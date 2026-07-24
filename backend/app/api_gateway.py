@@ -101,3 +101,37 @@ async def close_and_compact_session(payload: CloseSessionPayload):
         "session_id": payload.session_id,
         "compiled_footprint_token": summary
     }
+
+@app.post("/api/chat")
+async def process_chat(payload: ChatPayload):
+    config = {"configurable": {"thread_id": payload.session_id}}
+    
+    # --- NEW: FRONTEND INITIALIZATION INTERCEPTOR ---
+    if payload.message == "__INIT__":
+        # Check if the session already has memory saved in the checkpointer
+        state_snapshot = app_graph.get_state(config)
+        history = state_snapshot.values.get("chat_history", []) if state_snapshot.values else []
+        
+        if history:
+            # User refreshed the browser mid-conversation. 
+            # Return a special payload containing the history so React can render the chat log.
+            serialized_history = [{"role": "user" if isinstance(m, HumanMessage) else "ai", "content": m.content} for m in history]
+            return {
+                "text": "",
+                "uiType": "history_sync", 
+                "items": serialized_history
+            }
+        # If history is empty, let it fall through to invoke Node 00 (Greeting generation)
+    
+    # --- STANDARD INVOCATION ---
+    initial_turn_state = {"user_input": payload.message}
+    execution_result = app_graph.invoke(initial_turn_state, config=config)
+    
+    final_payload = {
+        "text": execution_result.get("final_response", ""),
+        "uiType": execution_result.get("ui_action_payload", {}).get("uiType", "text"),
+        "options": execution_result.get("ui_action_payload", {}).get("options", []),
+        "items": execution_result.get("ui_action_payload", {}).get("items", [])
+    }
+    
+    return final_payload

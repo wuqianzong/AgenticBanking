@@ -1,98 +1,141 @@
-from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver # NEW: Required for cross-turn memory
 from backend.app.orchestration.state import AgentState
 from backend.app.orchestration import nodes
 
-def build_orchestrator():
-    builder = StateGraph(AgentState)
+def build_agent_graph():
+    workflow = StateGraph(AgentState)
 
-    # --- ADD NODES ---
-    builder.add_node("node_0_turn_init", nodes.node_0_turn_init)
-    builder.add_node("node_0_hydrate", nodes.node_0_hydrate)
-    builder.add_node("node_1_ingest", nodes.node_1_deterministic_ingest_gate)
-    builder.add_node("node_2_intent", nodes.node_2_intent_router)
-    builder.add_node("node_3_retrieve", nodes.node_3_retrieval_execution)
-    builder.add_node("node_4_generate", nodes.node_4_response_generator)
-    builder.add_node("node_5_semantic", nodes.node_5_semantic_gate)
-    builder.add_node("node_5_static_refusal", nodes.node_5_static_refusal)
-    builder.add_node("node_5_soft_escalation", nodes.node_5_soft_escalation)
-    builder.add_node("node_loop_search", nodes.node_loop_search)
-    builder.add_node("node_loop_draft", nodes.node_loop_draft)
-    builder.add_node("node_6_substitute", nodes.node_6_precision_substitution)
-    builder.add_node("node_7_clarify", nodes.node_7_clarification_mediator)
-    builder.add_node("node_8_escalate", nodes.node_8_escalation_handler)
+    # 1. Register Nodes (Mapped to Mermaid Node IDs)
+    workflow.add_node("n00", nodes.node_00_context_hydrator_and_greeting)
+    workflow.add_node("n3",  nodes.node_01_deterministic_ingest_gate)
+    workflow.add_node("n4",  nodes.node_02a_pending_contract_check)
+    workflow.add_node("n6",  nodes.node_02b_confirmation_gate)
+    workflow.add_node("n16", nodes.node_02c_inbound_semantic_gate)
+    workflow.add_node("n7",  nodes.node_02d_intent_classifier)
+    workflow.add_node("n12", nodes.node_02e_contract_writer)
+    
+    workflow.add_node("n14", nodes.node_03a_knowledge_blueprint_planner)
+    workflow.add_node("n17", nodes.node_03b_vector_retrieval_engine)
+    workflow.add_node("n18", nodes.node_03c_sufficiency_auditor)
+    
+    workflow.add_node("n19", nodes.node_04a_resolution_planner)
+    workflow.add_node("n8",  nodes.node_04b_response_generator)
+    
+    workflow.add_node("n20", nodes.node_05_outbound_deterministic_gate)
+    workflow.add_node("n21", nodes.node_06_outbound_semantic_gate)
+    workflow.add_node("n22", nodes.node_07_precision_substitution)
+    workflow.add_node("n24", nodes.node_08_soft_escalation_analyzer)
+    workflow.add_node("n23", nodes.node_09_hard_escalation_broker)
+    workflow.add_node("n5",  nodes.node_10_standard_rejection)
 
     # --- CONDITIONAL ROUTING LOGIC ---
-    def route_turn_init(state: AgentState):
-        if not state.get("chat_history"):
-            return "hydrate"
-        return "ingest"
-
-    def route_ingest(state: AgentState):
-        # Implement deterministic block check
-        is_safe = True 
-        return "intent" if is_safe else "escalate"
-
-    def route_intent(state: AgentState):
-        strategy = state.get("retrieval_strategy")
-        if strategy == "clarify":
-            return "clarify"
-        elif strategy in ["vector_search", "path_lookup", "relational_lookup"]:
-            return "retrieve"
-        return "escalate" # Unmapped exception
-
-    def route_semantic(state: AgentState):
-        status = state.get("semantic_evaluation_status")
-        if status == "mas_violation":
-            return "refusal"
-        elif status == "groundedness_fail":
-            return "loop_search" if state.get("knowledge_retry_count", 0) < 2 else "escalate"
-        elif status == "generation_fail":
-            return "loop_draft" if state.get("safety_retry_count", 0) < 2 else "escalate"
-        elif status == "fatigue":
-            return "soft_escalate"
-        return "substitute" # Default PASS
-
-    def route_substitution(state: AgentState):
-        return "end" if state.get("substitution_status") == "valid" else "escalate"
-
-    # --- ADD EDGES ---
-    builder.add_edge(START, "node_0_turn_init")
-    builder.add_conditional_edges("node_0_turn_init", route_turn_init, {"hydrate": "node_0_hydrate", "ingest": "node_1_ingest"})
-    builder.add_edge("node_0_hydrate", "node_1_ingest")
     
-    builder.add_conditional_edges("node_1_ingest", route_ingest, {"intent": "node_2_intent", "escalate": "node_8_escalate"})
-    builder.add_conditional_edges("node_2_intent", route_intent, {"clarify": "node_7_clarify", "retrieve": "node_3_retrieve", "escalate": "node_8_escalate"})
+    def route_start(state: AgentState):
+        """Phase 0: Turn 1 Initialization vs Turn 2+ Ingest"""
+        history = state.get("chat_history", [])
+        
+        # 📡 TERMINAL DEBUG LOGGER
+        print("\n" + "="*50)
+        print(f"🚦 [ROUTER GATE] Initializing Graph Edge")
+        print(f"📦 [STATE CHECK] chat_history length: {len(history)}")
+        print(f"🗣️  [INPUT] user_input: '{state.get('user_input', '')}'")
+        
+        if not history: 
+            print("🔀 [ROUTE] History empty -> Routing to n00 (Greeting/Init)")
+            print("="*50 + "\n")
+            return "n00" # Turn 1
+            
+        print("🔀 [ROUTE] History found -> Routing to n3 (Ingest Gate)")
+        print("="*50 + "\n")
+        return "n3"      # Turns 2+
+        
+    def route_n3(state: AgentState):
+        if state.get("preflight_status") == "fail": return "n5"
+        return "n4"
+
+    def route_n4(state: AgentState):
+        if state.get("preflight_status") == "yes": return "n6"
+        return "n16"
+
+    def route_n6(state: AgentState):
+        status = state.get("preflight_status")
+        if status == "yes": return "n14"
+        if status == "no": return "n8"
+        return "n16" # Else (Ambiguous)
+
+    def route_n16(state: AgentState):
+        if state.get("preflight_status") == "pass": return "n7"
+        return "n5"
+
+    def route_n7(state: AgentState):
+        status = state.get("preflight_status")
+        if status == "intent_change": return "n12"
+        if status == "intent_persist": return "n8"
+        if status in ["new_intent", "intent_drift"]: return "n14"
+        if status in ["out_of_knowledge", "user_escalation"]: return "n23"
+        return "n5" # Unexpected Exception
+
+    def route_n18(state: AgentState):
+        status = state.get("preflight_status")
+        count = state.get("knowledge_retry_count", 0)
+        if status == "sufficient": return "n19"
+        if count < 3: return "n14"
+        return "n23" # Max retries
+
+    def route_n19(state: AgentState):
+        if state.get("preflight_status") == "fail": return "n5"
+        return "n8"
+
+    def route_n20(state: AgentState):
+        status = state.get("preflight_status")
+        count = state.get("safety_retry_count", 0)
+        if status == "pass": return "n21"
+        if count < 3: return "n8"
+        return "n23" # Max retries
+
+    def route_n21(state: AgentState):
+        status = state.get("preflight_status")
+        count = state.get("safety_retry_count", 0)
+        if status == "pass": return "n22"
+        if count < 3: return "n8"
+        return "n23" # Max retries
+
+    # --- ATTACH GRAPH EDGES ---
+    workflow.set_conditional_entry_point(route_start, {"n00": "n00", "n3": "n3"})
     
-    builder.add_edge("node_3_retrieve", "node_4_generate")
-    builder.add_edge("node_4_generate", "node_5_semantic")
+    # Phase 0
+    workflow.add_edge("n00", "n20")
+    workflow.add_conditional_edges("n3", route_n3, {"n4": "n4", "n5": "n5"})
     
-    builder.add_conditional_edges("node_5_semantic", route_semantic, {
-        "refusal": "node_5_static_refusal",
-        "loop_search": "node_loop_search",
-        "loop_draft": "node_loop_draft",
-        "soft_escalate": "node_5_soft_escalation",
-        "substitute": "node_6_substitute",
-        "escalate": "node_8_escalate"
+    # Phase 1
+    workflow.add_conditional_edges("n4", route_n4, {"n6": "n6", "n16": "n16"})
+    workflow.add_conditional_edges("n6", route_n6, {"n14": "n14", "n8": "n8", "n16": "n16"})
+    workflow.add_conditional_edges("n16", route_n16, {"n7": "n7", "n5": "n5"})
+    workflow.add_conditional_edges("n7", route_n7, {
+        "n12": "n12", "n8": "n8", "n14": "n14", "n23": "n23", "n5": "n5"
     })
+    workflow.add_edge("n12", END)
     
-    # Internal Loops
-    builder.add_edge("node_loop_search", "node_2_intent")
-    builder.add_edge("node_loop_draft", "node_4_generate")
-    builder.add_edge("node_5_soft_escalation", "node_6_substitute")
+    # Phase 2 & 3
+    workflow.add_edge("n14", "n17")
+    workflow.add_edge("n17", "n18")
+    workflow.add_conditional_edges("n18", route_n18, {"n19": "n19", "n14": "n14", "n23": "n23"})
+    workflow.add_conditional_edges("n19", route_n19, {"n8": "n8", "n5": "n5"})
+    workflow.add_edge("n8", "n20")
     
-    # Termination Edges
-    builder.add_edge("node_5_static_refusal", END)
-    builder.add_conditional_edges("node_6_substitute", route_substitution, {"end": END, "escalate": "node_8_escalate"})
-    builder.add_edge("node_7_clarify", END)
-    builder.add_edge("node_8_escalate", END)
+    # Phase 4
+    workflow.add_conditional_edges("n20", route_n20, {"n21": "n21", "n8": "n8", "n23": "n23"})
+    workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n23": "n23"})
+    workflow.add_edge("n22", "n24")
+    
+    # Terminal States
+    workflow.add_edge("n24", END)
+    workflow.add_edge("n23", END)
+    workflow.add_edge("n5", END)
 
-    #return builder.compile()
-    # INITIALIZE THE IN-MEMORY CHECKPOINTER
     memory = MemorySaver()
+    return workflow.compile(checkpointer=memory)
 
-    # ATTACH THE CHECKPOINTER WHEN COMPILING
-    return builder.compile(checkpointer=memory)
-
-# Instantiated graph to be imported into api_gateway.py
-app_graph = build_orchestrator()
+# ADD THIS EXACT LINE TO EXPOSE THE GRAPH TO UVICORN
+app_graph = build_agent_graph()

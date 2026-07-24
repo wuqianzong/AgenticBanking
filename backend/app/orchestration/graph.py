@@ -68,13 +68,16 @@ def build_agent_graph():
         if state.get("preflight_status") == "pass": return "n7"
         return "n5"
 
+    
     def route_n7(state: AgentState):
         status = state.get("preflight_status")
         if status == "intent_change": return "n12"
-        if status == "intent_persist": return "n8"
+        # ADDED: Route clarification directly to the response generator
+        if status in ["intent_persist", "intent_clarification_needed"]: return "n8" 
         if status in ["new_intent", "intent_drift"]: return "n14"
         if status in ["out_of_knowledge", "user_escalation"]: return "n23"
         return "n5" # Unexpected Exception
+
 
     def route_n18(state: AgentState):
         status = state.get("preflight_status")

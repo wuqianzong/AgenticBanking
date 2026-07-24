@@ -124,31 +124,46 @@ def node_02c_inbound_semantic_gate(state: AgentState):
     return {"preflight_status": "pass"}
 
 
-
-
-
-
 def node_02d_intent_classifier(state: AgentState):
-    """n7: Model A classifies New, Persist, Drift, Change, Out of Knowledge."""
+    """n7: Model A classifies New, Persist, Drift, Change, Out of Knowledge, Clarification."""
     print("🟢 [NODE 02d] Executing Intent Classifier")
     user_msg = state.get("user_input", "")
+    
     active = state.get("active_intent", "")
+    plan = state.get("active_plan", {})
+    idx = plan.get("current_step_index", 0)
+    steps = plan.get("steps", [])
+    
+    process_complete = False
+    if active and steps and idx >= len(steps):
+        print("   🏁 [PROCESS COMPLETE]: Previous plan resolved. Resetting active state.")
+        active = ""
+        process_complete = True
+        
+    current_step = steps[idx] if steps and idx < len(steps) else "None"
+    
+    full_history = state.get("chat_history", [])
+    recent_context = full_history[-4:] if len(full_history) > 4 else full_history
+    history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in recent_context])
     
     prompt = f"""
     Current Active Intent: "{active}"
+    Current Target Step in Plan: "{current_step}"
     FAQ Directories: {FAQ_DIRECTORIES}
-    User Input: "{user_msg}"
+    Recent Conversation Context: {history_str}
+    Latest User Input: "{user_msg}"
     
-    RULES FOR CLASSIFICATION (Follow in strict order):
-    1. INTENT CHANGE: If 'Current Active Intent' is NOT empty, and the user's input changes the topic completely, you MUST classify it as "intent_change" and extract the new topic as 'target_intent'. Do this even if the new topic is not in the FAQ Directories.
-    2. OUT OF KNOWLEDGE: Use this ONLY if 'Current Active Intent' IS empty AND the user's requested topic is not in the FAQ Directories.
-    3. NEW INTENT: Use if 'Current Active Intent' is empty AND the topic is inside the FAQ Directories.
-    4. INTENT PERSIST: Use if the user is answering a question or continuing the 'Current Active Intent'.
-    5. INTENT DRIFT: Use if continuing the current intent but with a slight sub-topic shift.
-    6. USER ESCALATION: Use if the user explicitly demands a human agent.
+    RULES FOR CLASSIFICATION (Follow strictly in this order):
+    1. INTENT CHANGE: If 'Current Active Intent' is NOT empty, and the user's input completely changes the topic.
+    2. INTENT CLARIFICATION NEEDED: Use if the input is small talk, a vague preamble, a personal/identity question (e.g., "what is my name", "who are you"), general non-banking conversation, or if it lacks a specific financial intent.
+    3. OUT OF KNOWLEDGE: Use ONLY if the user asks for a SPECIFIC FINANCIAL OR BANKING operation that is clearly outside the FAQ Directories (e.g., "I want to buy crypto", "Apply for a mortgage"). Do NOT use this for personal questions or small talk.
+    4. NEW INTENT: Use if 'Current Active Intent' is empty AND the topic is inside the FAQ Directories.
+    5. INTENT DRIFT: Use if the user stays within the 'Current Active Intent' but DEVIATES from the current step.
+    6. INTENT PERSIST: Use ONLY if the user is directly answering a question, making a selection, or moving forward with the 'Current Target Step'.
+    7. USER ESCALATION: Use if the user explicitly demands a human agent.
 
     Classify the routing step. Output JSON ONLY:
-    {{"route": "intent_persist" | "intent_change" | "intent_drift" | "new_intent" | "out_of_knowledge" | "user_escalation", "target_intent": "..."}}
+    {{"route": "intent_persist" | "intent_change" | "intent_drift" | "new_intent" | "out_of_knowledge" | "intent_clarification_needed" | "user_escalation", "target_intent": "..."}}
     """
     
     try:
@@ -165,7 +180,23 @@ def node_02d_intent_classifier(state: AgentState):
             return {"preflight_status": route, "pending_intent_switch": {"target_intent": target}}
             
         elif route in ["new_intent", "intent_drift"]:
-            return {"preflight_status": route, "active_intent": target, "pending_intent_switch": {}}
+            return {
+                "preflight_status": route, 
+                "active_intent": target if target else active, 
+                "pending_intent_switch": {},
+                "active_plan": {} 
+            }
+            
+        elif route == "intent_persist":
+            if process_complete:
+                return {"preflight_status": route, "active_intent": "", "active_plan": {}, "pending_intent_switch": {}}
+            return {"preflight_status": route, "pending_intent_switch": {}}
+            
+        elif route == "intent_clarification_needed":
+            # FIX: We must aggressively wipe the plan here too if the process just finished!
+            if process_complete:
+                return {"preflight_status": route, "active_intent": "", "active_plan": {}, "pending_intent_switch": {}}
+            return {"preflight_status": route, "pending_intent_switch": {}}
             
         else:
             return {"preflight_status": route, "pending_intent_switch": {}}
@@ -222,15 +253,28 @@ def node_03b_vector_retrieval_engine(state: AgentState):
     intent = state.get("active_intent", "")
     print(f"   🔎 [SEARCHING DB]: Target path -> '{intent}'")
     
-    # FIX: Dynamically simulate the DB check against our allowed directories
-    if intent in FAQ_DIRECTORIES:
+    # FIX: Provide a realistic, detailed mock RAG payload so the LLM has actual data to extract.
+    if intent == "ACCOUNT_OPENING":
+        retrieved = """
+        Mock FAQ Policy for ACCOUNT_OPENING: 
+        To open a standard savings or checking account, the customer must provide the following three mandatory documents:
+        1. Valid Government-Issued Photo ID (e.g., Passport, National ID card, or Driver's License).
+        2. Proof of Residential Address dated within the last 3 months (e.g., Utility bill, Bank statement, or Tenancy agreement).
+        3. Tax Identification Number (TIN) or Social Security Number.
+        The current promotional interest rate is {{SAVINGS_RATE_01}}.
+        """
+        print(f"   📄 [RETRIEVED DATA]: Found detailed policy for {intent}")
+        
+    elif intent in FAQ_DIRECTORIES:
         retrieved = f"Mock FAQ Policy for {intent}: To process {intent}, please provide required documents."
         print(f"   📄 [RETRIEVED DATA]: Found valid policy for {intent}")
+        
     else:
         retrieved = "NO_KNOWLEDGE_FOUND"
         print(f"   ❌ [RETRIEVED DATA]: Database returned empty for {intent}")
         
     return {"raw_retrieved_text": retrieved}
+
 
 def node_03c_sufficiency_auditor(state: AgentState):
     """n18: Model B checks context sufficiency (Max 3 retries)."""
@@ -296,14 +340,24 @@ def node_04a_resolution_planner(state: AgentState):
 
 
 def node_04b_response_generator(state: AgentState):
-    """n8: Model A Synthesizes text & placeholders for the active step under strict non-transactional rules."""
+    """n8: Model A Synthesizes text & placeholders."""
     print("🟢 [NODE 04b] Executing Response Generator")
     
     plan = state.get("active_plan", {})
     idx = plan.get("current_step_index", 0)
     steps = plan.get("steps", [])
+    routing_status = state.get("preflight_status", "")
     
-    current_step = steps[idx] if idx < len(steps) else "Summarize and conclude."
+    # Let the LLM naturally execute the step (or handle clarification)
+    if routing_status == "intent_clarification_needed":
+        current_step = "The user engaged in small talk, gave a vague response, or their intent is unclear. Respond naturally and politely to what they said, then gently ask them how you can assist them with their banking needs. Do NOT attempt to execute a process step."
+    elif not steps:
+        current_step = "Respond naturally to the user's latest input. If they indicate they need more help, prompt them directly for their new request. Do NOT repeat previous process summaries."
+    elif idx >= len(steps):
+        current_step = "Acknowledge the user politely. Ask if there is anything else you can help them with today."
+    else:
+        current_step = steps[idx]
+        
     print(f"   📍 [CURRENT TARGET STEP]: {current_step} (Index {idx})")
     
     knowledge = state.get("raw_retrieved_text", "")
@@ -314,15 +368,14 @@ def node_04b_response_generator(state: AgentState):
     feedback = state.get("draft_feedback_history", [])
     feedback_str = f"CRITICAL CORRECTION NEEDED FROM LAST ATTEMPT: {feedback[-1]}" if feedback else ""
 
-    # THE ENFORCED SYSTEM ROLE PROMPT
     prompt = f"""
     You are Horizon, an informational digital banking assistant embedded in a consumer banking mobile application.
     
-    CORE OPERATIONAL RULES (MAS COMPLIANCE & ARCHITECTURAL LIMITS):
+    CORE OPERATIONAL RULES:
     1. READ-ONLY & INFORMATIONAL ONLY: You extract FAQ info, explain procedures, and guide users step-by-step. 
-    2. NO TRANSACTION EXECUTION: You CANNOT execute transactions, create accounts, modify profiles, or generate account numbers/data. 
-    3. NO FALSE COMPLETION: Never tell a user that an account has been created, a loan has been approved, or a transaction is finalized. When a process reaches its final step, instruct the user to complete it on the bank's secure native screen using allowlisted deep-links.
-    4. KNOWLEDGE CONTAINMENT: Rely ONLY on the retrieved knowledge base facts below. Do not extrapolate or fabricate data.
+    2. NO TRANSACTION EXECUTION: You CANNOT execute transactions, create accounts, modify profiles, or generate data. 
+    3. NO FALSE COMPLETION: When a process reaches its final step, instruct the user to complete it on the bank's secure native screen using allowlisted deep-links.
+    4. KNOWLEDGE CONTAINMENT: Rely ONLY on the retrieved knowledge base facts below.
     
     Current Plan: {steps}
     Current Step to Execute: "{current_step}"
@@ -333,8 +386,7 @@ def node_04b_response_generator(state: AgentState):
 
     Rules for Generation:
     - Draft a conversational response addressing ONLY the 'Current Step'.
-    - Ask a clear, single follow-up question or provide the exact next process instruction.
-    - If quoting exact numerical rates or fees from the knowledge base, use ONLY allowed placeholders: {list(VALID_PLACEHOLDERS)}.
+    - If quoting exact numerical rates or fees, use ONLY allowed placeholders: {list(VALID_PLACEHOLDERS)}.
     
     Output JSON ONLY:
     {{"response": "Your conversational text here", "uiType": "stepper", "advance_step": true}}
@@ -349,14 +401,26 @@ def node_04b_response_generator(state: AgentState):
         
         print(f"   💬 [DRAFT RESPONSE]: {draft}")
         
-        if res.get("advance_step") and (idx + 1) < len(steps):
+        should_advance = res.get("advance_step") and steps and idx < len(steps) and routing_status != "intent_clarification_needed"
+        
+        if should_advance:
             plan["current_step_index"] = idx + 1
             print(f"   ⏩ [STEP ADVANCED]: Moving to index {plan['current_step_index']}")
+            
+        # FIX: Evaluate process completion AFTER the step advances!
+        ui_type = res.get("uiType", "stepper")
+        options = res.get("options", [])
+        
+        # If steps exist AND the index has now reached or exceeded the length of the plan
+        if steps and plan.get("current_step_index", 0) >= len(steps):
+            ui_type = "chips"
+            options = ["That's all, thank you.", "I have another question."]
+            print(f"   🛑 [PROCESS CONCLUSION]: Injecting explicit UI closure chips.")
             
         return {
             "final_draft": draft, 
             "active_plan": plan, 
-            "ui_action_payload": {"uiType": res.get("uiType", "stepper"), "options": []}
+            "ui_action_payload": {"uiType": ui_type, "options": options}
         }
     except Exception as e:
         print(f"🚨 [NODE 04b EXCEPTION] Text Generation Failed: {e}")

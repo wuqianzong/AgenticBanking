@@ -68,13 +68,19 @@ def build_agent_graph():
         if state.get("preflight_status") == "pass": return "n7"
         return "n5"
 
-    
+
     def route_n7(state: AgentState):
         status = state.get("preflight_status")
         if status == "intent_change": return "n12"
-        # ADDED: Route clarification directly to the response generator
-        if status in ["intent_persist", "intent_clarification_needed"]: return "n8" 
-        if status in ["new_intent", "intent_drift"]: return "n14"
+        if status == "intent_clarification_needed": return "n8" # Clarification still bypasses planning
+        
+        # 🚀 V3.74 DYNAMIC REPLANNING UPDATE:
+        # Persist now routes to the Planner (n19). If a plan exists, the Planner will safely bypass itself.
+        # If the plan was wiped by a recent drift, it will dynamically regenerate the remaining steps!
+        if status == "intent_persist": return "n19" 
+        
+        if status == "new_intent": return "n14"
+        if status == "intent_drift": return "n18"
         if status in ["out_of_knowledge", "user_escalation"]: return "n23"
         return "n5" # Unexpected Exception
 
@@ -116,7 +122,7 @@ def build_agent_graph():
     workflow.add_conditional_edges("n6", route_n6, {"n14": "n14", "n8": "n8", "n16": "n16"})
     workflow.add_conditional_edges("n16", route_n16, {"n7": "n7", "n5": "n5"})
     workflow.add_conditional_edges("n7", route_n7, {
-        "n12": "n12", "n8": "n8", "n14": "n14", "n23": "n23", "n5": "n5"
+        "n12": "n12", "n8": "n8", "n14": "n14", "n18": "n18", "n19": "n19","n23": "n23", "n5": "n5"
     })
     workflow.add_edge("n12", END)
     

@@ -6,6 +6,7 @@ class AgentState(TypedDict):
     chat_history: List[BaseMessage]
     active_intent: str
     active_plan: Dict[str, Any]      # e.g., {"steps": [], "current_step_index": 0}
+    completed_steps: List[str]       # V3.73: Stateful Milestone Tracker for Anti-Amnesia
     process_slots: Dict[str, Any]    # Verified data (e.g., {"age": 25})
     pending_intent_switch: Dict[str, Any] # e.g., {"target_intent": "ACCOUNT_OPENING"}
     

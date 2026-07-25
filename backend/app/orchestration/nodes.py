@@ -123,9 +123,8 @@ def node_02c_inbound_semantic_gate(state: AgentState):
     print("🟢 [NODE 02c] Executing Inbound Semantic Gate")
     return {"preflight_status": "pass"}
 
-
 def node_02d_intent_classifier(state: AgentState):
-    """n7: Model A classifies New, Persist, Drift, Change, Out of Knowledge, Clarification."""
+    """n7: Model A classifies Intent and manages state memory."""
     print("🟢 [NODE 02d] Executing Intent Classifier")
     user_msg = state.get("user_input", "")
     
@@ -153,49 +152,54 @@ def node_02d_intent_classifier(state: AgentState):
     Recent Conversation Context: {history_str}
     Latest User Input: "{user_msg}"
     
-    RULES FOR CLASSIFICATION (Follow strictly in this order):
+    RULES FOR CLASSIFICATION:
     1. INTENT CHANGE: If 'Current Active Intent' is NOT empty, and the user's input completely changes the topic.
-    2. INTENT CLARIFICATION NEEDED: Use if the input is small talk, a vague preamble, a personal/identity question (e.g., "what is my name", "who are you"), general non-banking conversation, or if it lacks a specific financial intent.
-    3. OUT OF KNOWLEDGE: Use ONLY if the user asks for a SPECIFIC FINANCIAL OR BANKING operation that is clearly outside the FAQ Directories (e.g., "I want to buy crypto", "Apply for a mortgage"). Do NOT use this for personal questions or small talk.
+    2. INTENT CLARIFICATION NEEDED: Use if the input is small talk, a vague preamble, a personal/identity question, general non-banking conversation, or if it lacks a specific financial intent.
+    3. OUT OF KNOWLEDGE: Use ONLY if the user asks for a SPECIFIC FINANCIAL OR BANKING operation that is clearly outside the FAQ Directories. Do NOT use this for personal questions or small talk.
     4. NEW INTENT: Use if 'Current Active Intent' is empty AND the topic is inside the FAQ Directories.
     5. INTENT DRIFT: Use if the user stays within the 'Current Active Intent' but DEVIATES from the current step.
     6. INTENT PERSIST: Use ONLY if the user is directly answering a question, making a selection, or moving forward with the 'Current Target Step'.
     7. USER ESCALATION: Use if the user explicitly demands a human agent.
 
-    Classify the routing step. Output JSON ONLY:
+    Output JSON ONLY:
     {{"route": "intent_persist" | "intent_change" | "intent_drift" | "new_intent" | "out_of_knowledge" | "intent_clarification_needed" | "user_escalation", "target_intent": "..."}}
     """
     
     try:
         raw_res = call_groq_lpu(prompt)
-        print(f"   🤖 [LLM RAW OUTPUT]: {raw_res.strip()}") 
-        
         res = _parse_json_robustly(raw_res) 
         route = res.get("route", "unexpected_exception")
         target = res.get("target_intent", "")
         
         print(f"   🎯 [ROUTING DECISION]: {route.upper()} | TARGET: {target}")
         
+        # Base wipe payload for completed processes
+        clear_state = {"active_intent": "", "active_plan": {}, "pending_intent_switch": {}, "completed_steps": []}
+        
         if route == "intent_change":
             return {"preflight_status": route, "pending_intent_switch": {"target_intent": target}}
             
-        elif route in ["new_intent", "intent_drift"]:
+        elif route == "new_intent":
+            return {
+                "preflight_status": route, 
+                "active_intent": target if target else active, 
+                "pending_intent_switch": {},
+                "active_plan": {},
+                "completed_steps": [] # V3.73: Wipe ledger on new intent
+            }
+            
+        elif route == "intent_drift":
             return {
                 "preflight_status": route, 
                 "active_intent": target if target else active, 
                 "pending_intent_switch": {},
                 "active_plan": {} 
+                # V3.73: Notice we DO NOT wipe completed_steps here. We preserve the ledger!
             }
             
-        elif route == "intent_persist":
+        elif route in ["intent_persist", "intent_clarification_needed"]:
             if process_complete:
-                return {"preflight_status": route, "active_intent": "", "active_plan": {}, "pending_intent_switch": {}}
-            return {"preflight_status": route, "pending_intent_switch": {}}
-            
-        elif route == "intent_clarification_needed":
-            # FIX: We must aggressively wipe the plan here too if the process just finished!
-            if process_complete:
-                return {"preflight_status": route, "active_intent": "", "active_plan": {}, "pending_intent_switch": {}}
+                return {**clear_state, "preflight_status": route}
             return {"preflight_status": route, "pending_intent_switch": {}}
             
         else:
@@ -204,7 +208,6 @@ def node_02d_intent_classifier(state: AgentState):
     except Exception as e:
         print(f"🚨 [NODE 02d EXCEPTION] Routing to Node 10. Error: {e}")
         return {"preflight_status": "unexpected_exception"}
-
 
 def node_02e_contract_writer(state: AgentState):
     """n12: Sets pending switch flag & prompts confirmation."""
@@ -302,45 +305,65 @@ def node_03c_sufficiency_auditor(state: AgentState):
 # --- PHASE 3: RESOLUTION BLUEPRINT & STEP-BY-STEP RESPONSE ---
 
 def node_04a_resolution_planner(state: AgentState):
-    """n19: Model A compiles linear active_plan array based on retrieved FAQ knowledge."""
+    """n19: Model A compiles linear active_plan array based on bounded RAG text & completed ledger."""
     print("🟢 [NODE 04a] Executing Resolution Planner")
     
-    intent = state.get("active_intent", "")
-    knowledge = state.get("raw_retrieved_text", "")
-    user_msg = state.get("user_input", "")
-
-    prompt = f"""
-    You are a backend system for a banking AI.
-    Your task is to create a step-by-step resolution plan based ONLY on the retrieved FAQ policy.
+    plan = state.get("active_plan", {})
+    steps = plan.get("steps", [])
+    idx = plan.get("current_step_index", 0)
     
-    User Request: "{user_msg}"
-    Active Intent: "{intent}"
-    Retrieved FAQ Policy: "{knowledge}"
-
-    Rules:
-    1. Break the solution down into a logical sequence of steps.
-    2. If the user's request is a simple question, make it a 1-step plan.
-    3. Output ONLY valid JSON.
-
-    Output Schema:
-    {{"steps": ["Step 1 description", "Step 2 description"], "current_step_index": 0}}
+    if steps and idx < len(steps):
+        print("   ⏩ [PLAN EXISTS]: Preserving current active_plan. Bypassing replan.")
+        return {"preflight_status": "pass"}
+        
+    retrieved_text = state.get("raw_retrieved_text", "")
+    user_input = state.get("user_input", "")
+    active_intent = state.get("active_intent", "")
+    
+    completed_steps = state.get("completed_steps", [])
+    completed_str = "\n".join([f"- {s}" for s in completed_steps]) if completed_steps else "None"
+    
+    prompt = f"""
+    You are the Resolution Planner for an informational digital banking assistant.
+    Your job is to read the retrieved FAQ knowledge and dynamically map out a step-by-step plan to resolve the user's specific request.
+    
+    User's Latest Request: "{user_input}"
+    Active Intent: "{active_intent}"
+    Retrieved Knowledge: "{retrieved_text}"
+    
+    MILESTONES ALREADY COMPLETED:
+    {completed_str}
+    
+    ARCHITECTURAL PRINCIPLES (Strictly Enforce):
+    1. SCOPE CONTAINMENT: Formulate steps that resolve ONLY the exact bounding box of the user's request.
+    2. LEAN PLANNING (TOKEN EFFICIENCY): Write steps as short, abstract directives (e.g., "List the required documents", "Provide the deep-link", "State the promotional rate"). DO NOT include the actual factual details, document names, or rate placeholders in the plan. The downstream generation engine already has the FAQ document and will extract the exact details itself.
+    3. SEPARATION OF CONCERNS: Your sole job is Task Resolution. A separate downstream engine will autonomously handle conversational proactivity and UI chips.
+    4. INFORMATIONAL ONLY BOUNDARY: The chatbot is read-only. It CANNOT execute transactions.
+    5. LEDGER STRICT AVOIDANCE: Review the "MILESTONES ALREADY COMPLETED". You are STRICTLY FORBIDDEN from generating any step that repeats or overlaps with these completed actions. 
+    6. THE EMPTY ARRAY RULE: If the user's request is already fully covered by the completed milestones, or requires no new procedural steps, you MUST output an empty array: {{"steps": [], "current_step_index": 0}}.
+    
+    Based on the retrieved knowledge, create the linear steps to satisfy the User's Latest Request.
+    Output JSON ONLY matching this schema:
+    {{"steps": ["Short directive for step 1"...], "current_step_index": 0}}
     """
     
     try:
         raw_res = call_groq_lpu(prompt)
-        print(f"   🤖 [LLM RAW OUTPUT]: {raw_res.strip()}") # <-- ADDED VISIBILITY
+        print(f"   🤖 [LLM RAW OUTPUT]: {raw_res.strip()}")
+        res = _parse_json_robustly(raw_res)
         
-        plan = _parse_json_robustly(raw_res)
-        print(f"   📋 [ACTIVE PLAN SAVED]: {json.dumps(plan, indent=2)}")
+        if "steps" not in res or not isinstance(res["steps"], list):
+            res = {"steps": [], "current_step_index": 0}
+            
+        print(f"   📋 [ACTIVE PLAN SAVED]: {res}")
+        return {"active_plan": res, "preflight_status": "pass"}
         
-        return {"active_plan": plan, "preflight_status": "success"}
     except Exception as e:
-        print(f"🚨 [NODE 04a EXCEPTION] Plan Compilation Failed: {e}")
+        print(f"🚨 [NODE 04a EXCEPTION] Plan Generation Failed: {e}")
         return {"preflight_status": "fail"}
 
-
 def node_04b_response_generator(state: AgentState):
-    """n8: Model A Synthesizes text & placeholders."""
+    """n8: Model A Synthesizes text, dynamic chips & logs completed steps."""
     print("🟢 [NODE 04b] Executing Response Generator")
     
     plan = state.get("active_plan", {})
@@ -348,13 +371,17 @@ def node_04b_response_generator(state: AgentState):
     steps = plan.get("steps", [])
     routing_status = state.get("preflight_status", "")
     
-    # Let the LLM naturally execute the step (or handle clarification)
+    # V3.73: Load the current ledger
+    completed_steps = state.get("completed_steps", [])
+    
+    is_conclusion = bool(steps and idx >= len(steps))
+    
     if routing_status == "intent_clarification_needed":
         current_step = "The user engaged in small talk, gave a vague response, or their intent is unclear. Respond naturally and politely to what they said, then gently ask them how you can assist them with their banking needs. Do NOT attempt to execute a process step."
     elif not steps:
         current_step = "Respond naturally to the user's latest input. If they indicate they need more help, prompt them directly for their new request. Do NOT repeat previous process summaries."
-    elif idx >= len(steps):
-        current_step = "Acknowledge the user politely. Ask if there is anything else you can help them with today."
+    elif is_conclusion:
+        current_step = "Explicitly state that this specific request is completely finished. Summarize what was done. Ask if they need anything else. YOU MUST set uiType to 'chips' and generate exactly TWO custom UI chips in the 'options' array matching your conversational tone: one option for ending the conversation, and one for asking a new question."
     else:
         current_step = steps[idx]
         
@@ -364,7 +391,6 @@ def node_04b_response_generator(state: AgentState):
     full_history = state.get("chat_history", [])
     recent_context = full_history[-6:] if len(full_history) > 6 else full_history
     history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in recent_context])
-    
     feedback = state.get("draft_feedback_history", [])
     feedback_str = f"CRITICAL CORRECTION NEEDED FROM LAST ATTEMPT: {feedback[-1]}" if feedback else ""
 
@@ -373,7 +399,7 @@ def node_04b_response_generator(state: AgentState):
     
     CORE OPERATIONAL RULES:
     1. READ-ONLY & INFORMATIONAL ONLY: You extract FAQ info, explain procedures, and guide users step-by-step. 
-    2. NO TRANSACTION EXECUTION: You CANNOT execute transactions, create accounts, modify profiles, or generate data. 
+    2. NO TRANSACTION EXECUTION: You CANNOT execute transactions.
     3. NO FALSE COMPLETION: When a process reaches its final step, instruct the user to complete it on the bank's secure native screen using allowlisted deep-links.
     4. KNOWLEDGE CONTAINMENT: Rely ONLY on the retrieved knowledge base facts below.
     
@@ -384,18 +410,19 @@ def node_04b_response_generator(state: AgentState):
     
     {feedback_str}
 
-    Rules for Generation:
+    Rules for Text Generation:
     - Draft a conversational response addressing ONLY the 'Current Step'.
-    - If quoting exact numerical rates or fees, use ONLY allowed placeholders: {list(VALID_PLACEHOLDERS)}.
     
-    Output JSON ONLY:
-    {{"response": "Your conversational text here", "uiType": "stepper", "advance_step": true}}
+    Rules for UI Payload (Predictive Next Best Action):
+    - Dynamically select the best 'uiType': 'chips', 'stepper', or 'none'.
+    - If 'chips', populate 'options' array with 1-3 predicted user responses.
+    
+    Output JSON ONLY matching this schema:
+    {{"response": "Your conversational text here", "uiType": "chips" | "stepper" | "none", "options": ["prediction 1"], "advance_step": true}}
     """
     
     try:
         raw_res = call_groq_lpu(prompt)
-        print(f"   🤖 [LLM RAW OUTPUT]: {raw_res.strip()}") 
-        
         res = _parse_json_robustly(raw_res)
         draft = res.get("response", "Could you please clarify your request?")
         
@@ -404,28 +431,33 @@ def node_04b_response_generator(state: AgentState):
         should_advance = res.get("advance_step") and steps and idx < len(steps) and routing_status != "intent_clarification_needed"
         
         if should_advance:
+            # V3.73 FIX: Log this step into the completed ledger before advancing
+            completed_steps.append(current_step)
             plan["current_step_index"] = idx + 1
             print(f"   ⏩ [STEP ADVANCED]: Moving to index {plan['current_step_index']}")
+            print(f"   ✅ [LEDGER UPDATED]: Appended step to completed_steps.")
             
-        # FIX: Evaluate process completion AFTER the step advances!
-        ui_type = res.get("uiType", "stepper")
+        ui_type = res.get("uiType", "none")
         options = res.get("options", [])
         
-        # If steps exist AND the index has now reached or exceeded the length of the plan
-        if steps and plan.get("current_step_index", 0) >= len(steps):
+        if is_conclusion:
             ui_type = "chips"
-            options = ["That's all, thank you.", "I have another question."]
-            print(f"   🛑 [PROCESS CONCLUSION]: Injecting explicit UI closure chips.")
+            if not options or len(options) < 2:
+                options = ["That's all, thank you.", "I have another question."]
+            else:
+                print(f"   🛑 [PROCESS CONCLUSION]: Dynamic UI Chips Generated: {options}")
+        elif ui_type == "none":
+            options = [] 
             
         return {
             "final_draft": draft, 
             "active_plan": plan, 
+            "completed_steps": completed_steps, # V3.73: Return the updated ledger
             "ui_action_payload": {"uiType": ui_type, "options": options}
         }
     except Exception as e:
         print(f"🚨 [NODE 04b EXCEPTION] Text Generation Failed: {e}")
         return {"final_draft": "I encountered an error. Please try again.", "preflight_status": "fail"}
-
 
 # --- PHASE 4: OUTPUT GUARDRAILS & ESCALATION HANDLER ---
 

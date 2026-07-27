@@ -135,8 +135,7 @@ def node_02d_intent_classifier(state: AgentState):
     
     process_complete = False
     if active and steps and idx >= len(steps):
-        print("   🏁 [PROCESS COMPLETE]: Previous plan resolved. Resetting active state.")
-        active = ""
+        print("   🏁 [PROCESS COMPLETE]: Previous plan resolved.")
         process_complete = True
         
     current_step = steps[idx] if steps and idx < len(steps) else "None"
@@ -153,8 +152,8 @@ def node_02d_intent_classifier(state: AgentState):
     Latest User Input: "{user_msg}"
     
     RULES FOR CLASSIFICATION:
-    1. INTENT CHANGE: If 'Current Active Intent' is NOT empty, and the user's input completely changes the topic.
-    2. INTENT CLARIFICATION NEEDED: Use if the input is small talk, a vague preamble, a personal/identity question, general non-banking conversation, or if it lacks a specific financial intent.
+    1. INTENT CHANGE: Use ONLY if 'Current Active Intent' is NOT empty, AND the user introduces a SPECIFIC new banking topic (e.g., "Actually, I want to open an account"). 
+    2. INTENT CLARIFICATION NEEDED: Use if the input is small talk, a vague preamble, a general request to change topics (e.g., "I have another question", "Ask something else"), or lacks a specific financial intent.
     3. OUT OF KNOWLEDGE: Use ONLY if the user asks for a SPECIFIC FINANCIAL OR BANKING operation that is clearly outside the FAQ Directories. Do NOT use this for personal questions or small talk.
     4. NEW INTENT: Use if 'Current Active Intent' is empty AND the topic is inside the FAQ Directories.
     5. INTENT DRIFT: Use if the user stays within the 'Current Active Intent' but DEVIATES from the current step.
@@ -173,10 +172,16 @@ def node_02d_intent_classifier(state: AgentState):
         
         print(f"   🎯 [ROUTING DECISION]: {route.upper()} | TARGET: {target}")
         
-        # Base wipe payload for completed processes
-        clear_state = {"active_intent": "", "active_plan": {}, "pending_intent_switch": {}, "completed_steps": []}
+        clear_state = {"active_plan": {}, "pending_intent_switch": {}, "completed_steps": []}
         
         if route == "intent_change":
+            # V3.76 FIX: Prevent the "Empty Contract" Loop!
+            # If the LLM fires an intent_change but cannot identify a specific target,
+            # we automatically downgrade it to clarification.
+            if not target:
+                print("   ⚠️ [FALLBACK]: Empty target intent detected. Downgrading to clarification.")
+                return {"preflight_status": "intent_clarification_needed", "pending_intent_switch": {}}
+                
             return {"preflight_status": route, "pending_intent_switch": {"target_intent": target}}
             
         elif route == "new_intent":
@@ -185,7 +190,7 @@ def node_02d_intent_classifier(state: AgentState):
                 "active_intent": target if target else active, 
                 "pending_intent_switch": {},
                 "active_plan": {},
-                "completed_steps": [] # V3.73: Wipe ledger on new intent
+                "completed_steps": [] 
             }
             
         elif route == "intent_drift":
@@ -194,7 +199,6 @@ def node_02d_intent_classifier(state: AgentState):
                 "active_intent": target if target else active, 
                 "pending_intent_switch": {},
                 "active_plan": {} 
-                # V3.73: Notice we DO NOT wipe completed_steps here. We preserve the ledger!
             }
             
         elif route in ["intent_persist", "intent_clarification_needed"]:
@@ -324,8 +328,8 @@ def node_04a_resolution_planner(state: AgentState):
     completed_str = "\n".join([f"- {s}" for s in completed_steps]) if completed_steps else "None"
     
     prompt = f"""
-    You are the Resolution Planner for an informational digital banking assistant.
-    Your job is to read the retrieved FAQ knowledge and dynamically map out a step-by-step plan to resolve the user's specific request.
+    ROLE ALIGNMENT: 
+    You are a Strict Information Extraction Engine. You are NOT a helpful assistant, you are NOT a conversationalist, and you do not solve problems. Your ONLY function is to act as a strict logical filter: you read a user's query, search the provided text for the exact answer, and output a clinical plan to deliver that specific answer.
     
     User's Latest Request: "{user_input}"
     Active Intent: "{active_intent}"
@@ -335,14 +339,14 @@ def node_04a_resolution_planner(state: AgentState):
     {completed_str}
     
     ARCHITECTURAL PRINCIPLES (Strictly Enforce):
-    1. SCOPE CONTAINMENT: Formulate steps that resolve ONLY the exact bounding box of the user's request.
-    2. LEAN PLANNING (TOKEN EFFICIENCY): Write steps as short, abstract directives (e.g., "List the required documents", "Provide the deep-link", "State the promotional rate"). DO NOT include the actual factual details, document names, or rate placeholders in the plan. The downstream generation engine already has the FAQ document and will extract the exact details itself.
-    3. SEPARATION OF CONCERNS: Your sole job is Task Resolution. A separate downstream engine will autonomously handle conversational proactivity and UI chips.
-    4. INFORMATIONAL ONLY BOUNDARY: The chatbot is read-only. It CANNOT execute transactions.
+    1. EXACT MATCH EXTRACTION (NO VOLUNTEERING): You must ONLY plan steps that directly and explicitly answer the user's specific query. Do NOT volunteer extra facts. If the user asks for required documents, plan a step to list the documents. Do NOT plan a step to state the interest rate unless the user explicitly asked for the interest rate.
+    2. THE PROCEED TRAP: If a user asks to "proceed", "start", or "next", you must scan the retrieved knowledge for explicit procedural instructions (e.g., links, forms to fill). If the retrieved knowledge does NOT contain procedural steps, you are strictly forbidden from guessing, and you are strictly forbidden from grabbing unrelated facts (like interest rates) just to have something to say. 
+    3. THE EMPTY ARRAY RULE: If the exact answer to the user's request is not in the text, OR if the request is already fully covered by the completed milestones, you MUST output an empty array: {{"steps": [], "current_step_index": 0}}.
+    4. LEAN PLANNING: Write steps as short, abstract directives (e.g., "List the required documents").
     5. LEDGER STRICT AVOIDANCE: Review the "MILESTONES ALREADY COMPLETED". You are STRICTLY FORBIDDEN from generating any step that repeats or overlaps with these completed actions. 
-    6. THE EMPTY ARRAY RULE: If the user's request is already fully covered by the completed milestones, or requires no new procedural steps, you MUST output an empty array: {{"steps": [], "current_step_index": 0}}.
     
-    Based on the retrieved knowledge, create the linear steps to satisfy the User's Latest Request.
+    Based EXCLUSIVELY on the retrieved knowledge, output the extraction plan.
+    
     Output JSON ONLY matching this schema:
     {{"steps": ["Short directive for step 1"...], "current_step_index": 0}}
     """
@@ -362,6 +366,7 @@ def node_04a_resolution_planner(state: AgentState):
         print(f"🚨 [NODE 04a EXCEPTION] Plan Generation Failed: {e}")
         return {"preflight_status": "fail"}
 
+
 def node_04b_response_generator(state: AgentState):
     """n8: Model A Synthesizes text, dynamic chips & logs completed steps."""
     print("🟢 [NODE 04b] Executing Response Generator")
@@ -371,9 +376,7 @@ def node_04b_response_generator(state: AgentState):
     steps = plan.get("steps", [])
     routing_status = state.get("preflight_status", "")
     
-    # V3.73: Load the current ledger
     completed_steps = state.get("completed_steps", [])
-    
     is_conclusion = bool(steps and idx >= len(steps))
     
     if routing_status == "intent_clarification_needed":
@@ -395,13 +398,8 @@ def node_04b_response_generator(state: AgentState):
     feedback_str = f"CRITICAL CORRECTION NEEDED FROM LAST ATTEMPT: {feedback[-1]}" if feedback else ""
 
     prompt = f"""
-    You are Horizon, an informational digital banking assistant embedded in a consumer banking mobile application.
-    
-    CORE OPERATIONAL RULES:
-    1. READ-ONLY & INFORMATIONAL ONLY: You extract FAQ info, explain procedures, and guide users step-by-step. 
-    2. NO TRANSACTION EXECUTION: You CANNOT execute transactions.
-    3. NO FALSE COMPLETION: When a process reaches its final step, instruct the user to complete it on the bank's secure native screen using allowlisted deep-links.
-    4. KNOWLEDGE CONTAINMENT: Rely ONLY on the retrieved knowledge base facts below.
+    ROLE ALIGNMENT:
+    You are Horizon, a Read-Only FAQ Navigation Bot embedded in a banking app. Your ONLY identity is a conversational search interface. You do not have eyes, you do not have backend system access, you cannot see user screens, and you cannot receive, view, or verify uploaded files. You exist SOLELY to read static FAQ documents to the user and guide them.
     
     Current Plan: {steps}
     Current Step to Execute: "{current_step}"
@@ -412,10 +410,15 @@ def node_04b_response_generator(state: AgentState):
 
     Rules for Text Generation:
     - Draft a conversational response addressing ONLY the 'Current Step'.
+    - ZERO HALLUCINATION: You must rely EXCLUSIVELY on the 'Retrieved Knowledge'. Do NOT add extra details, standard banking practices, or assume features (like optional documents, proof of income, or taking a selfie) unless explicitly stated in the text.
+    - If the knowledge does not contain the answer to the user's specific question, you MUST gracefully state that the information is not provided in your current policy documents. Do not attempt to guess or infer.
+    - If the user says they uploaded a file or completed an action, praise them for completing it on their end, but DO NOT claim that you received it or will check it.
+    - If quoting exact numerical rates or fees, use ONLY allowed placeholders: {list(VALID_PLACEHOLDERS)}.
     
-    Rules for UI Payload (Predictive Next Best Action):
-    - Dynamically select the best 'uiType': 'chips', 'stepper', or 'none'.
-    - If 'chips', populate 'options' array with 1-3 predicted user responses.
+    Rules for UI Payload:
+    - UI Payload is not mandatory, if there is no need for UI payload based on the context, choose 'uiType' to be 'none'.
+    - Dynamically select the most suitable 'uiType' for the current context: 'chips', 'stepper', or 'none'. 
+    - If 'chips', populate 'options' array with no more than 3 predicted user responses based on retreived knowledge.
     
     Output JSON ONLY matching this schema:
     {{"response": "Your conversational text here", "uiType": "chips" | "stepper" | "none", "options": ["prediction 1"], "advance_step": true}}
@@ -431,7 +434,6 @@ def node_04b_response_generator(state: AgentState):
         should_advance = res.get("advance_step") and steps and idx < len(steps) and routing_status != "intent_clarification_needed"
         
         if should_advance:
-            # V3.73 FIX: Log this step into the completed ledger before advancing
             completed_steps.append(current_step)
             plan["current_step_index"] = idx + 1
             print(f"   ⏩ [STEP ADVANCED]: Moving to index {plan['current_step_index']}")
@@ -452,12 +454,13 @@ def node_04b_response_generator(state: AgentState):
         return {
             "final_draft": draft, 
             "active_plan": plan, 
-            "completed_steps": completed_steps, # V3.73: Return the updated ledger
+            "completed_steps": completed_steps, 
             "ui_action_payload": {"uiType": ui_type, "options": options}
         }
     except Exception as e:
         print(f"🚨 [NODE 04b EXCEPTION] Text Generation Failed: {e}")
         return {"final_draft": "I encountered an error. Please try again.", "preflight_status": "fail"}
+
 
 # --- PHASE 4: OUTPUT GUARDRAILS & ESCALATION HANDLER ---
 

@@ -8,7 +8,8 @@ api_key = os.environ.get("GROQ_API_KEY")
 def call_groq_lpu(prompt: str) -> str:
     """
     Centralized remote Groq LPU inference client manager.
-    Takes a raw string prompt, sends it to Groq, and returns the string response.
+    Takes a raw string prompt, logs it to the terminal, sends it to Groq, 
+    and returns the string response.
     """
     if not api_key:
         # If no API key is found, raise an exception. 
@@ -16,6 +17,13 @@ def call_groq_lpu(prompt: str) -> str:
         raise ValueError("GROQ_API_KEY is not set in the environment.")
         
     client = Groq(api_key=api_key)
+
+    # 📡 CENTRALIZED PROMPT TELEMETRY
+    print("\n" + "░"*60)
+    print("📤 [LLM PROMPT DISPATCHED]")
+    print("-" * 60)
+    print(prompt.strip())
+    print("░"*60 + "\n")
 
     try:
         # Using the versatile model with 0 temperature for strict compliance
@@ -32,5 +40,5 @@ def call_groq_lpu(prompt: str) -> str:
         return chat_completion.choices[0].message.content
         
     except Exception as e:
-        print(f"[LLM Service Error]: {e}")
+        print(f"🚨 [LLM Service Error]: {e}")
         raise e

@@ -4,7 +4,9 @@ from langchain_core.messages import BaseMessage
 class AgentState(TypedDict):
     # --- PERSISTENT MEMORY (Cross-Turn) ---
     chat_history: List[BaseMessage]
-    active_intent: str
+    #active_intent: str
+    active_domain: str               # e.g., "ACCOUNT_OPENING"
+    active_intent_families: List[str]# e.g., ["Eligibility","documents"]
     active_plan: Dict[str, Any]      # e.g., {"steps": [], "current_step_index": 0}
     completed_steps: List[str]       # V3.73: Stateful Milestone Tracker for Anti-Amnesia
     process_slots: Dict[str, Any]    # Verified data (e.g., {"age": 25})

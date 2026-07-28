@@ -7,7 +7,19 @@ from backend.app.services.memory_service import LongTermMemoryManager
 
 # MOCK DATABASES FOR VALIDATION
 VALID_PLACEHOLDERS = {"SAVINGS_RATE_01", "MIN_BALANCE_01", "FEE_01"}
-FAQ_DIRECTORIES = ["ACCOUNT_OPENING", "DIGITAL_BANKING", "PROFILE_UPDATE"]
+#FAQ_DIRECTORIES = ["ACCOUNT_OPENING", "DIGITAL_BANKING", "PROFILE_UPDATE"]
+# V3.74: COMPREHENSIVE TWO-TIERED TAXONOMY
+GLOBAL_TAXONOMY = {
+    "ACCOUNT_OPENING": ["Eligibility", "documents", "application status"],
+    "DEPOSIT_ACCOUNTS": ["Features", "fees", "restrictions", "dormancy"],
+    "DEBIT_CARDS": ["Activation", "decline", "lost card", "PIN"],
+    "CREDIT_CARDS": ["Fees", "statement queries", "decline", "dispute"],
+    "DIGITAL_BANKING": ["Password reset", "login issue", "OTP issue"],
+    "STATEMENTS": ["Download", "missing statement", "transaction explanation"],
+    "LOANS": ["Features", "documents", "application status", "repayment issue"],
+    "BRANCHES": ["Branch locator", "ATM locator", "service availability"],
+    "PROFILE": ["Contact update", "address update", "status"]
+}
 
 def _parse_json_robustly(raw_text: str) -> dict:
     """Strips markdown formatting to prevent json.loads() from crashing."""
@@ -68,13 +80,12 @@ def node_01_deterministic_ingest_gate(state: AgentState):
 
 # --- PHASE 1: PREFLIGHT ROUTING & INTERLOCK CONTEXTS ---
 
-
 def node_02a_pending_contract_check(state: AgentState):
     """n4: Scans state for active pending_intent_switch flag."""
     print("🟢 [NODE 02a] Executing Pending Contract Check")
     pending = state.get("pending_intent_switch", {})
-    if pending and pending.get("target_intent"):
-        print(f"   🔒 [STATE INTERLOCKED]: Pending switch to '{pending.get('target_intent')}'")
+    if pending and pending.get("target_domain"):
+        print(f"   🔒 [STATE INTERLOCKED]: Pending switch to '{pending.get('target_domain')}'")
         return {"preflight_status": "yes"} 
     
     print("   🔓 [STATE OPEN]: No pending contracts.")
@@ -84,16 +95,16 @@ def node_02b_confirmation_gate(state: AgentState):
     """n6: Model A evaluates Yes/No/Else responses. Erases intent on Else."""
     print("🟢 [NODE 02b] Executing Confirmation Gate")
     user_msg = state.get("user_input", "")
-    pending_intent = state.get("pending_intent_switch", {}).get("target_intent", "")
+    pending_domain = state.get("pending_intent_switch", {}).get("target_domain", "")
+    pending_families = state.get("pending_intent_switch", {}).get("target_intent_families", [])
     
     prompt = f"""
     Evaluate user input: "{user_msg}"
-    Did they agree to abandon progress and switch to {pending_intent}?
+    Did they agree to abandon progress and switch to {pending_domain}?
     Reply ONLY with JSON: {{"decision": "yes" | "no" | "else"}}
     """
     try:
         raw_res = call_groq_lpu(prompt)
-        print(f"   🤖 [LLM RAW OUTPUT]: {raw_res.strip()}")
         decision = _parse_json_robustly(raw_res).get("decision", "else")
     except:
         decision = "else"
@@ -102,21 +113,31 @@ def node_02b_confirmation_gate(state: AgentState):
         
     if decision == "yes":
         return {
-            "active_intent": pending_intent,
+            "active_domain": pending_domain,
+            "active_intent_families": pending_families,
             "pending_intent_switch": {}, 
             "preflight_status": "yes"
         }
     elif decision == "no":
-        return {
-            "pending_intent_switch": {}, 
-            "preflight_status": "no"
-        }
+        return {"pending_intent_switch": {}, "preflight_status": "no"}
     else:
-        return {
-            "active_intent": "",         
-            "pending_intent_switch": {}, 
-            "preflight_status": "else"
-        }
+        return {"active_domain": "", "active_intent_families": [], "pending_intent_switch": {}, "preflight_status": "else"}
+
+def node_02e_contract_writer(state: AgentState):
+    """n12: Sets pending switch flag & prompts confirmation."""
+    print("🟢 [NODE 02e] Executing Contract Writer")
+    target = state.get("pending_intent_switch", {}).get("target_domain", "a new topic")
+    msg = f"Do you want to abandon your current progress and switch to {target}?"
+    
+    print(f"   🛑 [INTERCEPT]: Prompting user to confirm intent switch to {target}")
+    history = list(state.get("chat_history", []))
+    history.append(AIMessage(content=msg))
+    
+    return {
+        "final_response": msg,
+        "chat_history": history,
+        "ui_action_payload": {"uiType": "chips", "options": ["Yes", "No"]}
+    }
 
 def node_02c_inbound_semantic_gate(state: AgentState):
     """n16: Model B query compliance check."""
@@ -128,13 +149,15 @@ def node_02d_intent_classifier(state: AgentState):
     print("🟢 [NODE 02d] Executing Intent Classifier")
     user_msg = state.get("user_input", "")
     
-    active = state.get("active_intent", "")
+    active_domain = state.get("active_domain", "")
+    active_families = state.get("active_intent_families", [])
+    
     plan = state.get("active_plan", {})
     idx = plan.get("current_step_index", 0)
     steps = plan.get("steps", [])
     
     process_complete = False
-    if active and steps and idx >= len(steps):
+    if active_domain and steps and idx >= len(steps):
         print("   🏁 [PROCESS COMPLETE]: Previous plan resolved.")
         process_complete = True
         
@@ -145,49 +168,63 @@ def node_02d_intent_classifier(state: AgentState):
     history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in recent_context])
     
     prompt = f"""
-    Current Active Intent: "{active}"
+    Current Active Domain: "{active_domain}"
+    Current Active Families: {active_families}
     Current Target Step in Plan: "{current_step}"
-    FAQ Directories: {FAQ_DIRECTORIES}
+    Global Taxonomy: {GLOBAL_TAXONOMY}
     Recent Conversation Context: {history_str}
     Latest User Input: "{user_msg}"
     
+    TASK: Classify the user's input into a specific Domain and a list of specific Intent Families based on the Global Taxonomy.
+    If the user asks for small talk or clarification, leave Domain and Families blank.
+    
     RULES FOR CLASSIFICATION:
-    1. INTENT CHANGE: Use ONLY if 'Current Active Intent' is NOT empty, AND the user introduces a SPECIFIC new banking topic (e.g., "Actually, I want to open an account"). 
-    2. INTENT CLARIFICATION NEEDED: Use if the input is small talk, a vague preamble, a general request to change topics (e.g., "I have another question", "Ask something else"), or lacks a specific financial intent.
-    3. OUT OF KNOWLEDGE: Use ONLY if the user asks for a SPECIFIC FINANCIAL OR BANKING operation that is clearly outside the FAQ Directories. Do NOT use this for personal questions or small talk.
-    4. NEW INTENT: Use if 'Current Active Intent' is empty AND the topic is inside the FAQ Directories.
-    5. INTENT DRIFT: Use if the user stays within the 'Current Active Intent' but DEVIATES from the current step.
-    6. INTENT PERSIST: Use ONLY if the user is directly answering a question, making a selection, or moving forward with the 'Current Target Step'.
-    7. USER ESCALATION: Use if the user explicitly demands a human agent.
+    1. INTENT CHANGE: Use if 'Current Active Domain' is NOT empty, AND the user introduces a new Domain entirely.
+    2. INTENT CLARIFICATION NEEDED: Use for small talk, vague requests ("Ask another question"), or no financial intent.
+    3. OUT OF KNOWLEDGE: Use ONLY if the query is a financial topic completely missing from the Global Taxonomy.
+    4. NEW INTENT: Use if 'Current Active Domain' is empty.
+    5. INTENT DRIFT: Use if the user stays in the SAME Domain, but asks about DIFFERENT or ADDITIONAL Intent Families.
+    6. INTENT PERSIST: Use ONLY if the user is advancing the current step without changing the topic.
+    7. USER ESCALATION: Use if demanding a human agent.
 
     Output JSON ONLY:
-    {{"route": "intent_persist" | "intent_change" | "intent_drift" | "new_intent" | "out_of_knowledge" | "intent_clarification_needed" | "user_escalation", "target_intent": "..."}}
+    {{"route": "intent_persist" | "intent_change" | "intent_drift" | "new_intent" | "out_of_knowledge" | "intent_clarification_needed" | "user_escalation", "target_domain": "...", "target_intent_families": ["..."]}}
     """
     
     try:
         raw_res = call_groq_lpu(prompt)
         res = _parse_json_robustly(raw_res) 
         route = res.get("route", "unexpected_exception")
-        target = res.get("target_intent", "")
+        target_domain = res.get("target_domain", "")
+        target_families = res.get("target_intent_families", [])
         
-        print(f"   🎯 [ROUTING DECISION]: {route.upper()} | TARGET: {target}")
+        # V3.74 MATHEMATICAL ROUTING OVERRIDE
+        # We trust the LLM's classification of the Domain/Families, but we use Python math to enforce the correct route!
+        if route not in ["intent_clarification_needed", "user_escalation", "out_of_knowledge", "unexpected_exception"]:
+            if not target_domain:
+                print("   ⚠️ [FALLBACK]: Empty target domain detected. Downgrading to clarification.")
+                route = "intent_clarification_needed"
+            elif not active_domain:
+                route = "new_intent"
+            elif target_domain != active_domain:
+                route = "intent_change"
+            elif set(target_families) != set(active_families):
+                route = "intent_drift"
+            else:
+                route = "intent_persist"
+
+        print(f"   🎯 [ROUTING DECISION]: {route.upper()} | DOMAIN: {target_domain} | FAMILIES: {target_families}")
         
         clear_state = {"active_plan": {}, "pending_intent_switch": {}, "completed_steps": []}
         
         if route == "intent_change":
-            # V3.76 FIX: Prevent the "Empty Contract" Loop!
-            # If the LLM fires an intent_change but cannot identify a specific target,
-            # we automatically downgrade it to clarification.
-            if not target:
-                print("   ⚠️ [FALLBACK]: Empty target intent detected. Downgrading to clarification.")
-                return {"preflight_status": "intent_clarification_needed", "pending_intent_switch": {}}
-                
-            return {"preflight_status": route, "pending_intent_switch": {"target_intent": target}}
+            return {"preflight_status": route, "pending_intent_switch": {"target_domain": target_domain, "target_intent_families": target_families}}
             
         elif route == "new_intent":
             return {
                 "preflight_status": route, 
-                "active_intent": target if target else active, 
+                "active_domain": target_domain, 
+                "active_intent_families": target_families,
                 "pending_intent_switch": {},
                 "active_plan": {},
                 "completed_steps": [] 
@@ -196,7 +233,8 @@ def node_02d_intent_classifier(state: AgentState):
         elif route == "intent_drift":
             return {
                 "preflight_status": route, 
-                "active_intent": target if target else active, 
+                "active_domain": target_domain, 
+                "active_intent_families": target_families,
                 "pending_intent_switch": {},
                 "active_plan": {} 
             }
@@ -213,75 +251,56 @@ def node_02d_intent_classifier(state: AgentState):
         print(f"🚨 [NODE 02d EXCEPTION] Routing to Node 10. Error: {e}")
         return {"preflight_status": "unexpected_exception"}
 
-def node_02e_contract_writer(state: AgentState):
-    """n12: Sets pending switch flag & prompts confirmation."""
-    print("🟢 [NODE 02e] Executing Contract Writer")
-    target = state.get("pending_intent_switch", {}).get("target_intent", "a new topic")
-    msg = f"Do you want to abandon your current progress and switch to {target}?"
-    
-    print(f"   🛑 [INTERCEPT]: Prompting user to confirm intent switch to {target}")
-    
-    history = list(state.get("chat_history", []))
-    history.append(AIMessage(content=msg))
-    
-    return {
-        "final_response": msg,
-        "chat_history": history,
-        "ui_action_payload": {"uiType": "chips", "options": ["Yes", "No"]}
-    }
-
 # --- PHASE 2: BOUNDED RAG ARCHITECTURE ---
 
-
 def node_03a_knowledge_blueprint_planner(state: AgentState):
-    """n14: Model A formulates domain search keywords."""
+    """n14: Model A formulates optimized Cosine Similarity keywords."""
     print("🟢 [NODE 03a] Executing Knowledge Blueprint Planner")
     
     user_input = state.get("user_input", "")
-    target_intent = state.get("active_intent", "")
+    active_domain = state.get("active_domain", "")
+    active_families = state.get("active_intent_families", [])
     
-    # FIX: If the user just said "Yes" to confirm a switch, "Yes" is a bad search term.
-    # Use the target intent as the search keyword instead.
-    if user_input.strip().lower() in ["yes", "y", "yeah", "correct", "sure"]:
-        search_keywords = target_intent
-    else:
-        search_keywords = user_input
+    prompt = f"""
+    The user is asking a question in the Domain: "{active_domain}" and Intent Families: {active_families}.
+    User Input: "{user_input}"
+    
+    Generate a highly optimized, comma-separated list of 3-5 keywords to execute a Cosine Similarity vector search against the database.
+    Output JSON ONLY: {{"optimized_keywords": "keyword1, keyword2, keyword3"}}
+    """
+    try:
+        raw_res = call_groq_lpu(prompt)
+        blueprint = _parse_json_robustly(raw_res)
+    except:
+        blueprint = {"optimized_keywords": user_input}
         
-    blueprint = {
-        "keywords": search_keywords, 
-        "directory": target_intent
-    }
     print(f"   🗺️ [BLUEPRINT GENERATED]: {blueprint}")
     return {"knowledge_blueprint": blueprint}
 
 def node_03b_vector_retrieval_engine(state: AgentState):
-    """n17: ChromaDB vector search bounded by folder path."""
+    """n17: Executes Mock RAG Retrieval based on Domain and Families."""
     print("🟢 [NODE 03b] Executing Vector Retrieval Engine")
-    intent = state.get("active_intent", "")
-    print(f"   🔎 [SEARCHING DB]: Target path -> '{intent}'")
+    domain = state.get("active_domain", "")
+    families = state.get("active_intent_families", [])
+    print(f"   🔎 [SEARCHING DB]: Domain -> '{domain}' | Families -> {families}")
     
-    # FIX: Provide a realistic, detailed mock RAG payload so the LLM has actual data to extract.
-    if intent == "ACCOUNT_OPENING":
-        retrieved = """
-        Mock FAQ Policy for ACCOUNT_OPENING: 
-        To open a standard savings or checking account, the customer must provide the following three mandatory documents:
-        1. Valid Government-Issued Photo ID (e.g., Passport, National ID card, or Driver's License).
-        2. Proof of Residential Address dated within the last 3 months (e.g., Utility bill, Bank statement, or Tenancy agreement).
-        3. Tax Identification Number (TIN) or Social Security Number.
-        The current promotional interest rate is {{SAVINGS_RATE_01}}.
-        """
-        print(f"   📄 [RETRIEVED DATA]: Found detailed policy for {intent}")
+    # MOCK RAG LOGIC (To be replaced by actual ChromaDB `$in` query later)
+    if domain == "ACCOUNT_OPENING":
+        retrieved = ""
+        if "documents" in families or not families:
+            retrieved += "To open a standard savings or checking account, you must provide: 1. Photo ID, 2. Proof of Address (≤3 months), 3. TIN/SSN.\n"
+        if "Eligibility" in families:
+            retrieved += "Applicants must be at least 18 years old and a resident.\n"
+        if "application status" in families:
+            retrieved += "To check your application status, please click the secure link below: bankapp://account/status\n"
         
-    elif intent in FAQ_DIRECTORIES:
-        retrieved = f"Mock FAQ Policy for {intent}: To process {intent}, please provide required documents."
-        print(f"   📄 [RETRIEVED DATA]: Found valid policy for {intent}")
-        
+        print(f"   📄 [RETRIEVED DATA]: Assembled compounded multi-intent chunks.")
+    elif domain in GLOBAL_TAXONOMY:
+        retrieved = f"Mock FAQ Policy for {domain} - {families}: To process this request, please refer to the digital guidelines."
     else:
         retrieved = "NO_KNOWLEDGE_FOUND"
-        print(f"   ❌ [RETRIEVED DATA]: Database returned empty for {intent}")
         
-    return {"raw_retrieved_text": retrieved}
-
+    return {"raw_retrieved_text": retrieved.strip()}
 
 def node_03c_sufficiency_auditor(state: AgentState):
     """n18: Model B checks context sufficiency (Max 3 retries)."""
@@ -322,7 +341,9 @@ def node_04a_resolution_planner(state: AgentState):
         
     retrieved_text = state.get("raw_retrieved_text", "")
     user_input = state.get("user_input", "")
-    active_intent = state.get("active_intent", "")
+    
+    active_domain = state.get("active_domain", "")
+    active_families = state.get("active_intent_families", [])
     
     completed_steps = state.get("completed_steps", [])
     completed_str = "\n".join([f"- {s}" for s in completed_steps]) if completed_steps else "None"
@@ -332,7 +353,8 @@ def node_04a_resolution_planner(state: AgentState):
     You are a Strict Information Extraction Engine. You are NOT a helpful assistant, you are NOT a conversationalist, and you do not solve problems. Your ONLY function is to act as a strict logical filter: you read a user's query, search the provided text for the exact answer, and output a clinical plan to deliver that specific answer.
     
     User's Latest Request: "{user_input}"
-    Active Intent: "{active_intent}"
+    Active Domain: "{active_domain}"
+    Active Intent Families: {active_families}
     Retrieved Knowledge: "{retrieved_text}"
     
     MILESTONES ALREADY COMPLETED:
@@ -416,9 +438,10 @@ def node_04b_response_generator(state: AgentState):
     - If quoting exact numerical rates or fees, use ONLY allowed placeholders: {list(VALID_PLACEHOLDERS)}.
     
     Rules for UI Payload:
+    - UI Payload is not mandatory. It is used to improve user experience by providing them with predicted next user input according to context and retrieved knowledge.
     - UI Payload is not mandatory, if there is no need for UI payload based on the context, choose 'uiType' to be 'none'.
     - Dynamically select the most suitable 'uiType' for the current context: 'chips', 'stepper', or 'none'. 
-    - If 'chips', populate 'options' array with no more than 3 predicted user responses based on retreived knowledge.
+    - If 'chips', populate 'options' array with no more than 3 predicted user input in the next turn based on retrieved knowledge only. DO NOT provide option of talking to human agent or similar meaning.
     
     Output JSON ONLY matching this schema:
     {{"response": "Your conversational text here", "uiType": "chips" | "stepper" | "none", "options": ["prediction 1"], "advance_step": true}}

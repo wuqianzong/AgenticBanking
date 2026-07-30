@@ -1,0 +1,27 @@
+[
+  {
+    "category": "Savings Account",
+    "question": "What is the minimum age for opening a Savings Account by Trust?",
+    "answer": "You may apply if you are a Singapore citizen, PR or foreigner with a valid work pass, and 16 years old and above."
+  },
+  {
+    "category": "Savings Account",
+    "question": "Is there a fall-below fee for the Savings Account?",
+    "answer": "No, there are absolutely zero hidden fees! Say goodbye to minimum balance or fall-below fees."
+  },
+  {
+    "category": "Credit Card",
+    "question": "How do I earn up to 15% cashback on my preferred category?",
+    "answer": "You can change your preferred category in the Trust App under Rewards > Cashback. Options include shopping, dining, transport, travel, wellness and entertainment."
+  },
+  {
+    "category": "Credit Card",
+    "question": "What are the income requirements for a credit card?",
+    "answer": "For Singaporeans/PRs (age 21-55), S$30,000 annual income. For foreigners, S$60,000 annual income."
+  },
+  {
+    "category": "Digital Banking",
+    "question": "Where can I find my account number?",
+    "answer": "Log in to your Trust App. Tap on 'Savings'. You will be able to view your account number in the main account card."
+  }
+]

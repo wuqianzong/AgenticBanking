@@ -1,0 +1,1502 @@
+[
+    {
+        "faq_id": "faq_2f201863",
+        "original_category": "autoinvest-(stocks)",
+        "question": "How do I set up AutoInvest for Stocks?",
+        "answer": "- To set up AutoInvest in stocks, you'll need an active Stocks account. - Log in to Trust App and go to Investments - Tap Stocks tab - Tap Set up to schedule AutoInvest now - Choose the stock or ETF you want to AutoInvest in - Select your preferred frequency and start date , otherwise the default would be the next business day - Enter the amount and currency to invest regularly - Review and confirm your setup",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "AutoInvest",
+            "Stocks"
+        ],
+        "synth_question": "What steps are required to activate the automatic investment feature for equities at Horizon Bank?",
+        "synth_answer": "To initiate automatic investments in stocks with Horizon Bank, ensure you have an active stocks account. Follow these steps: \n   * Access the Horizon App and navigate to the Investments section\n   * Select the Stocks option\n   * Proceed to the setup for automatic investments\n   * Identify the specific stock or exchange-traded fund you wish to invest in automatically\n   * Determine your preferred investment schedule and commencement date; if not specified, the next working day will be applied by default\n   * Specify the amount and currency for regular investments\n   * Review the details and confirm the setup to complete the process",
+        "tokenized_answer": "To initiate automatic investments in stocks with Horizon Bank, ensure you have an active stocks account. Follow these steps: \n   * Access the Horizon App and navigate to the Investments section\n   * Select the Stocks option\n   * Proceed to the setup for automatic investments\n   * Identify the specific stock or exchange-traded fund you wish to invest in automatically\n   * Determine your preferred investment schedule and commencement date; if not specified, the next working day will be applied by default\n   * Specify the amount and currency for regular investments\n   * Review the details and confirm the setup to complete the process"
+    },
+    {
+        "faq_id": "faq_9a88fadb",
+        "original_category": "autoinvest-(stocks)",
+        "question": "Can I set up more than one AutoInvest schedule for Stocks?",
+        "answer": "- Yes, you can create multiple AutoInvest instructions - even more than one for the same stock or ETF with different frequency. You can edit or cancel them any time from the next scheduled date.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "AutoInvest",
+            "Stocks"
+        ],
+        "synth_question": "Is it possible to configure multiple automated investment plans for equities through Horizon Bank?",
+        "synth_answer": "At Horizon Bank, you have the flexibility to establish numerous automated investment schedules for your stock portfolio, including multiple plans for the same security with varying frequencies. Furthermore, you can modify or terminate these instructions at any time, with changes taking effect from the next scheduled investment date.",
+        "tokenized_answer": "At Horizon Bank, you have the flexibility to establish numerous automated investment schedules for your stock portfolio, including multiple plans for the same security with varying frequencies. Furthermore, you can modify or terminate these instructions at any time, with changes taking effect from the next scheduled investment date."
+    },
+    {
+        "faq_id": "faq_3fb1caf7",
+        "original_category": "autoinvest-(stocks)",
+        "question": "Do I need to fund my Stocks account before each AutoInvest schedule?",
+        "answer": "- No, you do not need to separately fund your Stocks account. Money will be automatically deducted from your Trust Savings account in SGD and converted to USD at the prevailing exchange rate for each scheduled AutoInvest buy order. You’ll be notified about your upcoming AutoInvest order 1 day in advance. Please ensure you have sufficient monies in your Savings account.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "AutoInvest",
+            "Stocks"
+        ],
+        "synth_question": "Is it necessary to preload my investment account for automated stock purchases?",
+        "synth_answer": "At Horizon Bank, your automated investments are seamlessly facilitated without requiring a separate preload of funds. For each scheduled investment, the necessary amount will be automatically deducted from your Horizon Savings account in Singapore Dollars and converted to US Dollars at the current exchange rate. As a courtesy, you will receive a notification one day prior to the scheduled investment. To avoid any issues, please ensure that your Savings account with Horizon Bank has adequate funds to cover the upcoming investment.",
+        "tokenized_answer": "At Horizon Bank, your automated investments are seamlessly facilitated without requiring a separate preload of funds. For each scheduled investment, the necessary amount will be automatically deducted from your Horizon Savings account in Singapore Dollars and converted to US Dollars at the current exchange rate. As a courtesy, you will receive a notification one day prior to the scheduled investment. To avoid any issues, please ensure that your Savings account with Horizon Bank has adequate funds to cover the upcoming investment."
+    },
+    {
+        "faq_id": "faq_0193ee46",
+        "original_category": "autoinvest-(stocks)",
+        "question": "What happens if I have insufficient money in my Savings account for the AutoInvest schedule?",
+        "answer": "- If your Savings account doesn’t have sufficient monies, your AutoInvest for that scheduled date will not go through, and you’ll be notified. There won’t be a retry for that particular scheduled date, but you can still invest by topping up your Stocks account and then placing an order through the Trust App. As long as your AutoInvest setup remains active, it will automatically try again during the next scheduled date.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "AutoInvest",
+            "Fees"
+        ],
+        "synth_question": "How does Horizon Bank handle AutoInvest transactions when my Savings account balance is low?",
+        "synth_answer": "In the event that your Savings account lacks sufficient funds to cover an AutoInvest transaction, the scheduled investment will be skipped and you will receive a notification from Horizon Bank. Although the transaction will not be retried on the same scheduled date, you have the option to manually invest by replenishing your account and using the Horizon App to place an order. As long as your AutoInvest configuration remains active, Horizon Bank will automatically attempt to execute the investment on the next scheduled date.",
+        "tokenized_answer": "In the event that your Savings account lacks sufficient funds to cover an AutoInvest transaction, the scheduled investment will be skipped and you will receive a notification from Horizon Bank. Although the transaction will not be retried on the same scheduled date, you have the option to manually invest by replenishing your account and using the Horizon App to place an order. As long as your AutoInvest configuration remains active, Horizon Bank will automatically attempt to execute the investment on the next scheduled date."
+    },
+    {
+        "faq_id": "faq_da8c52ca",
+        "original_category": "autoinvest-(stocks)",
+        "question": "What happens if my AutoInvest date falls on a non-trading day?",
+        "answer": "- If your scheduled AutoInvest date falls on a non-trading day, our system will reschedule it to the next available trading day. The autoinvested amount will be deducted from your savings account, and the market buy order will be submitted on the next available trading day. To view the list of non-trading days, please refer to Holidays & Trading Hours",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "AutoInvest",
+            "Trading Hours"
+        ],
+        "synth_question": "How does Horizon Bank handle AutoInvest transactions when they coincide with a day the market is closed?",
+        "synth_answer": "In the event that your designated AutoInvest date aligns with a non-trading day, Horizon Bank's system will automatically adjust the transaction to the subsequent trading day. The process involves deducting the specified amount from your savings account and then executing the market buy order on the next available trading day. For a comprehensive list of days when the market is closed, you can consult the Holidays & Trading Hours section.",
+        "tokenized_answer": "In the event that your designated AutoInvest date aligns with a non-trading day, Horizon Bank's system will automatically adjust the transaction to the subsequent trading day. The process involves deducting the specified amount from your savings account and then executing the market buy order on the next available trading day. For a comprehensive list of days when the market is closed, you can consult the Holidays & Trading Hours section."
+    },
+    {
+        "faq_id": "faq_d22a7a8c",
+        "original_category": "autoinvest-(stocks)",
+        "question": "What happens if I have insufficient money in my Savings account for the AutoInvest schedule?",
+        "answer": "- If your Savings account doesn’t have sufficient monies, your AutoInvest for that scheduled date will not go through, and you’ll be notified. There won’t be a retry for that particular scheduled date, but you can still invest by topping up your Stocks account and then placing an order through the Trust App. As long as your AutoInvest setup remains active, it will automatically try again during the next scheduled date.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "AutoInvest",
+            "Fees"
+        ],
+        "synth_question": "How does Horizon Bank handle AutoInvest transactions when my Savings account balance is low?",
+        "synth_answer": "In the event that your Savings account lacks sufficient funds to cover an AutoInvest transaction, the scheduled investment will be skipped, and you will receive a notification from Horizon Bank. Although the transaction will not be retried on that specific date, you have the option to manually invest by replenishing your account and placing an order through the Horizon App. Provided your AutoInvest configuration remains active, the system will automatically attempt to execute the investment again on the next scheduled date.",
+        "tokenized_answer": "In the event that your Savings account lacks sufficient funds to cover an AutoInvest transaction, the scheduled investment will be skipped, and you will receive a notification from Horizon Bank. Although the transaction will not be retried on that specific date, you have the option to manually invest by replenishing your account and placing an order through the Horizon App. Provided your AutoInvest configuration remains active, the system will automatically attempt to execute the investment again on the next scheduled date."
+    },
+    {
+        "faq_id": "faq_9d7a4b83",
+        "original_category": "trust-card",
+        "question": "When will my physical card arrive?",
+        "answer": "- Your physical card will be delivered to you within 6-7 working days from your application date.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "card_delivery"
+        ],
+        "synth_question": "What is the expected timeframe for receiving my Horizon card in the mail after submitting my application?",
+        "synth_answer": "Following your application, you can anticipate the arrival of your physical Horizon card within a period of 6-7 working days, commencing from the date your application was received.",
+        "tokenized_answer": "Following your application, you can anticipate the arrival of your physical Horizon card within a period of {{faq_9d7a4b83_001}}-{{faq_9d7a4b83_002}} working days, commencing from the date your application was received."
+    },
+    {
+        "faq_id": "faq_78c7cb79",
+        "original_category": "trust-card",
+        "question": "What is the difference between the physical card and digital card only?",
+        "answer": "- You can perform almost all card related transactions in Singapore using digital card through Apple Pay, Google Pay and FairPrice App.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "card_types"
+        ],
+        "synth_question": "How do the physical and digital versions of my Horizon card differ in terms of functionality and usage?",
+        "synth_answer": "At Horizon Bank, our digital card offers a wide range of capabilities, allowing you to execute virtually all card-related transactions within Singapore through various platforms, including Apple Pay, Google Pay, and the FairPrice App, thereby providing a seamless and convenient experience.",
+        "tokenized_answer": "At Horizon Bank, our digital card offers a wide range of capabilities, allowing you to execute virtually all card-related transactions within Singapore through various platforms, including Apple Pay, Google Pay, and the FairPrice App, thereby providing a seamless and convenient experience."
+    },
+    {
+        "faq_id": "faq_5dd95dc7",
+        "original_category": "trust-card",
+        "question": "What can I use my digital card for?",
+        "answer": "- Your digital card can be used for online transactions, in-app purchases, offline and recurring payments (e.g. insurance policy premiums, telecommunications bills). If you have enrolled your card for Apple Pay and/or Google Pay, you may use them for in-store purchases.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "card usage"
+        ],
+        "synth_question": "How can I utilize my Horizon card in various transactions?",
+        "synth_answer": "With your Horizon card, you can facilitate a wide range of transactions, including online purchases, payments within mobile applications, and recurring payments such as insurance premiums and utility bills. Additionally, if you have set up your Horizon card with Apple Pay or Google Pay, you can also make in-store purchases, providing you with a seamless and convenient payment experience.",
+        "tokenized_answer": "With your Horizon card, you can facilitate a wide range of transactions, including online purchases, payments within mobile applications, and recurring payments such as insurance premiums and utility bills. Additionally, if you have set up your Horizon card with Apple Pay or Google Pay, you can also make in-store purchases, providing you with a seamless and convenient payment experience."
+    },
+    {
+        "faq_id": "faq_0be050cf",
+        "original_category": "trust-card",
+        "question": "How do I add my card into Apple Pay and Google Pay?",
+        "answer": "- a. To add your card to Apple Pay : - Log into your Trust app - Tap \"View Card\" - Tap “Add to Apple Wallet” - Follow the on-screen instructions b. To add your card to Google Wallet or Google Pay: - Log into your Trust app - Tap \"View Card\" - Tap “Add to Google Pay” - Follow the on-screen instructions",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "Digital Wallets"
+        ],
+        "synth_question": "What steps do I need to take to integrate my Horizon card with popular mobile payment services like Apple Pay and Google Pay?",
+        "synth_answer": "To link your Horizon card to these services, follow these simple steps: \n   * For Apple Pay, access your Horizon App, navigate to the 'View Card' section, and select 'Add to Apple Wallet', then proceed with the prompts.\n   * For Google Pay, log in to your Horizon App, go to 'View Card', choose 'Add to Google Pay', and complete the on-screen instructions.",
+        "tokenized_answer": "To link your Horizon card to these services, follow these simple steps: \n   * For Apple Pay, access your Horizon App, navigate to the 'View Card' section, and select 'Add to Apple Wallet', then proceed with the prompts.\n   * For Google Pay, log in to your Horizon App, go to 'View Card', choose 'Add to Google Pay', and complete the on-screen instructions."
+    },
+    {
+        "faq_id": "faq_8573e6e1",
+        "original_category": "trust-card",
+        "question": "If I am a Union member, how do I receive my FairPrice Member benefits of 4% with the digital card?",
+        "answer": "- You can earn the 4% FairPrice Member benefits by adding your digital card in the FairPrice app and using your FairPrice app to make payment in-store or online.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "Rewards",
+            "Digital Cards"
+        ],
+        "synth_question": "As a union member, what steps do I need to take to redeem my 4% FairPrice membership rewards when using my Horizon Bank digital card?",
+        "synth_answer": "To unlock your 4% FairPrice member benefits, simply integrate your Horizon Bank digital card into the FairPrice application and proceed to make payments either in-store or through the app, ensuring you earn your rewards seamlessly with every transaction.",
+        "tokenized_answer": "To unlock your {{faq_8573e6e1_001}} FairPrice member benefits, simply integrate your Horizon Bank digital card into the FairPrice application and proceed to make payments either in-store or through the app, ensuring you earn your rewards seamlessly with every transaction."
+    },
+    {
+        "faq_id": "faq_1b63a21e",
+        "original_category": "trust-card",
+        "question": "How can I add my card to the FairPrice App?",
+        "answer": "- Follow these steps: - Download the FairPrice App from App Store / Play Store - Click on the icon on the top left corner of the main screen - Tap on Credit/Debit Card - Tap on + Add payment Method - Log into your Trust App, copy your card number using the copy icon . Remember your CVV and card expiry - Enter your card details manually and click on add card",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "statement queries"
+        ],
+        "synth_question": "What is the process for linking my Horizon card to the FairPrice mobile application?",
+        "synth_answer": "To integrate your Horizon card with the FairPrice app, please follow these steps: \n    • Install the FairPrice application from the App Store or Google Play Store.\n    • Navigate to the top left corner of the main screen and select the options menu.\n    • Choose the 'Credit/Debit Card' option, then proceed to add a new payment method by tapping the '+' icon.\n    • Access your Horizon App, locate your card details, and note the CVV and expiration date.\n    • Manually input your card information into the FairPrice app and confirm the addition of the card.",
+        "tokenized_answer": "To integrate your Horizon card with the FairPrice app, please follow these steps: \n    • Install the FairPrice application from the App Store or Google Play Store.\n    • Navigate to the top left corner of the main screen and select the options menu.\n    • Choose the 'Credit/Debit Card' option, then proceed to add a new payment method by tapping the '+' icon.\n    • Access your Horizon App, locate your card details, and note the CVV and expiration date.\n    • Manually input your card information into the FairPrice app and confirm the addition of the card."
+    },
+    {
+        "faq_id": "faq_7e20cb52",
+        "original_category": "trust-card",
+        "question": "How can I track the delivery status of my physical card?",
+        "answer": "- You can track the delivery status of your physical card in a few easy steps: 1. Log in to your Trust App 2. Tap on 'Savings' 3. Select 'Track Your Physical Card' section",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "statement queries"
+        ],
+        "synth_question": "What is the process for monitoring the shipping progress of my Horizon card?",
+        "synth_answer": "To stay updated on the delivery of your physical Horizon card, follow these straightforward steps: \n      * Access your Horizon App account by logging in\n      * Navigate to the section labeled 'Account Management'\n      * Click on 'Card Delivery Status' to view the current shipping status of your card",
+        "tokenized_answer": "To stay updated on the delivery of your physical Horizon card, follow these straightforward steps: \n      * Access your Horizon App account by logging in\n      * Navigate to the section labeled 'Account Management'\n      * Click on 'Card Delivery Status' to view the current shipping status of your card"
+    },
+    {
+        "faq_id": "faq_0b438d3f",
+        "original_category": "trust-card",
+        "question": "In the App, the \"Track your Physical Card\" states delivered, However I did not receive the card.",
+        "answer": "- Reach us via: - Live chat or voice call on your Trust App - OR call us at +65 313-TRUST ( +65 3138 7878 )",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "decline",
+            "statement queries"
+        ],
+        "synth_question": "I'm experiencing a discrepancy with my Horizon card delivery status in the Horizon App, as it indicates that my physical card has been delivered, yet I haven't received it.",
+        "synth_answer": "To resolve this issue, please contact our dedicated support team through the Horizon App using either the live chat feature or by initiating a voice call. Alternatively, you can reach us directly by dialing +65 313-HORIZON (+65 313-467496) for further assistance.",
+        "tokenized_answer": "To resolve this issue, please contact our dedicated support team through the Horizon App using either the live chat feature or by initiating a voice call. Alternatively, you can reach us directly by dialing +{{faq_0b438d3f_001}} {{faq_0b438d3f_002}}-HORIZON (+{{faq_0b438d3f_003}} {{faq_0b438d3f_004}}-{{faq_0b438d3f_005}}) for further assistance."
+    },
+    {
+        "faq_id": "faq_26561f81",
+        "original_category": "trust-card",
+        "question": "Why do I need to activate my new physical card before use?",
+        "answer": "- This is to prevent any unauthorised use of your new physical card should it be intercepted or stolen while being delivered to you.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "card_security",
+            "activation"
+        ],
+        "synth_question": "What is the purpose of verifying my newly issued Horizon card before I can start using it?",
+        "synth_answer": "To safeguard your account, Horizon Bank requires you to activate your new physical Horizon card prior to use, thereby minimizing the risk of unauthorized transactions in the event that your card is lost, stolen, or intercepted during delivery.",
+        "tokenized_answer": "To safeguard your account, Horizon Bank requires you to activate your new physical Horizon card prior to use, thereby minimizing the risk of unauthorized transactions in the event that your card is lost, stolen, or intercepted during delivery."
+    },
+    {
+        "faq_id": "faq_74abafeb",
+        "original_category": "trust-card",
+        "question": "How can I activate my physical card?",
+        "answer": "- After receiving your physical card, you can activate it in a few easy steps: 1. Log in to your Trust App 2. Tap on 'Savings' 3. Select 'Track Your Physical Card' 4. Select 'Activate Card' and choose your activation method 5. Select 'Start' for NFC activation and hold your card to the back of your phone, or 6. Select 'Enter Activation Code Instead' for code activation and enter the code found in your welcome pack Do note that all new, replacement or renewal cards will require activation prior to usage.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "card_activation"
+        ],
+        "synth_question": "What steps do I need to take to enable my newly received Horizon card for use?",
+        "synth_answer": "To begin using your Horizon card, follow these straightforward steps: \n      * Access your Horizon App account by logging in with your credentials.\n      * Navigate to the section labeled 'Account Management' and select the option related to your physical card.\n      * Choose the 'Activate Your Card' feature, which will prompt you to select an activation method.\n      * For NFC activation, click 'Proceed' and hold your card against the back of your device.\n      * Alternatively, opt for code activation by selecting 'Enter Code Manually' and input the unique code provided in your welcome materials.\n      Please note that all newly issued, replaced, or renewed Horizon cards must be activated before they can be used for transactions.",
+        "tokenized_answer": "To begin using your Horizon card, follow these straightforward steps: \n      * Access your Horizon App account by logging in with your credentials.\n      * Navigate to the section labeled 'Account Management' and select the option related to your physical card.\n      * Choose the 'Activate Your Card' feature, which will prompt you to select an activation method.\n      * For NFC activation, click 'Proceed' and hold your card against the back of your device.\n      * Alternatively, opt for code activation by selecting 'Enter Code Manually' and input the unique code provided in your welcome materials.\n      Please note that all newly issued, replaced, or renewed Horizon cards must be activated before they can be used for transactions."
+    },
+    {
+        "faq_id": "faq_04a55dce",
+        "original_category": "trust-card",
+        "question": "Why is there no card information shown on my physical card?",
+        "answer": "- This is an enhanced security measure to protect you from fraud. With no card number, CVV or expiry date on the card, this will make it more difficult for card fraud and theft. To view your card details, follow these steps in the Trust App > Click on 'Money' > Click on 'View and manage card' > Click on 'Card Details'.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "security",
+            "card information"
+        ],
+        "synth_question": "I've noticed that my Horizon card doesn't display any sensitive information - is this a standard feature?",
+        "synth_answer": "At Horizon Bank, we prioritize your security. To minimize the risk of card fraud and theft, we've intentionally omitted the card number, CVV, and expiry date from the physical card. To access your card details securely, navigate to the Horizon App and follow these steps: \n   * Select the 'Money' tab\n   * Choose 'View and manage card'\n   * Click on 'Card Details' to view your information",
+        "tokenized_answer": "At Horizon Bank, we prioritize your security. To minimize the risk of card fraud and theft, we've intentionally omitted the card number, CVV, and expiry date from the physical card. To access your card details securely, navigate to the Horizon App and follow these steps: \n   * Select the 'Money' tab\n   * Choose 'View and manage card'\n   * Click on 'Card Details' to view your information"
+    },
+    {
+        "faq_id": "faq_23b30ec5",
+        "original_category": "trust-card",
+        "question": "Where can I find details (card number, expiry date, CVV) of my Trust card?",
+        "answer": "- You can view your card details in a few easy steps: 1. Open your Trust App 2. Tap 'View Card' 2. Log in to your Trust App 3. Tap 'Card details'",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "statement queries"
+        ],
+        "synth_question": "How can I access key information about my Horizon card, including the card number, expiration date, and security code?",
+        "synth_answer": "To retrieve your Horizon card details, simply follow these steps: \n      * Launch the Horizon App on your device\n      * Navigate to the 'Account Overview' section\n      * Select 'Card Information' to view your card details, including the card number, expiry date, and CVV",
+        "tokenized_answer": "To retrieve your Horizon card details, simply follow these steps: \n      * Launch the Horizon App on your device\n      * Navigate to the 'Account Overview' section\n      * Select 'Card Information' to view your card details, including the card number, expiry date, and CVV"
+    },
+    {
+        "faq_id": "faq_6dae126c",
+        "original_category": "trust-card",
+        "question": "How do I reset or change the PIN for my Trust card?",
+        "answer": "- You can reset or change your credit card PIN in a few easy steps: 1. Log in to your Trust App 2. Go to 'View Card' 3. Select 'Change your card PIN' and choose a new 6-digit PIN",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "PIN Management"
+        ],
+        "synth_question": "What is the process for updating the personal identification number associated with my Horizon card?",
+        "synth_answer": "To update your Horizon card PIN, follow these straightforward steps: \n      * Access your Horizon App account\n      * Navigate to the 'Card Details' section\n      * Choose the 'Modify PIN' option and create a new 6-digit PIN for enhanced security and convenience",
+        "tokenized_answer": "To update your Horizon card PIN, follow these straightforward steps: \n      * Access your Horizon App account\n      * Navigate to the 'Card Details' section\n      * Choose the 'Modify PIN' option and create a new {{faq_6dae126c_001}}-digit PIN for enhanced security and convenience"
+    },
+    {
+        "faq_id": "faq_84458a8e",
+        "original_category": "trust-card",
+        "question": "Why is my physical card (both EMV chip and magnetic stripe) disabled for overseas usage?",
+        "answer": "- It has been disabled by default to provide a higher level of security for cardholders. This is part of an industry-wide measure introduced by the Association of Banks in Singapore. As a result, the following functions may be affected: - Overseas ATM cash withdrawal - Overseas magnetic stripe transactions - Overseas contactless and chip card transactions To prevent the above from happening, you will need to activate your physical card for overseas usage. Do note that you will need to first activate your physical card if it's new, replaced or renewed. You can activate your physical card for overseas usage in a few easy steps: - Log in to your Trust App - Go to 'View Card' - Select 'Manage card settings' - Under ‘Physical card, contactless, ATM withdrawal’, turn on the setting for Overseas use",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "decline",
+            "Fees"
+        ],
+        "synth_question": "I'm having trouble using my Horizon card abroad, as both the EMV chip and magnetic stripe seem to be inactive. What's the reason behind this restriction?",
+        "synth_answer": "As a precautionary measure to enhance the security of our cardholders, Horizon Bank has implemented a default disablement of overseas transactions for physical cards. This industry-wide initiative, led by the Association of Banks in Singapore, affects several functions, including overseas ATM withdrawals, magnetic stripe transactions, and contactless or chip card transactions. To enable overseas usage, simply follow these steps: \n   - Log in to your Horizon App\n   - Navigate to the 'View Card' section\n   - Select 'Manage card settings'\n   - Locate the ‘Physical card, contactless, ATM withdrawal’ option and toggle on the setting for international use. Please note that if your card is new, replaced, or renewed, you will need to activate it first.",
+        "tokenized_answer": "As a precautionary measure to enhance the security of our cardholders, Horizon Bank has implemented a default disablement of overseas transactions for physical cards. This industry-wide initiative, led by the Association of Banks in Singapore, affects several functions, including overseas ATM withdrawals, magnetic stripe transactions, and contactless or chip card transactions. To enable overseas usage, simply follow these steps: \n   - Log in to your Horizon App\n   - Navigate to the 'View Card' section\n   - Select 'Manage card settings'\n   - Locate the ‘Physical card, contactless, ATM withdrawal’ option and toggle on the setting for international use. Please note that if your card is new, replaced, or renewed, you will need to activate it first."
+    },
+    {
+        "faq_id": "faq_8e5e63ca",
+        "original_category": "trust-card",
+        "question": "What should I do if my Trust card is lost or stolen?",
+        "answer": "- You should report your lost or stolen card immediately by following these few easy steps: 1. Log in to your Trust App 2. Go to 'View Card' 3. Select 'Replace Card' 4. Select 'My Card is Lost or Stolen' Alternatively, you can reach us via - Live chat or voice call on your Trust App - OR call us at +65 313-TRUST ( +65 3138 7878 )",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "decline",
+            "dispute"
+        ],
+        "synth_question": "If my Horizon card goes missing, what immediate actions should I take to protect my account and obtain a replacement?",
+        "synth_answer": "In the event that your Horizon card is lost or stolen, prompt action is necessary to safeguard your account. To initiate the replacement process, follow these straightforward steps: \n   * Access your Horizon App and navigate to the 'View Card' section\n   * Proceed to select the 'Replace Card' option\n   * Choose the 'My Card is Lost or Stolen' option to report the incident\n   Alternatively, you may also contact Horizon Bank's support team through the live chat or voice call feature within the Horizon App, or by dialing +65 313-HORIZON (+65 3134 6976) for assistance.",
+        "tokenized_answer": "In the event that your Horizon card is lost or stolen, prompt action is necessary to safeguard your account. To initiate the replacement process, follow these straightforward steps: \n   * Access your Horizon App and navigate to the 'View Card' section\n   * Proceed to select the 'Replace Card' option\n   * Choose the 'My Card is Lost or Stolen' option to report the incident\n   Alternatively, you may also contact Horizon Bank's support team through the live chat or voice call feature within the Horizon App, or by dialing +{{faq_8e5e63ca_001}} {{faq_8e5e63ca_002}}-HORIZON (+{{faq_8e5e63ca_003}} {{faq_8e5e63ca_004}} {{faq_8e5e63ca_005}}) for assistance."
+    },
+    {
+        "faq_id": "faq_33f045af",
+        "original_category": "trust-card",
+        "question": "I damaged my Trust card. How do I get a replacement card?",
+        "answer": "- You can request for a replacement card in a few easy steps: 1. Log in to your Trust App 2. Go to 'View Card' 3. Select 'Replace Card' 4. Select 'My Card is damaged'",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "card replacement",
+            "account maintenance"
+        ],
+        "synth_question": "My Horizon card has been compromised due to physical damage. What steps should I take to obtain a new one from Horizon Bank?",
+        "synth_answer": "To acquire a replacement card, follow these straightforward steps: \n    * Access your Horizon App account \n    * Navigate to the 'Card Management' section \n    * Choose the 'Replace Current Card' option \n    * Indicate that your card is damaged to complete the request",
+        "tokenized_answer": "To acquire a replacement card, follow these straightforward steps: \n    * Access your Horizon App account \n    * Navigate to the 'Card Management' section \n    * Choose the 'Replace Current Card' option \n    * Indicate that your card is damaged to complete the request"
+    },
+    {
+        "faq_id": "faq_74392fe2",
+        "original_category": "trust-card",
+        "question": "I requested for a replacement card. What should I do if I do not receive my replacement Trust Link card/NTUC Link card?",
+        "answer": "- Reach us via: - Live chat or voice call on your Trust App - OR call us at +65 313-TRUST ( +65 3138 7878 )",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "card replacement",
+            "support queries"
+        ],
+        "synth_question": "I've applied for a new Horizon card, but it hasn't arrived yet. What steps can I take to resolve the issue?",
+        "synth_answer": "To address the non-receipt of your replacement Horizon card, please get in touch with our dedicated support team through the following channels: \n    * Utilize the live chat feature or initiate a voice call directly from your Horizon App \n    * Alternatively, you can reach us by dialing +65 313-HORIZON",
+        "tokenized_answer": "To address the non-receipt of your replacement Horizon card, please get in touch with our dedicated support team through the following channels: \n    * Utilize the live chat feature or initiate a voice call directly from your Horizon App \n    * Alternatively, you can reach us by dialing +{{faq_74392fe2_001}} {{faq_74392fe2_002}}-HORIZON"
+    },
+    {
+        "faq_id": "faq_1dac2209",
+        "original_category": "trust-card",
+        "question": "I'm a Union member, but the Trust card issued to me is the non-Union version. What should I do?",
+        "answer": "- Reach us via: - Live chat or voice call on your Trust App - OR call us at +65 313-TRUST ( +65 3138 7878 )",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "card queries",
+            "account issues"
+        ],
+        "synth_question": "I've received a Horizon card that doesn't reflect my affiliation with a labor organization. What steps can I take to rectify this situation?",
+        "synth_answer": "To address the discrepancy with your Horizon card, please contact our dedicated support team through the Horizon App using either the live chat feature or by initiating a voice call. Alternatively, you may reach us directly by dialing +65 313-HORIZON.",
+        "tokenized_answer": "To address the discrepancy with your Horizon card, please contact our dedicated support team through the Horizon App using either the live chat feature or by initiating a voice call. Alternatively, you may reach us directly by dialing +{{faq_1dac2209_001}} {{faq_1dac2209_002}}-HORIZON."
+    },
+    {
+        "faq_id": "faq_24a4ab42",
+        "original_category": "trust-card",
+        "question": "I'm not a Union member, but the Trust card issued to me is the Union version. What should I do?",
+        "answer": "- Reach us via: - Live chat or voice call on your Trust App - OR call us at +65 313-TRUST ( +65 3138 7878 )",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "card queries",
+            "account issues"
+        ],
+        "synth_question": "I've received a Horizon card that appears to be designed for a specific affiliation, but I'm not a member of that group. What steps can I take to address this discrepancy?",
+        "synth_answer": "To resolve this matter, please get in touch with our dedicated support team through the Horizon App, utilizing either the live chat feature or placing a voice call. Alternatively, you may contact us directly at +65 313-HORIZON (+65 3134 6967) for further assistance.",
+        "tokenized_answer": "To resolve this matter, please get in touch with our dedicated support team through the Horizon App, utilizing either the live chat feature or placing a voice call. Alternatively, you may contact us directly at +{{faq_24a4ab42_001}} {{faq_24a4ab42_002}}-HORIZON (+{{faq_24a4ab42_003}} {{faq_24a4ab42_004}} {{faq_24a4ab42_005}}) for further assistance."
+    },
+    {
+        "faq_id": "faq_6f303f5f",
+        "original_category": "trust-card",
+        "question": "Can I use my Trust card overseas for point of sale transactions or ATM withdrawals?",
+        "answer": "- For overseas transactions, if you are prompted by the overseas merchant to key in a PIN, inform the merchant to perform a signature or contactless based transaction instead. If the merchant insists on you keying in a PIN, then you can set or reset your Trust card PIN from the Trust App . For ATM withdrawals, do not use ATMs that accept 4 digit PINs as our cards only work at ATMs which use 6 digit PINs. Only use ATMs with the VISA – Plus Logo If you hold both a Trust Link credit card account and a savings account, we recommend that you pair your card with savings account and select ‘Savings Account’ at the ATM during cash withdrawals so that they are withdrawn from your savings account even if there is no option to select to withdraw from your savings account at the ATM. Do note that cash withdrawals under credit account option are cash advances and will incur a cash advance fee (effective from 1 Feb 26) and interest charges.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "overseas usage",
+            "ATM transactions"
+        ],
+        "synth_question": "How can I utilize my Horizon card for international transactions, including point-of-sale purchases and ATM withdrawals?",
+        "synth_answer": "When conducting overseas transactions, if a merchant requests that you enter a PIN, kindly ask them to process the transaction using a signature or contactless method instead. Should the merchant still require a PIN, you can conveniently set or reset your Horizon card PIN via the Horizon App. For ATM withdrawals, please ensure that you only use ATMs bearing the VISA – Plus Logo and those that support 6-digit PINs, as our cards are not compatible with 4-digit PIN ATMs. If you have both a Horizon Link credit card account and a savings account, we advise pairing your card with your savings account. When withdrawing cash from an ATM, select the 'Savings Account' option to ensure that the funds are deducted from your savings account. Note that if you withdraw cash using the credit account option, it will be considered a cash advance and will incur a cash advance fee, effective from 1 Feb 26, as well as interest charges.",
+        "tokenized_answer": "When conducting overseas transactions, if a merchant requests that you enter a PIN, kindly ask them to process the transaction using a signature or contactless method instead. Should the merchant still require a PIN, you can conveniently set or reset your Horizon card PIN via the Horizon App. For ATM withdrawals, please ensure that you only use ATMs bearing the VISA – Plus Logo and those that support {{faq_6f303f5f_001}}-digit PINs, as our cards are not compatible with {{faq_6f303f5f_002}}-digit PIN ATMs. If you have both a Horizon Link credit card account and a savings account, we advise pairing your card with your savings account. When withdrawing cash from an ATM, select the 'Savings Account' option to ensure that the funds are deducted from your savings account. Note that if you withdraw cash using the credit account option, it will be considered a cash advance and will incur a cash advance fee, effective from {{faq_6f303f5f_003}} Feb {{faq_6f303f5f_004}}, as well as interest charges."
+    },
+    {
+        "faq_id": "faq_b458716c",
+        "original_category": "trust-card",
+        "question": "Can I get concession fares for bus and MRT rides with my Trust Card?",
+        "answer": "- Unfortunately, no. Concession fares for senior citizens, students, and other eligible groups are only available when using a dedicated concession card issued by TransitLink. This means that tapping your Trust Card for bus and MRT rides will always charge you the standard adult fare, regardless of your eligibility for a concession. The TransitLink system currently doesn't support concession fare processing for third-party cards like the Trust Card. Please check with TransitLink directly for alternatives.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "Fees",
+            "decline"
+        ],
+        "synth_question": "Am I eligible for reduced fares on public transportation when using my Horizon card?",
+        "synth_answer": "Regrettably, Horizon Bank's cardholders are not entitled to concessionary rates for bus and train travel. To benefit from discounted fares, you would need to utilize a specialized concession card provided by TransitLink. As a result, when you use your Horizon card for commuting, you will be charged the standard adult fare. The TransitLink system is currently not equipped to handle concessionary fare payments for cards issued by third-party providers, such as Horizon Bank. For potential alternatives, we recommend contacting TransitLink directly for further information.",
+        "tokenized_answer": "Regrettably, Horizon Bank's cardholders are not entitled to concessionary rates for bus and train travel. To benefit from discounted fares, you would need to utilize a specialized concession card provided by TransitLink. As a result, when you use your Horizon card for commuting, you will be charged the standard adult fare. The TransitLink system is currently not equipped to handle concessionary fare payments for cards issued by third-party providers, such as Horizon Bank. For potential alternatives, we recommend contacting TransitLink directly for further information."
+    },
+    {
+        "faq_id": "faq_c8d61dc6",
+        "original_category": "stocks",
+        "question": "What does TrustInvest Stocks offer?",
+        "answer": "- We offer access to trade stocks and ETFs listed in US markets, as well as UK UCITS ETFs.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks"
+        ],
+        "synth_question": "What investment opportunities are available through Horizon Bank's stock trading services?",
+        "synth_answer": "Horizon Bank provides its clients with the ability to engage in trading activities involving stocks and exchange-traded funds listed on US exchanges, in addition to a selection of UK UCITS exchange-traded funds.",
+        "tokenized_answer": "Horizon Bank provides its clients with the ability to engage in trading activities involving stocks and exchange-traded funds listed on US exchanges, in addition to a selection of UK UCITS exchange-traded funds."
+    },
+    {
+        "faq_id": "faq_e94ad933",
+        "original_category": "stocks",
+        "question": "Are there any requirements to open a Stocks account?",
+        "answer": "- You may apply for the Stocks account if: - You have an existing Savings account with Trust. - You are between 18 and 74 years old. Please note that US persons are ineligible to open a Stocks account with Trust. Download the Trust App to open a Savings account if you do not have one yet.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks"
+        ],
+        "synth_question": "What are the eligibility criteria for creating a Stocks account with Horizon Bank?",
+        "synth_answer": "To be eligible for a Stocks account, you must meet the following conditions: \n      * You should have an active Savings account with Horizon Bank. If you haven't already, you can easily open one through the Horizon App.\n      * Your age should be between 18 and 74 years. Additionally, please be aware that individuals classified as US persons are not eligible to open a Stocks account with Horizon Bank.",
+        "tokenized_answer": "To be eligible for a Stocks account, you must meet the following conditions: \n      * You should have an active Savings account with Horizon Bank. If you haven't already, you can easily open one through the Horizon App.\n      * Your age should be between {{faq_e94ad933_001}} and {{faq_e94ad933_002}} years. Additionally, please be aware that individuals classified as US persons are not eligible to open a Stocks account with Horizon Bank."
+    },
+    {
+        "faq_id": "faq_502da680",
+        "original_category": "stocks",
+        "question": "How do I start trading?",
+        "answer": "- Before you can start trading, you first need to open a Stocks account by going to Trust App > Investments > Stocks. Follow the in-app instructions to open your Stocks account. Do note that your eligibility to open the Stocks account will be subject to the bank's internal assessment.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks"
+        ],
+        "synth_question": "What are the initial steps to begin buying and selling securities with Horizon Bank?",
+        "synth_answer": "To initiate trading activities, it is necessary to establish a securities trading account. This can be accomplished by navigating to the Horizon App, selecting the Investments option, and then choosing the Stocks feature. Upon doing so, adhere to the on-screen prompts to finalize the account setup. Please be aware that the approval to open this account is contingent upon an internal evaluation conducted by Horizon Bank.",
+        "tokenized_answer": "To initiate trading activities, it is necessary to establish a securities trading account. This can be accomplished by navigating to the Horizon App, selecting the Investments option, and then choosing the Stocks feature. Upon doing so, adhere to the on-screen prompts to finalize the account setup. Please be aware that the approval to open this account is contingent upon an internal evaluation conducted by Horizon Bank."
+    },
+    {
+        "faq_id": "faq_b8e22edc",
+        "original_category": "stocks",
+        "question": "What fees will I be charged?",
+        "answer": "- Trust offers zero commission for US stocks and ETFs trading until 31 December 2026 (0.05% with minimum USD 2.99 per trade thereafter). However, standard market fees still apply. UK UCITS ETFs trading is charged commission at 0.05% with minimum USD 4 per trade. 9% GST is applied on commissions and the Trade Confirmation will serve as Tax Invoice. Trust does not charge any platform, custody, settlement and corporate action handling fees. For details, please refer to the Stocks Fee Schedule by going to Trust App > Profile > Legal.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Fees",
+            "Stocks"
+        ],
+        "synth_question": "How does Horizon Bank's fee structure work for investment transactions?",
+        "synth_answer": "At Horizon Bank, we provide a competitive fee environment for our investors. Until December 31, 2026, trading US stocks and ETFs is commission-free. After this period, a commission of 0.05% applies, with a minimum charge of USD 2.99 per trade. For UK UCITS ETFs, a commission rate of 0.05% is applicable, with a minimum fee of USD 4 per trade. Additionally, a 9% GST is levied on commissions, and your Trade Confirmation will also serve as your Tax Invoice. Notably, Horizon Bank does not impose platform, custody, settlement, or corporate action handling fees. For a detailed breakdown, please navigate to the Horizon App, select your Profile, and then access the Legal section to view the Stocks Fee Schedule.",
+        "tokenized_answer": "At Horizon Bank, we provide a competitive fee environment for our investors. Until December {{faq_b8e22edc_001}}, {{faq_b8e22edc_002}}, trading US stocks and ETFs is commission-free. After this period, a commission of {{faq_b8e22edc_003}} applies, with a minimum charge of USD {{faq_b8e22edc_004}} per trade. For UK UCITS ETFs, a commission rate of {{faq_b8e22edc_005}} is applicable, with a minimum fee of USD {{faq_b8e22edc_006}} per trade. Additionally, a {{faq_b8e22edc_007}} GST is levied on commissions, and your Trade Confirmation will also serve as your Tax Invoice. Notably, Horizon Bank does not impose platform, custody, settlement, or corporate action handling fees. For a detailed breakdown, please navigate to the Horizon App, select your Profile, and then access the Legal section to view the Stocks Fee Schedule."
+    },
+    {
+        "faq_id": "faq_891d0d5f",
+        "original_category": "stocks",
+        "question": "Is my investment capital guaranteed?",
+        "answer": "- All investments involve risks and are not guaranteed. You could lose all or part of your original investment amount.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Investments",
+            "Risk"
+        ],
+        "synth_question": "What level of security can I expect for my invested funds with Horizon Bank?",
+        "synth_answer": "It's essential to understand that investing inherently carries uncertainties. When you invest through Horizon Bank, there's a possibility you might not recover your entire initial investment, as market fluctuations can impact your returns.",
+        "tokenized_answer": "It's essential to understand that investing inherently carries uncertainties. When you invest through Horizon Bank, there's a possibility you might not recover your entire initial investment, as market fluctuations can impact your returns."
+    },
+    {
+        "faq_id": "faq_e6babddf",
+        "original_category": "stocks",
+        "question": "Why am I missing the Investments section in the Trust App?",
+        "answer": "- Only eligible customers can see the Investments section in Trust App. Please ensure that you are using the latest version of Trust App. Need help? Please contact us via the in-app chat or call us at +65 313-TRUST (+65 3138 7878).",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Investments"
+        ],
+        "synth_question": "I'm unable to locate the investment portfolio feature within the Horizon App. What could be the reason for this?",
+        "synth_answer": "To access the investment features on the Horizon App, you must meet specific eligibility criteria. Additionally, ensure you're running the most current version of the Horizon App. If you require assistance, our support team is available through the in-app messaging service or by calling +65 313-HORIZON (+65 3134 6976).",
+        "tokenized_answer": "To access the investment features on the Horizon App, you must meet specific eligibility criteria. Additionally, ensure you're running the most current version of the Horizon App. If you require assistance, our support team is available through the in-app messaging service or by calling +{{faq_e6babddf_001}} {{faq_e6babddf_002}}-HORIZON (+{{faq_e6babddf_003}} {{faq_e6babddf_004}} {{faq_e6babddf_005}})."
+    },
+    {
+        "faq_id": "faq_4bd34aa4",
+        "original_category": "stocks",
+        "question": "What is the minimum amount to invest?",
+        "answer": "- You can buy stocks and ETFs with as little as USD 10.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks"
+        ],
+        "synth_question": "At Horizon Bank, what is the lowest investment threshold for purchasing securities?",
+        "synth_answer": "With Horizon Bank, you have the flexibility to initiate your investment portfolio by buying stocks and ETFs with a minimum investment of just USD 10.",
+        "tokenized_answer": "With Horizon Bank, you have the flexibility to initiate your investment portfolio by buying stocks and ETFs with a minimum investment of just USD {{faq_4bd34aa4_001}}."
+    },
+    {
+        "faq_id": "faq_41bb5359",
+        "original_category": "stocks",
+        "question": "What is the difference between Stocks account and Savings account?",
+        "answer": "- The Stocks account is solely used for investing in stocks and ETFs, and cannot be used for other banking purposes. Unlike the Savings account, the Stocks account is non-interest bearing and not insured under the Deposit Insurance Scheme managed by the Singapore Deposit Insurance Corporation (SDIC).",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks",
+            "Savings Account"
+        ],
+        "synth_question": "How do investment accounts at Horizon Bank differ from traditional savings accounts in terms of their usage and benefits?",
+        "synth_answer": "At Horizon Bank, our investment accounts are specifically designed for trading stocks and ETFs, and they do not offer the same flexibility as our savings accounts for everyday banking needs. Notably, these investment accounts do not accrue interest and are not protected under the Deposit Insurance Scheme, which is managed by the Singapore Deposit Insurance Corporation (SDIC), unlike our savings accounts.",
+        "tokenized_answer": "At Horizon Bank, our investment accounts are specifically designed for trading stocks and ETFs, and they do not offer the same flexibility as our savings accounts for everyday banking needs. Notably, these investment accounts do not accrue interest and are not protected under the Deposit Insurance Scheme, which is managed by the Singapore Deposit Insurance Corporation (SDIC), unlike our savings accounts."
+    },
+    {
+        "faq_id": "faq_2aed0ebe",
+        "original_category": "stocks",
+        "question": "Where are my investment monies held?",
+        "answer": "- Your monies and assets are held with our custodian in accordance with the Securities and Futures Act.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Investments",
+            "Fees"
+        ],
+        "synth_question": "How does Horizon Bank safeguard my investment funds?",
+        "synth_answer": "At Horizon Bank, we ensure the security of your investments by holding them through our designated custodian, strictly adhering to the regulatory requirements outlined in the Securities and Futures Act.",
+        "tokenized_answer": "At Horizon Bank, we ensure the security of your investments by holding them through our designated custodian, strictly adhering to the regulatory requirements outlined in the Securities and Futures Act."
+    },
+    {
+        "faq_id": "faq_aa05e9b8",
+        "original_category": "stocks",
+        "question": "Will cash in my Stocks account earn interest?",
+        "answer": "- No, the cash in your Stocks account will not earn interest.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks"
+        ],
+        "synth_question": "Does Horizon Bank offer interest on the cash balance in my investment portfolio?",
+        "synth_answer": "At Horizon Bank, the cash held within your investment account does not accrue interest.",
+        "tokenized_answer": "At Horizon Bank, the cash held within your investment account does not accrue interest."
+    },
+    {
+        "faq_id": "faq_b73dbebe",
+        "original_category": "stocks",
+        "question": "Does Trust provide investment advice?",
+        "answer": "- No, Trust does not provide any investment advice to customers.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Investments",
+            "Fees"
+        ],
+        "synth_question": "Does Horizon Bank offer personalized investment guidance to its clients?",
+        "synth_answer": "Horizon Bank maintains a neutral stance and does not extend investment advice to its customers, allowing them to make independent decisions regarding their financial portfolios.",
+        "tokenized_answer": "Horizon Bank maintains a neutral stance and does not extend investment advice to its customers, allowing them to make independent decisions regarding their financial portfolios."
+    },
+    {
+        "faq_id": "faq_b6934e37",
+        "original_category": "stocks",
+        "question": "Can I use CPF or SRS account to fund my investments?",
+        "answer": "- No, Trust only supports stocks and ETFs trading via cash. Monies from CPF or SRS accounts cannot be used for stocks and ETFs trading at this time.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks",
+            "Fees"
+        ],
+        "synth_question": "Are investments with Horizon Bank limited to cash transactions, or can I utilize my CPF or SRS account?",
+        "synth_answer": "At Horizon Bank, our investment platform currently only accommodates cash transactions for trading stocks and ETFs. Unfortunately, this means that funds from CPF or SRS accounts are not eligible for use in these investment activities at this time.",
+        "tokenized_answer": "At Horizon Bank, our investment platform currently only accommodates cash transactions for trading stocks and ETFs. Unfortunately, this means that funds from CPF or SRS accounts are not eligible for use in these investment activities at this time."
+    },
+    {
+        "faq_id": "faq_2fe9ef88",
+        "original_category": "stocks",
+        "question": "I'm facing technical issues on the Trust App. What should I do?",
+        "answer": "- For assistance, please contact us via the in-app chat or call us at +65 313-TRUST (+65 3138 7878).",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Technical Support"
+        ],
+        "synth_question": "I'm experiencing difficulties with the Horizon Bank mobile application. How can I obtain technical assistance?",
+        "synth_answer": "To resolve the issue, you can reach out to our dedicated support team through the in-app messaging feature or by dialing +65 313-HORIZON (+65 3134 6967) for personalized guidance.",
+        "tokenized_answer": "To resolve the issue, you can reach out to our dedicated support team through the in-app messaging feature or by dialing +{{faq_2fe9ef88_001}} {{faq_2fe9ef88_002}}-HORIZON (+{{faq_2fe9ef88_003}} {{faq_2fe9ef88_004}} {{faq_2fe9ef88_005}}) for personalized guidance."
+    },
+    {
+        "faq_id": "faq_3a182d84",
+        "original_category": "stocks",
+        "question": "What are the risks involved with investment?",
+        "answer": "- Investment involves risks, and you could lose all or part of your original investment amount. The price of stocks and ETFs will move up and down. As a result, the value of your investment may increase or decrease. Past performance is not a guide to future performance. For details, please refer to the \"Risk Warning for Stocks and Exchange Traded Funds\" and \"TrustInvest - product terms\" under Legal ( https://trustbank.sg/legal/ ).",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks",
+            "Fees"
+        ],
+        "synth_question": "What potential downsides should I be aware of when making an investment through Horizon Bank?",
+        "synth_answer": "Investing with Horizon Bank entails certain risks, potentially resulting in the loss of some or all of your initial investment. The value of your portfolio may fluctuate due to market movements, affecting the price of securities such as stocks and ETFs. It's essential to note that historical performance does not guarantee future results. For a comprehensive understanding of these risks, we recommend reviewing the 'Risk Disclosure for Securities and Exchange-Traded Funds' and 'HorizonInvest - Product Terms' sections on our website (https://horizonbank.sg/legal/).",
+        "tokenized_answer": "Investing with Horizon Bank entails certain risks, potentially resulting in the loss of some or all of your initial investment. The value of your portfolio may fluctuate due to market movements, affecting the price of securities such as stocks and ETFs. It's essential to note that historical performance does not guarantee future results. For a comprehensive understanding of these risks, we recommend reviewing the 'Risk Disclosure for Securities and Exchange-Traded Funds' and 'HorizonInvest - Product Terms' sections on our website (https://horizonbank.sg/legal/)."
+    },
+    {
+        "faq_id": "faq_786f3467",
+        "original_category": "stocks",
+        "question": "Are my investments insured under SDIC?",
+        "answer": "- Investments and monies inside the Stocks account are not insured under the Deposit Insurance Scheme managed by the Singapore Deposit Insurance Corporation (SDIC).",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks",
+            "Fees"
+        ],
+        "synth_question": "Does Horizon Bank offer any protection for the funds held in my investment portfolio?",
+        "synth_answer": "It's essential to note that the investments and cash balances within your Horizon Bank Stocks account are not covered by the Deposit Insurance Scheme, which is administered by the Singapore Deposit Insurance Corporation (SDIC).",
+        "tokenized_answer": "It's essential to note that the investments and cash balances within your Horizon Bank Stocks account are not covered by the Deposit Insurance Scheme, which is administered by the Singapore Deposit Insurance Corporation (SDIC)."
+    },
+    {
+        "faq_id": "faq_91bd0060",
+        "original_category": "stocks",
+        "question": "What are UK UCITS ETFs?",
+        "answer": "- UCITS ETFs traded on the London Stock Exchange are European-regulated exchange traded funds designed for improved risk management and diversification. Unlike US ETFs which are subject to a 30% withholding tax on dividends, Irish-domiciled UCITS ETFs are only subject to a 15% withholding tax on dividends for Singaporean investors residing in Singapore. This is for information only and does not constitute tax, legal, or financial advice. Base currency for trading UK UCITS ETFs offered by Trust is US Dollars (USD).",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks",
+            "Fees"
+        ],
+        "synth_question": "Can you provide information on the characteristics of UCITS ETFs listed in the UK and their tax implications for international investors?",
+        "synth_answer": "Horizon Bank offers access to European-regulated exchange-traded funds, known as UCITS ETFs, which are traded on the London Stock Exchange. These funds are designed to enhance risk management and diversification strategies. Notably, Irish-domiciled UCITS ETFs are subject to a reduced withholding tax of 15% on dividends for certain investors, such as those residing in Singapore, compared to the 30% withholding tax applicable to US ETFs. Please note that this information is for general purposes only and should not be considered as tax, legal, or financial guidance. It's also worth noting that the base currency for trading UK UCITS ETFs through Horizon Bank is the US Dollar (USD).",
+        "tokenized_answer": "Horizon Bank offers access to European-regulated exchange-traded funds, known as UCITS ETFs, which are traded on the London Stock Exchange. These funds are designed to enhance risk management and diversification strategies. Notably, Irish-domiciled UCITS ETFs are subject to a reduced withholding tax of {{faq_91bd0060_001}} on dividends for certain investors, such as those residing in Singapore, compared to the {{faq_91bd0060_002}} withholding tax applicable to US ETFs. Please note that this information is for general purposes only and should not be considered as tax, legal, or financial guidance. It's also worth noting that the base currency for trading UK UCITS ETFs through Horizon Bank is the US Dollar (USD)."
+    },
+    {
+        "faq_id": "faq_c76de5d0",
+        "original_category": "stocks",
+        "question": "Which UCITS ETFs can I trade?",
+        "answer": "- Trust currently offers 40 UCITS ETFs on the London Stock Exchange (LSE) available for fractional trading in USD. We do not offer stocks on the LSE.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks",
+            "Fees"
+        ],
+        "synth_question": "What range of UCITS ETFs are available for trading through Horizon Bank, and are there any specific exchange or currency limitations?",
+        "synth_answer": "Horizon Bank provides access to a diverse portfolio of 40 UCITS ETFs listed on the London Stock Exchange, which can be traded fractionally in US dollars via the Horizon App. It's worth noting that Horizon Bank's offerings on the LSE are currently limited to these ETFs, with stock trading not being an available option at this time.",
+        "tokenized_answer": "Horizon Bank provides access to a diverse portfolio of {{faq_c76de5d0_001}} UCITS ETFs listed on the London Stock Exchange, which can be traded fractionally in US dollars via the Horizon App. It's worth noting that Horizon Bank's offerings on the LSE are currently limited to these ETFs, with stock trading not being an available option at this time."
+    },
+    {
+        "faq_id": "faq_07fa5cb9",
+        "original_category": "stocks",
+        "question": "Where do I find the list of UK UCITS ETFs offered by Trust?",
+        "answer": "- You can find them under Investments > Stocks > Trade > UCITS under Browse by category.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks",
+            "Mutual Funds"
+        ],
+        "synth_question": "How can I access the range of UK UCITS ETFs available through Horizon Bank?",
+        "synth_answer": "To explore the selection of UK UCITS ETFs offered by Horizon Bank, navigate to the Investments section within the Horizon App, then proceed to Stocks, followed by Trade, and finally, locate the UCITS option within the Browse by category menu.",
+        "tokenized_answer": "To explore the selection of UK UCITS ETFs offered by Horizon Bank, navigate to the Investments section within the Horizon App, then proceed to Stocks, followed by Trade, and finally, locate the UCITS option within the Browse by category menu."
+    },
+    {
+        "faq_id": "faq_1751281e",
+        "original_category": "stocks",
+        "question": "How do I differentiate between US and UK ETFs on Trust app?",
+        "answer": "- When searching for a specific stock or ETF ticker, US stocks and ETFs will be identified with a 'US' label, while UK UCITS ETFs will be identified with a 'UK' label.",
+        "domain": "INVESTMENTS",
+        "intent_families": [
+            "Stocks",
+            "Fees"
+        ],
+        "synth_question": "What distinguishes American and British exchange-traded funds within the Horizon App's search functionality?",
+        "synth_answer": "To discern between US and UK-based exchange-traded funds, simply look for the respective 'US' or 'UK' designation that accompanies each fund's ticker symbol when conducting a search on the Horizon App.",
+        "tokenized_answer": "To discern between US and UK-based exchange-traded funds, simply look for the respective 'US' or 'UK' designation that accompanies each fund's ticker symbol when conducting a search on the Horizon App."
+    },
+    {
+        "faq_id": "faq_173fbcd8",
+        "original_category": "trust-plus",
+        "question": "What is Trust+?",
+        "answer": "- Trust+ is a new level of banking experience from Trust designed to help customers better grow their savings in a simple and transparent way. Customers who maintain min. S$100K eligible balances across their Trust savings account Average Daily Balance (ADB) and/or TrustInvest account value will automatically qualify for Trust+ from the following month. Customers who qualify for Trust+ will also get to enjoy exclusive 1-for-1 privileges, a metal card, a differentiated app experience, and priority in-app customer service.",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "Features"
+        ],
+        "synth_question": "Can you describe the premium banking offering provided by Horizon Bank?",
+        "synth_answer": "Horizon Bank's elevated banking experience is designed to facilitate effortless savings growth through transparency and simplicity. By maintaining a minimum of S$100K in eligible balances across your Horizon Bank savings account Average Daily Balance (ADB) and/or Horizon Invest account value, you will automatically qualify for this exclusive program the following month. As a valued member, you can look forward to enjoying a range of privileges, including 1-for-1 exclusive offers, a premium metal Horizon card, an enhanced Horizon App experience, and priority customer support directly within the app.",
+        "tokenized_answer": "Horizon Bank's elevated banking experience is designed to facilitate effortless savings growth through transparency and simplicity. By maintaining a minimum of {{faq_173fbcd8_001}}K in eligible balances across your Horizon Bank savings account Average Daily Balance (ADB) and/or Horizon Invest account value, you will automatically qualify for this exclusive program the following month. As a valued member, you can look forward to enjoying a range of privileges, including {{faq_173fbcd8_002}}-for-{{faq_173fbcd8_003}} exclusive offers, a premium metal Horizon card, an enhanced Horizon App experience, and priority customer support directly within the app."
+    },
+    {
+        "faq_id": "faq_a3bab790",
+        "original_category": "trust-plus",
+        "question": "How do I qualify for Trust+?",
+        "answer": "- Customers who maintain min. S$100K total across their Trust savings account Average Daily Balance (ADB) and/or TrustInvest Mutual Funds or Stocks account value will automatically qualify for Trust+ from the following month. You will be a Trust+ customer for the next three consecutive months and will continue to be a Trust+ customer if you continue to meet our eligibility criteria. E.g., if you maintain S$100K total balances or higher for Jan, you will qualify for Trust+ for Feb, Mar and Apr. If you maintain min. S$100K total balances in Feb, you will continue to be a Trust+ customer for Mar, Apr and May.",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "Features",
+            "restrictions"
+        ],
+        "synth_question": "What are the requirements to become a Horizon Bank premium customer?",
+        "synth_answer": "To enjoy the exclusive benefits of Horizon Bank's premium tier, simply ensure that your total Average Daily Balance in your Horizon savings account, combined with the value of your HorizonInvest Mutual Funds or Stocks, reaches a minimum of S$100,000. Once this threshold is met, you will automatically be upgraded to our premium tier for the following three months. To continue enjoying these privileges, maintain the minimum S$100,000 total balance, and you will remain a valued premium customer for the subsequent three-month periods, such as qualifying in January to enjoy benefits from February to April, and then from March to May if the balance is maintained in February.",
+        "tokenized_answer": "To enjoy the exclusive benefits of Horizon Bank's premium tier, simply ensure that your total Average Daily Balance in your Horizon savings account, combined with the value of your HorizonInvest Mutual Funds or Stocks, reaches a minimum of {{faq_a3bab790_001}}. Once this threshold is met, you will automatically be upgraded to our premium tier for the following three months. To continue enjoying these privileges, maintain the minimum {{faq_a3bab790_002}} total balance, and you will remain a valued premium customer for the subsequent three-month periods, such as qualifying in January to enjoy benefits from February to April, and then from March to May if the balance is maintained in February."
+    },
+    {
+        "faq_id": "faq_0aec0a71",
+        "original_category": "trust-plus",
+        "question": "What are the privileges for Trust+?",
+        "answer": "- As a Trust+ customer, you will be able to enjoy up to 2.4% interest p.a. on your first S$1.2M deposit (with Flex plan and the fulfilment of relevant bonus interest criteria), exclusive 1-for-1 privileges at curated merchants, a metal card, a differentiated app experience, and priority in-app customer service.",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "Features"
+        ],
+        "synth_question": "What exclusive benefits can I expect as a premium customer of Horizon Bank?",
+        "synth_answer": "As a valued client of Horizon Bank, you'll have access to a range of distinctive perks, including the potential to earn up to 2.4% interest p.a. on your initial S$1.2M deposit when you opt for the Flex plan and meet the specified bonus interest requirements. Additionally, you'll enjoy exclusive 1-for-1 offers at select merchants, receive a premium metal Horizon card, experience a tailored Horizon App interface, and receive priority support directly within the Horizon App.",
+        "tokenized_answer": "As a valued client of Horizon Bank, you'll have access to a range of distinctive perks, including the potential to earn up to {{faq_0aec0a71_001}} interest p.a. on your initial {{faq_0aec0a71_002}}M deposit when you opt for the Flex plan and meet the specified bonus interest requirements. Additionally, you'll enjoy exclusive {{faq_0aec0a71_003}}-for-{{faq_0aec0a71_004}} offers at select merchants, receive a premium metal Horizon card, experience a tailored Horizon App interface, and receive priority support directly within the Horizon App."
+    },
+    {
+        "faq_id": "faq_cad93909",
+        "original_category": "trust-plus",
+        "question": "Will I be charged any fees for Trust+?",
+        "answer": "- There are currently no fees such as joining fee and fall below fee for Trust+. However, as a Trust customer, other fees and charges as interest charges on unpaid credit card balances remain applicable.",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "fees"
+        ],
+        "synth_question": "Are there any charges associated with maintaining a Horizon+ account?",
+        "synth_answer": "At Horizon Bank, we do not impose fees for joining or falling below a certain threshold for Horizon+. Nevertheless, as a valued Horizon customer, please note that standard interest charges will still apply to unpaid balances on your Horizon credit card.",
+        "tokenized_answer": "At Horizon Bank, we do not impose fees for joining or falling below a certain threshold for Horizon+. Nevertheless, as a valued Horizon customer, please note that standard interest charges will still apply to unpaid balances on your Horizon credit card."
+    },
+    {
+        "faq_id": "faq_d1152d2a",
+        "original_category": "trust-plus",
+        "question": "Will I be able to cancel Trust+?",
+        "answer": "- Your Trust+ status is valid for 3 months upon qualification. Your Trust+ status will automatically expire if you are unable to maintain the min. S$100K eligible balances for each of the 3 months.",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "restrictions",
+            "Features"
+        ],
+        "synth_question": "How can I opt out of the premium services offered by Horizon Bank, and what are the conditions for maintaining this status?",
+        "synth_answer": "To clarify, your elevated status with Horizon Bank remains active for a period of 3 months from the date you initially qualify. In order to continue benefiting from this premium service, you must ensure that your account balance with Horizon Bank meets the minimum requirement of S$100K for each of the 3 months. Failure to maintain this threshold will result in the automatic expiration of your premium status after the initial 3-month period.",
+        "tokenized_answer": "To clarify, your elevated status with Horizon Bank remains active for a period of {{faq_d1152d2a_001}} months from the date you initially qualify. In order to continue benefiting from this premium service, you must ensure that your account balance with Horizon Bank meets the minimum requirement of {{faq_d1152d2a_002}}K for each of the {{faq_d1152d2a_003}} months. Failure to maintain this threshold will result in the automatic expiration of your premium status after the initial {{faq_d1152d2a_004}}-month period."
+    },
+    {
+        "faq_id": "faq_c9998e4f",
+        "original_category": "trust-plus",
+        "question": "How do I get a metal card?",
+        "answer": "- If you are a Trust+ member, you can request for your metal card in 4 easy steps: - Log in to Trust App - Tap on the profile icon on the top right - Tap on your name - Tap on ‘metal card’ If you upgrade to the metal card: - Your old card will be blocked immediately - You’ll get a new physical and digital card with a new number - Your new physical card will be delivered to you as soon as possible but your digital card can be used right away - Remember to update your new card number in Apple/Google Pay and wherever else your card is added (e.g. FairPrice Group app)",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "Features",
+            "restrictions"
+        ],
+        "synth_question": "What is the process for obtaining a premium metal card with Horizon Bank, and what are the key implications of upgrading to this card type?",
+        "synth_answer": "As a valued Horizon Bank customer with a premium membership, you can acquire a metal card by following these straightforward steps: \n      * Access the Horizon App and navigate to your profile section\n      * Select your profile picture located at the top right corner of the screen\n      * Proceed to tap on your name to view detailed options\n      * Choose the 'metal card' option to initiate the request. \n      Upon upgrading, please note the following: \n      * Your existing card will be immediately deactivated for security purposes\n      * You will receive both a new physical and digital card, complete with a unique card number\n      * While the physical card will be delivered as soon as possible, you can start using the digital version right away\n      * Don't forget to update your new card details in digital wallets like Apple Pay or Google Pay, as well as any other platforms where your card is linked, such as the FairPrice Group app, to ensure uninterrupted service.",
+        "tokenized_answer": "As a valued Horizon Bank customer with a premium membership, you can acquire a metal card by following these straightforward steps: \n      * Access the Horizon App and navigate to your profile section\n      * Select your profile picture located at the top right corner of the screen\n      * Proceed to tap on your name to view detailed options\n      * Choose the 'metal card' option to initiate the request. \n      Upon upgrading, please note the following: \n      * Your existing card will be immediately deactivated for security purposes\n      * You will receive both a new physical and digital card, complete with a unique card number\n      * While the physical card will be delivered as soon as possible, you can start using the digital version right away\n      * Don't forget to update your new card details in digital wallets like Apple Pay or Google Pay, as well as any other platforms where your card is linked, such as the FairPrice Group app, to ensure uninterrupted service."
+    },
+    {
+        "faq_id": "faq_e9143f58",
+        "original_category": "trust-plus",
+        "question": "When will my metal card arrive?",
+        "answer": "- We are working to deliver the new card to you as soon as possible. Typically, your new card will arrive within 6-7 working days from your replacement date. In the meantime, you can start using your digital card right away! Remember to update your new card number in your mobile apps and online checkouts.",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "Features"
+        ],
+        "synth_question": "What is the estimated timeframe for receiving my Horizon card after it has been issued?",
+        "synth_answer": "At Horizon Bank, we strive to expedite the delivery of your new Horizon card. Generally, you can expect to receive it within 6-7 working days following the issuance date. While you wait, take advantage of the immediate availability of your digital card through the Horizon App. Don't forget to update your card details in your favorite mobile apps and online shopping platforms to ensure seamless transactions.",
+        "tokenized_answer": "At Horizon Bank, we strive to expedite the delivery of your new Horizon card. Generally, you can expect to receive it within {{faq_e9143f58_001}}-{{faq_e9143f58_002}} working days following the issuance date. While you wait, take advantage of the immediate availability of your digital card through the Horizon App. Don't forget to update your card details in your favorite mobile apps and online shopping platforms to ensure seamless transactions."
+    },
+    {
+        "faq_id": "faq_82276734",
+        "original_category": "trust-plus",
+        "question": "Can I continue using my metal card after my Trust+ membership expires?",
+        "answer": "- Yes, you can continue using your metal card even after your Trust+ membership expires.",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "restrictions"
+        ],
+        "synth_question": "What happens to my Horizon card privileges when my premium membership with Horizon Bank comes to an end?",
+        "synth_answer": "You will still be able to utilize your Horizon card without interruption, as the expiration of your premium membership does not affect its usability.",
+        "tokenized_answer": "You will still be able to utilize your Horizon card without interruption, as the expiration of your premium membership does not affect its usability."
+    },
+    {
+        "faq_id": "faq_34e4a4ab",
+        "original_category": "trust-plus",
+        "question": "Is there a charge for replacing the metal card?",
+        "answer": "- Metal card is complimentary for the 1st issuance but chargeable for subsequent replacements. Do keep your card in a safe place!",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "fees"
+        ],
+        "synth_question": "What is the cost associated with obtaining a replacement for my Horizon card if it is made of metal?",
+        "synth_answer": "At Horizon Bank, we provide your initial metal Horizon card at no additional cost. However, please note that any subsequent replacements will incur a fee. To avoid this expense, we recommend storing your Horizon card in a secure location to prevent loss or damage.",
+        "tokenized_answer": "At Horizon Bank, we provide your initial metal Horizon card at no additional cost. However, please note that any subsequent replacements will incur a fee. To avoid this expense, we recommend storing your Horizon card in a secure location to prevent loss or damage."
+    },
+    {
+        "faq_id": "faq_78b1b823",
+        "original_category": "trust-plus",
+        "question": "Is replacing to the metal card compulsory? I would like to stick with my current plastic physical card.",
+        "answer": "- Absolutely, the choice is yours! However, please note that your digital card in Trust App will show metal card as long as you continue to be a Trust+ customer, while you continue to use your current plastic physical card.",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "Features",
+            "restrictions"
+        ],
+        "synth_question": "Can I opt out of upgrading to a metal card and keep using my existing plastic card with Horizon Bank?",
+        "synth_answer": "You have the flexibility to choose. Although your digital card displayed in the Horizon App will be represented as a metal card as a valued Horizon+ customer, you can still continue to utilize your current plastic physical card.",
+        "tokenized_answer": "You have the flexibility to choose. Although your digital card displayed in the Horizon App will be represented as a metal card as a valued Horizon+ customer, you can still continue to utilize your current plastic physical card."
+    },
+    {
+        "faq_id": "faq_bde7d1d5",
+        "original_category": "trust-plus",
+        "question": "How do I qualify for the metal card?",
+        "answer": "- The metal card is exclusively for Trust+ customers! Qualify for Trust+ and you will have the option to upgrade to the metal card. Do note that we will be rolling out the metal card to our customers in batches.",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "Features",
+            "restrictions"
+        ],
+        "synth_question": "What are the eligibility criteria for obtaining the premium metal card from Horizon Bank?",
+        "synth_answer": "To be eligible for the metal card, you must first qualify for Horizon Bank's premium membership program. Upon meeting the requirements, you will be given the opportunity to upgrade to the metal card. Please note that the rollout of the metal card will occur in phases, with select customers being invited to participate in each batch.",
+        "tokenized_answer": "To be eligible for the metal card, you must first qualify for Horizon Bank's premium membership program. Upon meeting the requirements, you will be given the opportunity to upgrade to the metal card. Please note that the rollout of the metal card will occur in phases, with select customers being invited to participate in each batch."
+    },
+    {
+        "faq_id": "faq_3e4329f8",
+        "original_category": "trust-plus",
+        "question": "What is the difference between my Trust Link / NTUC Link card and the metal card?",
+        "answer": "- The metal card is exclusively for you, the Trust+ customer 😉 Benefits and features from your Trust Link / NTUC Link card will not change! Spends on your metal card will earn Linkpoints at the same rate.",
+        "domain": "DEPOSIT_ACCOUNTS",
+        "intent_families": [
+            "Features",
+            "restrictions"
+        ],
+        "synth_question": "How does the Horizon card differ from my existing Link card, and what benefits can I expect?",
+        "synth_answer": "As a valued Horizon Bank customer, the metal card is a unique offering tailored specifically to your needs. Rest assured that the benefits and features associated with your Link card remain unchanged. Furthermore, any transactions made using the metal card will accrue Linkpoints at the same rate as before, ensuring a seamless rewards experience.",
+        "tokenized_answer": "As a valued Horizon Bank customer, the metal card is a unique offering tailored specifically to your needs. Rest assured that the benefits and features associated with your Link card remain unchanged. Furthermore, any transactions made using the metal card will accrue Linkpoints at the same rate as before, ensuring a seamless rewards experience."
+    },
+    {
+        "faq_id": "faq_88e75264",
+        "original_category": "life-insurance",
+        "question": "What Life Insurance plans will Trust be offering?",
+        "answer": "- We will be offering savings, term, whole life and investment-linked plans in partnership with Income Insurance Limited (Income Insurance). Income Insurance is one of the leading composite insurers in Singapore, offering life, health and general insurance.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Life Insurance"
+        ],
+        "synth_question": "What types of life insurance products can I expect from Horizon Bank?",
+        "synth_answer": "Horizon Bank is pleased to introduce a diverse range of life insurance solutions, including savings, term, whole life, and investment-linked plans, courtesy of our strategic partnership with Income Insurance Limited, a renowned insurer in Singapore providing comprehensive life, health, and general insurance coverage.",
+        "tokenized_answer": "Horizon Bank is pleased to introduce a diverse range of life insurance solutions, including savings, term, whole life, and investment-linked plans, courtesy of our strategic partnership with Income Insurance Limited, a renowned insurer in Singapore providing comprehensive life, health, and general insurance coverage."
+    },
+    {
+        "faq_id": "faq_598df143",
+        "original_category": "life-insurance",
+        "question": "Where can I find out more information about Life Insurance in Trust App?",
+        "answer": "- Do ensure that your Trust App is updated to the latest version. Then on the home page, look for \"Insure\" on the bottom navigation bar to access our Insurance offerings. For more information about life insurance products, you can refer to \"Products\" within the Insure tab.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Life Insurance"
+        ],
+        "synth_question": "How can I access details on life insurance policies through the Horizon Bank digital platform?",
+        "synth_answer": "To explore life insurance options, first verify that your Horizon App is running the most current version. Next, navigate to the home screen and select the 'Insure' option located at the bottom of the navigation menu. From there, you can delve into the specifics of our life insurance products by clicking on the 'Products' section within the Insure tab.",
+        "tokenized_answer": "To explore life insurance options, first verify that your Horizon App is running the most current version. Next, navigate to the home screen and select the 'Insure' option located at the bottom of the navigation menu. From there, you can delve into the specifics of our life insurance products by clicking on the 'Products' section within the Insure tab."
+    },
+    {
+        "faq_id": "faq_1d97d3a0",
+        "original_category": "life-insurance",
+        "question": "How can I buy Life Insurance plans?",
+        "answer": "- You can reach out to our Insurance Specialists through Trust App. They are licensed to advise on Life and Health Insurance plans as well as Investment-Linked plans.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Life Insurance"
+        ],
+        "synth_question": "What steps can I take to purchase a life insurance policy from Horizon Bank?",
+        "synth_answer": "To acquire a life insurance plan, consider consulting with our experienced insurance consultants via the Horizon App. These specialists are fully qualified to provide expert guidance on a wide range of insurance products, including life, health, and investment-linked policies offered by Horizon Bank.",
+        "tokenized_answer": "To acquire a life insurance plan, consider consulting with our experienced insurance consultants via the Horizon App. These specialists are fully qualified to provide expert guidance on a wide range of insurance products, including life, health, and investment-linked policies offered by Horizon Bank."
+    },
+    {
+        "faq_id": "faq_cd9c2a05",
+        "original_category": "life-insurance",
+        "question": "Who is eligible for Life Insurance?",
+        "answer": "- Different insurance plans may have different minimum and maximum entry ages for the policyholder and life insured. Application for life insurance will also be subjected to Trust's review and Income's terms and conditions. At Trust, we generally offer Life Insurance to customers aged 18 to 74 years old.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Life Insurance"
+        ],
+        "synth_question": "What are the age requirements for purchasing a life insurance policy from Horizon Bank?",
+        "synth_answer": "The eligibility criteria for life insurance policies at Horizon Bank typically include age restrictions, with most plans available to individuals between the ages of 18 and 74. However, it's essential to note that specific age limits may vary depending on the chosen insurance plan. Additionally, all applications are carefully reviewed by Horizon Bank and are subject to the terms and conditions of our insurance policies.",
+        "tokenized_answer": "The eligibility criteria for life insurance policies at Horizon Bank typically include age restrictions, with most plans available to individuals between the ages of {{faq_cd9c2a05_001}} and {{faq_cd9c2a05_002}}. However, it's essential to note that specific age limits may vary depending on the chosen insurance plan. Additionally, all applications are carefully reviewed by Horizon Bank and are subject to the terms and conditions of our insurance policies."
+    },
+    {
+        "faq_id": "faq_e423653d",
+        "original_category": "life-insurance",
+        "question": "Who can help me with the questions that I have for Life Insurance?",
+        "answer": "- Our Insurance Specialists are most happy to answer questions on Life Insurance. You can connect with them via Trust App > Insure > Connect with Insurance Specialist.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Life Insurance"
+        ],
+        "synth_question": "What resources are available at Horizon Bank to address my inquiries regarding life insurance policies?",
+        "synth_answer": "For personalized guidance on life insurance, our dedicated team of insurance experts at Horizon Bank are here to assist you. You can easily reach out to them through the Horizon App by navigating to the Insure section and selecting the option to connect with an Insurance Specialist.",
+        "tokenized_answer": "For personalized guidance on life insurance, our dedicated team of insurance experts at Horizon Bank are here to assist you. You can easily reach out to them through the Horizon App by navigating to the Insure section and selecting the option to connect with an Insurance Specialist."
+    },
+    {
+        "faq_id": "faq_a466809f",
+        "original_category": "balance-transfer",
+        "question": "What is Balance Transfer?",
+        "answer": "- Balance Transfer is a short-term loan in Singapore that allows you to convert a portion of your Trust credit card available limit into funds at 0% interest. These funds can be used to clear your other outstanding credit card balances with other banks or for your short term cash needs.",
+        "domain": "TRANSACTIONS",
+        "intent_families": [
+            "Credit Card",
+            "Loan Options"
+        ],
+        "synth_question": "How does Horizon Bank's credit card balance transfer facility work?",
+        "synth_answer": "At Horizon Bank, our balance transfer option provides a convenient, short-term financing solution, enabling you to tap into your available Horizon credit card limit at an interest rate of 0%. This allows you to consolidate and pay off outstanding balances from other credit cards or address short-term cash requirements.",
+        "tokenized_answer": "At Horizon Bank, our balance transfer option provides a convenient, short-term financing solution, enabling you to tap into your available Horizon credit card limit at an interest rate of {{faq_a466809f_001}}. This allows you to consolidate and pay off outstanding balances from other credit cards or address short-term cash requirements."
+    },
+    {
+        "faq_id": "faq_bde1fb33",
+        "original_category": "balance-transfer",
+        "question": "Am I eligible for Balance Transfer?",
+        "answer": "- You must have sufficient available credit limit to be eligible for Balance Transfer.",
+        "domain": "TRANSACTIONS",
+        "intent_families": [
+            "Limits"
+        ],
+        "synth_question": "What are the requirements to qualify for a balance transfer with Horizon Bank?",
+        "synth_answer": "To be considered for a balance transfer, you will need to have an adequate available credit limit on your Horizon card.",
+        "tokenized_answer": "To be considered for a balance transfer, you will need to have an adequate available credit limit on your Horizon card."
+    },
+    {
+        "faq_id": "faq_46c17d0e",
+        "original_category": "balance-transfer",
+        "question": "How do I apply for Balance Transfer?",
+        "answer": "- You can apply for Balance Transfer via our app. Simply tap on Trust App > More > Loan > Other Flexible Loans to get started.",
+        "domain": "TRANSACTIONS",
+        "intent_families": [
+            "Balance Transfer",
+            "Loan Application"
+        ],
+        "synth_question": "What steps do I need to take to initiate a balance transfer request with Horizon Bank?",
+        "synth_answer": "To begin the balance transfer process, navigate to the Horizon App, select the 'More' option, and then proceed to the 'Loan' section, where you will find 'Other Flexible Loans' to commence your application.",
+        "tokenized_answer": "To begin the balance transfer process, navigate to the Horizon App, select the 'More' option, and then proceed to the 'Loan' section, where you will find 'Other Flexible Loans' to commence your application."
+    },
+    {
+        "faq_id": "faq_f7412d3a",
+        "original_category": "balance-transfer",
+        "question": "What are the fees for taking up Balance Transfer?",
+        "answer": "- We only charge a one-time fee when you apply for Balance Transfer. There are no other hidden fees!",
+        "domain": "TRANSACTIONS",
+        "intent_families": [
+            "Balance Transfer",
+            "Fees"
+        ],
+        "synth_question": "How does Horizon Bank's Balance Transfer program charge its customers, and are there any additional costs involved?",
+        "synth_answer": "At Horizon Bank, we maintain transparency by only imposing a single, upfront fee when you opt for our Balance Transfer service. You won't encounter any surprise charges beyond this initial payment.",
+        "tokenized_answer": "At Horizon Bank, we maintain transparency by only imposing a single, upfront fee when you opt for our Balance Transfer service. You won't encounter any surprise charges beyond this initial payment."
+    },
+    {
+        "faq_id": "faq_d6a715e5",
+        "original_category": "balance-transfer",
+        "question": "How long will it take for my Balance Transfer to be approved?",
+        "answer": "- Most Balance Transfer will be approved and deposited to your Trust savings account within 60 seconds.",
+        "domain": "TRANSACTIONS",
+        "intent_families": [
+            "Balance Transfer"
+        ],
+        "synth_question": "What is the typical processing timeframe for Balance Transfer approvals at Horizon Bank?",
+        "synth_answer": "At Horizon Bank, the majority of Balance Transfers are approved and credited to your Horizon savings account almost instantly, typically within 60 seconds.",
+        "tokenized_answer": "At Horizon Bank, the majority of Balance Transfers are approved and credited to your Horizon savings account almost instantly, typically within {{faq_d6a715e5_001}} seconds."
+    },
+    {
+        "faq_id": "faq_636979cb",
+        "original_category": "balance-transfer",
+        "question": "How do I repay my balance transfer?",
+        "answer": "- We will charge a monthly Balance Transfer loan repayment amount, and this will be reflected in your monthly credit card statement. Simply tap on Trust App > Money > Credit Card > Pay credit card.",
+        "domain": "TRANSACTIONS",
+        "intent_families": [
+            "Credit Card",
+            "Repayment"
+        ],
+        "synth_question": "What is the process for settling my outstanding balance transfer amount with Horizon Bank?",
+        "synth_answer": "To manage your balance transfer repayment, Horizon Bank will calculate a monthly loan repayment amount, which will be clearly outlined in your monthly Horizon Bank credit card statement. To make a payment, navigate to the Horizon App, select the 'Money' option, then 'Credit Card', and finally choose 'Pay credit card' to complete the transaction.",
+        "tokenized_answer": "To manage your balance transfer repayment, Horizon Bank will calculate a monthly loan repayment amount, which will be clearly outlined in your monthly Horizon Bank credit card statement. To make a payment, navigate to the Horizon App, select the 'Money' option, then 'Credit Card', and finally choose 'Pay credit card' to complete the transaction."
+    },
+    {
+        "faq_id": "faq_ac3045cf",
+        "original_category": "balance-transfer",
+        "question": "What happens if I don’t make full payment on my monthly charge amount?",
+        "answer": "- If you don't pay the full amount due on or before the payment due date, the unpaid principal of the monthly charge amount will be charged a daily interest of 0.077% (27.9% p.a.)* until the date the payment is received. *From 1 July 2026, your credit card Effective Interest Rate (EIR) will be personalised based on your credit behaviour. Your rate will range from 18.9% p.a. to 29.9% p.a.",
+        "domain": "TRANSACTIONS",
+        "intent_families": [
+            "Payment Terms",
+            "Interest Rates"
+        ],
+        "synth_question": "What are the consequences of not settling my Horizon Bank credit card balance in full by the due date?",
+        "synth_answer": "Failure to pay the entire outstanding amount on or before the specified payment deadline will result in the accrual of daily interest on the unpaid principal balance of your monthly charges. This daily interest rate is set at 0.077% (equivalent to 27.9% per annum)*. Please note that, effective 1 July 2026, the Effective Interest Rate (EIR) for your Horizon Bank credit card will be tailored to your individual credit behaviour, with rates ranging from 18.9% per annum to 29.9% per annum.",
+        "tokenized_answer": "Failure to pay the entire outstanding amount on or before the specified payment deadline will result in the accrual of daily interest on the unpaid principal balance of your monthly charges. This daily interest rate is set at {{faq_ac3045cf_001}} (equivalent to {{faq_ac3045cf_002}} per annum)*. Please note that, effective {{faq_ac3045cf_003}} July {{faq_ac3045cf_004}}, the Effective Interest Rate (EIR) for your Horizon Bank credit card will be tailored to your individual credit behaviour, with rates ranging from {{faq_ac3045cf_005}} per annum to {{faq_ac3045cf_006}} per annum."
+    },
+    {
+        "faq_id": "faq_5f31fc26",
+        "original_category": "balance-transfer",
+        "question": "How is my Balance Transfer monthly charge calculated?",
+        "answer": "- Before end of tenure: 3% (for Balance Transfers approved before 13 August 2026), or 1% (for Balance Transfers approved on or after 13 August 2026) of the outstanding amount will be charged to your credit card statement on a monthly basis and included in the minimum amount due. In last month of tenure, or if you choose to repay before the last month: The remaining outstanding balance will be charged to your credit card statement and 1% of the outstanding amount will be included in the minimum amount due. For more information, please refer to Balance Transfer Product Terms & Key Facts.",
+        "domain": "TRANSACTIONS",
+        "intent_families": [
+            "Balance Transfer",
+            "Charges"
+        ],
+        "synth_question": "What factors determine the monthly fee for transferring my balance to a Horizon Bank credit card?",
+        "synth_answer": "At Horizon Bank, the monthly charge for balance transfers is calculated based on the outstanding balance. Prior to the final month of your tenure, a monthly fee of either 3% for transfers approved before August 13, 2026, or 1% for transfers approved on or after August 13, 2026, will be applied to your Horizon Bank credit card statement. This fee will be included in the minimum payment due. In the last month of your tenure, or if you opt to repay your balance early, the remaining outstanding balance will be charged to your statement, along with a 1% fee on the outstanding amount, which will also be included in the minimum payment due. For detailed information, please consult the Balance Transfer Product Terms and Key Facts document provided by Horizon Bank.",
+        "tokenized_answer": "At Horizon Bank, the monthly charge for balance transfers is calculated based on the outstanding balance. Prior to the final month of your tenure, a monthly fee of either {{faq_5f31fc26_001}} for transfers approved before August {{faq_5f31fc26_002}}, {{faq_5f31fc26_003}}, or {{faq_5f31fc26_004}} for transfers approved on or after August {{faq_5f31fc26_005}}, {{faq_5f31fc26_006}}, will be applied to your Horizon Bank credit card statement. This fee will be included in the minimum payment due. In the last month of your tenure, or if you opt to repay your balance early, the remaining outstanding balance will be charged to your statement, along with a {{faq_5f31fc26_007}} fee on the outstanding amount, which will also be included in the minimum payment due. For detailed information, please consult the Balance Transfer Product Terms and Key Facts document provided by Horizon Bank."
+    },
+    {
+        "faq_id": "faq_98ed4759",
+        "original_category": "balance-transfer",
+        "question": "What is Effective Interest Rate (EIR)?",
+        "answer": "- EIR reflects the true cost of borrowing. We calculate the Effective Interest Rate (EIR) by considering the processing fee and assuming that each minimum monthly payment is paid on time and that the remaining loan amount is paid in the last month.",
+        "domain": "TRANSACTIONS",
+        "intent_families": [
+            "Interest Rates"
+        ],
+        "synth_question": "How does Horizon Bank determine the actual cost of borrowing for its customers?",
+        "synth_answer": "At Horizon Bank, we provide transparency into the true cost of borrowing through the Effective Interest Rate. This rate is calculated by taking into account the processing fee and assuming timely payment of the minimum monthly amount, with the outstanding loan balance being settled in the final month.",
+        "tokenized_answer": "At Horizon Bank, we provide transparency into the true cost of borrowing through the Effective Interest Rate. This rate is calculated by taking into account the processing fee and assuming timely payment of the minimum monthly amount, with the outstanding loan balance being settled in the final month."
+    },
+    {
+        "faq_id": "faq_0c89a56a",
+        "original_category": "balance-transfer",
+        "question": "Can I repay my Balance Transfer early?",
+        "answer": "- You may make a partial or full repayment anytime with no penalty fee.",
+        "domain": "TRANSACTIONS",
+        "intent_families": [
+            "Repayment",
+            "Balance Transfer"
+        ],
+        "synth_question": "Is it possible to settle my outstanding balance transfer amount ahead of schedule at Horizon Bank?",
+        "synth_answer": "At Horizon Bank, you have the flexibility to make partial or full repayments of your balance transfer at any time, and we will not charge you a penalty fee for doing so.",
+        "tokenized_answer": "At Horizon Bank, you have the flexibility to make partial or full repayments of your balance transfer at any time, and we will not charge you a penalty fee for doing so."
+    },
+    {
+        "faq_id": "faq_441386d0",
+        "original_category": "insurance",
+        "question": "Are there any Trust exclusive offers for Insurance?",
+        "answer": "- Yes, there may be Trust exclusive offers for Trust customers from time to time for eligible Income Insurance Limited policies. For the latest offers available, please check your Trust App or website.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Insurance",
+            "Premiums"
+        ],
+        "synth_question": "Does Horizon Bank provide special promotions for its insurance products?",
+        "synth_answer": "Horizon Bank periodically extends exclusive benefits to its valued customers, particularly for select Income Insurance Limited policies. To stay informed about the most current promotions, we recommend visiting the Horizon Bank website or accessing the Horizon App for the latest updates.",
+        "tokenized_answer": "Horizon Bank periodically extends exclusive benefits to its valued customers, particularly for select Income Insurance Limited policies. To stay informed about the most current promotions, we recommend visiting the Horizon Bank website or accessing the Horizon App for the latest updates."
+    },
+    {
+        "faq_id": "faq_9778f649",
+        "original_category": "insurance",
+        "question": "How can I enjoy the Trust exclusive offer that is available?",
+        "answer": "- You must be a Trust customer and have to buy the insurance policy through the Trust App or website to enjoy the Trust exclusive offer. The offer will automatically be applied when you checkout and pay. Promotion Terms and Conditions apply. Trust's General Terms and Conditions apply. You may find them on the Trust App or website.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Insurance",
+            "Premiums"
+        ],
+        "synth_question": "What are the requirements to take advantage of Horizon Bank's special promotional offer?",
+        "synth_answer": "To qualify for Horizon Bank's exclusive offer, you must be a valued customer of Horizon Bank and purchase your insurance policy directly through the Horizon App or the official Horizon Bank website. Upon completing your payment at checkout, the offer will be automatically applied. Please note that this promotion is subject to specific terms and conditions, as well as Horizon Bank's general terms and conditions, which can be conveniently accessed via the Horizon App or the Horizon Bank website.",
+        "tokenized_answer": "To qualify for Horizon Bank's exclusive offer, you must be a valued customer of Horizon Bank and purchase your insurance policy directly through the Horizon App or the official Horizon Bank website. Upon completing your payment at checkout, the offer will be automatically applied. Please note that this promotion is subject to specific terms and conditions, as well as Horizon Bank's general terms and conditions, which can be conveniently accessed via the Horizon App or the Horizon Bank website."
+    },
+    {
+        "faq_id": "faq_3ea789da",
+        "original_category": "insurance",
+        "question": "Can I enjoy the Trust exclusive offer with Income promotions?",
+        "answer": "- Yes, you can. The Trust exclusive offer is applied after any ongoing Income promotions. For the latest Income promotions, please visit https://www.income.com.sg",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Promotions",
+            "Insurance Offers"
+        ],
+        "synth_question": "Am I eligible to receive the Horizon Bank exclusive deal in conjunction with Income promotions?",
+        "synth_answer": "Indeed, you are. The Horizon Bank exclusive offer is granted subsequent to any existing Income promotions. To stay updated on the latest Income promotions, kindly refer to https://www.income.com.sg",
+        "tokenized_answer": "Indeed, you are. The Horizon Bank exclusive offer is granted subsequent to any existing Income promotions. To stay updated on the latest Income promotions, kindly refer to https://www.income.com.sg"
+    },
+    {
+        "faq_id": "faq_a9f79468",
+        "original_category": "insurance",
+        "question": "I did not buy through Trust App or website and thus did not enjoy the Trust exclusive offer. Can Trust accord the exclusive offer to me?",
+        "answer": "- Trust will not be able to accord the exclusive offer. Purchase must be made through the Trust App or website.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Claims",
+            "Premiums"
+        ],
+        "synth_question": "If I purchased a policy outside of the Horizon Bank platform, am I still eligible for the exclusive benefits normally offered to Horizon Bank customers?",
+        "synth_answer": "Unfortunately, Horizon Bank's exclusive offers are only available to customers who purchase policies directly through the Horizon App or website. As such, we are unable to extend these exclusive benefits to purchases made through other channels.",
+        "tokenized_answer": "Unfortunately, Horizon Bank's exclusive offers are only available to customers who purchase policies directly through the Horizon App or website. As such, we are unable to extend these exclusive benefits to purchases made through other channels."
+    },
+    {
+        "faq_id": "faq_bf464b75",
+        "original_category": "insurance",
+        "question": "Must I pay with a Trust Credit or Debit Card?",
+        "answer": "- Yes. You must buy using a Trust Card or Trust Savings Account to enjoy the Trust exclusive offer.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Premiums",
+            "Claims"
+        ],
+        "synth_question": "Is it mandatory to use a Horizon Bank card for payment to be eligible for the exclusive promotion offered by Horizon Bank?",
+        "synth_answer": "To qualify for the exclusive benefits provided by Horizon Bank, it is necessary to make your purchase using a Horizon card or a Horizon Savings Account, thereby ensuring you can take full advantage of the special offer available to Horizon customers.",
+        "tokenized_answer": "To qualify for the exclusive benefits provided by Horizon Bank, it is necessary to make your purchase using a Horizon card or a Horizon Savings Account, thereby ensuring you can take full advantage of the special offer available to Horizon customers."
+    },
+    {
+        "faq_id": "faq_0befd9b1",
+        "original_category": "insurance",
+        "question": "I bought an insurance policy from Income’s website. Can I cancel the policy and buy again through the Trust App or website to enjoy the Trust exclusive offer?",
+        "answer": "- No. Customers who cancel and buy again will not be eligible for the Trust exclusive offer.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Insurance",
+            "Premiums"
+        ],
+        "synth_question": "If I purchase an insurance plan from another platform, can I later cancel it and repurchase through Horizon Bank's platform or mobile application to take advantage of their exclusive promotions?",
+        "synth_answer": "Unfortunately, individuals who cancel their existing policy and attempt to repurchase it through Horizon Bank will not qualify for the exclusive offer provided by Horizon Bank.",
+        "tokenized_answer": "Unfortunately, individuals who cancel their existing policy and attempt to repurchase it through Horizon Bank will not qualify for the exclusive offer provided by Horizon Bank."
+    },
+    {
+        "faq_id": "faq_84f93166",
+        "original_category": "insurance",
+        "question": "Who should I reach out to if I have any further queries regarding Income insurance products?",
+        "answer": "- You may contact Income at https://www.income.com.sg/contact-us for further enquiries regarding Income insurance products.",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Life Insurance",
+            "Claims"
+        ],
+        "synth_question": "What is the best way to get in touch with Horizon Bank's insurance partner for more information on income protection policies?",
+        "synth_answer": "For additional inquiries about income insurance products offered through Horizon Bank, you can visit the insurance provider's website and navigate to their 'Contact Us' page to reach out to their dedicated support team.",
+        "tokenized_answer": "For additional inquiries about income insurance products offered through Horizon Bank, you can visit the insurance provider's website and navigate to their 'Contact Us' page to reach out to their dedicated support team."
+    },
+    {
+        "faq_id": "faq_7e7d7d04",
+        "original_category": "insurance",
+        "question": "Domestic Helper Insurance FAQ",
+        "answer": "- Domestic Helper Insurance FAQ",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Insurance"
+        ],
+        "synth_question": "What information is available regarding insurance coverage for household staff at Horizon Bank?",
+        "synth_answer": "For details on insurance options tailored for domestic helpers, please refer to the dedicated section on the Horizon Bank website or consult with a Horizon Bank representative to understand the available coverage and benefits.",
+        "tokenized_answer": "For details on insurance options tailored for domestic helpers, please refer to the dedicated section on the Horizon Bank website or consult with a Horizon Bank representative to understand the available coverage and benefits."
+    },
+    {
+        "faq_id": "faq_d8dff0e2",
+        "original_category": "insurance",
+        "question": "Enhanced Home Insurance FAQ",
+        "answer": "- Enhanced Home Insurance FAQ",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Home Insurance"
+        ],
+        "synth_question": "What does Horizon Bank's premium home protection policy entail?",
+        "synth_answer": "Horizon Bank's comprehensive home insurance policy is designed to provide extensive coverage for your residence. For more detailed information, please refer to our dedicated Horizon Bank Home Insurance webpage or contact our customer support team for personalized assistance.",
+        "tokenized_answer": "Horizon Bank's comprehensive home insurance policy is designed to provide extensive coverage for your residence. For more detailed information, please refer to our dedicated Horizon Bank Home Insurance webpage or contact our customer support team for personalized assistance."
+    },
+    {
+        "faq_id": "faq_d8b93ac3",
+        "original_category": "insurance",
+        "question": "Home Ultimate Protect Insurance FAQ",
+        "answer": "- Home Ultimate Protect Insurance FAQ",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Home Insurance",
+            "Claims"
+        ],
+        "synth_question": "What information can I find in the Horizon Bank Home Ultimate Protect Insurance frequently asked questions section?",
+        "synth_answer": "The Horizon Bank Home Ultimate Protect Insurance FAQ section provides comprehensive details about the insurance policy, including coverage, benefits, and the claims process. For more information, please visit the Horizon Bank website or contact our customer support team through the Horizon App.",
+        "tokenized_answer": "The Horizon Bank Home Ultimate Protect Insurance FAQ section provides comprehensive details about the insurance policy, including coverage, benefits, and the claims process. For more information, please visit the Horizon Bank website or contact our customer support team through the Horizon App."
+    },
+    {
+        "faq_id": "faq_8e57f7ac",
+        "original_category": "insurance",
+        "question": "Travel Insurance FAQ",
+        "answer": "- Travel Insurance FAQ",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Travel Insurance"
+        ],
+        "synth_question": "What information can I find in the Horizon Bank travel insurance guide?",
+        "synth_answer": "For comprehensive details about our travel insurance offerings, including policy coverage, benefits, and how to file a claim, please refer to the Horizon Bank travel insurance resource section, where you can access a wealth of information tailored to meet your travel needs.",
+        "tokenized_answer": "For comprehensive details about our travel insurance offerings, including policy coverage, benefits, and how to file a claim, please refer to the Horizon Bank travel insurance resource section, where you can access a wealth of information tailored to meet your travel needs."
+    },
+    {
+        "faq_id": "faq_4a101e55",
+        "original_category": "insurance",
+        "question": "Happy Tails Pet Insurance FAQ",
+        "answer": "- Happy Tails Pet Insurance FAQ",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Pet Insurance",
+            "Claims"
+        ],
+        "synth_question": "What information can I find in the Horizon Bank's pet insurance frequently asked questions section?",
+        "synth_answer": "The Horizon Bank's pet insurance FAQ section provides a comprehensive overview of our policies, including coverage details, claim procedures, and general guidelines for pet owners. This resource is designed to help you navigate the insurance process with ease and confidence, ensuring that you and your pet receive the best possible care and support.",
+        "tokenized_answer": "The Horizon Bank's pet insurance FAQ section provides a comprehensive overview of our policies, including coverage details, claim procedures, and general guidelines for pet owners. This resource is designed to help you navigate the insurance process with ease and confidence, ensuring that you and your pet receive the best possible care and support."
+    },
+    {
+        "faq_id": "faq_9655333c",
+        "original_category": "insurance",
+        "question": "Car Insurance FAQ",
+        "answer": "- Car Insurance FAQ",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Claims",
+            "Premiums"
+        ],
+        "synth_question": "What information can I find in the Horizon Bank automobile insurance frequently asked questions section?",
+        "synth_answer": "The Horizon Bank vehicle insurance FAQ section provides detailed information on various aspects of car insurance, including policy coverage, claims processing, and premium payments. For more information, please visit the Horizon Bank website or contact our customer support team.",
+        "tokenized_answer": "The Horizon Bank vehicle insurance FAQ section provides detailed information on various aspects of car insurance, including policy coverage, claims processing, and premium payments. For more information, please visit the Horizon Bank website or contact our customer support team."
+    },
+    {
+        "faq_id": "faq_3ac51ece",
+        "original_category": "insurance",
+        "question": "Motorcycle Insurance FAQ",
+        "answer": "- Motorcycle Insurance FAQ",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Motorcycle Insurance"
+        ],
+        "synth_question": "What information can I find in the Horizon Bank motorcycle insurance guide?",
+        "synth_answer": "The Horizon Bank motorcycle insurance guide provides essential details on coverage options, policy terms, and how to file a claim. For more information, please visit the Horizon Bank website or contact our customer support team.",
+        "tokenized_answer": "The Horizon Bank motorcycle insurance guide provides essential details on coverage options, policy terms, and how to file a claim. For more information, please visit the Horizon Bank website or contact our customer support team."
+    },
+    {
+        "faq_id": "faq_616c0a66",
+        "original_category": "insurance",
+        "question": "Family Personal Accident Insurance FAQ",
+        "answer": "- Family Personal Accident Insurance FAQ",
+        "domain": "INSURANCE",
+        "intent_families": [
+            "Life Insurance",
+            "Claims"
+        ],
+        "synth_question": "What information can I find in the Horizon Bank Family Personal Accident Insurance resource section?",
+        "synth_answer": "The Horizon Bank Family Personal Accident Insurance resource section provides a comprehensive overview of our insurance offerings, including policy details, benefits, and the claims process. For more information on how to navigate this section or to learn about the various insurance products available through Horizon Bank, please contact our customer support team.",
+        "tokenized_answer": "The Horizon Bank Family Personal Accident Insurance resource section provides a comprehensive overview of our insurance offerings, including policy details, benefits, and the claims process. For more information on how to navigate this section or to learn about the various insurance products available through Horizon Bank, please contact our customer support team."
+    },
+    {
+        "faq_id": "faq_da866599",
+        "original_category": "linkpoints",
+        "question": "I am an existing Link member. Will my Link account be linked to my Trust card?",
+        "answer": "- Yes, certainly! Upon the approval of your application, your existing Link membership ID would be linked to your new Trust card. Once it's linked, you can start earning Linkpoints with your debit/credit card and view your Linkpoints balance and transactions in your Trust App.",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Merchant Promos"
+        ],
+        "synth_question": "As a current member of the rewards program, will my existing membership automatically connect to my Horizon Bank card?",
+        "synth_answer": "Indeed, upon approval of your application, your existing rewards membership will be seamlessly integrated with your new Horizon card. This integration enables you to accumulate rewards points through your debit or credit card transactions and conveniently monitor your points balance and transaction history within the Horizon App.",
+        "tokenized_answer": "Indeed, upon approval of your application, your existing rewards membership will be seamlessly integrated with your new Horizon card. This integration enables you to accumulate rewards points through your debit or credit card transactions and conveniently monitor your points balance and transaction history within the Horizon App."
+    },
+    {
+        "faq_id": "faq_921890b4",
+        "original_category": "linkpoints",
+        "question": "I am not a Link member. Will a new Link account be created for me?",
+        "answer": "- Yes, upon the approval of your application, we will create a new Link membership ID and link it to your new Trust card. Once it's linked, you can start earning Linkpoints with your Trust card and view your Linkpoints balance and transactions in your Trust App.",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints"
+        ],
+        "synth_question": "As a non-member, will I be assigned a Link account when I apply for a Horizon card?",
+        "synth_answer": "Upon approval of your application, Horizon Bank will establish a new Link membership account and associate it with your newly issued Horizon card. This will enable you to accumulate Linkpoints using your Horizon card, and you will be able to monitor your Linkpoints balance and transaction history directly within the Horizon App.",
+        "tokenized_answer": "Upon approval of your application, Horizon Bank will establish a new Link membership account and associate it with your newly issued Horizon card. This will enable you to accumulate Linkpoints using your Horizon card, and you will be able to monitor your Linkpoints balance and transaction history directly within the Horizon App."
+    },
+    {
+        "faq_id": "faq_59210acf",
+        "original_category": "linkpoints",
+        "question": "My Trust Link card/NTUC Link card is tied to an incorrect Link account. What should I do? Can I merge my Link accounts?",
+        "answer": "- Please reach out to FPG Customer Care Team via our webform at https://support.link.sg/hc/en-us/requests/new .",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Merchant Promos"
+        ],
+        "synth_question": "I've noticed that my Horizon card is associated with the wrong rewards account. What steps can I take to rectify this situation, and is it possible to consolidate my accounts?",
+        "synth_answer": "To resolve the issue with your Horizon card being linked to an incorrect rewards account, please contact the dedicated support team at Horizon Bank through their online support portal. They will be able to assist you in resolving the matter and provide guidance on any potential account consolidation options.",
+        "tokenized_answer": "To resolve the issue with your Horizon card being linked to an incorrect rewards account, please contact the dedicated support team at Horizon Bank through their online support portal. They will be able to assist you in resolving the matter and provide guidance on any potential account consolidation options."
+    },
+    {
+        "faq_id": "faq_560b6fac",
+        "original_category": "linkpoints",
+        "question": "My Trust Link card/NTUC Link card is tied to a newly created Link account, but I am an existing Link member. What should I do? Will I lose my previously earned Linkpoints?",
+        "answer": "- Please reach out to FPG Customer Care Team via our webform at https://support.link.sg/hc/en-us/requests/new .",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Merchant Promos"
+        ],
+        "synth_question": "I'm an existing Horizon Bank rewards member, but my new Horizon card is linked to a freshly created account. How can I ensure my previously accumulated rewards are preserved?",
+        "synth_answer": "To safeguard your existing rewards balance, kindly contact the Horizon Bank Customer Support Team through their dedicated web portal to seek assistance and guidance on merging your accounts.",
+        "tokenized_answer": "To safeguard your existing rewards balance, kindly contact the Horizon Bank Customer Support Team through their dedicated web portal to seek assistance and guidance on merging your accounts."
+    },
+    {
+        "faq_id": "faq_31afb42a",
+        "original_category": "linkpoints",
+        "question": "My current Link account is linked to my OCBC Plus!/NTUC Plus! Card. Will I have any issues if I apply for Trust Link/NTUC Link card?",
+        "answer": "- When you successfully apply for your Trust card, your Link account will be automatically tagged to your new Trust Link/NTUC Link account. In your Trust App, you will be able to see your Linkpoints balance and transactions made using your Trust card. For more information regarding NTUC / OCBC Plus! Visa Card or Linkpoints, please visit the Link Rewards website . Alternatively, you may reach out to FPG Customer Care Team via a webform at https://support.link.sg/hc/en-us/requests/new .",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Merchant Promos"
+        ],
+        "synth_question": "If I currently have a Link account connected to my existing rewards card, will applying for a Horizon Bank Link card cause any disruptions to my rewards balance or transactions?",
+        "synth_answer": "Upon successful application for your Horizon card, your Link account will seamlessly integrate with your new Horizon Link card, allowing you to view your Linkpoints balance and transaction history within the Horizon App. For detailed information on Link rewards, NTUC benefits, or Visa card perks, please visit the Link Rewards website. Alternatively, you can contact the Customer Care Team through the webform available at https://support.link.sg/hc/en-us/requests/new for personalized assistance.",
+        "tokenized_answer": "Upon successful application for your Horizon card, your Link account will seamlessly integrate with your new Horizon Link card, allowing you to view your Linkpoints balance and transaction history within the Horizon App. For detailed information on Link rewards, NTUC benefits, or Visa card perks, please visit the Link Rewards website. Alternatively, you can contact the Customer Care Team through the webform available at https://support.link.sg/hc/en-us/requests/new for personalized assistance."
+    },
+    {
+        "faq_id": "faq_0bd4ea1f",
+        "original_category": "linkpoints",
+        "question": "Can my Trust Link card/NTUC Link card be used to identify me as a Link member and/or NTUC Union member?",
+        "answer": "- Yes. You can present your Trust Link card to identify yourself as a Link member, and you can present your NTUC Link card to identify yourself as both a Link member and a NTUC Union member.",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Merchant Promos"
+        ],
+        "synth_question": "How can I verify my membership status with Horizon Bank using my existing cards?",
+        "synth_answer": "You can use your Horizon Link card to confirm your Link membership, while your NTUC Link card serves as proof of both your Link membership and NTUC Union membership with Horizon Bank.",
+        "tokenized_answer": "You can use your Horizon Link card to confirm your Link membership, while your NTUC Link card serves as proof of both your Link membership and NTUC Union membership with Horizon Bank."
+    },
+    {
+        "faq_id": "faq_40b2dacf",
+        "original_category": "linkpoints",
+        "question": "What transactions are ineligible transactions and will therefore not earn you any Linkpoints?",
+        "answer": "- The following are ineligible transactions: - Any cash advance. - Transactions on your credit card that are subsequently cancelled, voided, refunded or reversed or incurred by you but aren’t submitted or posted to your credit card. - AXS, SAM or ATM transactions made using your credit card. - Any insurance premiums. - Any fees (for example annual card fees, service fees, interest, administrative fees, finance fees, and/or late payment fees). - Amounts which have been rolled over from any preceding month’s statement. - Any top-ups or payment of funds to any accounts. - Any transaction classified under any of the following Merchant Category Codes: - Utilities, Rentals and Cleaning Services – 4900, 6513, 7349. - Financial Institutions, Securities – Brokers, Quasi Cash, Insurance, Stored Value Card Purchase/Load and Wire Transfer – 4829, 5960, 6010, 6011, 6012, 6051, 6211, 6300, 6540. - Gambling – 7995. - Educational Institutions – 8211, 8220, 8241, 8244, 8249, 8299. - Charitable services, political organisations, religious organisations and government payments – 8398, 8651, 8661, 9211, 9222, 9223, 9311, 9399, 9402, 9405. - Other services – 7399* - Any other fees or payments as we may decide. Do note that Trust is entitled to clawback or withdraw any excess Linkpoints issued at its sole discretion. For more information on our rewards, please refer to https://trustbank.sg/faqs/credit-card/#what-are-the-reward-of-the-trust-link-credit-card-and-debit-card-how-do-i-earn * From 15 May 2026, transactions under the following MCC will be classified as ineligible: 7399",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Ineligible Transactions"
+        ],
+        "synth_question": "Which types of transactions are excluded from earning rewards points with my Horizon Bank credit card?",
+        "synth_answer": "At Horizon Bank, certain transactions do not qualify for rewards points. These include: \n   - Cash advances\n   - Credit card transactions that are later cancelled, voided, refunded, or reversed\n   - AXS, SAM, or ATM transactions made with your Horizon card\n   - Insurance premiums\n   - Fees such as annual card fees, service fees, interest, administrative fees, finance fees, and late payment fees\n   - Rollover amounts from previous statements\n   - Top-ups or payments to accounts\n   - Transactions classified under specific Merchant Category Codes, including:\n     * Utilities, rentals, and cleaning services\n     * Financial institutions, securities, and quasi-cash transactions\n     * Gambling\n     * Educational institutions\n     * Charitable services, political organizations, and government payments\n     * Other services\n   Please note that Horizon Bank reserves the right to withdraw excess rewards points at its discretion. For more information on our rewards program, please visit our website. Additionally, from 15 May 2026, transactions with a specific Merchant Category Code will be reclassified as ineligible for rewards points.",
+        "tokenized_answer": "At Horizon Bank, certain transactions do not qualify for rewards points. These include: \n   - Cash advances\n   - Credit card transactions that are later cancelled, voided, refunded, or reversed\n   - AXS, SAM, or ATM transactions made with your Horizon card\n   - Insurance premiums\n   - Fees such as annual card fees, service fees, interest, administrative fees, finance fees, and late payment fees\n   - Rollover amounts from previous statements\n   - Top-ups or payments to accounts\n   - Transactions classified under specific Merchant Category Codes, including:\n     * Utilities, rentals, and cleaning services\n     * Financial institutions, securities, and quasi-cash transactions\n     * Gambling\n     * Educational institutions\n     * Charitable services, political organizations, and government payments\n     * Other services\n   Please note that Horizon Bank reserves the right to withdraw excess rewards points at its discretion. For more information on our rewards program, please visit our website. Additionally, from {{faq_40b2dacf_001}} May {{faq_40b2dacf_002}}, transactions with a specific Merchant Category Code will be reclassified as ineligible for rewards points."
+    },
+    {
+        "faq_id": "faq_e9a3d292",
+        "original_category": "linkpoints",
+        "question": "When will I receive my earned Linkpoints (excluding monthly and quarterly bonus Linkpoints)?",
+        "answer": "- We aim to credit the Linkpoints for your Eligible Spend to you in real-time (i.e., as soon as they are earned and posted!). However, there may be times when it can take us up to a day. Eligible Spend consists of Local Eligible Spend and Foreign Eligible Spend. Local Eligible Spend refers to all Visa transactions on your credit card or debit card in Singapore Dollars, and where the transaction is processed in Singapore, excluding FPG spend and ineligible transactions. You will receive 0.22% Linkpoints on all Local Eligible Spend, with no cap. For supplementary cardholders, Linkpoints will be awarded to the main cardholder. Foreign Eligible Spend refers to all Visa transactions made on your credit card or debit card that are not in Singapore Dollars, or where the transaction is processed outside of Singapore (including transactions that are converted into Singapore dollars via Dynamic Currency Conversion (DCC)), excluding FPG spend and ineligible transactions. You will receive 0.22% Linkpoints on all Foreign Eligible Spend, with no cap. For supplementary cardholders, Linkpoints will be awarded to the main cardholder. For the list of ineligible transactions, refer to https://trustbank.sg/faqs/linkpoints/#what-transactions-are-ineligible-transactions-and-will-therefore-not-earn-you-any-linkpoints?search=true",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Eligible Spend"
+        ],
+        "synth_question": "How soon can I expect to receive my earned rewards points from Horizon Bank, excluding any bonus points I may be eligible for on a monthly or quarterly basis?",
+        "synth_answer": "At Horizon Bank, we strive to update your account with earned rewards points in real-time, as soon as the transaction is processed. However, in some cases, it may take up to 24 hours. To clarify, eligible transactions include both local and foreign spend on your Horizon card. Local spend refers to Visa transactions in Singapore Dollars processed within Singapore, excluding certain spend categories. You can earn 0.22% rewards points on these local transactions without any cap. Similarly, foreign transactions, which include those in currencies other than Singapore Dollars or processed outside of Singapore, also earn 0.22% rewards points with no cap. For joint accounts, the main cardholder will receive the rewards points. For more details on transactions that do not qualify for rewards points, please visit our website at https://horizonbank.sg/faqs/linkpoints.",
+        "tokenized_answer": "At Horizon Bank, we strive to update your account with earned rewards points in real-time, as soon as the transaction is processed. However, in some cases, it may take up to {{faq_e9a3d292_001}} hours. To clarify, eligible transactions include both local and foreign spend on your Horizon card. Local spend refers to Visa transactions in Singapore Dollars processed within Singapore, excluding certain spend categories. You can earn {{faq_e9a3d292_002}} rewards points on these local transactions without any cap. Similarly, foreign transactions, which include those in currencies other than Singapore Dollars or processed outside of Singapore, also earn {{faq_e9a3d292_003}} rewards points with no cap. For joint accounts, the main cardholder will receive the rewards points. For more details on transactions that do not qualify for rewards points, please visit our website at https://horizonbank.sg/faqs/linkpoints."
+    },
+    {
+        "faq_id": "faq_814920a9",
+        "original_category": "linkpoints",
+        "question": "When will I receive my monthly bonus Linkpoints on FairPrice Group spend?",
+        "answer": "- Once you've met your minimum monthly spend ($450 for NTUC Link Credit cardholders, $550 for Trust Link Credit cardholders, or $300 for NTUC Link Debit and Trust Link Debit cardholders) which is based on the posting date (not transaction date) of your transactions, you'll receive the monthly bonus Linkpoints on all your posted FPG spend*. Subsequently, you'll receive the monthly bonus Linkpoints on FPG spend* once they are posted in the same month. *FPG groceries includes FairPrice, FairPrice Finest, FairPrice Xtra, FairPrice Xpress, FairPrice Online, Warehouse Club, Unity and Cheers stores (excluding FairPrice Xpress and Cheers outlets located within Esso stations) and FPG food includes participating Kopitiam stalls. FPG groceries and food spend will, together, also be referred to as FPG spend.",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Merchant Promos"
+        ],
+        "synth_question": "How do I qualify for and receive my monthly bonus rewards on purchases made at FairPrice Group merchants using my Horizon Bank card?",
+        "synth_answer": "To be eligible for the monthly bonus rewards, you must meet the minimum monthly spend requirement, which varies depending on your Horizon Bank card type: $450 for NTUC Link Credit cardholders, $550 for Horizon Link Credit cardholders, or $300 for NTUC Link Debit and Horizon Link Debit cardholders. The spend is calculated based on the posting date of your transactions, not the transaction date. Once you have met this requirement, you will receive the bonus rewards on your FairPrice Group spend, which includes purchases made at FairPrice, FairPrice Finest, FairPrice Xtra, FairPrice Online, Warehouse Club, Unity, and participating Kopitiam stalls. Please note that FairPrice Xpress and Cheers outlets located within Esso stations are excluded. You will receive the bonus rewards on your posted FairPrice Group spend for the same month, provided the transactions are posted within that month.",
+        "tokenized_answer": "To be eligible for the monthly bonus rewards, you must meet the minimum monthly spend requirement, which varies depending on your Horizon Bank card type: {{faq_814920a9_001}} for NTUC Link Credit cardholders, {{faq_814920a9_002}} for Horizon Link Credit cardholders, or {{faq_814920a9_003}} for NTUC Link Debit and Horizon Link Debit cardholders. The spend is calculated based on the posting date of your transactions, not the transaction date. Once you have met this requirement, you will receive the bonus rewards on your FairPrice Group spend, which includes purchases made at FairPrice, FairPrice Finest, FairPrice Xtra, FairPrice Online, Warehouse Club, Unity, and participating Kopitiam stalls. Please note that FairPrice Xpress and Cheers outlets located within Esso stations are excluded. You will receive the bonus rewards on your posted FairPrice Group spend for the same month, provided the transactions are posted within that month."
+    },
+    {
+        "faq_id": "faq_5a7395a4",
+        "original_category": "linkpoints",
+        "question": "When will I receive my quarterly bonus Linkpoints on  FairPrice Group spend?",
+        "answer": "- Once you've met your minimum monthly spend ($450 for NTUC Link Credit cardholders, $550 for Trust Link Credit cardholders, or $300 for NTUC Link Debit and Trust Link Debit cardholders) which is based on the posting date (not transaction date) of your transactions for 3 consecutive months starting from the first month that your card is approved, you'll receive the quarterly bonus Linkpoints on all your posted FPG spend* in the quarter. Subsequently, you'll receive the quarterly bonus Linkpoints on FPG spend* once they are posted in the month. Earn additional quarterly bonus when you meet the following minimum monthly spend ($800 for NTUC Link Credit and Trust Link Credit cardholders, or $500 for NTUC Link Debit and Trust Link Debit cardholders) which is based on the posting date (not transaction date) of your transactions for 3 consecutive months starting from the first month that your card is approved, you'll receive the quarterly bonus Linkpoints on all your posted FPG spend* in the quarter. Subsequently, you'll receive the quarterly bonus Linkpoints on FPG spend* once they are posted in the month. *FPG groceries includes FairPrice, FairPrice Finest, FairPrice Xtra, FairPrice Xpress, FairPrice Online, Warehouse Club, Unity and Cheers stores (excluding FairPrice Xpress and Cheers outlets located within Esso stations) and FPG food includes participating Kopitiam stalls. FPG groceries and food spend will, together, also be referred to as FPG spend.",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Merchant Promos"
+        ],
+        "synth_question": "How do I qualify for and receive the quarterly bonus Linkpoints on my FairPrice Group purchases made with my Horizon card?",
+        "synth_answer": "To be eligible for the quarterly bonus Linkpoints on your FairPrice Group spend, you must first meet the minimum monthly spend requirement for three consecutive months, starting from the month your Horizon card is approved. The required spend amounts are $450 for NTUC Link Credit cardholders, $550 for Horizon Link Credit cardholders, or $300 for NTUC Link Debit and Horizon Link Debit cardholders, based on the posting date of your transactions. Once you've met this condition, you'll receive the quarterly bonus Linkpoints on all your posted FairPrice Group spend. Additionally, if you meet the higher minimum monthly spend of $800 for NTUC Link Credit and Horizon Link Credit cardholders, or $500 for NTUC Link Debit and Horizon Link Debit cardholders, you'll be eligible for an extra quarterly bonus. The FairPrice Group spend includes purchases made at FairPrice, FairPrice Finest, FairPrice Xtra, FairPrice Online, Warehouse Club, Unity, and Cheers stores, as well as participating Kopitiam stalls, excluding FairPrice Xpress and Cheers outlets within Esso stations. You will receive the quarterly bonus Linkpoints on your FairPrice Group spend once the transactions are posted in the month.",
+        "tokenized_answer": "To be eligible for the quarterly bonus Linkpoints on your FairPrice Group spend, you must first meet the minimum monthly spend requirement for three consecutive months, starting from the month your Horizon card is approved. The required spend amounts are {{faq_5a7395a4_001}} for NTUC Link Credit cardholders, {{faq_5a7395a4_002}} for Horizon Link Credit cardholders, or {{faq_5a7395a4_003}} for NTUC Link Debit and Horizon Link Debit cardholders, based on the posting date of your transactions. Once you've met this condition, you'll receive the quarterly bonus Linkpoints on all your posted FairPrice Group spend. Additionally, if you meet the higher minimum monthly spend of {{faq_5a7395a4_004}} for NTUC Link Credit and Horizon Link Credit cardholders, or {{faq_5a7395a4_005}} for NTUC Link Debit and Horizon Link Debit cardholders, you'll be eligible for an extra quarterly bonus. The FairPrice Group spend includes purchases made at FairPrice, FairPrice Finest, FairPrice Xtra, FairPrice Online, Warehouse Club, Unity, and Cheers stores, as well as participating Kopitiam stalls, excluding FairPrice Xpress and Cheers outlets within Esso stations. You will receive the quarterly bonus Linkpoints on your FairPrice Group spend once the transactions are posted in the month."
+    },
+    {
+        "faq_id": "faq_1b7fc742",
+        "original_category": "linkpoints",
+        "question": "How do I view my earned Linkpoints?",
+        "answer": "- You can view your earned Linkpoints in a few easy steps: 1. Log in to your Trust App 2. Go to 'Dashboard' 3. Select 'Rewards' 4. Select 'Link Rewards'",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints"
+        ],
+        "synth_question": "What is the process for checking the Linkpoints I have accumulated through Horizon Bank?",
+        "synth_answer": "To access your earned Linkpoints, follow these straightforward steps: \n      * Launch the Horizon App and sign in to your account\n      * Navigate to the main 'Dashboard' section\n      * Click on 'Rewards' to view your available rewards\n      * Choose 'Link Rewards' to see the specifics of your earned Linkpoints",
+        "tokenized_answer": "To access your earned Linkpoints, follow these straightforward steps: \n      * Launch the Horizon App and sign in to your account\n      * Navigate to the main 'Dashboard' section\n      * Click on 'Rewards' to view your available rewards\n      * Choose 'Link Rewards' to see the specifics of your earned Linkpoints"
+    },
+    {
+        "faq_id": "faq_d3769b79",
+        "original_category": "linkpoints",
+        "question": "What happens to my Linkpoints if I return or refund the product(s) purchased with my Credit Card?",
+        "answer": "- Unfortunately, the Linkpoints you had previously earned on the purchase would have to be reversed out of your account.",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Redemption"
+        ],
+        "synth_question": "How are my rewards points affected if I initiate a return or obtain a refund for a transaction made using my Horizon card?",
+        "synth_answer": "In the event of a return or refund, the rewards points you initially accrued from the purchase will be deducted from your Horizon Bank account to maintain the integrity of our rewards program.",
+        "tokenized_answer": "In the event of a return or refund, the rewards points you initially accrued from the purchase will be deducted from your Horizon Bank account to maintain the integrity of our rewards program."
+    },
+    {
+        "faq_id": "faq_8065dd4a",
+        "original_category": "linkpoints",
+        "question": "How do I connect a Link membership to my FairPrice app?",
+        "answer": "- Please visit https://help.fairprice.com.sg/hc/en-us/articles/360049935451-How-do-I-connect-a-Link-membership-to-my-FairPrice-account-",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Merchant Promos"
+        ],
+        "synth_question": "What steps can I take to integrate my loyalty program membership with the Horizon Bank partner merchant application?",
+        "synth_answer": "To establish a connection between your membership and the partner app, kindly refer to the comprehensive guide available at the Horizon Bank support portal, which outlines the straightforward process for linking your accounts and unlocking exclusive rewards.",
+        "tokenized_answer": "To establish a connection between your membership and the partner app, kindly refer to the comprehensive guide available at the Horizon Bank support portal, which outlines the straightforward process for linking your accounts and unlocking exclusive rewards."
+    },
+    {
+        "faq_id": "faq_495693bf",
+        "original_category": "linkpoints",
+        "question": "How can I earn Linkpoints when I'm at FairPrice physical stores?",
+        "answer": "- You will first need to: - Tap your physical Trust card (if you have received it); or - Scan your QR code from the FairPrice app (under 'Payment') Thereafter, you may make your payment using your Trust card added to Apple Pay / Google Pay, physical Trust card or via the FairPrice app (where Trust card is added as the default payment mode).",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Merchant Promos"
+        ],
+        "synth_question": "What steps can I take to accumulate rewards points when shopping in person at FairPrice retail locations?",
+        "synth_answer": "To earn rewards, start by either tapping your physical Horizon card or scanning the QR code displayed within the FairPrice app under the 'Payment' section. Next, proceed with your payment using your Horizon card, whether it's through Apple Pay, Google Pay, your physical Horizon card, or directly via the FairPrice app, ensuring your Horizon card is set as the default payment method.",
+        "tokenized_answer": "To earn rewards, start by either tapping your physical Horizon card or scanning the QR code displayed within the FairPrice app under the 'Payment' section. Next, proceed with your payment using your Horizon card, whether it's through Apple Pay, Google Pay, your physical Horizon card, or directly via the FairPrice app, ensuring your Horizon card is set as the default payment method."
+    },
+    {
+        "faq_id": "faq_7e444bde",
+        "original_category": "linkpoints",
+        "question": "Do I earn Linkpoints when I pay using Apple Pay/Google Pay at FairPrice?",
+        "answer": "- Yes, you will earn the monthly and quarterly bonuses if you meet the minimum spend requirement. However, to earn the Linkpoints base rate given by FairPrice Group as well as FairPrice member benefits (if applicable), do remember to tap your physical Trust card or scan your QR code from your FairPrice App (under 'Payment') before making payment.",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Merchant Promos"
+        ],
+        "synth_question": "How do I accumulate rewards points when using digital wallets like Apple Pay or Google Pay for purchases at FairPrice?",
+        "synth_answer": "When you utilize Apple Pay or Google Pay at FairPrice, you are eligible to receive both monthly and quarterly bonuses, provided you fulfill the necessary minimum expenditure criteria. To also earn the standard Linkpoints rate offered by FairPrice Group, as well as any applicable FairPrice membership perks, simply ensure that you first tap your physical Horizon card or scan the QR code accessible via the FairPrice App under the 'Payment' section, prior to completing your transaction.",
+        "tokenized_answer": "When you utilize Apple Pay or Google Pay at FairPrice, you are eligible to receive both monthly and quarterly bonuses, provided you fulfill the necessary minimum expenditure criteria. To also earn the standard Linkpoints rate offered by FairPrice Group, as well as any applicable FairPrice membership perks, simply ensure that you first tap your physical Horizon card or scan the QR code accessible via the FairPrice App under the 'Payment' section, prior to completing your transaction."
+    },
+    {
+        "faq_id": "faq_519cce2f",
+        "original_category": "linkpoints",
+        "question": "How does the revision of Linkpoints rewards from 1 April 2024 affect me?",
+        "answer": "- The new Monthly and Quarterly Linkpoints bonus rates will apply from 1 April 2024 for all customers regardless of when your quarter starts. For example, if your quarter starts in Jan 2024 / Feb 2024/ Mar 2024, the revised Monthly and Quarterly bonus rates will apply from 1 Apr 2024 onwards. In addition, the new Quarterly Linkpoints Cap will apply from 1 Apr 2024 for new Trust customers (i.e., customers who have signed up for a Trust credit card and/or debit card from 1 Apr 2024 onwards). For existing customers, if your quarter starts in Feb 2024, your Quarterly Linkpoints Cap will be based on the revised cap for your quarter from Feb to Apr 2024. If your quarter starts in Mar 2024, your Quarterly Linkpoints Cap will be based on the revised cap for your quarter from Mar to May 2024.",
+        "domain": "REWARDS_AND_OFFERS",
+        "intent_families": [
+            "Linkpoints",
+            "Redemption"
+        ],
+        "synth_question": "What impact will the Linkpoints rewards revision have on my account starting from 1 April 2024?",
+        "synth_answer": "As of 1 April 2024, all Horizon Bank customers will be subject to the new Monthly and Quarterly Linkpoints bonus rates, regardless of their quarterly cycle start date. For instance, customers whose quarter commences in January, February, or March 2024 will have the revised bonus rates applied from 1 April 2024 onwards. Furthermore, new Horizon Bank customers who sign up for a Horizon credit or debit card from 1 April 2024 will be governed by the new Quarterly Linkpoints Cap. Existing customers will have their Quarterly Linkpoints Cap adjusted based on their specific quarterly cycle, with those starting in February 2024 being subject to the revised cap from February to April 2024, and those starting in March 2024 from March to May 2024.",
+        "tokenized_answer": "As of {{faq_519cce2f_001}} April {{faq_519cce2f_002}}, all Horizon Bank customers will be subject to the new Monthly and Quarterly Linkpoints bonus rates, regardless of their quarterly cycle start date. For instance, customers whose quarter commences in January, February, or March {{faq_519cce2f_003}} will have the revised bonus rates applied from {{faq_519cce2f_004}} April {{faq_519cce2f_005}} onwards. Furthermore, new Horizon Bank customers who sign up for a Horizon credit or debit card from {{faq_519cce2f_006}} April {{faq_519cce2f_007}} will be governed by the new Quarterly Linkpoints Cap. Existing customers will have their Quarterly Linkpoints Cap adjusted based on their specific quarterly cycle, with those starting in February {{faq_519cce2f_008}} being subject to the revised cap from February to April {{faq_519cce2f_009}}, and those starting in March {{faq_519cce2f_010}} from March to May {{faq_519cce2f_011}}."
+    },
+    {
+        "faq_id": "faq_b3c9ded6",
+        "original_category": "credit-card",
+        "question": "Am I eligible to apply for a credit card?",
+        "answer": "- You can apply for a credit card if: - You are between 21 years old and 55 years old; and - Have an annual income of S$30,000 if Singaporean citizen or permanent resident; or - Have an annual income of S$60,000 if foreigner with a valid work pass OR if: - You are above 55 years old; and - Have an annual income of S$15,000 if Singaporean citizen or permanent resident; or - Have an annual income of S$60,000 if foreigner with a valid work pass",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "Eligibility"
+        ],
+        "synth_question": "What are the requirements for applying for a Horizon Bank credit card?",
+        "synth_answer": "To be considered for a Horizon Bank credit card, you must meet specific criteria. If you are a Singaporean citizen or permanent resident between the ages of 21 and 55, you will need to have an annual income of at least S$30,000. For foreigners with a valid work pass, the requirement is an annual income of S$60,000. Alternatively, if you are above 55 years old, the annual income requirements are S$15,000 for Singaporean citizens or permanent residents, and S$60,000 for foreigners with a valid work pass.",
+        "tokenized_answer": "To be considered for a Horizon Bank credit card, you must meet specific criteria. If you are a Singaporean citizen or permanent resident between the ages of {{faq_b3c9ded6_001}} and {{faq_b3c9ded6_002}}, you will need to have an annual income of at least {{faq_b3c9ded6_003}}. For foreigners with a valid work pass, the requirement is an annual income of {{faq_b3c9ded6_004}}. Alternatively, if you are above {{faq_b3c9ded6_005}} years old, the annual income requirements are {{faq_b3c9ded6_006}} for Singaporean citizens or permanent residents, and {{faq_b3c9ded6_007}} for foreigners with a valid work pass."
+    },
+    {
+        "faq_id": "faq_85dbaadf",
+        "original_category": "credit-card",
+        "question": "What do I need to prepare when applying for a credit card?",
+        "answer": "- For a Singaporean citizen or permanent resident, we recommend you to use MyInfo as it pre-fills your application form quickly and effortlessly. If you are a foreigner, in addition to Myinfo, you will need to upload or take a photo of your passport and latest payslip.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "Application Requirements"
+        ],
+        "synth_question": "What documentation is required to initiate a Horizon Bank credit card application?",
+        "synth_answer": "To streamline your credit card application with Horizon Bank, Singaporean citizens and permanent residents can utilize MyInfo for expedited form completion. For foreign applicants, please ensure you have your passport and most recent payslip readily available for upload or photo capture via the Horizon App, in addition to accessing MyInfo.",
+        "tokenized_answer": "To streamline your credit card application with Horizon Bank, Singaporean citizens and permanent residents can utilize MyInfo for expedited form completion. For foreign applicants, please ensure you have your passport and most recent payslip readily available for upload or photo capture via the Horizon App, in addition to accessing MyInfo."
+    },
+    {
+        "faq_id": "faq_d8b75c7d",
+        "original_category": "credit-card",
+        "question": "I already have a Standard Chartered credit card. Can I skip the application process to automatically get a Trust credit card?",
+        "answer": "- No, you still need to sign up for a Trust credit card. The application process is fully automated so it should be quick and easy. Do note that if you're a Singaporean citizen or permanent resident and your annual income is between SGD 30,000 and SGD 120,000, your credit limit with Trust will be combined with your Standard Chartered credit limit.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "credit_card_application",
+            "existing_relationship"
+        ],
+        "synth_question": "As an existing Standard Chartered credit cardholder, can I bypass the application process for a Horizon Bank credit card?",
+        "synth_answer": "While having an existing credit card does not exempt you from applying for a Horizon Bank credit card, our streamlined application process is designed to be efficient and hassle-free. Please note that for Singaporean citizens or permanent residents with an annual income ranging from SGD 30,000 to SGD 120,000, your Horizon Bank credit limit will be combined with your Standard Chartered credit limit, as per regulatory requirements.",
+        "tokenized_answer": "While having an existing credit card does not exempt you from applying for a Horizon Bank credit card, our streamlined application process is designed to be efficient and hassle-free. Please note that for Singaporean citizens or permanent residents with an annual income ranging from {{faq_d8b75c7d_001}} to {{faq_d8b75c7d_002}}, your Horizon Bank credit limit will be combined with your Standard Chartered credit limit, as per regulatory requirements."
+    },
+    {
+        "faq_id": "faq_2cb724a1",
+        "original_category": "credit-card",
+        "question": "How long does the application take?",
+        "answer": "- Most applications take less than 3 minutes. However, if we need clarifications from you, it may take up to 3 working days.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "application_process"
+        ],
+        "synth_question": "What is the typical timeframe for processing a Horizon Bank credit card application?",
+        "synth_answer": "At Horizon Bank, we strive for efficiency in our application process. While the majority of applications can be completed in under 3 minutes, there are instances where we may require additional information from you, potentially extending the processing time to up to 3 working days.",
+        "tokenized_answer": "At Horizon Bank, we strive for efficiency in our application process. While the majority of applications can be completed in under {{faq_2cb724a1_001}} minutes, there are instances where we may require additional information from you, potentially extending the processing time to up to {{faq_2cb724a1_002}} working days."
+    },
+    {
+        "faq_id": "faq_6b6d2823",
+        "original_category": "credit-card",
+        "question": "Why was my application for the credit card unsuccessful?",
+        "answer": "- All applications go through an internal assessment process, and we consider all applications carefully. Due to the bank's policy and confidentiality guidelines, we cannot reveal the reasons for your unsuccessful application.",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "decline"
+        ],
+        "synth_question": "I recently applied for a Horizon Bank credit card, but my application was denied. Can you provide insight into the decision-making process behind this outcome?",
+        "synth_answer": "At Horizon Bank, every credit card application undergoes a thorough evaluation. While we cannot disclose specific details regarding the denial of your application due to our confidentiality and banking policies, please be assured that each application receives careful consideration.",
+        "tokenized_answer": "At Horizon Bank, every credit card application undergoes a thorough evaluation. While we cannot disclose specific details regarding the denial of your application due to our confidentiality and banking policies, please be assured that each application receives careful consideration."
+    },
+    {
+        "faq_id": "faq_c241b12d",
+        "original_category": "credit-card",
+        "question": "I'm a retiree, can I still apply for Trust credit card?",
+        "answer": "- Yes, you may qualify for a credit card with a S$500 credit limit (subject to meeting other standard bank requirements), if you meet the below criteria: - Singapore citizens and permanent residents - Age 56 years and above - Assessed annual income less than S$15,000 - No credit card or unsecured loan with Standard Chartered Bank",
+        "domain": "CREDIT_CARDS",
+        "intent_families": [
+            "Eligibility",
+            "Application"
+        ],
+        "synth_question": "As a senior citizen, am I eligible to apply for a Horizon Bank credit card, and what are the key requirements I need to fulfill?",
+        "synth_answer": "At Horizon Bank, we welcome applications from retirees who meet specific criteria. To qualify for our credit card with a credit limit of S$500, you must be a Singapore citizen or permanent resident, aged 56 or above, have an assessed annual income of less than S$15,000, and not hold any existing credit cards or unsecured loans with us. If you meet these conditions, you may be eligible for our credit card, subject to our standard banking requirements.",
+        "tokenized_answer": "At Horizon Bank, we welcome applications from retirees who meet specific criteria. To qualify for our credit card with a credit limit of {{faq_c241b12d_001}}, you must be a Singapore citizen or permanent resident, aged {{faq_c241b12d_002}} or above, have an assessed annual income of less than {{faq_c241b12d_003}}, and not hold any existing credit cards or unsecured loans with us. If you meet these conditions, you may be eligible for our credit card, subject to our standard banking requirements."
+    }
+]

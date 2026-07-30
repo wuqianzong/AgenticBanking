@@ -81,9 +81,9 @@ def node_01_deterministic_ingest_gate(state: AgentState):
 # --- PHASE 1: PREFLIGHT ROUTING & INTERLOCK CONTEXTS ---
 
 def node_02a_pending_contract_check(state: AgentState):
-    """n4: Scans state for active pending_intent_switch flag."""
+    """n4: Scans state for active pending_domain_switch flag."""
     print("🟢 [NODE 02a] Executing Pending Contract Check")
-    pending = state.get("pending_intent_switch", {})
+    pending = state.get("pending_domain_switch", {})
     if pending and pending.get("target_domain"):
         print(f"   🔒 [STATE INTERLOCKED]: Pending switch to '{pending.get('target_domain')}'")
         return {"preflight_status": "yes"} 
@@ -95,8 +95,8 @@ def node_02b_confirmation_gate(state: AgentState):
     """n6: Model A evaluates Yes/No/Else responses. Erases intent on Else."""
     print("🟢 [NODE 02b] Executing Confirmation Gate")
     user_msg = state.get("user_input", "")
-    pending_domain = state.get("pending_intent_switch", {}).get("target_domain", "")
-    pending_families = state.get("pending_intent_switch", {}).get("target_intent_families", [])
+    pending_domain = state.get("pending_domain_switch", {}).get("target_domain", "")
+    pending_families = state.get("pending_domain_switch", {}).get("target_intent_families", [])
     
     prompt = f"""
     Evaluate user input: "{user_msg}"
@@ -115,18 +115,18 @@ def node_02b_confirmation_gate(state: AgentState):
         return {
             "active_domain": pending_domain,
             "active_intent_families": pending_families,
-            "pending_intent_switch": {}, 
+            "pending_domain_switch": {}, 
             "preflight_status": "yes"
         }
     elif decision == "no":
-        return {"pending_intent_switch": {}, "preflight_status": "no"}
+        return {"pending_domain_switch": {}, "preflight_status": "no"}
     else:
-        return {"active_domain": "", "active_intent_families": [], "pending_intent_switch": {}, "preflight_status": "else"}
+        return {"active_domain": "", "active_intent_families": [], "pending_domain_switch": {}, "preflight_status": "else"}
 
 def node_02e_contract_writer(state: AgentState):
     """n12: Sets pending switch flag & prompts confirmation."""
     print("🟢 [NODE 02e] Executing Contract Writer")
-    target = state.get("pending_intent_switch", {}).get("target_domain", "a new topic")
+    target = state.get("pending_domain_switch", {}).get("target_domain", "a new topic")
     msg = f"Do you want to abandon your current progress and switch to {target}?"
     
     print(f"   🛑 [INTERCEPT]: Prompting user to confirm intent switch to {target}")
@@ -179,18 +179,17 @@ def node_02d_intent_classifier(state: AgentState):
     If the user asks for small talk or clarification, leave Domain and Families blank.
     
     RULES FOR CLASSIFICATION:
-    1. INTENT CHANGE: Use if 'Current Active Domain' is NOT empty, AND the user introduces a new Domain entirely.
+    1. DOMAIN CHANGE: Use if 'Current Active Domain' is NOT empty, AND the user introduces a new Domain entirely.
     2. INTENT CLARIFICATION NEEDED: Use for small talk, vague requests ("Ask another question"), or no financial intent.
     3. OUT OF KNOWLEDGE: Use ONLY if the query is a financial topic completely missing from the Global Taxonomy.
-    4. NEW INTENT: Use if 'Current Active Domain' is empty.
-    5. INTENT DRIFT: Use if the user stays in the SAME Domain, but asks about DIFFERENT or ADDITIONAL Intent Families.
-    6. INTENT PERSIST: Use ONLY if the user is advancing the current step without changing the topic.
+    4. NEW DOMAIN: Use if 'Current Active Domain' is empty.
+    5. FAMILY DRIFT: Use if the user stays in the SAME Domain, but asks about DIFFERENT or ADDITIONAL Intent Families.
+    6. TOPIC PERSIST: Use ONLY if the user is advancing the current step without changing the topic.
     7. USER ESCALATION: Use if demanding a human agent.
 
     Output JSON ONLY:
-    {{"route": "intent_persist" | "intent_change" | "intent_drift" | "new_intent" | "out_of_knowledge" | "intent_clarification_needed" | "user_escalation", "target_domain": "...", "target_intent_families": ["..."]}}
+    {{"route": "topic_persist" | "domain_change" | "family_drift" | "new_domain" | "out_of_knowledge" | "intent_clarification_needed" | "user_escalation", "target_domain": "...", "target_intent_families": ["..."]}}
     """
-    
     try:
         raw_res = call_groq_lpu(prompt)
         res = _parse_json_robustly(raw_res) 
@@ -198,54 +197,54 @@ def node_02d_intent_classifier(state: AgentState):
         target_domain = res.get("target_domain", "")
         target_families = res.get("target_intent_families", [])
         
-        # V3.74 MATHEMATICAL ROUTING OVERRIDE
-        # We trust the LLM's classification of the Domain/Families, but we use Python math to enforce the correct route!
+        # V3.75 SEMANTIC ROUTING OVERRIDE (Set-Based Math)
         if route not in ["intent_clarification_needed", "user_escalation", "out_of_knowledge", "unexpected_exception"]:
             if not target_domain:
                 print("   ⚠️ [FALLBACK]: Empty target domain detected. Downgrading to clarification.")
                 route = "intent_clarification_needed"
             elif not active_domain:
-                route = "new_intent"
+                route = "new_domain"
             elif target_domain != active_domain:
-                route = "intent_change"
+                route = "domain_change"
             elif set(target_families) != set(active_families):
-                route = "intent_drift"
+                route = "family_drift"
             else:
-                route = "intent_persist"
+                route = "topic_persist"
 
         print(f"   🎯 [ROUTING DECISION]: {route.upper()} | DOMAIN: {target_domain} | FAMILIES: {target_families}")
         
-        clear_state = {"active_plan": {}, "pending_intent_switch": {}, "completed_steps": []}
+        # Notice pending_domain_switch is used here!
+        clear_state = {"active_plan": {}, "pending_domain_switch": {}, "completed_steps": []}
         
-        if route == "intent_change":
-            return {"preflight_status": route, "pending_intent_switch": {"target_domain": target_domain, "target_intent_families": target_families}}
+        if route == "domain_change":
+            return {"preflight_status": route, "pending_domain_switch": {"target_domain": target_domain, "target_intent_families": target_families}}
             
-        elif route == "new_intent":
+        elif route == "new_domain":
             return {
                 "preflight_status": route, 
                 "active_domain": target_domain, 
                 "active_intent_families": target_families,
-                "pending_intent_switch": {},
+                "pending_domain_switch": {},
                 "active_plan": {},
                 "completed_steps": [] 
             }
             
-        elif route == "intent_drift":
+        elif route == "family_drift":
             return {
                 "preflight_status": route, 
                 "active_domain": target_domain, 
                 "active_intent_families": target_families,
-                "pending_intent_switch": {},
+                "pending_domain_switch": {},
                 "active_plan": {} 
             }
             
-        elif route in ["intent_persist", "intent_clarification_needed"]:
+        elif route in ["topic_persist", "intent_clarification_needed"]:
             if process_complete:
                 return {**clear_state, "preflight_status": route}
-            return {"preflight_status": route, "pending_intent_switch": {}}
+            return {"preflight_status": route, "pending_domain_switch": {}}
             
         else:
-            return {"preflight_status": route, "pending_intent_switch": {}}
+            return {"preflight_status": route, "pending_domain_switch": {}}
             
     except Exception as e:
         print(f"🚨 [NODE 02d EXCEPTION] Routing to Node 10. Error: {e}")
@@ -314,7 +313,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         
         count = state.get("knowledge_retry_count", 0) + 1
         history = state.get("search_feedback_history", [])
-        history.append(f"No documents found in knowledge base for directory '{state.get('active_intent')}'.")
+        history.append(f"No documents found for Domain '{state.get('active_domain')}' and Families {state.get('active_intent_families') }.")
         
         return {
             "knowledge_retry_count": count,
@@ -402,7 +401,7 @@ def node_04b_response_generator(state: AgentState):
     is_conclusion = bool(steps and idx >= len(steps))
     
     if routing_status == "intent_clarification_needed":
-        current_step = "The user engaged in small talk, gave a vague response, or their intent is unclear. Respond naturally and politely to what they said, then gently ask them how you can assist them with their banking needs. Do NOT attempt to execute a process step."
+        current_step = "The user engaged in small talk, gave a vague response, or their intent is unclear. If user input is banking-related, ask a follow-up question to clarify their intent or banking needs. If user input is not banking-related, respond naturally and politely telling them that you cannot engage in non-banking conversations, then gently ask them how you can assist them with their banking needs. Do NOT attempt to execute a process step."
     elif not steps:
         current_step = "Respond naturally to the user's latest input. If they indicate they need more help, prompt them directly for their new request. Do NOT repeat previous process summaries."
     elif is_conclusion:

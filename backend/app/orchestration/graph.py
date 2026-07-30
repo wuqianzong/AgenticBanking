@@ -71,18 +71,14 @@ def build_agent_graph():
 
     def route_n7(state: AgentState):
         status = state.get("preflight_status")
-        if status == "intent_change": return "n12"
-        if status == "intent_clarification_needed": return "n8" # Clarification still bypasses planning
-        
-        # 🚀 V3.74 DYNAMIC REPLANNING UPDATE:
-        # Persist now routes to the Planner (n19). If a plan exists, the Planner will safely bypass itself.
-        # If the plan was wiped by a recent drift, it will dynamically regenerate the remaining steps!
-        if status == "intent_persist": return "n19" 
-        
-        if status == "new_intent": return "n14"
-        if status == "intent_drift": return "n18"
+        # V3.75: Upgraded Semantic Routing Strings
+        if status == "domain_change": return "n12"
+        if status == "intent_clarification_needed": return "n8" 
+        if status == "topic_persist": return "n19" 
+        if status == "new_domain": return "n14"
+        if status == "family_drift": return "n18"
         if status in ["out_of_knowledge", "user_escalation"]: return "n23"
-        return "n5" # Unexpected Exception
+        return "n5" 
 
 
     def route_n18(state: AgentState):

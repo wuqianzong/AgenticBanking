@@ -20,6 +20,7 @@ export default function BankingBotUI() {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,6 +29,13 @@ export default function BankingBotUI() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    // When the bot stops typing (isTyping becomes false), refocus the input
+    if (!isTyping && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isTyping]);
 
 // ⚡ ACTUAL END-TO-END NETWORK CALL TO LANGGRAPH/FASTAPI
   const handleSend = async (text) => {
@@ -274,6 +282,7 @@ export default function BankingBotUI() {
 
           <div className="relative flex items-center">
             <input
+              ref={inputRef}
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
@@ -292,7 +301,7 @@ export default function BankingBotUI() {
           </div>
           <div className="flex items-center justify-center gap-1 mt-3 mb-1">
              <LockIcon size={10} className="text-slate-400"/>
-             <span className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">Secured by 256-bit encryption</span>
+             <span className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">Secured by 256-bit encryption (Out of scope)</span>
           </div>
         </div>
       </div>

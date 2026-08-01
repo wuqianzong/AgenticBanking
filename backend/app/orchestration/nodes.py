@@ -180,7 +180,7 @@ def node_02d_intent_classifier(state: AgentState):
     
     RULES FOR CLASSIFICATION:
     1. DOMAIN CHANGE: Use if 'Current Active Domain' is NOT empty, AND the user introduces a new Domain entirely.
-    2. INTENT CLARIFICATION NEEDED: Use for small talk, vague requests ("Ask another question"), or no financial intent.
+    2. INTENT CLARIFICATION NEEDED: Use for small talk, vague requests ("Ask another question"), requests crossing multiple domains, or no financial intent.
     3. OUT OF KNOWLEDGE: Use ONLY if the query is a financial topic completely missing from the Global Taxonomy.
     4. NEW DOMAIN: Use if 'Current Active Domain' is empty.
     5. FAMILY DRIFT: Use if the user stays in the SAME Domain, but asks about DIFFERENT or ADDITIONAL Intent Families.
@@ -253,37 +253,53 @@ def node_02d_intent_classifier(state: AgentState):
 # --- PHASE 2: BOUNDED RAG ARCHITECTURE ---
 
 def node_03a_knowledge_blueprint_planner(state: AgentState):
-    """n14: Model A formulates optimized Cosine Similarity keywords."""
-    print("🟢 [NODE 03a] Executing Knowledge Blueprint Planner")
+    """n14: The Supervisor - Determines which parallel worker nodes to spawn."""
+    print("🟢 [NODE 03a] Executing Supervisor Tool Router")
     
     user_input = state.get("user_input", "")
     active_domain = state.get("active_domain", "")
     active_families = state.get("active_intent_families", [])
     
     prompt = f"""
-    The user is asking a question in the Domain: "{active_domain}" and Intent Families: {active_families}.
+    You are the Cognitive Supervisor for a banking AI.
     User Input: "{user_input}"
+    Active Domain: "{active_domain}" | Active Families: {active_families}
     
-    Generate a highly optimized, comma-separated list of 3-5 keywords to execute a Cosine Similarity vector search against the database.
-    Output JSON ONLY: {{"optimized_keywords": "keyword1, keyword2, keyword3"}}
+    TASK: Determine which retrieval tools are necessary to answer the query. You can select multiple tools.
+    
+    1. "n17_rag": Use for fetching bank policies, rules, limits, or general guidelines. (Always include this for standard inquiries).
+    2. "n17_api": Use ONLY if the user is asking to look up specific personal numerical data (e.g., "What is my balance?").
+    3. "n17_deeplink": Use ONLY if the user wants to navigate the app or take an action (e.g., "How do I update my profile?").
+    
+    Output JSON ONLY matching this schema:
+    {{"active_tool_routes": ["n17_rag", "n17_api"]}}
     """
+    
     try:
         raw_res = call_groq_lpu(prompt)
         blueprint = _parse_json_robustly(raw_res)
+        routes = blueprint.get("active_tool_routes", ["n17_rag"])
     except:
-        blueprint = {"optimized_keywords": user_input}
+        routes = ["n17_rag"]
         
-    print(f"   🗺️ [BLUEPRINT GENERATED]: {blueprint}")
-    return {"knowledge_blueprint": blueprint}
+    print(f"   🔀 [SUPERVISOR DISPATCH]: Fanning out to -> {routes}")
+    
+    # We clear the buffers to prevent ghost data from previous turns, and set the routes
+    return {
+        "active_tool_routes": routes,
+        "rag_payload": "",
+        "api_payload": "",
+        "deeplink_payload": ""
+    }
 
-def node_03b_vector_retrieval_engine(state: AgentState):
-    """n17: Executes Mock RAG Retrieval based on Domain and Families."""
-    print("🟢 [NODE 03b] Executing Vector Retrieval Engine")
+
+def node_03b_rag_worker(state: AgentState):
+    """n17_rag: Dedicated ChromaDB Worker"""
+    print("🟢 [NODE 03b] Executing RAG Worker")
     domain = state.get("active_domain", "")
     families = state.get("active_intent_families", [])
-    print(f"   🔎 [SEARCHING DB]: Domain -> '{domain}' | Families -> {families}")
     
-    # MOCK RAG LOGIC (To be replaced by actual ChromaDB `$in` query later)
+    # Existing mock logic
     if domain == "ACCOUNT_OPENING":
         retrieved = ""
         if "documents" in families or not families:
@@ -292,37 +308,57 @@ def node_03b_vector_retrieval_engine(state: AgentState):
             retrieved += "Applicants must be at least 18 years old and a resident.\n"
         if "application status" in families:
             retrieved += "To check your application status, please click the secure link below: bankapp://account/status\n"
-        
-        print(f"   📄 [RETRIEVED DATA]: Assembled compounded multi-intent chunks.")
     elif domain in GLOBAL_TAXONOMY:
         retrieved = f"Mock FAQ Policy for {domain} - {families}: To process this request, please refer to the digital guidelines."
     else:
         retrieved = "NO_KNOWLEDGE_FOUND"
         
-    return {"raw_retrieved_text": retrieved.strip()}
+    return {"rag_payload": f"[RAG DATA]:\n{retrieved.strip()}"}
+
+
+def node_03b_api_worker(state: AgentState):
+    """n17_api: Dedicated Placeholder Fetcher (Deferred for now)"""
+    print("🟢 [NODE 03b] Executing API Worker")
+    # In the future, this will do SQLite lookups for placeholder syntax
+    return {"api_payload": "[API DATA]:\nNo API data requested for this MVP."}
+
+
+def node_03b_deeplink_worker(state: AgentState):
+    """n17_deeplink: Dedicated Navigation Fetcher (Deferred for now)"""
+    print("🟢 [NODE 03b] Executing Deeplink Worker")
+    # In the future, this will do SQLite lookups for app URIs
+    return {"deeplink_payload": "[DEEPLINK DATA]:\nNo Deep-links requested for this MVP."}
 
 def node_03c_sufficiency_auditor(state: AgentState):
-    """n18: Model B checks context sufficiency (Max 3 retries)."""
-    print("🟢 [NODE 03c] Executing Sufficiency Auditor")
+    """n18: The Reducer - Aggregates worker payloads & evaluates sufficiency."""
+    print("🟢 [NODE 03c] Executing Sufficiency Auditor & Reducer")
     
-    retrieved_text = state.get("raw_retrieved_text", "")
+    # 1. Aggregate outputs from whichever workers were activated
+    rag_data = state.get("rag_payload", "")
+    api_data = state.get("api_payload", "")
+    deeplink_data = state.get("deeplink_payload", "")
     
-    # FIX: Explicitly fail the audit if no knowledge was found
-    if retrieved_text == "NO_KNOWLEDGE_FOUND":
+    # Combine into the master string that Node 04a and 04b expect
+    combined_knowledge = f"{rag_data}\n{api_data}\n{deeplink_data}".strip()
+    
+    if "NO_KNOWLEDGE_FOUND" in combined_knowledge and len(combined_knowledge) < 50:
         print("   ❌ [AUDIT]: Retrieved text is INSUFFICIENT (Out of Knowledge).")
-        
         count = state.get("knowledge_retry_count", 0) + 1
         history = state.get("search_feedback_history", [])
-        history.append(f"No documents found for Domain '{state.get('active_domain')}' and Families {state.get('active_intent_families') }.")
+        history.append(f"No documents found for Domain '{state.get('active_domain')}' and Families {state.get('active_intent_families')}.")
         
         return {
             "knowledge_retry_count": count,
             "search_feedback_history": history,
-            "preflight_status": "insufficient"
+            "preflight_status": "insufficient",
+            "raw_retrieved_text": combined_knowledge
         }
         
-    print("   ✅ [AUDIT]: Retrieved text deemed sufficient for resolution.")
-    return {"preflight_status": "sufficient"}
+    print("   ✅ [AUDIT]: Aggregated text deemed sufficient for resolution.")
+    return {
+        "preflight_status": "sufficient",
+        "raw_retrieved_text": combined_knowledge
+    }
 
 # --- PHASE 3: RESOLUTION BLUEPRINT & STEP-BY-STEP RESPONSE ---
 
@@ -401,7 +437,7 @@ def node_04b_response_generator(state: AgentState):
     is_conclusion = bool(steps and idx >= len(steps))
     
     if routing_status == "intent_clarification_needed":
-        current_step = "The user engaged in small talk, gave a vague response, or their intent is unclear. If user input is banking-related, ask a follow-up question to clarify their intent or banking needs. If user input is not banking-related, respond naturally and politely telling them that you cannot engage in non-banking conversations, then gently ask them how you can assist them with their banking needs. Do NOT attempt to execute a process step."
+        current_step = "The user engaged in small talk, gave a vague response, gave a response that crosses more than one domain, or their intent is unclear. If user input crosses more than one domain, explain to the user that you will solve his queries crossing multiple domains one by one and guide the user to focus on a single domain and . If user input is banking-related, ask a follow-up question to clarify their intent or banking needs. If user input is not banking-related, respond naturally and politely telling them that you cannot engage in non-banking conversations, then gently ask them how you can assist them with their banking needs. Do NOT attempt to execute a process step."
     elif not steps:
         current_step = "Respond naturally to the user's latest input. If they indicate they need more help, prompt them directly for their new request. Do NOT repeat previous process summaries."
     elif is_conclusion:

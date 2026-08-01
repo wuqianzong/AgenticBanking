@@ -16,7 +16,9 @@ def build_agent_graph():
     workflow.add_node("n12", nodes.node_02e_contract_writer)
     
     workflow.add_node("n14", nodes.node_03a_knowledge_blueprint_planner)
-    workflow.add_node("n17", nodes.node_03b_vector_retrieval_engine)
+    workflow.add_node("n17_rag", nodes.node_03b_rag_worker)
+    workflow.add_node("n17_api", nodes.node_03b_api_worker)
+    workflow.add_node("n17_deeplink", nodes.node_03b_deeplink_worker)
     workflow.add_node("n18", nodes.node_03c_sufficiency_auditor)
     
     workflow.add_node("n19", nodes.node_04a_resolution_planner)
@@ -88,6 +90,10 @@ def build_agent_graph():
         if count < 3: return "n14"
         return "n23" # Max retries
 
+    def route_tools(state: AgentState):
+        """Reads the array of requested tools and fans-out simultaneously."""
+        return state.get("active_tool_routes", ["n17_rag"]) # Default to RAG if empty
+
     def route_n19(state: AgentState):
         if state.get("preflight_status") == "fail": return "n5"
         return "n8"
@@ -123,8 +129,18 @@ def build_agent_graph():
     workflow.add_edge("n12", END)
     
     # Phase 2 & 3
-    workflow.add_edge("n14", "n17")
-    workflow.add_edge("n17", "n18")
+    # The Fan-Out: Node 03a (n14) triggers multiple nodes concurrently based on the list
+    workflow.add_conditional_edges("n14", route_tools, {
+        "n17_rag": "n17_rag",
+        "n17_api": "n17_api",
+        "n17_deeplink": "n17_deeplink"
+    })
+
+    # The Fan-In: All workers converge seamlessly at Node 03c (n18)
+    workflow.add_edge("n17_rag", "n18")
+    workflow.add_edge("n17_api", "n18")
+    workflow.add_edge("n17_deeplink", "n18")
+    
     workflow.add_conditional_edges("n18", route_n18, {"n19": "n19", "n14": "n14", "n23": "n23"})
     workflow.add_conditional_edges("n19", route_n19, {"n8": "n8", "n5": "n5"})
     workflow.add_edge("n8", "n20")

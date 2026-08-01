@@ -2,7 +2,7 @@ import json
 from collections import Counter
 
 def list_unique_categories():
-    input_file = "raw_trustbank_faqs.json"
+    input_file = "mapped_trustbank_faqs.json"
     
     if not os_file_exists(input_file):
         print(f"[!] Error: {input_file} not found in the current directory.")

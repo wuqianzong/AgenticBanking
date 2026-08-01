@@ -34,7 +34,7 @@ GLOBAL_TAXONOMY = {
 # Exhaustive Mapping of Scraped Categories to Domains
 CATEGORY_TO_DOMAIN_MAP = {
     "credit-card": "CREDIT_CARDS",
-    "trust-card": "CREDIT_CARDS",
+    "trust-card": "DEBIT_CARDS",
     "supplementary-card": "CREDIT_CARDS",
     "savings-account": "DEPOSIT_ACCOUNTS",
     "security": "DIGITAL_BANKING",
@@ -116,6 +116,8 @@ def classify_and_synthesize(client, question, answer, domain):
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
+        #model="openai/gpt-oss-120b",
+        
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}

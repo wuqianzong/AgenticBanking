@@ -22,6 +22,10 @@ class AgentState(TypedDict):
     final_draft: str
     final_response: str
     ui_action_payload: Dict[str, Any]
+    active_tool_routes: List[str]    # The list of parallel nodes to trigger
+    rag_payload: str                 # Buffer for RAG agent
+    api_payload: str                 # Buffer for API agent
+    deeplink_payload: str            # Buffer for Deeplink agent
     
     # --- ISOLATED LOOP TRACKERS ---
     knowledge_retry_count: int       # Max 3

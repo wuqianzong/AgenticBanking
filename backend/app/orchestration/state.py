@@ -11,6 +11,7 @@ class AgentState(TypedDict):
     completed_steps: List[str]       # V3.73: Stateful Milestone Tracker for Anti-Amnesia
     process_slots: Dict[str, Any]    # Verified data (e.g., {"age": 25})
     pending_domain_switch: Dict[str, Any] # e.g., {"target_domain": "ACCOUNT_OPENING"}
+    pending_domain_queue: List[Dict[str, Any]] # Stores: {"domain": str, "families": list, "plan": dict, "completed_steps": list}
     
     # --- VOLATILE TURN STATE (Reset per turn) ---
     user_input: str
@@ -26,7 +27,10 @@ class AgentState(TypedDict):
     rag_payload: str                 # Buffer for RAG agent
     api_payload: str                 # Buffer for API agent
     deeplink_payload: str            # Buffer for Deeplink agent
-    
+    triage_status: str                         # 'ESCALATION', 'CLARIFICATION', 'OUT_OF_SCOPE', 'VALID_DOMAIN'
+    extracted_domains: List[str]               # Holds the Pass 1 Domain Array to pass to Pass 2
+    search_queries: List[Dict[str, Any]]       # Holds: [{"rephrased_query": "...", "intent_families": [...]}]
+
     # --- ISOLATED LOOP TRACKERS ---
     knowledge_retry_count: int       # Max 3
     safety_retry_count: int          # Max 3

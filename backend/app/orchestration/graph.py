@@ -2,6 +2,11 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver # NEW: Required for cross-turn memory
 from backend.app.orchestration.state import AgentState
 from backend.app.orchestration import nodes
+from backend.app.orchestration.nodes import (
+    node_02d_domain_classifier_and_triage,
+    node_02e_intent_classifier_and_query_formulator,
+    node_02f_contract_writer,
+)
 
 def build_agent_graph():
     workflow = StateGraph(AgentState)
@@ -12,8 +17,9 @@ def build_agent_graph():
     workflow.add_node("n4",  nodes.node_02a_pending_contract_check)
     workflow.add_node("n6",  nodes.node_02b_confirmation_gate)
     workflow.add_node("n16", nodes.node_02c_inbound_semantic_gate)
-    workflow.add_node("n7",  nodes.node_02d_intent_classifier)
-    workflow.add_node("n12", nodes.node_02e_contract_writer)
+    workflow.add_node("n2d", node_02d_domain_classifier_and_triage)
+    workflow.add_node("n2e", node_02e_intent_classifier_and_query_formulator)
+    workflow.add_node("n2f", node_02f_contract_writer)
     
     workflow.add_node("n14", nodes.node_03a_knowledge_blueprint_planner)
     workflow.add_node("n17_rag", nodes.node_03b_rag_worker)
@@ -67,28 +73,42 @@ def build_agent_graph():
         return "n16" # Else (Ambiguous)
 
     def route_n16(state: AgentState):
-        if state.get("preflight_status") == "pass": return "n7"
+        if state.get("preflight_status") == "pass": return "n2d"
         return "n5"
 
 
-    def route_n7(state: AgentState):
+    def route_n2d(state: AgentState):
+        status = state.get("triage_status")
+        if status == "ESCALATION": return "n23"
+        if status == "OUT_OF_SCOPE": return "n23"
+        if status == "CLARIFICATION": return "n8"
+        return "n2e"
+
+    def route_n2e(state: AgentState):
         status = state.get("preflight_status")
-        # V3.75: Upgraded Semantic Routing Strings
-        if status == "domain_change": return "n12"
-        if status == "intent_clarification_needed": return "n8" 
-        if status == "topic_persist": return "n19" 
-        if status == "new_domain": return "n14"
-        if status == "family_drift": return "n18"
-        if status in ["out_of_knowledge", "user_escalation"]: return "n23"
-        return "n5" 
+        
+        if status == "domain_change": return "n2f"
+        
+        queries = state.get("search_queries", [])
+        if queries and status in ["new_domain", "family_drift", "topic_persist"]:
+            return "n14"
+            
+        if not queries and status == "topic_persist":
+            return "n19"
+            
+        return "n5"
 
 
     def route_n18(state: AgentState):
         status = state.get("preflight_status")
-        count = state.get("knowledge_retry_count", 0)
-        if status == "sufficient": return "n19"
-        if count < 3: return "n14"
-        return "n23" # Max retries
+        
+        # V3.77 FIX: Agentic routing logic with Kill-Switch
+        if status == "insufficient": 
+            return "n2e" # Loop back to rephrase/expand intents
+        if status == "max_retries_exceeded": 
+            return "n23" # Kill the loop, route to Node 09 (Hard Escalation)
+            
+        return "n19" # Success -> Proceed to Planner
 
     def route_tools(state: AgentState):
         """Reads the array of requested tools and fans-out simultaneously."""
@@ -122,11 +142,10 @@ def build_agent_graph():
     # Phase 1
     workflow.add_conditional_edges("n4", route_n4, {"n6": "n6", "n16": "n16"})
     workflow.add_conditional_edges("n6", route_n6, {"n14": "n14", "n8": "n8", "n16": "n16"})
-    workflow.add_conditional_edges("n16", route_n16, {"n7": "n7", "n5": "n5"})
-    workflow.add_conditional_edges("n7", route_n7, {
-        "n12": "n12", "n8": "n8", "n14": "n14", "n18": "n18", "n19": "n19","n23": "n23", "n5": "n5"
-    })
-    workflow.add_edge("n12", END)
+    workflow.add_conditional_edges("n16", route_n16, {"n2d": "n2d", "n5": "n5"})
+    workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n8": "n8", "n2e": "n2e"})
+    workflow.add_conditional_edges("n2e", route_n2e, {"n2f": "n2f", "n14": "n14", "n19": "n19", "n5": "n5"})
+    workflow.add_edge("n2f", END)
     
     # Phase 2 & 3
     # The Fan-Out: Node 03a (n14) triggers multiple nodes concurrently based on the list
@@ -141,7 +160,7 @@ def build_agent_graph():
     workflow.add_edge("n17_api", "n18")
     workflow.add_edge("n17_deeplink", "n18")
     
-    workflow.add_conditional_edges("n18", route_n18, {"n19": "n19", "n14": "n14", "n23": "n23"})
+    workflow.add_conditional_edges("n18", route_n18, {"n2e": "n2e", "n19": "n19", "n23": "n23"})
     workflow.add_conditional_edges("n19", route_n19, {"n8": "n8", "n5": "n5"})
     workflow.add_edge("n8", "n20")
     

@@ -89,7 +89,7 @@ def build_agent_graph():
         
         if status == "domain_change": return "n2f"
         
-        queries = state.get("search_queries", [])
+        queries = state.get("search_tasks", [])
         if queries and status in ["new_domain", "family_drift", "topic_persist"]:
             return "n14"
             
@@ -112,7 +112,7 @@ def build_agent_graph():
 
     def route_tools(state: AgentState):
         """Reads the array of requested tools and fans-out simultaneously."""
-        return state.get("active_tool_routes", ["n17_rag"]) # Default to RAG if empty
+        return state.get("active_tool_routes", []) 
 
     def route_n19(state: AgentState):
         if state.get("preflight_status") == "fail": return "n5"

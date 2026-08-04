@@ -29,7 +29,7 @@ class AgentState(TypedDict):
     deeplink_payload: str            # Buffer for Deeplink agent
     triage_status: str                         # 'ESCALATION', 'CLARIFICATION', 'OUT_OF_SCOPE', 'VALID_DOMAIN'
     extracted_domains: List[str]               # Holds the Pass 1 Domain Array to pass to Pass 2
-    search_queries: List[Dict[str, Any]]       # Holds: [{"rephrased_query": "...", "intent_families": [...]}]
+    search_tasks: List[Dict[str, str]]         # Holds: [{"query": "...", "intent": "..."}]
 
     # --- ISOLATED LOOP TRACKERS ---
     knowledge_retry_count: int       # Max 3

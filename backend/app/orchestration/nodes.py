@@ -3,6 +3,7 @@ import re
 from langchain_core.messages import HumanMessage, AIMessage
 from backend.app.orchestration.state import AgentState
 from backend.app.core.llm_service import call_groq_lpu  
+from backend.app.orchestration.rag_engine import execute_hybrid_rag_search
 from backend.app.services.memory_service import LongTermMemoryManager
 
 # MOCK DATABASES FOR VALIDATION
@@ -260,22 +261,27 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     5. If the user is just saying "proceed" or "yes" without a specific question, output an empty queries array.
     
     Output JSON ONLY:
-    {{"queries": [{{"rephrased_query": "...", "intent_families": ["..."]}}]}}
+    {{"search_tasks": [{{"query": "rephrased keyword...", "intent": "Specific Family"}}]}}
     """
     
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt))
-        queries = res.get("queries", [])
+        search_tasks = res.get("search_tasks", [])
     except Exception as e:
         print(f"🚨 [NODE 02e EXCEPTION]: {e}")
-        queries = []
+        search_tasks = []
 
-    target_families = []
-    for q in queries:
-        target_families.extend(q.get("intent_families", []))
-    target_families = list(set(target_families))
+    target_families_raw = []
+    for task in search_tasks:
+        intent_val = task.get("intent")
+        if isinstance(intent_val, list):
+            target_families_raw.extend(intent_val)
+        elif isinstance(intent_val, str):
+            target_families_raw.append(intent_val)
+
+    target_families = list(set(target_families_raw))
     
-    print(f"   🔎 [QUERIES FORMULATED]: {len(queries)} queries mapped to {target_families}")
+    print(f"   🔎 [SEARCH TASKS FORMULATED]: {len(search_tasks)} tasks mapped to {target_families}")
 
     plan = state.get("active_plan", {})
     process_complete = bool(plan.get("steps") and plan.get("current_step_index", 0) >= len(plan.get("steps", [])))
@@ -301,29 +307,34 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                     "preflight_status": "topic_persist", 
                     "active_domain": popped["domain"], "active_intent_families": popped["families"],
                     "active_plan": popped["plan"], "completed_steps": popped["completed_steps"],
-                    "pending_domain_queue": current_queue, "search_queries": queries
-                }
+                        "pending_domain_queue": current_queue, "search_tasks": search_tasks
+                    }
         return {
             "preflight_status": route, "active_domain": target_domain, "active_intent_families": target_families,
-            "active_plan": {}, "completed_steps": [], "search_queries": queries
+            "active_plan": {}, "completed_steps": [], "search_tasks": search_tasks
         }
         
     elif route == "domain_change":
-        return {"preflight_status": route, "pending_domain_switch": {"target_domain": target_domain, "target_intent_families": target_families}, "search_queries": queries}
+        return {"preflight_status": route, "pending_domain_switch": {"target_domain": target_domain, "target_intent_families": target_families}, "search_tasks": search_tasks}
         
     elif route == "family_drift":
-        return {"preflight_status": route, "active_domain": target_domain, "active_intent_families": target_families, "active_plan": {}, "search_queries": queries}
+        return {"preflight_status": route, "active_domain": target_domain, "active_intent_families": target_families, "active_plan": {}, "search_tasks": search_tasks}
         
-    return {"preflight_status": route, "search_queries": queries}
+    return {"preflight_status": route, "search_tasks": search_tasks}
 
 
 def node_02f_contract_writer(state: AgentState):
-    """n12: Sets pending switch flag & prompts PAUSE confirmation."""
+    """n2f: Sets pending switch flag & prompts PAUSE confirmation."""
     print("🟢 [NODE 02f] Executing Contract Writer")
+    
     target = state.get("pending_domain_switch", {}).get("target_domain", "a new topic")
     active = state.get("active_domain", "")
     
-    msg = f"You are currently in the middle of {active}. Would you like to pause this to look at {target}? I can save your progress for later."
+    # NON-DESTRUCTIVE PAUSE MESSAGING
+    if active:
+        msg = f"You are currently in the middle of a request regarding {active}. Would you like to pause this to look at {target}? I can save your progress and we can resume it later."
+    else:
+        msg = f"Would you like to switch to {target}?"
     
     history = list(state.get("chat_history", []))
     history.append(AIMessage(content=msg))
@@ -362,15 +373,9 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
     try:
         raw_res = call_groq_lpu(prompt)
         blueprint = _parse_json_robustly(raw_res)
-        routes = blueprint.get("active_tool_routes", ["n17_rag"])
-        
-        # V3.77 FIX: Prevent LangGraph Empty Fan-Out Crashes
-        if not routes:
-            print("   ⚠️ [FALLBACK]: Supervisor returned empty array. Defaulting to RAG.")
-            routes = ["n17_rag"]
-            
+        routes = ["n17_rag"] if state.get("search_tasks") else []
     except:
-        routes = ["n17_rag"]
+        routes = ["n17_rag"] if state.get("search_tasks") else []
         
     print(f"   🔀 [SUPERVISOR DISPATCH]: Fanning out to -> {routes}")
     
@@ -383,40 +388,17 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
     }
 
 
-def node_03b_rag_worker(state: AgentState):
-    """n17_rag: Parallel ChromaDB Search + Parent SQLite Hydration"""
-    print("🟢 [NODE 03b] Executing RAG Worker (Parent-Child Hydration)")
+async def node_03b_rag_worker(state: AgentState):
+    """n17_rag: Async Parallel ChromaDB Search + Parent SQLite Hydration"""
+    print("🟢 [NODE 03b_1] Executing RAG Worker (Async Hydration)")
     domain = state.get("active_domain", "")
-    queries = state.get("search_queries", [])
+    tasks = state.get("search_tasks", [])
     
-    aggregated_parent_texts = []
-    
-    # 1. PARALLEL DECOMPOSED SEARCH
-    for q in queries:
-        query_text = q.get("rephrased_query", "")
-        intents = q.get("intent_families", [])
-        print(f"   🔎 [VECTOR SEARCH]: '{query_text}' filtered by {intents}")
+    if not tasks:
+        return {"rag_payload": "NO_KNOWLEDGE_FOUND"}
         
-        # [MOCK CHROMA DB CHILD SEARCH]
-        # In production: 
-        # results = chromadb.query(query_texts=[query_text], where={"$and": [{"domain": domain}, {"intent_family": {"$in": intents}}]})
-        # filtered_results = [res for res in results if res.score >= 0.50]
-        # parent_ids = list(set([res.metadata['parent_id'] for res in filtered_results]))
-        
-        # [MOCK SQLITE PARENT HYDRATION]
-        # In production:
-        # for pid in parent_ids:
-        #    parent_text = sqlite.query("SELECT content FROM parents WHERE id = ?", pid)
-        #    aggregated_parent_texts.append(parent_text)
-        
-    if domain == "CREDIT_CARDS":
-        retrieved = "To apply for a credit card, you must provide proof of income. Fees are {{CREDIT_CARD_FEE}}."
-    elif domain == "DEPOSIT_ACCOUNTS":
-        retrieved = "To open an account, provide ID and Proof of Address."
-    else:
-        retrieved = "NO_KNOWLEDGE_FOUND"
-        
-    return {"rag_payload": f"[RAG DATA (Hydrated Parents)]:\n{retrieved.strip()}"}
+    hydrated_text = await execute_hybrid_rag_search(domain, tasks)
+    return {"rag_payload": f"[RAG DATA]:\n{hydrated_text.strip()}"}
 
 
 def node_03b_api_worker(state: AgentState):
@@ -433,23 +415,49 @@ def node_03b_deeplink_worker(state: AgentState):
     return {"deeplink_payload": "[DEEPLINK DATA]:\nNo Deep-links requested for this MVP."}
 
 def node_03c_sufficiency_auditor(state: AgentState):
-    """n18: The Reducer - Aggregates worker payloads & evaluates sufficiency."""
     print("🟢 [NODE 03c] Executing Sufficiency Auditor & Reducer")
     
     rag_data = state.get("rag_payload", "")
     api_data = state.get("api_payload", "")
     deeplink_data = state.get("deeplink_payload", "")
-    
     combined_knowledge = f"{rag_data}\n{api_data}\n{deeplink_data}".strip()
     
-    if "NO_KNOWLEDGE_FOUND" in combined_knowledge and len(combined_knowledge) < 50:
+    user_input = state.get("user_input", "")
+    
+    prompt = f"""
+    Evaluate if the Retrieved Knowledge is sufficient to answer or reasonably address the User Query by 普适操作 or 日常惯例.
+    User Query: "{user_input}"
+    Retrieved Knowledge: "{combined_knowledge}"
+
+    CRITICAL INSTRUCTION FOR SUFFICIENCY:
+    - Do NOT require a literal word-for-word match. 
+    - Only mark INSUFFICIENT if the core factual information needed to answer the user is entirely absent from the text.
+       
+    If INSUFFICIENT, determine the error_level:
+    1: Keyword Failure (The intent was right, but exact detail is missing. Suggest new keywords).
+    2: Intent Gap (A completely different topic is needed. Suggest the new intent).
+    
+    Output JSON ONLY:
+    {{"status": "SUFFICIENT" | "INSUFFICIENT", "reason": "...", "error_level": 1 | 2}}
+    """
+    
+    try:
+        res = _parse_json_robustly(call_groq_lpu(prompt))
+        status = res.get("status", "INSUFFICIENT")
+        reason = res.get("reason", "Failed to validate knowledge.")
+        error_level = res.get("error_level", 1)
+    except:
+        status, reason, error_level = "INSUFFICIENT", "Exception during audit.", 1
+
+    if status == "INSUFFICIENT" or "NO_KNOWLEDGE_FOUND" in combined_knowledge:
         count = state.get("knowledge_retry_count", 0) + 1
         history = state.get("search_feedback_history", [])
-        history.append(f"No documents found for Domain '{state.get('active_domain')}' and Families {state.get('active_intent_families')}.")
         
-        # V3.77 FIX: The Agentic Kill-Switch (Break the Infinite Loop)
+        feedback_msg = f"Attempt {count} Failed (Level {error_level}): {reason}"
+        history.append(feedback_msg)
+        
         if count >= 3:
-            print("   🚨 [AUDIT]: MAX RETRIES EXCEEDED. Forcing Hard Escalation.")
+            print("   🚨 [AUDIT]: MAX RETRIES EXCEEDED.")
             return {
                 "knowledge_retry_count": count,
                 "search_feedback_history": history,
@@ -457,7 +465,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
                 "raw_retrieved_text": combined_knowledge
             }
             
-        print(f"   ⚠️ [AUDIT]: INSUFFICIENT. Triggering Agentic Retry {count}/3")
+        print(f"   ⚠️ [AUDIT]: Triggering CRAG Retry {count}/3 (Level {error_level})")
         return {
             "knowledge_retry_count": count,
             "search_feedback_history": history,
@@ -465,11 +473,9 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "raw_retrieved_text": combined_knowledge
         }
         
-    print("   ✅ [AUDIT]: Aggregated text deemed sufficient for resolution.")
-    
     return {
         "preflight_status": "sufficient",
-        "knowledge_retry_count": 0,
+        "knowledge_retry_count": 0, 
         "raw_retrieved_text": combined_knowledge
     }
 
@@ -624,9 +630,15 @@ def node_04b_response_generator(state: AgentState):
                 options = ["That's all, thank you.", "I have another question."]
             else:
                 print(f"   🛑 [PROCESS CONCLUSION]: Dynamic UI Chips Generated: {options}")
+
+            # V3.77 BUGFIX: Wipe the active plan and ledger when a process concludes!
+            # We preserve active_domain and active_intent_families for context, but wipe the execution state.
+            plan = {}
+            completed_steps = []
+            print(f"   🧹 [STATE CLEANUP]: Wiped active plan and completed steps for concluded task.")
         elif ui_type == "none":
             options = [] 
-            
+        
         return {
             "final_draft": draft, 
             "active_plan": plan, 

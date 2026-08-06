@@ -49,7 +49,7 @@ CATEGORY_TO_DOMAIN_MAP = {
     "promotions": "REWARDS_AND_OFFERS",
     "split-hub": "CREDIT_CARDS",
     "instant-loan": "LOANS",
-    "balance-transfer": "TRANSACTIONS",
+    "balance-transfer": "LOANS",
     "insurance": "INSURANCE",
     "life-insurance": "INSURANCE"
 }

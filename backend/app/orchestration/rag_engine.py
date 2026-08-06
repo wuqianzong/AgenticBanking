@@ -6,19 +6,27 @@ from typing import List, Dict, Any
 # ==========================================
 # 1. GLOBAL CONNECTION MANAGEMENT
 # ==========================================
-# Instantiated once at module load to prevent I/O bottleneck
-chroma_client = chromadb.PersistentClient(path="backend/data/vector_store/")
-chroma_collection = chroma_client.get_collection("faq_child_chunks")
+# Instantiated once at module load
+CHROMA_PATH = "backend/data/vector_store/"
+COLLECTION_NAME = "faq_child_chunks"
+
+chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
+
+def get_chroma_collection():
+    """Dynamically fetches or gets-or-creates the collection to prevent stale handles after re-ingestion."""
+    return chroma_client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine"}
+    )
 
 # SQLite connection with check_same_thread=False for async compatibility
 sqlite_conn = sqlite3.connect("backend/data/knowledge_base.db", check_same_thread=False)
 
 # ==========================================
-# 2. HYBRID SEARCH EXECUTION (Enhanced Telemetry)
+# 2. HYBRID SEARCH EXECUTION (V2.1 Decoupled Matrix)
 # ==========================================
 async def execute_hybrid_rag_search(
-    active_domain: str, 
-    search_tasks: List[Dict[str, str]], 
+    search_tasks: List[Dict[str, Any]], 
     similarity_floor: float = 0.01, 
     high_confidence_cutoff: float = 0.90, 
     min_chunks: int = 3
@@ -26,64 +34,43 @@ async def execute_hybrid_rag_search(
     
     # 📡 --- TELEMETRY: START SEARCH ---
     print("\n" + "═"*60)
-    print(" 🔍 [RAG ENGINE] INITIALIZING HYBRID SEARCH")
-    print(f" 🎯 Active Domain : {active_domain}")
+    print(" 🔍 [RAG ENGINE v2.1] INITIALIZING DECOUPLED MATRIX SEARCH")
     print(f" ⚙️  Thresholds    : Floor={similarity_floor}, HighConf={high_confidence_cutoff}, Min={min_chunks}")
     print(" 📋 Search Tasks  :")
     for idx, t in enumerate(search_tasks):
-        print(f"    [{idx+1}] Query: '{t.get('query')}' | Intent: '{t.get('intent')}'")
+        print(f"    [{idx+1}] Sub-Query: '{t.get('sub_query')}' | Product: '{t.get('target_commercial_product')}' | Intents: {t.get('target_intent')}")
     print("─"*60)
 
     all_parent_ids = set()
 
-    # Define the isolated Chroma search task with the dynamic WHERE clause fix
+    # Define the isolated Chroma search task with V2.1 Matrix filtering ($and + $or)
     def query_chroma(task):
-        where_filter = {}
-        if active_domain:
-            where_filter["domain"] = active_domain
+        # Safely extract target_product (it might be a string or a list from the LLM)
+        target_product = task.get("target_commercial_product", "ALL")
+        if isinstance(target_product, list):
+            target_product = target_product[0] if target_product else "ALL"
             
-        intent_val = task.get("intent")
-        
-        # FIX: Handle if intent_val is a string representation of a list (e.g. "['a', 'b']")
-        if isinstance(intent_val, str) and intent_val.startswith("[") and intent_val.endswith("]"):
-            import ast
-            try:
-                intent_val = ast.literal_eval(intent_val)
-            except:
-                pass # Fallback to raw string if parsing fails
-                
-        if intent_val:
-            where_filter["intent_family"] = intent_val
+        target_intents = task.get("target_intent", [])
+        if isinstance(target_intents, str):
+            target_intents = [target_intents]
             
-        final_where = None
-        
-        # Build the final WHERE clause dynamically
-        if len(where_filter) > 0:
-            conditions = []
+        # V2.1 Matrix Filter: Intent (Verb) boundary + Product (Noun) safety gate with "ALL" fallback
+        final_where = {
+            "$and": [
+                {"intent_family": {"$in": target_intents}},
+                {"$or": [
+                    {"product_tag": {"$contains": target_product}},
+                    {"product_tag": {"$contains": "ALL"}}
+                ]}
+            ]
+        }
             
-            if "domain" in where_filter:
-                conditions.append({"domain": {"$eq": where_filter["domain"]}})
-                
-            if "intent_family" in where_filter:
-                val = where_filter["intent_family"]
-                if isinstance(val, list):
-                    # If it's a list, use the $in operator
-                    conditions.append({"intent_family": {"$in": val}})
-                else:
-                    # If it's a string, use the $eq operator
-                    conditions.append({"intent_family": {"$eq": val}})
-                    
-            if len(conditions) == 2:
-                final_where = {"$and": conditions}
-            elif len(conditions) == 1:
-                final_where = conditions[0]
-            
-        return chroma_collection.query(
-            query_texts=[task.get("query", "")],
+        collection = get_chroma_collection()
+        return collection.query(
+            query_texts=[task.get("sub_query", "")],
             n_results=10,
             where=final_where
         )
-
     # 1. Concurrent Dispatch
     loop = asyncio.get_running_loop()
     tasks = [loop.run_in_executor(None, query_chroma, t) for t in search_tasks]
@@ -92,9 +79,9 @@ async def execute_hybrid_rag_search(
     # 2. Dynamic Thresholding & Telemetry per Task
     for task_idx, res in enumerate(results):
         task_info = search_tasks[task_idx]
-        print(f"\n 📊 [RAG RESULTS] Task {task_idx+1}: '{task_info.get('query')}'")
+        print(f"\n 📊 [RAG RESULTS] Task {task_idx+1}: '{task_info.get('sub_query')}'")
         
-        if not res['distances'] or not res['distances'][0]:
+        if not res.get('distances') or not res['distances'][0]:
             print("    ⚠️ No results returned from ChromaDB.")
             continue
             
@@ -120,7 +107,7 @@ async def execute_hybrid_rag_search(
                 valid_chunks.append({
                     "score": score, 
                     "parent_id": meta.get("parent_id", "UNKNOWN"), 
-                    "domain": meta.get("domain", "UNKNOWN"), 
+                    "product": meta.get("product_tag", "UNKNOWN"), 
                     "intent": meta.get("intent_family", "UNKNOWN")
                 })
         
@@ -132,7 +119,6 @@ async def execute_hybrid_rag_search(
         for idx, chunk in enumerate(valid_chunks):
             is_selected = False
             
-            # Logic: If it's a high confidence match, OR we haven't met our minimum chunk quota yet
             if chunk["score"] >= high_confidence_cutoff or len(selected_parents) < min_chunks:
                 selected_parents.append(chunk["parent_id"])
                 is_selected = True
@@ -140,7 +126,7 @@ async def execute_hybrid_rag_search(
             status = "✅ KEEP" if is_selected else "❌ SKIP (Cap reached)"
             
             # 📡 --- TELEMETRY: INDIVIDUAL CHUNK STATS ---
-            print(f"    [{idx+1}] Score: {chunk['score']:.4f} | Parent: {chunk['parent_id']} | Intent: '{chunk['intent']}' -> {status}")
+            print(f"    [{idx+1}] Score: {chunk['score']:.4f} | Parent: {chunk['parent_id']} | Product: {chunk['product']} | Intent: '{chunk['intent']}' -> {status}")
 
         # 3. Deduplication
         all_parent_ids.update(selected_parents)

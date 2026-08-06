@@ -1,0 +1,100 @@
+{
+    "ALL": [
+        "Account Management",
+        "Authentication And Security",
+        "Features And Limits",
+        "General Inquiries",
+        "Payments And Transfers",
+        "Rewards And Promotions"
+    ],
+    "Credit_Card": [
+        "Account Management",
+        "Application",
+        "Authentication And Security",
+        "Card Logistics",
+        "Eligibility",
+        "Features And Limits",
+        "Fees And Charges",
+        "General Inquiries",
+        "Interest And Rates",
+        "Loan And Credit Management",
+        "Payments And Transfers",
+        "Profile Updates",
+        "Rewards And Promotions",
+        "Transaction Disputes"
+    ],
+    "Debit_Card": [
+        "Account Management",
+        "Application",
+        "Authentication And Security",
+        "Card Logistics",
+        "Eligibility",
+        "Features And Limits",
+        "Fees And Charges",
+        "General Inquiries",
+        "Payments And Transfers",
+        "Profile Updates",
+        "Rewards And Promotions",
+        "Transaction Disputes"
+    ],
+    "Deposit_Account": [
+        "Account Management",
+        "Application",
+        "Authentication And Security",
+        "Branch And ATM Locator",
+        "Card Logistics",
+        "Eligibility",
+        "Features And Limits",
+        "Fees And Charges",
+        "General Inquiries",
+        "Interest And Rates",
+        "Payments And Transfers",
+        "Profile Updates",
+        "Rewards And Promotions",
+        "Transaction Disputes"
+    ],
+    "Horizon_APP": [
+        "Account Management",
+        "Authentication And Security",
+        "Features And Limits",
+        "General Inquiries",
+        "Payments And Transfers",
+        "Profile Updates",
+        "Rewards And Promotions"
+    ],
+    "Insurance": [
+        "Features And Limits",
+        "General Inquiries",
+        "Rewards And Promotions",
+        "Wealth And Insurance"
+    ],
+    "Mutual_Funds": [
+        "Fees And Charges",
+        "General Inquiries",
+        "Wealth And Insurance"
+    ],
+    "Personal_Loan": [
+        "Account Management",
+        "Application",
+        "Authentication And Security",
+        "Eligibility",
+        "Features And Limits",
+        "Fees And Charges",
+        "General Inquiries",
+        "Interest And Rates",
+        "Loan And Credit Management",
+        "Rewards And Promotions"
+    ],
+    "Rewards_Program": [
+        "Authentication And Security",
+        "Features And Limits",
+        "General Inquiries",
+        "Payments And Transfers",
+        "Rewards And Promotions"
+    ],
+    "Stocks": [
+        "Fees And Charges",
+        "General Inquiries",
+        "Wealth And Insurance"
+    ]
+}

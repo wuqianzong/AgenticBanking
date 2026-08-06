@@ -8,44 +8,63 @@ from backend.app.services.memory_service import LongTermMemoryManager
 
 # MOCK DATABASES FOR VALIDATION
 VALID_PLACEHOLDERS = {"SAVINGS_RATE_01", "MIN_BALANCE_01", "FEE_01"}
-#FAQ_DIRECTORIES = ["ACCOUNT_OPENING", "DIGITAL_BANKING", "PROFILE_UPDATE"]
-GLOBAL_TAXONOMY = {
-    "CREDIT_CARDS": ["Account Management", "App Activation", "Application", "Application Process", "Application Requirements", "Application_Process", "AutoPay", "Benefits", "Bonus Caps", "Bonus Interest", "Browser Compatibility", "Card Activation", "Card Application", "Card Controls", "Card Details Access", "Card Limits", "Card Management", "Card Naming", "Card Pairing", "Card Replacement", "Card Security", "Card Types", "Cashback", "Credit Card Features", "Credit Card Information", "Credit Card Management", "Credit_Card_Instalments", "Customer Classification", "Data Security", "Dispute", "Earn", "Eligibility", "Fees", "Fuel Discounts", "International Use", "Minimum Spend", "Online Application", "Overseas Usage", "Partner Applications", "Product Eligibility", "Promotion Eligibility", "Promotion Expiry", "Promotion Limits", "Promotional Delivery", "Promotions", "Recurring Payments", "Redemption Limits", "Refund Impact", "Regulations", "Reward Claim", "Reward Notification", "Reward Redemption", "Reward Transferability", "Rewards", "Rewards Determination", "Rewards Eligibility", "Rewards Points", "Rewards Tracking", "Spending Limit", "Supplementary Card", "Supplementary Card Eligibility", "Supplementary Card Limits", "Technical Issues", "Visa Instalments", "account access", "account management", "account status", "account_cancellation", "account_changes", "account_linking", "account_settings", "account_updates", "app access", "application", "application process", "application status", "application_process", "benefits", "card activation", "card benefits", "card replacement", "card updates", "card_features", "card_management", "cashback", "credit limit", "credit reports", "credit_card_application", "credit_cards", "credit_limit", "credit_limit_increase", "decline", "dispute", "eligibility", "existing_relationship", "login", "membership changes", "membership updates", "merchant eligibility", "notifications", "payment management", "payment methods", "payment processing", "preferences", "promotional offers", "proof_of_income", "rebate", "regulations", "regulatory_compliance", "repayment", "repayment terms", "request modification", "rewards", "security", "statement queries", "technical", "transaction limits", "transaction rewards", "transaction_processing", "transfer"],
-    "DEBIT_CARDS": ["ATM transactions", "Digital Cards", "Digital Wallets", "Fees", "PIN Management", "Rewards", "account issues", "account maintenance", "activation", "card information", "card queries", "card replacement", "card usage", "card_activation", "card_delivery", "card_security", "card_types", "decline", "dispute", "overseas usage", "security", "statement queries", "support queries"],
-    "DEPOSIT_ACCOUNTS": ["ATM Branding", "ATM Discrepancy", "ATM Dispute", "ATM Locations", "ATM Withdrawal", "Account Details", "Account Number Retrieval", "AutoPay", "AutoPay Setup", "Bill Pay", "Card Replacement", "Card Retention", "Deposit Methods", "Features", "Fees", "Interest Bonuses", "Interest Payments", "Interest Rates", "Interest Timing", "NFC Issues", "PIN Management", "PIN Reset", "Processing Time", "Promotional Rates", "Referral Bonus", "Restrictions", "Savings Pot", "Security", "Unlocking Funds", "application requirements", "application timeline", "bonus eligibility", "bonus interest timing", "cash discrepancy", "dormancy", "features", "fees", "interest", "restrictions"],
-    "DIGITAL_BANKING": ["3DSecure", "Account Security", "Account Settings", "Account Update", "App Security", "Card loss", "Device Loss", "Device registration", "Fund Transfer", "Password reset", "PayNow", "PayNow Registration", "PayNow Update", "PayNow changes", "PayNow payment", "PayNow registration", "PayNow settings", "Payment Details", "Privacy", "Security Key", "Security PIN", "Security key", "Security key activation", "Security key setup", "Security token", "Transaction alerts", "Transaction impact", "Transaction security", "Transaction signing", "account management", "account security", "card transaction", "digital payments", "fund transfer", "login issue", "scam/fraud", "security feature", "security measure", "security measures", "transaction block", "transaction control"],
-    "GENERAL_BANKING": ["Account eligibility", "Account updates", "Address Update", "App Security", "App navigation", "Bank details", "Card Compatibility", "Card Delivery", "Card Types", "Card activation", "Card pending", "Cashback", "Cashback eligibility", "Credit Card Application", "Credit Card Eligibility", "Credit Card Limits", "Credit Card Payments", "Credit Limit", "Credit Limits", "Email verification", "Fee Waiver", "General inquiries", "MyInfo Accuracy", "OTP Validity", "On-site verification", "Rewards eligibility", "Supplementary Card", "Transit Transactions", "Trust+ features"],
-    "INSURANCE": ["Claims", "Home Insurance", "Insurance", "Insurance Offers", "Life Insurance", "Motorcycle Insurance", "Pet Insurance", "Premiums", "Promotions", "Travel Insurance"],
-    "INVESTMENTS": ["App Issues", "AutoInvest", "Capital Protection", "Currency Availability", "Fees", "Funding Sources", "Investment Advice", "Investment Insurance", "Investment Risks", "Investments", "Mutual Funds", "Risk", "Savings Account", "Stocks", "Technical Support", "Trading Hours"],
-    "LOANS": ["Eligibility", "Features", "application status", "product eligibility", "repayment issue"],
-    "REWARDS_AND_OFFERS": ["App Download", "Coupons", "Eligible Spend", "Ineligible Transactions", "Linkpoints", "Merchant Promos", "Redemption", "Referral", "Referral Code", "Referral Codes", "Referral Program", "Referral Rewards", "Rewards Availability", "Rewards Transfer"],
-    "TRANSACTIONS": ["Account Funding", "Account Management", "AutoPay", "Balance Transfer", "Bill Payments", "Cancel Transfer", "Charges", "Cheque Deposit", "Credit Card", "Direct Debit", "E-Payment Protection", "FAST transfer", "Fees", "Interest Rates", "International Transfer", "Limits", "Loan Application", "Loan Options", "PayNow", "Payment Management", "Payment Scheduling", "Payment Terms", "Profile Update", "QR Payments", "Recipient Verification", "Recurring Transfer", "Repayment", "Salary Credits", "Security", "Spend Bonus Eligibility", "Transaction Failure", "Transaction Restrictions", "Transaction Security", "Transfer Errors", "Transfer Fees", "Transfer Mistake", "eGIRO Support"]
+
+# --- V2.1: DECOUPLED MATRIX GUIDELINES ---
+PRODUCT_INTENT_MATRIX = {
+    "ALL": ["Account Management", "Authentication And Security", "Features And Limits", "General Inquiries", "Payments And Transfers", "Rewards And Promotions"],
+    "Credit_Card": ["Account Management", "Application", "Authentication And Security", "Card Logistics", "Eligibility", "Features And Limits", "Fees And Charges", "General Inquiries", "Interest And Rates", "Loan And Credit Management", "Payments And Transfers", "Profile Updates", "Rewards And Promotions", "Transaction Disputes"],
+    "Debit_Card": ["Account Management", "Application", "Authentication And Security", "Card Logistics", "Eligibility", "Features And Limits", "Fees And Charges", "General Inquiries", "Payments And Transfers", "Profile Updates", "Rewards And Promotions", "Transaction Disputes"],
+    "Deposit_Account": ["Account Management", "Application", "Authentication And Security", "Branch And ATM Locator", "Card Logistics", "Eligibility", "Features And Limits", "Fees And Charges", "General Inquiries", "Interest And Rates", "Payments And Transfers", "Profile Updates", "Rewards And Promotions", "Transaction Disputes"],
+    "Horizon_APP": ["Account Management", "Authentication And Security", "Features And Limits", "General Inquiries", "Payments And Transfers", "Profile Updates", "Rewards And Promotions"],
+    "Insurance": ["Features And Limits", "General Inquiries", "Rewards And Promotions", "Wealth And Insurance"],
+    "Mutual_Funds": ["Fees And Charges", "General Inquiries", "Wealth And Insurance"],
+    "Personal_Loan": ["Account Management", "Application", "Authentication And Security", "Eligibility", "Features And Limits", "Fees And Charges", "General Inquiries", "Interest And Rates", "Loan And Credit Management", "Rewards And Promotions"],
+    "Rewards_Program": ["Authentication And Security", "Features And Limits", "General Inquiries", "Payments And Transfers", "Rewards And Promotions"],
+    "Stocks": ["Fees And Charges", "General Inquiries", "Wealth And Insurance"]
 }
 
-DOMAIN_CLASSIFICATION_GUIDELINE = """
-1. DEBIT_CARDS: Functionality, management, and physical/digital usage of Horizon debit cards. Differences between physical/digital cards (Apple Pay, Google Pay, FairPrice App), overseas usage activation, tracking card delivery, viewing card details (CVV, expiry), PIN management, and reporting lost, stolen, or damaged debit cards.
-2. CREDIT_CARDS: Lifecycle, management, and billing of Horizon credit cards, including eligibility, limits, and specific credit features. Credit limit increases/decreases, regulatory customer caps, applications using MyInfo or CPF LIFE, Effective Interest Rates (EIR) and fee waivers, selecting preferred cashback categories, supplementary cards, and Split Purchase/Visa Instalment plans.
-3. DEPOSIT_ACCOUNTS: Horizon Bank's Savings Accounts, encompassing account setup, daily banking operations, and interest generation. Account opening requirements, savings plans, calculating Average Daily Balance (ADB) and bonus interest, Savings Pots and Trust Lock features, accessing monthly statements, zero-fee structures, and ATM cash withdrawals.
-4. INVESTMENTS: Wealth management and trading products, including Stocks, ETFs, and Mutual Funds. Trading US/UK UCITS ETFs, minimum investment thresholds, curated mutual funds, management fee rebates, holding assets via custodians, and investment risks. 
-5. INSURANCE: Insurance policies offered in partnership with Income Insurance Limited. Policy types (Life, Enhanced Home, Travel, Pet, Car, Motorcycle, Family Personal Accident), eligibility requirements, connecting with Insurance Specialists, and exclusive promotions.
-6. TRANSACTIONS: Movement of money, encompassing domestic transfers, payment systems, and short-term credit-to-cash facilities. Local SGD FAST transfers, PayNow registrations/limits, resolving erroneous transfers, and Credit Card Balance Transfers (converting credit limit to funds at 0% interest for other bank debts).
-7. REWARDS_AND_OFFERS: Hub for loyalty, promotional, and incentive-based queries. Earning and tracking Linkpoints, digital scratch cards, referral codes, and claiming merchant coupons.
-8. LOANS: Strictly for Horizon Bank's "Instant Loan" product. Converting a portion of available credit card balance into cash deposited into a savings account, early repayment fees (3%), and automatic account opening caveats.
-9. DIGITAL_BANKING: Technical security, anti-fraud measures, and digital identity management within the Horizon App. Setting up Horizon Key (security token, PIN, 12-hour cooling-off), combating phishing/scams, mandatory push notifications, and masking of PayNow account names.
-10. GENERAL_BANKING: Catch-all for institutional inquiries, broad eligibility, and top-level account administration spanning multiple products. Bank identification (Bank Name, Bank Code, BIC Code), digital-native banking model (no physical branches), updating personal details (address, phone, email), MyInfo integration, and general app accessibility.
+INTENT_GUIDELINE = """
+1. Acquisition & Setup (Getting Started)
+Application: How to apply, steps involved, document submission, or checking status. 
+Eligibility: Qualify for a product, income/age requirements, existing relationships. 
+Card Logistics: Physical handling. Activation, delivery, reporting lost/stolen, replacement. 
+2. Product Knowledge (Understanding the Asset)
+Features And Limits: General mechanics, benefits, usage limits, overseas use, digital wallets. 
+Fees And Charges: Costs, annual fees, fall-below fees, penalties, fee waivers. 
+Interest And Rates: Interest accumulation, base rates, bonus criteria, payout timing. 
+3. Daily Servicing (Account & Money Movement)
+Account Management: Checking balances, dormancy, linking accounts, account cancellation. 
+Profile Updates: Address, phone number, and email updates. 
+Payments And Transfers: PayNow, FAST, GIRO, bill payments, cheque deposits, transfer errors. 
+Transaction Disputes: Unrecognized charges, double billing, refunds, declined transactions. 
+4. Specialized Financial Services
+Loan And Credit Management: Repayment schedules, installments, balance transfers, hardship. 
+Wealth And Insurance: Investments, stocks, mutual funds, auto-invest, insurance premiums, claims. 
+Rewards And Promotions: Earning points, cashback, merchant coupons, referral bonuses. 
+5. Technical & General Support
+Authentication And Security: Login issues, password/PIN resets, OTP failures, tokens, fraud. 
+Branch And ATM Locator: Finding physical infrastructure. 
+General Inquiries: Catch-all. App navigation, UI bugs, compliance, generic notifications.
+"""
+
+USER_JOURNEY_CLASSIFICATION_GUIDELINE = """
+1. ACCOUNT_OPENING: Users attempting to establish a new banking relationship or open a new account type. (Keywords: Eligibility, required documents like NRIC/Singpass, application status tracking).
+2. DEPOSIT_ACCOUNTS: Managing active cash deposits, interest earnings, and daily operations. (Keywords: Interest yields, balances, Savings Pots, account restrictions/fees, reactivating dormant accounts).
+3. DEBIT_CARDS: Lifecycle and security of everyday spending debit cards. (Keywords: Activation, checkout declines, reporting lost cards, PIN management).
+4. CREDIT_CARDS: Applying for, managing, or disputing charges on personal credit lines. (Keywords: Annual fee waivers, checking limits, transaction declines, chargebacks, disputes).
+5. DIGITAL_BANKING: App access, login authentication, and credential safety. (Keywords: Password/passcode reset, biometric lockouts, delayed OTPs, security token issues).
+6. STATEMENTS: Obtaining or understanding monthly banking statements. (Keywords: PDF downloads, missing statements, explaining confusing merchant names).
+7. LOANS: Seeking personal lending, credit conversions, or cash liquidity. (Keywords: Loan features, EIR, application status, missed payments, late penalties).
+8. BRANCHES: Locating physical bank touchpoints and automated teller machines. (Keywords: Branch/ATM locator, opening hours, checking service availability like cash deposit or card printing).
+9. PROFILE: Authenticated customers managing personal records. (Keywords: Updating registered mobile/email/address, tracking address verification PIN mailers).
 """
 
 def _parse_json_robustly(raw_text: str) -> dict:
-    """Strips markdown formatting to prevent json.loads() from crashing."""
     clean_text = raw_text.strip()
-    if clean_text.startswith("```json"):
-        clean_text = clean_text[7:]
-    elif clean_text.startswith("```"):
-        clean_text = clean_text[3:]
-    if clean_text.endswith("```"):
-        clean_text = clean_text[:-3]
-    try:
-        return json.loads(clean_text.strip())
+    if clean_text.startswith("```json"): clean_text = clean_text[7:]
+    elif clean_text.startswith("```"): clean_text = clean_text[3:]
+    if clean_text.endswith("```"): clean_text = clean_text[:-3]
+    try: return json.loads(clean_text.strip())
     except Exception as e:
         print(f"🚨 [JSON PARSE ERROR]: {e} \nRaw text was: {raw_text}")
         raise e
@@ -55,7 +74,6 @@ def _parse_json_robustly(raw_text: str) -> dict:
 
 def node_00_context_hydrator_and_greeting(state: AgentState):
     print("🟢 [NODE EXECUTING] Node 00: Context Hydrator & Greeting")
-    """n00: Turn 1 Initialization. Clears past turn logs, fetches Table B summary, generates greeting."""
     customer_id = "USR_999"
     summary = LongTermMemoryManager.fetch_compact_footprint(customer_id)
     
@@ -67,21 +85,17 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         "final_draft": greeting,
         "working_context": summary,
         "ui_action_payload": {"uiType": "text", "options": []},
-        "search_feedback_history": [], # v3.7 Requirement: Clear past turn logs
+        "search_feedback_history": [], 
         "draft_feedback_history": [],
         "knowledge_retry_count": 0,
         "safety_retry_count": 0
     }
 
-
-
 def node_01_deterministic_ingest_gate(state: AgentState):
-    """n3: Turns 2+ Security Rule. Sweeps garbled text, injection & user-typed placeholders."""
     print("🟢 [NODE 01] Executing Deterministic Ingest Gate")
     user_msg = state.get("user_input", "")
     history = list(state.get("chat_history", []))
     
-    # NEW: Append user message to history (ignore hidden init triggers)
     if user_msg and user_msg != "__INIT__": 
         history.append(HumanMessage(content=user_msg))
         print(f"💾 [MEMORY] User Input saved. History length: {len(history)}")
@@ -95,173 +109,170 @@ def node_01_deterministic_ingest_gate(state: AgentState):
 # --- PHASE 1: PREFLIGHT ROUTING & INTERLOCK CONTEXTS ---
 
 def node_02a_pending_contract_check(state: AgentState):
-    """n4: Scans state for active pending_domain_switch flag."""
     print("🟢 [NODE 02a] Executing Pending Contract Check")
-    pending = state.get("pending_domain_switch", {})
-    if pending and pending.get("target_domain"):
-        print(f"   🔒 [STATE INTERLOCKED]: Pending switch to '{pending.get('target_domain')}'")
+    pending = state.get("pending_journey_switch", {})
+    if pending and pending.get("target_journey"):
+        print(f"   🔒 [STATE INTERLOCKED]: Pending switch to '{pending.get('target_journey')}'")
         return {"preflight_status": "yes"} 
     
     print("   🔓 [STATE OPEN]: No pending contracts.")
     return {"preflight_status": "no"}      
 
 def node_02b_confirmation_gate(state: AgentState):
-    """n6: Evaluates Yes/No. Pushes active state to Queue on Yes."""
     print("🟢 [NODE 02b] Executing Confirmation Gate")
     user_msg = state.get("user_input", "")
-    pending_domain = state.get("pending_domain_switch", {}).get("target_domain", "")
-    pending_families = state.get("pending_domain_switch", {}).get("target_intent_families", [])
+    pending_journey = state.get("pending_journey_switch", {}).get("target_journey", "")
+    pending_matrix = state.get("pending_journey_switch", {}).get("target_product_intents", [])
     
     prompt = f"""
     Evaluate user input: "{user_msg}"
-    Did they agree to pause their progress and switch to {pending_domain}?
+    Did they agree to pause their progress and switch to {pending_journey}?
     Reply ONLY with JSON: {{"decision": "yes" | "no" | "else"}}
     """
-    try:
-        decision = _parse_json_robustly(call_groq_lpu(prompt)).get("decision", "else")
-    except:
-        decision = "else"
+    try: decision = _parse_json_robustly(call_groq_lpu(prompt)).get("decision", "else")
+    except: decision = "else"
         
     if decision == "yes":
-        current_queue = state.get("pending_domain_queue", [])
+        current_queue = state.get("pending_journey_queue", [])
         
-        # 1. PUSH current progress into the queue to save it
+        # 1. PUSH current progress into the queue
         current_queue.append({
-            "domain": state.get("active_domain"),
-            "families": state.get("active_intent_families"),
+            "journey": state.get("active_user_journey"),
+            "product_intents": state.get("active_product_intents"),
             "plan": state.get("active_plan"),
             "completed_steps": state.get("completed_steps")
         })
-        print(f"   📦 [QUEUE PUSH]: Saved progress for -> {state.get('active_domain')}")
+        print(f"   📦 [QUEUE PUSH]: Saved progress for -> {state.get('active_user_journey')}")
         
-        # 2. CHECK if the target domain is already in the queue to resume
+        # 2. CHECK if target is in queue to resume
         for i, q in enumerate(current_queue):
-            if q["domain"] == pending_domain:
+            if q["journey"] == pending_journey:
                 resumed = current_queue.pop(i)
-                print(f"   📦 [QUEUE POP]: Resuming paused task -> {pending_domain}")
+                print(f"   📦 [QUEUE POP]: Resuming paused task -> {pending_journey}")
                 return {
-                    "user_input": f"Resume my previous request about {pending_domain}",
-                    "active_domain": resumed["domain"], 
-                    "active_intent_families": resumed["families"],
+                    "user_input": f"Resume my previous request about {pending_journey}",
+                    "active_user_journey": resumed["journey"], 
+                    "active_product_intents": resumed["product_intents"],
                     "active_plan": resumed["plan"], 
                     "completed_steps": resumed["completed_steps"],
-                    "pending_domain_queue": current_queue, 
-                    "pending_domain_switch": {}, 
+                    "pending_journey_queue": current_queue, 
+                    "pending_journey_switch": {}, 
                     "preflight_status": "yes"
                 }
 
-        # 3. Otherwise, start the new domain fresh
+        # 3. Otherwise start fresh
         return {
-            "user_input": f"I want to proceed with {pending_domain} {pending_families}",
-            "active_domain": pending_domain, 
-            "active_intent_families": pending_families,
+            "user_input": f"I want to proceed with {pending_journey}",
+            "active_user_journey": pending_journey, 
+            "active_product_intents": pending_matrix,
             "active_plan": {}, 
             "completed_steps": [],
-            "pending_domain_queue": current_queue, 
-            "pending_domain_switch": {}, 
+            "pending_journey_queue": current_queue, 
+            "pending_journey_switch": {}, 
             "preflight_status": "yes"
         }
         
     elif decision == "no":
-        return {"pending_domain_switch": {}, "preflight_status": "no"}
+        return {"pending_journey_switch": {}, "preflight_status": "no"}
     else:
-        return {"active_domain": "", "active_intent_families": [], "pending_domain_switch": {}, "preflight_status": "else"}
-
+        return {"active_user_journey": "", "active_product_intents": [], "pending_journey_switch": {}, "preflight_status": "else"}
 
 def node_02c_inbound_semantic_gate(state: AgentState):
-    """n16: Model B query compliance check."""
     print("🟢 [NODE 02c] Executing Inbound Semantic Gate")
     return {"preflight_status": "pass"}
 
-def node_02d_domain_classifier_and_triage(state: AgentState):
-    """n2d: Global Triage & Domain Extractor (Pass 1)"""
-    print("🟢 [NODE 02d] Executing Domain Classifier & Triage")
+def node_02d_user_journey_classifier_and_triage(state: AgentState):
+    """n2d: Global Triage & User Journey Extractor (Brain 1)"""
+    print("🟢 [NODE 02d] Executing User Journey Classifier & Triage")
     user_msg = state.get("user_input", "")
     history = state.get("chat_history", [])
     history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in history[-6:]])
     
     prompt = f"""
     ROLE ALIGNMENT:
-    You are an impartial, read-only Horizon Bank routing agent. You do NOT give financial advice, you do NOT have personal preferences, and you CANNOT make product choices for the user. 
+    You are an impartial, read-only Horizon Bank UI routing agent. You do NOT give financial advice, and you CANNOT make product choices for the user. 
     
-    DOMAIN CLASSIFICATION GUIDELINES:
-    {DOMAIN_CLASSIFICATION_GUIDELINE}
+    USER JOURNEY GUIDELINES (UI Sandbox):
+    {USER_JOURNEY_CLASSIFICATION_GUIDELINE}
     
     Recent Conversation Context: {history_str}
     Latest User Input: "{user_msg}"
     
-    TASK: Triage the user input.
+    TASK: Triage the user input based on the stage of their journey.
     1. ESCALATION: User demands a human agent or manager.
-    2. OUT_OF_SCOPE: Use ONLY for highly specific FINANCIAL or BANKING questions that are clearly outside our 10 Domains (e.g., buying Crypto, Commercial Mortgages). Do NOT use this for non-financial topics.
-    3. CLARIFICATION: Use for chitchat, non-financial topics, overly broad requests, OR when the user asks YOU to make a choice, recommendation, or give a preference (e.g., "you choose", "which is best"). Because you cannot choose for them, you must ask them to specify.
-    4. VALID_DOMAIN: A valid query mapping to our 10 Domains.
+    2. OUT_OF_SCOPE: Highly specific non-banking questions.
+    3. CLARIFICATION: Chitchat, overly broad requests, or asking you to make a choice.
+    4. VALID_JOURNEY: A valid query mapping to our Journeys.
     
-    If VALID_DOMAIN, output an ordered array of target_domains (primary first).
+    If VALID_JOURNEY, output an ordered array of target_journeys (primary first).
     
     Output JSON ONLY:
-    {{"triage_status": "ESCALATION" | "OUT_OF_SCOPE" | "CLARIFICATION" | "VALID_DOMAIN", "target_domains": ["DOMAIN_1"]}}
+    {{"triage_status": "ESCALATION" | "OUT_OF_SCOPE" | "CLARIFICATION" | "VALID_JOURNEY", "target_journeys": ["JOURNEY_1"]}}
     """
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt))
         triage_status = res.get("triage_status", "CLARIFICATION")
-        target_domains = res.get("target_domains", [])
+        target_journeys = res.get("target_journeys", [])
     except Exception as e:
         print(f"🚨 [NODE 02d EXCEPTION]: {e}")
         triage_status = "CLARIFICATION"
-        target_domains = []
+        target_journeys = []
 
-    print(f"   🧠 [TRIAGE STATUS]: {triage_status} | DOMAINS: {target_domains}")
+    print(f"   🧠 [TRIAGE STATUS]: {triage_status} | JOURNEYS: {target_journeys}")
     
-    current_queue = state.get("pending_domain_queue", [])
-    if len(target_domains) > 1:
-        for d in target_domains[1:]:
-            current_queue.append({"domain": d, "families": [], "plan": {}, "completed_steps": []})
-            print(f"   📥 [QUEUE PUSH]: Pushed secondary domain {d} to queue.")
+    current_queue = state.get("pending_journey_queue", [])
+    if len(target_journeys) > 1:
+        for j in target_journeys[1:]:
+            current_queue.append({"journey": j, "product_intents": [], "plan": {}, "completed_steps": []})
+            print(f"   📥 [QUEUE PUSH]: Pushed secondary journey {j} to queue.")
 
-    # V3.77 FIX: Map the Triage Status to Preflight Status so downstream nodes understand the route
     mapped_preflight = "intent_clarification_needed" if triage_status == "CLARIFICATION" else triage_status
 
     return {
         "triage_status": triage_status,
-        "preflight_status": mapped_preflight, # Crucial for Node 04b!
-        "extracted_domains": target_domains,
-        "pending_domain_queue": current_queue
+        "preflight_status": mapped_preflight, 
+        "extracted_journeys": target_journeys,
+        "pending_journey_queue": current_queue
     }
 
-
 def node_02e_intent_classifier_and_query_formulator(state: AgentState):
-    """n2e: Query Formulator & Intent Extractor (Pass 2) + Math Routing"""
-    print("🟢 [NODE 02e] Executing Intent & Query Formulator")
+    """n2e: Query Formulator & 2D Matrix Extractor (Brain 2)"""
+    print("🟢 [NODE 02e] Executing 2D Matrix Query Formulator")
     user_msg = state.get("user_input", "")
-    active_domain = state.get("active_domain", "")
-    active_families = state.get("active_intent_families", [])
-    extracted_domains = state.get("extracted_domains", [])
+    active_journey = state.get("active_user_journey", "")
+    extracted_journeys = state.get("extracted_journeys", [])
     
-    target_domain = extracted_domains[0] if extracted_domains else active_domain
-    focused_taxonomy = {target_domain: GLOBAL_TAXONOMY.get(target_domain, [])}
+    target_journey = extracted_journeys[0] if extracted_journeys else active_journey
+    active_matrix = state.get("active_product_intents", [])
     
     history = state.get("chat_history", [])
     history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in history[-4:]])
     
     feedback = state.get("search_feedback_history", [])
-    feedback_str = f"PREVIOUS SEARCH FAILED. ADJUST QUERIES/INTENTS BASED ON THIS FEEDBACK: {feedback[-1]}" if feedback else ""
+    feedback_str = f"PREVIOUS SEARCH FAILED. ADJUST QUERIES/NOUNS/VERBS BASED ON THIS FEEDBACK: {feedback[-1]}" if feedback else ""
     
     prompt = f"""
-    Target Domain: "{target_domain}"
-    Focused Taxonomy (Valid Intents): {focused_taxonomy}
+    PRODUCT/INTENT MATRIX (Valid Nouns and Verbs):
+    {PRODUCT_INTENT_MATRIX}
+    
+    INTENT DEFINITION GUIDELINE:
+    {INTENT_GUIDELINE}
+    
+    Active Context Matrix: {active_matrix}
     Recent Conversation: {history_str}
     Latest User Input: "{user_msg}"
     {feedback_str}
     
-    TASK: Act as a Search Query Architect.
-    1. Clean & Rephrase the user input (fix typos, resolve pronouns from history).
+    TASK: Act as a Decoupled Database Search Architect.
+    1. CONTEXTUAL INHERITANCE: Clean & Rephrase the user input. If it is a follow-up question, you MUST inherit the Product (Noun) from the "Active Context Matrix" or recent AI response. Do not default to "ALL" if they are discussing a specific active product process.
     2. Decompose multi-part questions into distinct queries.
-    3. Map each discrete query to 1-3 specific Intent Families from the Focused Taxonomy.
-    4. If previous search failed (see feedback), rephrase keywords or expand intents.
-    5. If the user is just saying "proceed" or "yes" without a specific question, output an empty queries array.
+    3. For EACH query, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above.
+    4. FORCED MUTATION (CRITICAL): If "PREVIOUS SEARCH FAILED" feedback is present, it will tell you which Matrix mapping failed. You MUST select a DIFFERENT "target_commercial_product" OR a DIFFERENT "target_intent" to explore a new database sector. Do not output the same exact Product/Intent combination twice.
+    5. CONVERSATIONAL CONTINUATION: If the user is simply providing information requested in the previous step (e.g., "I have MyInfo ready", "My age is 25", "Next", "Proceed"), you MUST output an empty array for "search_tasks": []
+    6. If the question applies universally (e.g. app password), use "ALL".
     
     Output JSON ONLY:
-    {{"search_tasks": [{{"query": "rephrased keyword...", "intent": "Specific Family"}}]}}
+    {{"search_tasks": [{{"sub_query": "...", "target_commercial_product": "Credit_Card", "target_intent": ["Transaction Disputes"]}}]}}
     """
     
     try:
@@ -271,66 +282,63 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         print(f"🚨 [NODE 02e EXCEPTION]: {e}")
         search_tasks = []
 
-    target_families_raw = []
+    # Compile the new relational matrix to track drift
+    new_matrix = []
     for task in search_tasks:
-        intent_val = task.get("intent")
-        if isinstance(intent_val, list):
-            target_families_raw.extend(intent_val)
-        elif isinstance(intent_val, str):
-            target_families_raw.append(intent_val)
-
-    target_families = list(set(target_families_raw))
-    
-    print(f"   🔎 [SEARCH TASKS FORMULATED]: {len(search_tasks)} tasks mapped to {target_families}")
+        prod = task.get("target_commercial_product")
+        ints = task.get("target_intent", [])
+        if isinstance(ints, str): ints = [ints]
+        if prod and ints:
+            new_matrix.append({"product": prod, "intents": ints})
+            
+    print(f"   🔎 [SEARCH TASKS]: {len(search_tasks)} tasks | Matrix: {new_matrix}")
 
     plan = state.get("active_plan", {})
     process_complete = bool(plan.get("steps") and plan.get("current_step_index", 0) >= len(plan.get("steps", [])))
-    current_queue = state.get("pending_domain_queue", [])
+    current_queue = state.get("pending_journey_queue", [])
     
-    if not target_domain:
+    # Mathematical Routing Logic
+    if not target_journey:
         route = "intent_clarification_needed"
-    elif target_domain != active_domain:
-        route = "new_domain" if (not active_domain or process_complete) else "domain_change"
-    elif set(target_families) != set(active_families):
-        route = "family_drift"
+    elif target_journey != active_journey:
+        route = "new_journey" if (not active_journey or process_complete) else "journey_change"
+    elif str(new_matrix) != str(active_matrix) and new_matrix:
+        # String comparison is safe here for matrix drift detection
+        route = "intent_drift"
     else:
         route = "topic_persist"
 
     print(f"   🎯 [PYTHON ROUTER]: {route.upper()}")
     
-    if route == "new_domain":
+    if route == "new_journey":
         for i, task in enumerate(current_queue):
-            if task["domain"] == target_domain:
+            if task["journey"] == target_journey:
                 popped = current_queue.pop(i)
-                print(f"   📦 [QUEUE POP]: Resuming -> {target_domain}")
+                print(f"   📦 [QUEUE POP]: Resuming -> {target_journey}")
                 return {
                     "preflight_status": "topic_persist", 
-                    "active_domain": popped["domain"], "active_intent_families": popped["families"],
+                    "active_user_journey": popped["journey"], "active_product_intents": popped["product_intents"],
                     "active_plan": popped["plan"], "completed_steps": popped["completed_steps"],
-                        "pending_domain_queue": current_queue, "search_tasks": search_tasks
+                        "pending_journey_queue": current_queue, "search_tasks": search_tasks
                     }
         return {
-            "preflight_status": route, "active_domain": target_domain, "active_intent_families": target_families,
+            "preflight_status": route, "active_user_journey": target_journey, "active_product_intents": new_matrix,
             "active_plan": {}, "completed_steps": [], "search_tasks": search_tasks
         }
         
-    elif route == "domain_change":
-        return {"preflight_status": route, "pending_domain_switch": {"target_domain": target_domain, "target_intent_families": target_families}, "search_tasks": search_tasks}
+    elif route == "journey_change":
+        return {"preflight_status": route, "pending_journey_switch": {"target_journey": target_journey, "target_product_intents": new_matrix}, "search_tasks": search_tasks}
         
-    elif route == "family_drift":
-        return {"preflight_status": route, "active_domain": target_domain, "active_intent_families": target_families, "active_plan": {}, "search_tasks": search_tasks}
+    elif route == "intent_drift":
+        return {"preflight_status": route, "active_user_journey": target_journey, "active_product_intents": new_matrix, "active_plan": {}, "search_tasks": search_tasks}
         
     return {"preflight_status": route, "search_tasks": search_tasks}
 
-
 def node_02f_contract_writer(state: AgentState):
-    """n2f: Sets pending switch flag & prompts PAUSE confirmation."""
     print("🟢 [NODE 02f] Executing Contract Writer")
+    target = state.get("pending_journey_switch", {}).get("target_journey", "a new topic")
+    active = state.get("active_user_journey", "")
     
-    target = state.get("pending_domain_switch", {}).get("target_domain", "a new topic")
-    active = state.get("active_domain", "")
-    
-    # NON-DESTRUCTIVE PAUSE MESSAGING
     if active:
         msg = f"You are currently in the middle of a request regarding {active}. Would you like to pause this to look at {target}? I can save your progress and we can resume it later."
     else:
@@ -348,80 +356,49 @@ def node_02f_contract_writer(state: AgentState):
 # --- PHASE 2: BOUNDED RAG ARCHITECTURE ---
 
 def node_03a_knowledge_blueprint_planner(state: AgentState):
-    """n14: The Supervisor - Determines which parallel worker nodes to spawn."""
     print("🟢 [NODE 03a] Executing Supervisor Tool Router")
-    
     user_input = state.get("user_input", "")
-    active_domain = state.get("active_domain", "")
-    active_families = state.get("active_intent_families", [])
+    active_journey = state.get("active_user_journey", "")
+    active_matrix = state.get("active_product_intents", [])
     
     prompt = f"""
     You are the Cognitive Supervisor for a banking AI.
     User Input: "{user_input}"
-    Active Domain: "{active_domain}" | Active Families: {active_families}
+    Active Journey: "{active_journey}" | Active Matrix: {active_matrix}
     
     TASK: Determine which retrieval tools are necessary to answer the query. You can select multiple tools.
-    
     1. "n17_rag": Use for fetching bank policies, rules, limits, or general guidelines. (Always include this for standard inquiries).
-    2. "n17_api": Use ONLY if the user is asking to look up specific personal numerical data (e.g., "What is my balance?").
-    3. "n17_deeplink": Use ONLY if the user wants to navigate the app or take an action (e.g., "How do I update my profile?").
+    2. "n17_api": Use ONLY if the user is asking to look up specific personal numerical data.
+    3. "n17_deeplink": Use ONLY if the user wants to navigate the app or take an action.
     
     Output JSON ONLY matching this schema:
     {{"active_tool_routes": ["n17_rag", "n17_api"]}}
     """
-    
-    try:
-        raw_res = call_groq_lpu(prompt)
-        blueprint = _parse_json_robustly(raw_res)
-        routes = ["n17_rag"] if state.get("search_tasks") else []
-    except:
-        routes = ["n17_rag"] if state.get("search_tasks") else []
+    try: blueprint = _parse_json_robustly(call_groq_lpu(prompt))
+    except: blueprint = {}
+    routes = ["n17_rag"] if state.get("search_tasks") else []
         
     print(f"   🔀 [SUPERVISOR DISPATCH]: Fanning out to -> {routes}")
-    
-    # We clear the buffers to prevent ghost data from previous turns, and set the routes
-    return {
-        "active_tool_routes": routes,
-        "rag_payload": "",
-        "api_payload": "",
-        "deeplink_payload": ""
-    }
-
+    return {"active_tool_routes": routes, "rag_payload": "", "api_payload": "", "deeplink_payload": ""}
 
 async def node_03b_rag_worker(state: AgentState):
-    """n17_rag: Async Parallel ChromaDB Search + Parent SQLite Hydration"""
     print("🟢 [NODE 03b_1] Executing RAG Worker (Async Hydration)")
-    domain = state.get("active_domain", "")
     tasks = state.get("search_tasks", [])
-    
-    if not tasks:
-        return {"rag_payload": "NO_KNOWLEDGE_FOUND"}
+    if not tasks: return {"rag_payload": "NO_KNOWLEDGE_FOUND"}
         
-    hydrated_text = await execute_hybrid_rag_search(domain, tasks)
+    hydrated_text = await execute_hybrid_rag_search(tasks)
     return {"rag_payload": f"[RAG DATA]:\n{hydrated_text.strip()}"}
 
-
 def node_03b_api_worker(state: AgentState):
-    """n17_api: Dedicated Placeholder Fetcher (Deferred for now)"""
-    print("🟢 [NODE 03b] Executing API Worker")
-    # In the future, this will do SQLite lookups for placeholder syntax
     return {"api_payload": "[API DATA]:\nNo API data requested for this MVP."}
 
-
 def node_03b_deeplink_worker(state: AgentState):
-    """n17_deeplink: Dedicated Navigation Fetcher (Deferred for now)"""
-    print("🟢 [NODE 03b] Executing Deeplink Worker")
-    # In the future, this will do SQLite lookups for app URIs
     return {"deeplink_payload": "[DEEPLINK DATA]:\nNo Deep-links requested for this MVP."}
 
 def node_03c_sufficiency_auditor(state: AgentState):
     print("🟢 [NODE 03c] Executing Sufficiency Auditor & Reducer")
     
-    rag_data = state.get("rag_payload", "")
-    api_data = state.get("api_payload", "")
-    deeplink_data = state.get("deeplink_payload", "")
-    combined_knowledge = f"{rag_data}\n{api_data}\n{deeplink_data}".strip()
-    
+    combined_knowledge = f"{state.get('rag_payload', '')}\n{state.get('api_payload', '')}\n{state.get('deeplink_payload', '')}".strip()
     user_input = state.get("user_input", "")
     
     prompt = f"""
@@ -453,293 +430,184 @@ def node_03c_sufficiency_auditor(state: AgentState):
         count = state.get("knowledge_retry_count", 0) + 1
         history = state.get("search_feedback_history", [])
         
-        feedback_msg = f"Attempt {count} Failed (Level {error_level}): {reason}"
-        history.append(feedback_msg)
+        # FIX: Inject the failed tasks into the feedback string so the LLM knows what NOT to repeat
+        attempted_tasks = state.get("search_tasks", [])
+        history.append(f"Attempt {count} Failed (Level {error_level}). Tried Matrix: {attempted_tasks}. Reason: {reason}")
         
         if count >= 3:
             print("   🚨 [AUDIT]: MAX RETRIES EXCEEDED.")
-            return {
-                "knowledge_retry_count": count,
-                "search_feedback_history": history,
-                "preflight_status": "max_retries_exceeded",
-                "raw_retrieved_text": combined_knowledge
-            }
+            return {"knowledge_retry_count": count, "search_feedback_history": history, "preflight_status": "max_retries_exceeded", "raw_retrieved_text": combined_knowledge}
             
         print(f"   ⚠️ [AUDIT]: Triggering CRAG Retry {count}/3 (Level {error_level})")
-        return {
-            "knowledge_retry_count": count,
-            "search_feedback_history": history,
-            "preflight_status": "insufficient",
-            "raw_retrieved_text": combined_knowledge
-        }
+        return {"knowledge_retry_count": count, "search_feedback_history": history, "preflight_status": "insufficient", "raw_retrieved_text": combined_knowledge}
         
-    return {
-        "preflight_status": "sufficient",
-        "knowledge_retry_count": 0, 
-        "raw_retrieved_text": combined_knowledge
-    }
+    return {"preflight_status": "sufficient", "knowledge_retry_count": 0, "raw_retrieved_text": combined_knowledge}
 
 # --- PHASE 3: RESOLUTION BLUEPRINT & STEP-BY-STEP RESPONSE ---
 
 def node_04a_resolution_planner(state: AgentState):
-    """n19: Model A compiles linear active_plan array based on bounded RAG text & completed ledger."""
     print("🟢 [NODE 04a] Executing Resolution Planner")
-    
     plan = state.get("active_plan", {})
-    steps = plan.get("steps", [])
     idx = plan.get("current_step_index", 0)
     
-    if steps and idx < len(steps):
+    if plan.get("steps") and idx < len(plan.get("steps", [])):
         print("   ⏩ [PLAN EXISTS]: Preserving current active_plan. Bypassing replan.")
         return {"preflight_status": "pass"}
         
-    retrieved_text = state.get("raw_retrieved_text", "")
-    user_input = state.get("user_input", "")
-    
-    active_domain = state.get("active_domain", "")
-    active_families = state.get("active_intent_families", [])
-    
     completed_steps = state.get("completed_steps", [])
     completed_str = "\n".join([f"- {s}" for s in completed_steps]) if completed_steps else "None"
     
     prompt = f"""
     ROLE ALIGNMENT: 
-    You are a Strict Information Extraction Engine. You are NOT a helpful assistant, you are NOT a conversationalist, and you do not solve problems. Your ONLY function is to act as a strict logical filter: you read a user's query, search the provided text for the exact answer, and output a clinical plan to deliver that specific answer.
+    You are a Strict Information Extraction Engine. You are NOT a helpful assistant. Your ONLY function is to read a user's query, search the text for the exact answer, and output a clinical plan.
     
-    User's Latest Request: "{user_input}"
-    Active Domain: "{active_domain}"
-    Active Intent Families: {active_families}
-    Retrieved Knowledge: "{retrieved_text}"
+    User Request: "{state.get("user_input", "")}"
+    Active Journey: "{state.get("active_user_journey", "")}"
+    Active Matrix: {state.get("active_product_intents", [])}
+    Retrieved Knowledge: "{state.get("raw_retrieved_text", "")}"
     
-    MILESTONES ALREADY COMPLETED:
+    MILESTONES COMPLETED:
     {completed_str}
     
     ARCHITECTURAL PRINCIPLES (Strictly Enforce):
-    1. EXACT MATCH EXTRACTION (NO VOLUNTEERING): You must ONLY plan steps that directly and explicitly answer the user's specific query. Do NOT volunteer extra facts. If the user asks for required documents, plan a step to list the documents. Do NOT plan a step to state the interest rate unless the user explicitly asked for the interest rate.
-    2. THE PROCEED TRAP: If a user asks to "proceed", "start", or "next", you must scan the retrieved knowledge for explicit procedural instructions (e.g., links, forms to fill). If the retrieved knowledge does NOT contain procedural steps, you are strictly forbidden from guessing, and you are strictly forbidden from grabbing unrelated facts (like interest rates) just to have something to say. 
-    3. THE EMPTY ARRAY RULE: If the exact answer to the user's request is not in the text, OR if the request is already fully covered by the completed milestones, you MUST output an empty array: {{"steps": [], "current_step_index": 0}}.
-    4. LEAN PLANNING: Write steps as short, abstract directives (e.g., "List the required documents").
-    5. LEDGER STRICT AVOIDANCE: Review the "MILESTONES ALREADY COMPLETED". You are STRICTLY FORBIDDEN from generating any step that repeats or overlaps with these completed actions. 
+    1. EXACT MATCH EXTRACTION (NO VOLUNTEERING): ONLY plan steps that directly answer the query. 
+    2. THE PROCEED TRAP: Do not guess procedures if they are missing from the text.
+    3. THE EMPTY ARRAY RULE: If the exact answer is missing or already covered by Milestones, output {{"steps": [], "current_step_index": 0}}.
+    4. LEAN PLANNING: Short, abstract directives.
+    5. LEDGER STRICT AVOIDANCE: DO NOT repeat any step from MILESTONES COMPLETED.
     
-    Based EXCLUSIVELY on the retrieved knowledge, output the extraction plan.
-    
-    Output JSON ONLY matching this schema:
+    Output JSON ONLY:
     {{"steps": ["Short directive for step 1"...], "current_step_index": 0}}
     """
     
     try:
-        raw_res = call_groq_lpu(prompt)
-        print(f"   🤖 [LLM RAW OUTPUT]: {raw_res.strip()}")
-        res = _parse_json_robustly(raw_res)
-        
-        if "steps" not in res or not isinstance(res["steps"], list):
-            res = {"steps": [], "current_step_index": 0}
-            
+        res = _parse_json_robustly(call_groq_lpu(prompt))
+        if "steps" not in res or not isinstance(res["steps"], list): res = {"steps": [], "current_step_index": 0}
         print(f"   📋 [ACTIVE PLAN SAVED]: {res}")
         return {"active_plan": res, "preflight_status": "pass"}
-        
     except Exception as e:
-        print(f"🚨 [NODE 04a EXCEPTION] Plan Generation Failed: {e}")
         return {"preflight_status": "fail"}
 
-
 def node_04b_response_generator(state: AgentState):
-    """n8: Model A Synthesizes text, dynamic chips & logs completed steps."""
     print("🟢 [NODE 04b] Executing Response Generator")
-    
     plan = state.get("active_plan", {})
     idx = plan.get("current_step_index", 0)
     steps = plan.get("steps", [])
     routing_status = state.get("preflight_status", "")
     
     completed_steps = state.get("completed_steps", [])
-    pending_queue = state.get("pending_domain_queue", [])
+    pending_queue = state.get("pending_journey_queue", [])
     is_conclusion = bool(steps and idx >= len(steps))
     
     if routing_status in ["intent_clarification_needed", "CLARIFICATION"]:
-        current_step = "The user's request is vague, small talk, or asks you to make a choice for them. Respond naturally. If they asked you to choose, politely explain that you cannot make financial decisions for them and ask what they prefer. Otherwise, ask a direct, polite follow-up question to clarify their specific needs. Do NOT apologize for missing knowledge."
+        current_step = "The user's request is vague, small talk, or asks you to make a choice. Respond naturally and clarify."
     elif not steps:
         current_step = "Respond naturally to the user's latest input without repeating previous summaries."
     elif is_conclusion:
         if pending_queue:
-            next_task = pending_queue[0]["domain"]
-            current_step = f"Explicitly state that this specific request is completely finished. Inform the user that you saved their request/progress for '{next_task}'. Ask if they would like to resume/start it now. YOU MUST set uiType to 'chips' and generate exactly TWO options: ['Resume {next_task}', 'No, I am done']."
+            next_task = pending_queue[0]["journey"]
+            current_step = f"State this request is finished. Ask to resume '{next_task}'. YOU MUST set uiType to 'chips' and generate exactly TWO options: ['Resume {next_task}', 'No, I am done']."
         else:
-            current_step = "Explicitly state that this specific request is completely finished. Summarize what was done. Ask if they need anything else. YOU MUST set uiType to 'chips' and generate exactly TWO custom UI chips for ending or asking a new question."
+            current_step = "State this request is finished. Summarize. YOU MUST set uiType to 'chips' and generate exactly TWO custom UI chips."
     else:
         current_step = steps[idx]
         
     print(f"   📍 [CURRENT TARGET STEP]: {current_step} (Index {idx})")
     
-    knowledge = state.get("raw_retrieved_text", "")
-    full_history = state.get("chat_history", [])
-    recent_context = full_history[-6:] if len(full_history) > 6 else full_history
-    history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in recent_context])
+    history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in state.get("chat_history", [])[-6:]])
     feedback = state.get("draft_feedback_history", [])
-    feedback_str = f"CRITICAL CORRECTION NEEDED FROM LAST ATTEMPT: {feedback[-1]}" if feedback else ""
+    feedback_str = f"CRITICAL CORRECTION NEEDED: {feedback[-1]}" if feedback else ""
 
     prompt = f"""
     ROLE ALIGNMENT:
-    You are Horizon, a Read-Only FAQ Navigation Bot embedded in a banking app. Your ONLY identity is a conversational search interface. You do not have eyes, you do not have backend system access, you cannot see user screens, and you cannot receive, view, or verify uploaded files. You exist SOLELY to read static FAQ documents to the user and guide them.
+    You are Horizon, a Read-Only FAQ Navigation Bot. You exist SOLELY to read static FAQ documents.
     
     Current Plan: {steps}
     Current Step to Execute: "{current_step}"
-    Retrieved Knowledge: "{knowledge}"
+    Retrieved Knowledge: "{state.get("raw_retrieved_text", "")}"
     Recent Conversation: {history_str}
-    
     {feedback_str}
 
     Rules for Text Generation:
     - Draft a conversational response addressing ONLY the 'Current Step'.
-    - ZERO HALLUCINATION: You must rely EXCLUSIVELY on the 'Retrieved Knowledge'. Do NOT add extra details unless explicitly stated in the text. (EXCEPTION: If the 'Current Step' asks you to clarify an ambiguous request or handle small talk, you are permitted to ask a natural clarifying question without needing retrieved knowledge).
-    - If the knowledge does not contain the answer to the user's specific question, you MUST gracefully state that the information is not provided in your current policy documents. Do not attempt to guess or infer.
-    - If the user says they uploaded a file or completed an action, praise them for completing it on their end, but DO NOT claim that you received it or will check it.
+    - ZERO HALLUCINATION: Rely EXCLUSIVELY on 'Retrieved Knowledge'.
     - If quoting exact numerical rates or fees, use ONLY allowed placeholders: {list(VALID_PLACEHOLDERS)}.
     
     Rules for UI Payload:
-    - UI Payload is not mandatory. It is used to improve user experience by providing them with predicted next user input according to context and retrieved knowledge.
-    - UI Payload is not mandatory, if there is no need for UI payload based on the context, choose 'uiType' to be 'none'.
-    - Dynamically select the most suitable 'uiType' for the current context: 'chips', 'stepper', or 'none'. 
-    - If 'chips', populate 'options' array with no more than 3 predicted user input in the next turn based on retrieved knowledge only. DO NOT provide option of talking to human agent or similar meaning.
+    - Choose 'uiType' ('chips', 'stepper', or 'none'). 
+    - If 'chips', provide max 3 predicted user inputs based on retrieved knowledge.
     
-    Output JSON ONLY matching this schema:
+    Output JSON ONLY:
     {{"response": "Your conversational text here", "uiType": "chips" | "stepper" | "none", "options": ["prediction 1"], "advance_step": true}}
     """
     
     try:
-        raw_res = call_groq_lpu(prompt)
-        res = _parse_json_robustly(raw_res)
+        res = _parse_json_robustly(call_groq_lpu(prompt))
         draft = res.get("response", "Could you please clarify your request?")
-        
         print(f"   💬 [DRAFT RESPONSE]: {draft}")
         
-        should_advance = res.get("advance_step") and steps and idx < len(steps) and routing_status != "intent_clarification_needed"
-        
-        if should_advance:
+        if res.get("advance_step") and steps and idx < len(steps) and routing_status != "intent_clarification_needed":
             completed_steps.append(current_step)
             plan["current_step_index"] = idx + 1
             print(f"   ⏩ [STEP ADVANCED]: Moving to index {plan['current_step_index']}")
-            print(f"   ✅ [LEDGER UPDATED]: Appended step to completed_steps.")
             
         ui_type = res.get("uiType", "none")
         options = res.get("options", [])
         
         if is_conclusion:
             ui_type = "chips"
-            if not options or len(options) < 2:
-                options = ["That's all, thank you.", "I have another question."]
-            else:
-                print(f"   🛑 [PROCESS CONCLUSION]: Dynamic UI Chips Generated: {options}")
-
-            # V3.77 BUGFIX: Wipe the active plan and ledger when a process concludes!
-            # We preserve active_domain and active_intent_families for context, but wipe the execution state.
+            if not options or len(options) < 2: options = ["That's all, thank you.", "I have another question."]
             plan = {}
             completed_steps = []
-            print(f"   🧹 [STATE CLEANUP]: Wiped active plan and completed steps for concluded task.")
-        elif ui_type == "none":
-            options = [] 
+            print(f"   🧹 [STATE CLEANUP]: Wiped active plan and completed steps.")
+        elif ui_type == "none": options = [] 
         
-        return {
-            "final_draft": draft, 
-            "active_plan": plan, 
-            "completed_steps": completed_steps, 
-            "ui_action_payload": {"uiType": ui_type, "options": options}
-        }
+        return {"final_draft": draft, "active_plan": plan, "completed_steps": completed_steps, "ui_action_payload": {"uiType": ui_type, "options": options}}
     except Exception as e:
-        print(f"🚨 [NODE 04b EXCEPTION] Text Generation Failed: {e}")
         return {"final_draft": "I encountered an error. Please try again.", "preflight_status": "fail"}
-
 
 # --- PHASE 4: OUTPUT GUARDRAILS & ESCALATION HANDLER ---
 
-
 def node_05_outbound_deterministic_gate(state: AgentState):
-    """n20: Sweeps draft for sensitive words & ILLEGAL PLACEHOLDERS."""
     print("🟢 [NODE 05] Executing Outbound Deterministic Gate")
     draft = state.get("final_draft", "")
-    
-    placeholders = re.findall(r"\{\{(.*?)\}\}", draft)
-    illegal_detected = [p for p in placeholders if p not in VALID_PLACEHOLDERS]
+    illegal_detected = [p for p in re.findall(r"\{\{(.*?)\}\}", draft) if p not in VALID_PLACEHOLDERS]
     
     if illegal_detected or "ILLEGAL_WORD" in draft:
-        print(f"   🚫 [HARD GATE VETO]: Illegal placeholders detected: {illegal_detected}")
         count = state.get("safety_retry_count", 0) + 1
         history = state.get("draft_feedback_history", [])
-        history.append(f"Draft contained illegal placeholders: {illegal_detected}. Do not use them.")
+        history.append(f"Draft contained illegal placeholders: {illegal_detected}.")
         return {"safety_retry_count": count, "draft_feedback_history": history, "preflight_status": "fail"}
-        
-    print("   ✅ [HARD GATE PASS]: No illegal syntax found.")
     return {"preflight_status": "pass"}
 
 def node_06_outbound_semantic_gate(state: AgentState):
-    """n21: Model B Groundedness & MAS compliance check."""
     print("🟢 [NODE 06] Executing Outbound Semantic Gate")
-    print("   ✅ [SEMANTIC PASS]: Draft aligns with MAS guidelines.")
     return {"preflight_status": "pass"}
 
 def node_07_precision_substitution(state: AgentState):
-    """n22: Maps placeholders to reference database values."""
     print("🟢 [NODE 07] Executing Precision Substitution")
-    draft = state.get("final_draft", "")
-    final_text = draft.replace("{{SAVINGS_RATE_01}}", "3.50%")
-    print(f"   🔢 [SUBSTITUTION]: Hydrated text variables.")
-    return {"final_response": final_text}
+    return {"final_response": state.get("final_draft", "").replace("{{SAVINGS_RATE_01}}", "3.50%")}
 
 def node_08_soft_escalation_analyzer(state: AgentState):
-    """n24: Injects optional agent chip on turn fatigue."""
     print("🟢 [NODE 08] Executing Soft Escalation Analyzer")
-    turns = state.get("turn_count", 0)
     payload = state.get("ui_action_payload", {})
-    if turns >= 5:
-        payload["options"].append("Talk to Agent")
+    if state.get("turn_count", 0) >= 5: payload["options"].append("Talk to Agent")
         
-    # NEW: Append final AI response to history
     history = list(state.get("chat_history", []))
-    final_text = state.get("final_response", "")
-    if final_text:
-        history.append(AIMessage(content=final_text))
-        print(f"💾 [MEMORY] AI Response saved. History length: {len(history)}")
-        
+    if state.get("final_response", ""):
+        history.append(AIMessage(content=state.get("final_response", "")))
     return {"ui_action_payload": payload, "chat_history": history}
 
-
 def node_09_hard_escalation_broker(state: AgentState):
-    """n23: Shuts down graph & compiles CSR summary with RAG feedback (v3.7)."""
     print("🟢 [NODE 09] Executing Hard Escalation Broker")
-    search_faults = state.get("search_feedback_history", [])
-    draft_faults = state.get("draft_feedback_history", [])
-    
-    # Compile rich summary for the human agent
-    summary_items = [f"System RAG Diagnostics: {fault}" for fault in search_faults]
-    summary_items.extend([f"Safety Diagnostics: {fault}" for fault in draft_faults])
-
-    # NEW: Append final AI response to history
+    summary_items = [f"RAG Diagnostics: {f}" for f in state.get("search_feedback_history", [])] + [f"Safety: {f}" for f in state.get("draft_feedback_history", [])]
     history = list(state.get("chat_history", []))
-    final_text = state.get("final_response", "")
-    if final_text:
-        history.append(AIMessage(content=final_text))
-        print(f"💾 [MEMORY] AI Response saved. History length: {len(history)}")    
-    
-    return {
-        "final_response": "I am transferring you to a human agent.",
-        "ui_action_payload": {"uiType": "case_summary", "items": summary_items}
-    }
-
-
+    if state.get("final_response", ""): history.append(AIMessage(content=state.get("final_response", "")))
+    return {"final_response": "I am transferring you to a human agent.", "ui_action_payload": {"uiType": "case_summary", "items": summary_items}}
 
 def node_10_standard_rejection(state: AgentState):
-    """n5: Returns static failure disclaimer text."""
-    # This will print EXACTLY which status caused the rejection
     print(f"🔴 [NODE 10] REJECTION TRIGGERED. Preflight Status: '{state.get('preflight_status')}'")
-    
     draft = "To comply with security and regulatory guidelines, I cannot process this request."
-    
-    # Save the rejection to history so the loop doesn't break
     history = list(state.get("chat_history", []))
     history.append(AIMessage(content=draft))
-    
-    return {
-        "final_response": draft,
-        "ui_action_payload": {"uiType": "text"},
-        "chat_history": history
-    }
+    return {"final_response": draft, "ui_action_payload": {"uiType": "text"}, "chat_history": history}

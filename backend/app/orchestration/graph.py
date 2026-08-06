@@ -3,7 +3,7 @@ from langgraph.checkpoint.memory import MemorySaver # NEW: Required for cross-tu
 from backend.app.orchestration.state import AgentState
 from backend.app.orchestration import nodes
 from backend.app.orchestration.nodes import (
-    node_02d_domain_classifier_and_triage,
+    node_02d_user_journey_classifier_and_triage,
     node_02e_intent_classifier_and_query_formulator,
     node_02f_contract_writer,
 )
@@ -17,7 +17,7 @@ def build_agent_graph():
     workflow.add_node("n4",  nodes.node_02a_pending_contract_check)
     workflow.add_node("n6",  nodes.node_02b_confirmation_gate)
     workflow.add_node("n16", nodes.node_02c_inbound_semantic_gate)
-    workflow.add_node("n2d", node_02d_domain_classifier_and_triage)
+    workflow.add_node("n2d", node_02d_user_journey_classifier_and_triage)
     workflow.add_node("n2e", node_02e_intent_classifier_and_query_formulator)
     workflow.add_node("n2f", node_02f_contract_writer)
     
@@ -84,17 +84,33 @@ def build_agent_graph():
         if status == "CLARIFICATION": return "n8"
         return "n2e"
 
+
     def route_n2e(state: AgentState):
         status = state.get("preflight_status")
         
-        if status == "domain_change": return "n2f"
+        # 1. Journey Change
+        if status == "journey_change": 
+            return "n2f"
         
         queries = state.get("search_tasks", [])
-        if queries and status in ["new_domain", "family_drift", "topic_persist"]:
-            return "n14"
-            
+        retry_count = state.get("knowledge_retry_count", 0)
+        
+        # 2. Topic Persist WITHOUT queries (Direct Continuation)
         if not queries and status == "topic_persist":
             return "n19"
+            
+        # 3. Topic Persist WITH queries (The Semantic Cache Optimization)
+        if queries and status == "topic_persist":
+            if retry_count == 0:
+                print("   ⏭️ [OPTIMIZATION] Topic Persist: Skipping DB Search, routing to Sufficiency Auditor (n18)")
+                return "n18"
+            else:
+                print("   🔄 [CRAG RETRY] Cache Miss / Feedback Received: Forcing new DB Search (n14)")
+                return "n14"
+                
+        # 4. New Journey or Intent Drift
+        if queries and status in ["new_journey", "intent_drift"]:
+            return "n14"
             
         return "n5"
 

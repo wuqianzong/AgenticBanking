@@ -35,8 +35,9 @@ class AgentState(TypedDict):
     triage_status: str                           # 'ESCALATION', 'CLARIFICATION', 'OUT_OF_SCOPE', 'VALID_JOURNEY'
     extracted_journeys: List[str]                # Holds the Pass 1 Journey Array to pass to Pass 2
     
-    # V2.1 Decoupled Database Target Array
-    search_tasks: List[Dict[str, Any]]           # Holds: [{"sub_query": "...", "target_commercial_product": "...", "target_intent": ["..."]}]
+    # V2.5 Tri-Angle RRF Search Tasks
+    search_tasks: List[Dict[str, Any]]           # Holds: [{"procedural": "...", "policy": "...", "conceptual": "...", "target_commercial_product": "...", "target_intent": ["..."]}]
+    pending_advance: bool                           # V4.1 Fix: Tracks if the current step should advance upon safety clearance
 
     # --- ISOLATED LOOP TRACKERS ---
     knowledge_retry_count: int                   # Max 3

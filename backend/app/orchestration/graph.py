@@ -160,7 +160,7 @@ def build_agent_graph():
     workflow.add_conditional_edges("n6", route_n6, {"n14": "n14", "n8": "n8", "n16": "n16"})
     workflow.add_conditional_edges("n16", route_n16, {"n2d": "n2d", "n5": "n5"})
     workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n8": "n8", "n2e": "n2e"})
-    workflow.add_conditional_edges("n2e", route_n2e, {"n2f": "n2f", "n14": "n14", "n19": "n19", "n5": "n5"})
+    workflow.add_conditional_edges("n2e", route_n2e, {"n2f": "n2f", "n14": "n14", "n19": "n19", "n18": "n18", "n5": "n5"})
     workflow.add_edge("n2f", END)
     
     # Phase 2 & 3

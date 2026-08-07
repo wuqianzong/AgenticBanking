@@ -3,7 +3,7 @@ import re
 from langchain_core.messages import HumanMessage, AIMessage
 from backend.app.orchestration.state import AgentState
 from backend.app.core.llm_service import call_groq_lpu  
-from backend.app.orchestration.rag_engine import execute_hybrid_rag_search
+from backend.app.orchestration.rag_engine import RAGEngine
 from backend.app.services.memory_service import LongTermMemoryManager
 
 # MOCK DATABASES FOR VALIDATION
@@ -264,15 +264,25 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     {feedback_str}
     
     TASK: Act as a Decoupled Database Search Architect.
+    
+    CRITICAL RULES FOR VECTOR DENSITY:
+    - NEVER use conversational filler (e.g., "Provide a guide", "Explain how to", "What is").
+    - NEVER use complete sentences.
+    - Extract ONLY the core nouns, target verbs, and specific constraints.
+    - Format each angle as a concise, comma-separated string of keywords.
+    
     1. CONTEXTUAL INHERITANCE: Clean & Rephrase the user input. If it is a follow-up question, you MUST inherit the Product (Noun) from the "Active Context Matrix" or recent AI response. Do not default to "ALL" if they are discussing a specific active product process.
-    2. Decompose multi-part questions into distinct queries.
-    3. For EACH query, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above.
+    2. Decompose multi-part questions into distinct tasks. For EACH task, formulate Three Distinct Semantic Angles based strictly on the density rules above:
+       - "procedural": Only the action verbs and tool nouns (e.g., "Horizon App, navigation, setup MyInfo, verification process").
+       - "policy": Only the rule nouns and constraints (e.g., "eligibility rules, required documents, security policy, restrictions").
+       - "conceptual": Only the definition nouns (e.g., "MyInfo service, personal data sharing, Horizon Bank").
+    3. For EACH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above.
     4. FORCED MUTATION (CRITICAL): If "PREVIOUS SEARCH FAILED" feedback is present, it will tell you which Matrix mapping failed. You MUST select a DIFFERENT "target_commercial_product" OR a DIFFERENT "target_intent" to explore a new database sector. Do not output the same exact Product/Intent combination twice.
     5. CONVERSATIONAL CONTINUATION: If the user is simply providing information requested in the previous step (e.g., "I have MyInfo ready", "My age is 25", "Next", "Proceed"), you MUST output an empty array for "search_tasks": []
     6. If the question applies universally (e.g. app password), use "ALL".
     
     Output JSON ONLY:
-    {{"search_tasks": [{{"sub_query": "...", "target_commercial_product": "Credit_Card", "target_intent": ["Transaction Disputes"]}}]}}
+    {{"search_tasks": [{{"procedural": "...", "policy": "...", "conceptual": "...", "target_commercial_product": "Credit_Card", "target_intent": ["Transaction Disputes"]}}]}}
     """
     
     try:
@@ -382,12 +392,26 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
     return {"active_tool_routes": routes, "rag_payload": "", "api_payload": "", "deeplink_payload": ""}
 
 async def node_03b_rag_worker(state: AgentState):
-    print("🟢 [NODE 03b_1] Executing RAG Worker (Async Hydration)")
+    print("🟢 [NODE 03b_1] Executing RAG Worker (Tri-Angle RRF)")
     tasks = state.get("search_tasks", [])
     if not tasks: return {"rag_payload": "NO_KNOWLEDGE_FOUND"}
         
-    hydrated_text = await execute_hybrid_rag_search(tasks)
-    return {"rag_payload": f"[RAG DATA]:\n{hydrated_text.strip()}"}
+    engine = RAGEngine()
+    hydrated_payloads = []
+    
+    for task in tasks:
+        target_product = task.get("target_commercial_product", "ALL")
+        product_tags = [target_product] if isinstance(target_product, str) else target_product
+        
+        text = await engine.execute_multi_angle_search(
+            blueprint=task,
+            product_tags=product_tags,
+            intent_families=task.get("target_intent", [])
+        )
+        hydrated_payloads.append(text)
+        
+    final_text = "\n\n---\n\n".join(hydrated_payloads)
+    return {"rag_payload": f"[RAG DATA]:\n{final_text.strip()}"}
 
 def node_03b_api_worker(state: AgentState):
     return {"api_payload": "[API DATA]:\nNo API data requested for this MVP."}
@@ -430,18 +454,22 @@ def node_03c_sufficiency_auditor(state: AgentState):
         count = state.get("knowledge_retry_count", 0) + 1
         history = state.get("search_feedback_history", [])
         
-        # FIX: Inject the failed tasks into the feedback string so the LLM knows what NOT to repeat
         attempted_tasks = state.get("search_tasks", [])
         history.append(f"Attempt {count} Failed (Level {error_level}). Tried Matrix: {attempted_tasks}. Reason: {reason}")
         
         if count >= 3:
             print("   🚨 [AUDIT]: MAX RETRIES EXCEEDED.")
+            # It's fine to pass the bad knowledge here so the Human Agent can see what the bot was looking at
             return {"knowledge_retry_count": count, "search_feedback_history": history, "preflight_status": "max_retries_exceeded", "raw_retrieved_text": combined_knowledge}
             
         print(f"   ⚠️ [AUDIT]: Triggering CRAG Retry {count}/3 (Level {error_level})")
-        return {"knowledge_retry_count": count, "search_feedback_history": history, "preflight_status": "insufficient", "raw_retrieved_text": combined_knowledge}
+        # 🐛 THE FIX: Remove 'raw_retrieved_text' from this return dict! 
+        # This protects the GOOD knowledge from the previous turn from being overwritten by this bad attempt.
+        return {"knowledge_retry_count": count, "search_feedback_history": history, "preflight_status": "insufficient"}
         
+    # If we reach here, it's a success. We safely commit the fresh knowledge to the state!
     return {"preflight_status": "sufficient", "knowledge_retry_count": 0, "raw_retrieved_text": combined_knowledge}
+
 
 # --- PHASE 3: RESOLUTION BLUEPRINT & STEP-BY-STEP RESPONSE ---
 
@@ -546,10 +574,9 @@ def node_04b_response_generator(state: AgentState):
         draft = res.get("response", "Could you please clarify your request?")
         print(f"   💬 [DRAFT RESPONSE]: {draft}")
         
-        if res.get("advance_step") and steps and idx < len(steps) and routing_status != "intent_clarification_needed":
-            completed_steps.append(current_step)
-            plan["current_step_index"] = idx + 1
-            print(f"   ⏩ [STEP ADVANCED]: Moving to index {plan['current_step_index']}")
+        # V4.1 FIX: Do NOT advance the step here! The text might fail the safety gates.
+        # Instead, set a volatile flag indicating this step *should* advance if it passes.
+        pending_advance = res.get("advance_step") and steps and idx < len(steps) and routing_status != "intent_clarification_needed"
             
         ui_type = res.get("uiType", "none")
         options = res.get("options", [])
@@ -562,7 +589,7 @@ def node_04b_response_generator(state: AgentState):
             print(f"   🧹 [STATE CLEANUP]: Wiped active plan and completed steps.")
         elif ui_type == "none": options = [] 
         
-        return {"final_draft": draft, "active_plan": plan, "completed_steps": completed_steps, "ui_action_payload": {"uiType": ui_type, "options": options}}
+        return {"final_draft": draft, "active_plan": plan, "completed_steps": completed_steps, "ui_action_payload": {"uiType": ui_type, "options": options}, "pending_advance": pending_advance}
     except Exception as e:
         return {"final_draft": "I encountered an error. Please try again.", "preflight_status": "fail"}
 
@@ -582,7 +609,22 @@ def node_05_outbound_deterministic_gate(state: AgentState):
 
 def node_06_outbound_semantic_gate(state: AgentState):
     print("🟢 [NODE 06] Executing Outbound Semantic Gate")
-    return {"preflight_status": "pass"}
+    
+    # 1. Perform your MAS Semantic Checks here... (assuming pass for now)
+    
+    # 2. V4.1 FIX: The draft has cleared BOTH safety gates. It is now safe to advance the ledger!
+    plan = state.get("active_plan", {})
+    completed_steps = state.get("completed_steps", [])
+    
+    if state.get("pending_advance"):
+        idx = plan.get("current_step_index", 0)
+        steps = plan.get("steps", [])
+        if steps and idx < len(steps):
+            completed_steps.append(steps[idx])
+            plan["current_step_index"] = idx + 1
+            print(f"   ⏩ [ATOMIC LEDGER UPDATE]: Safely advanced to step index {plan['current_step_index']}")
+            
+    return {"preflight_status": "pass", "active_plan": plan, "completed_steps": completed_steps, "pending_advance": False}
 
 def node_07_precision_substitution(state: AgentState):
     print("🟢 [NODE 07] Executing Precision Substitution")

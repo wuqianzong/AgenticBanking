@@ -1,13 +1,37 @@
 import json
 import re
+import sqlite3
+import os
 from langchain_core.messages import HumanMessage, AIMessage
 from backend.app.orchestration.state import AgentState
 from backend.app.core.llm_service import call_groq_lpu  
 from backend.app.orchestration.rag_engine import RAGEngine
 from backend.app.services.memory_service import LongTermMemoryManager
 
-# MOCK DATABASES FOR VALIDATION
-VALID_PLACEHOLDERS = {"SAVINGS_RATE_01", "MIN_BALANCE_01", "FEE_01"}
+# Define the DB Path (adjust relative path if necessary based on your working directory)
+SQLITE_DB_PATH = "backend/data/knowledge_base.db"
+
+def fetch_placeholders_from_db(placeholders: list) -> dict:
+    """Fetches exact values for a list of placeholders from the SQLite Precision_Reference_Table."""
+    if not placeholders:
+        return {}
+    
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    cursor = conn.cursor()
+    
+    # NOTE: Adjust 'placeholder_id' and 'value' if your Database Engineer used different column names.
+    placeholders_str = ",".join("?" * len(placeholders))
+    query = f"SELECT placeholder, exact_value FROM Precision_Reference_Table WHERE placeholder IN ({placeholders_str})"
+    
+    try:
+        cursor.execute(query, placeholders)
+        rows = cursor.fetchall()
+        return {row[0]: str(row[1]) for row in rows}
+    except Exception as e:
+        print(f"🚨 [DB ERROR] Precision table query failed: {e}")
+        return {}
+    finally:
+        conn.close()
 
 # --- V2.1: DECOUPLED MATRIX GUIDELINES ---
 PRODUCT_INTENT_MATRIX = {
@@ -57,6 +81,7 @@ USER_JOURNEY_CLASSIFICATION_GUIDELINE = """
 7. LOANS: Seeking personal lending, credit conversions, or cash liquidity. (Keywords: Loan features, EIR, application status, missed payments, late penalties).
 8. BRANCHES: Locating physical bank touchpoints and automated teller machines. (Keywords: Branch/ATM locator, opening hours, checking service availability like cash deposit or card printing).
 9. PROFILE: Authenticated customers managing personal records. (Keywords: Updating registered mobile/email/address, tracking address verification PIN mailers).
+10. INVESTMENTS: Wealth management, trading, and automated investments. (Keywords: Stocks, ETFs, Mutual Funds, AutoInvest, portfolios, trading fees).
 """
 
 def _parse_json_robustly(raw_text: str) -> dict:
@@ -199,15 +224,14 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     Latest User Input: "{user_msg}"
     
     TASK: Triage the user input based on the stage of their journey.
-    1. ESCALATION: User demands a human agent or manager.
-    2. OUT_OF_SCOPE: Highly specific non-banking questions.
-    3. CLARIFICATION: Chitchat, overly broad requests, or asking you to make a choice.
-    4. VALID_JOURNEY: A valid query mapping to our Journeys.
+    1. ESCALATION: User explicitly demands a human agent or manager.
+    2. CLARIFICATION: The input is PURELY chitchat, greetings, or completely unrelated to banking (e.g., "Hello", "How are you", "What is the weather"). 
+    3. VALID_JOURNEY: A valid query mapping to one of the 10 Journeys above.
     
     If VALID_JOURNEY, output an ordered array of target_journeys (primary first).
     
     Output JSON ONLY:
-    {{"triage_status": "ESCALATION" | "OUT_OF_SCOPE" | "CLARIFICATION" | "VALID_JOURNEY", "target_journeys": ["JOURNEY_1"]}}
+    {{"triage_status": "ESCALATION" | "CLARIFICATION" | "VALID_JOURNEY", "target_journeys": ["JOURNEY_1"]}}
     """
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt))
@@ -433,6 +457,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
     CRITICAL INSTRUCTION FOR SUFFICIENCY:
     - Do NOT require a literal word-for-word match. 
     - Only mark INSUFFICIENT if the core factual information needed to answer the user is entirely absent from the text.
+    - PLACEHOLDER RULE (CRITICAL): The text contains encrypted placeholders in the format {{{{faq_abc_123}}}}. These placeholders represent exact numbers, rates, fees, limits, and times (e.g., {{{{faq_123}}}}am). You MUST treat these placeholders as valid, sufficient numerical data. Do NOT mark the text as INSUFFICIENT just because it uses placeholders instead of real numbers.
        
     If INSUFFICIENT, determine the error_level:
     1: Keyword Failure (The intent was right, but exact detail is missing. Suggest new keywords).
@@ -559,7 +584,7 @@ def node_04b_response_generator(state: AgentState):
     Rules for Text Generation:
     - Draft a conversational response addressing ONLY the 'Current Step'.
     - ZERO HALLUCINATION: Rely EXCLUSIVELY on 'Retrieved Knowledge'.
-    - If quoting exact numerical rates or fees, use ONLY allowed placeholders: {list(VALID_PLACEHOLDERS)}.
+    - If quoting exact numerical rates or fees, you MUST ONLY use the exact {{placeholders}} provided in the 'Retrieved Knowledge'. Do NOT invent, alter, or hallucinate placeholders.
     
     Rules for UI Payload:
     - Choose 'uiType' ('chips', 'stepper', or 'none'). 
@@ -598,21 +623,92 @@ def node_04b_response_generator(state: AgentState):
 def node_05_outbound_deterministic_gate(state: AgentState):
     print("🟢 [NODE 05] Executing Outbound Deterministic Gate")
     draft = state.get("final_draft", "")
-    illegal_detected = [p for p in re.findall(r"\{\{(.*?)\}\}", draft) if p not in VALID_PLACEHOLDERS]
+    payload = state.get("ui_action_payload", {})
+    options = payload.get("options", [])
     
-    if illegal_detected or "ILLEGAL_WORD" in draft:
+    # 1. Combine draft text AND UI options to sweep globally
+    combined_text = draft + " " + " ".join(options)
+    placeholders_in_draft = re.findall(r"\{\{(.*?)\}\}", combined_text)
+    
+    illegal_detected = []
+    if placeholders_in_draft:
+        valid_map = fetch_placeholders_from_db(placeholders_in_draft)
+        for p in placeholders_in_draft:
+            if p not in valid_map:
+                illegal_detected.append(p)
+    
+    # 2. Trigger Safety Loop if any placeholder is invalid
+    if illegal_detected or "ILLEGAL_WORD" in combined_text:
+        print(f"   🚫 [HARD GATE VETO]: Illegal/invented placeholders detected: {illegal_detected}")
         count = state.get("safety_retry_count", 0) + 1
         history = state.get("draft_feedback_history", [])
-        history.append(f"Draft contained illegal placeholders: {illegal_detected}.")
-        return {"safety_retry_count": count, "draft_feedback_history": history, "preflight_status": "fail"}
+        
+        history.append(f"Draft or UI chips contained invalid placeholders: {illegal_detected}. You MUST ONLY use placeholders explicitly present in the Retrieved Knowledge.")
+        
+        return {
+            "safety_retry_count": count, 
+            "draft_feedback_history": history, 
+            "preflight_status": "fail",
+            "pending_advance": False # Enforce Atomic State
+        }
+        
+    print("   ✅ [HARD GATE PASS]: All placeholders in text and UI validated against DB.")
     return {"preflight_status": "pass"}
 
+
 def node_06_outbound_semantic_gate(state: AgentState):
-    print("🟢 [NODE 06] Executing Outbound Semantic Gate")
+    print("🟢 [NODE 06] Executing Outbound Semantic Gate (MAS Compliance & Groundedness)")
     
-    # 1. Perform your MAS Semantic Checks here... (assuming pass for now)
+    draft = state.get("final_draft", "")
+    payload = state.get("ui_action_payload", {})
+    options = payload.get("options", [])
+    combined_response = f"Chat Text: {draft}\nUI Buttons: {options}"
     
-    # 2. V4.1 FIX: The draft has cleared BOTH safety gates. It is now safe to advance the ledger!
+    retrieved_knowledge = state.get("raw_retrieved_text", "")
+    
+    # 1. The LLM-as-a-Judge Prompt
+    prompt = f"""
+    You are an independent Compliance Auditor for a Singaporean Bank.
+    
+    Retrieved Approved Knowledge:
+    "{retrieved_knowledge}"
+    
+    Generated AI Response (Text and UI Buttons):
+    "{combined_response}"
+    
+    TASK: Evaluate the Generated AI Response on two strict binary criteria:
+    1. GROUNDEDNESS: Is every claim, fact, and instruction in the Response strictly derived from the Retrieved Approved Knowledge? (True/False)
+    2. SAFETY: Does the Response contain any unauthorized financial advice, subjective product recommendations, or return forecasts? (True/False)
+    
+    Output JSON ONLY:
+    {{"is_grounded": true/false, "contains_advice": true/false, "reason": "..."}}
+    """
+    
+    try:
+        res = _parse_json_robustly(call_groq_lpu(prompt))
+        is_grounded = res.get("is_grounded", False)
+        contains_advice = res.get("contains_advice", True)
+    except Exception as e:
+        print(f"🚨 [SEMANTIC GATE ERROR]: {e}")
+        is_grounded, contains_advice = False, True # Fail-safe defaults
+
+    # 2. Evaluate Judge Results
+    if not is_grounded or contains_advice:
+        print(f"   🚫 [SEMANTIC VETO]: Grounded: {is_grounded} | Contains Advice: {contains_advice}")
+        count = state.get("safety_retry_count", 0) + 1
+        history = state.get("draft_feedback_history", [])
+        history.append(f"Semantic compliance failed. Grounded: {is_grounded}. Contained Advice: {contains_advice}. Reason: {res.get('reason', 'Violation')}. Rewrite to be 100% factual and objective.")
+        
+        return {
+            "safety_retry_count": count, 
+            "draft_feedback_history": history, 
+            "preflight_status": "fail",
+            "pending_advance": False # Block ledger update
+        }
+
+    print("   ✅ [SEMANTIC PASS]: Response is strictly grounded and MAS-compliant.")
+
+    # 3. ATOMIC LEDGER UPDATE: Safe to advance step progression!
     plan = state.get("active_plan", {})
     completed_steps = state.get("completed_steps", [])
     
@@ -626,9 +722,37 @@ def node_06_outbound_semantic_gate(state: AgentState):
             
     return {"preflight_status": "pass", "active_plan": plan, "completed_steps": completed_steps, "pending_advance": False}
 
+
 def node_07_precision_substitution(state: AgentState):
     print("🟢 [NODE 07] Executing Precision Substitution")
-    return {"final_response": state.get("final_draft", "").replace("{{SAVINGS_RATE_01}}", "3.50%")}
+    draft = state.get("final_draft", "")
+    payload = state.get("ui_action_payload", {})
+    options = payload.get("options", [])
+    
+    # Extract unique placeholders globally
+    combined_text = draft + " " + " ".join(options)
+    placeholders_in_draft = list(set(re.findall(r"\{\{(.*?)\}\}", combined_text)))
+    
+    if placeholders_in_draft:
+        valid_map = fetch_placeholders_from_db(placeholders_in_draft)
+        
+        # 1. Substitute in the main draft
+        for p_id, p_val in valid_map.items():
+            draft = draft.replace(f"{{{{{p_id}}}}}", p_val)
+            print(f"   🔢 [SUBSTITUTION]: Replaced {p_id} -> {p_val} in Draft")
+            
+        # 2. Substitute in the UI options array
+        updated_options = []
+        for opt in options:
+            updated_opt = opt
+            for p_id, p_val in valid_map.items():
+                updated_opt = updated_opt.replace(f"{{{{{p_id}}}}}", p_val)
+            updated_options.append(updated_opt)
+            
+        payload["options"] = updated_options
+            
+    return {"final_response": draft, "ui_action_payload": payload}
+
 
 def node_08_soft_escalation_analyzer(state: AgentState):
     print("🟢 [NODE 08] Executing Soft Escalation Analyzer")

@@ -114,6 +114,7 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         "draft_feedback_history": [],
         "knowledge_retry_count": 0,
         "safety_retry_count": 0
+        ,"preflight_status": "initial_greeting"
     }
 
 def node_01_deterministic_ingest_gate(state: AgentState):
@@ -457,14 +458,17 @@ def node_03c_sufficiency_auditor(state: AgentState):
     CRITICAL INSTRUCTION FOR SUFFICIENCY:
     - Do NOT require a literal word-for-word match. 
     - Only mark INSUFFICIENT if the core factual information needed to answer the user is entirely absent from the text.
-    - PLACEHOLDER RULE (CRITICAL): The text contains encrypted placeholders in the format {{{{faq_abc_123}}}}. These placeholders represent exact numbers, rates, fees, limits, and times (e.g., {{{{faq_123}}}}am). You MUST treat these placeholders as valid, sufficient numerical data. Do NOT mark the text as INSUFFICIENT just because it uses placeholders instead of real numbers.
+    - PLACEHOLDER RULE (CRITICAL): The text contains encrypted placeholders in the format {{{{faq_abc_123}}}}. These placeholders represent exact numbers, rates, fees, limits, and times (e.g., {{{{faq_123}}}}am). You MUST treat these placeholders as valid, sufficient numerical data.
+
+    TASK 2: UX PRESENTATION COMPLEXITY
+    If the knowledge is SUFFICIENT, analyze the User's tone and the nature of the data to determine the optimal UI presentation:
+    - "simple": Use this if the user asks a single factual question, explicitly asks for "all information/everything", implies urgency, OR if the retrieved answer is relatively short.
+    - "multi-step": Use this ONLY if the user asks a broad "How do I..." query AND the retrieved knowledge is a highly complex, multi-stage procedure that requires hand-holding.
        
-    If INSUFFICIENT, determine the error_level:
-    1: Keyword Failure (The intent was right, but exact detail is missing. Suggest new keywords).
-    2: Intent Gap (A completely different topic is needed. Suggest the new intent).
+    If INSUFFICIENT, determine the error_level (1 or 2).
     
     Output JSON ONLY:
-    {{"status": "SUFFICIENT" | "INSUFFICIENT", "reason": "...", "error_level": 1 | 2}}
+    {{"status": "SUFFICIENT" | "INSUFFICIENT", "reason": "...", "error_level": 1 | 2, "complexity": "simple" | "multi-step"}}
     """
     
     try:
@@ -472,8 +476,9 @@ def node_03c_sufficiency_auditor(state: AgentState):
         status = res.get("status", "INSUFFICIENT")
         reason = res.get("reason", "Failed to validate knowledge.")
         error_level = res.get("error_level", 1)
+        complexity = res.get("complexity", "simple")
     except:
-        status, reason, error_level = "INSUFFICIENT", "Exception during audit.", 1
+        status, reason, error_level, complexity = "INSUFFICIENT", "Exception during audit.", 1, "simple"
 
     if status == "INSUFFICIENT" or "NO_KNOWLEDGE_FOUND" in combined_knowledge:
         count = state.get("knowledge_retry_count", 0) + 1
@@ -488,12 +493,12 @@ def node_03c_sufficiency_auditor(state: AgentState):
             return {"knowledge_retry_count": count, "search_feedback_history": history, "preflight_status": "max_retries_exceeded", "raw_retrieved_text": combined_knowledge}
             
         print(f"   ⚠️ [AUDIT]: Triggering CRAG Retry {count}/3 (Level {error_level})")
-        # 🐛 THE FIX: Remove 'raw_retrieved_text' from this return dict! 
+        # 🐛 THE Fix: Remove 'raw_retrieved_text' from this return dict!
         # This protects the GOOD knowledge from the previous turn from being overwritten by this bad attempt.
         return {"knowledge_retry_count": count, "search_feedback_history": history, "preflight_status": "insufficient"}
         
     # If we reach here, it's a success. We safely commit the fresh knowledge to the state!
-    return {"preflight_status": "sufficient", "knowledge_retry_count": 0, "raw_retrieved_text": combined_knowledge}
+    return {"preflight_status": "sufficient", "knowledge_retry_count": 0, "raw_retrieved_text": combined_knowledge, "response_complexity": complexity}
 
 
 # --- PHASE 3: RESOLUTION BLUEPRINT & STEP-BY-STEP RESPONSE ---
@@ -555,7 +560,8 @@ def node_04b_response_generator(state: AgentState):
     if routing_status in ["intent_clarification_needed", "CLARIFICATION"]:
         current_step = "The user's request is vague, small talk, or asks you to make a choice. Respond naturally and clarify."
     elif not steps:
-        current_step = "Respond naturally to the user's latest input without repeating previous summaries."
+        # 🟢 CHANGE: Force a complete data dump when the planner is bypassed
+        current_step = "Provide a complete, comprehensive, and direct answer to the user's query using the Retrieved Knowledge. Give all the information at once. Do NOT use a stepper."
     elif is_conclusion:
         if pending_queue:
             next_task = pending_queue[0]["journey"]
@@ -683,6 +689,13 @@ def node_06_outbound_semantic_gate(state: AgentState):
     Output JSON ONLY:
     {{"is_grounded": true/false, "contains_advice": true/false, "reason": "..."}}
     """
+
+    # 🐛 FIX: Pre-initialize variables so they always exist in memory even if the API crashes
+    res = {}
+    is_grounded = False
+    contains_advice = True
+    reason = "API Evaluation Failed"
+
     
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt))
@@ -693,6 +706,15 @@ def node_06_outbound_semantic_gate(state: AgentState):
         is_grounded, contains_advice = False, True # Fail-safe defaults
 
     # 2. Evaluate Judge Results
+
+    # 🟢 UPDATE: Deterministic Guardrail Exemption (include initial greeting)
+    is_exempt = state.get("triage_status") == "CLARIFICATION" or state.get("preflight_status") in ["intent_clarification_needed", "initial_greeting"]
+
+    if is_exempt:
+        print(f"   💡 [GUARDRAIL EXEMPTION]: {state.get('preflight_status', 'CLARIFICATION')} detected. Bypassing Groundedness requirement.")
+        is_grounded = True # Deterministically override the LLM's failure
+    # -----------------------------------------------------
+
     if not is_grounded or contains_advice:
         print(f"   🚫 [SEMANTIC VETO]: Grounded: {is_grounded} | Contains Advice: {contains_advice}")
         count = state.get("safety_retry_count", 0) + 1

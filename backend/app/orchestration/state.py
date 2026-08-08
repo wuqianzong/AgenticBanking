@@ -38,6 +38,7 @@ class AgentState(TypedDict):
     # V2.5 Tri-Angle RRF Search Tasks
     search_tasks: List[Dict[str, Any]]           # Holds: [{"procedural": "...", "policy": "...", "conceptual": "...", "target_commercial_product": "...", "target_intent": ["..."]}]
     pending_advance: bool                           # V4.1 Fix: Tracks if the current step should advance upon safety clearance
+    response_complexity: str                        # V4.1: Holds "simple" or "multi-step" from Node 03c
 
     # --- ISOLATED LOOP TRACKERS ---
     knowledge_retry_count: int                   # Max 3

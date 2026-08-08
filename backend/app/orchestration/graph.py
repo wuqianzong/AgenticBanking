@@ -117,14 +117,29 @@ def build_agent_graph():
 
     def route_n18(state: AgentState):
         status = state.get("preflight_status")
-        
+
         # V3.77 FIX: Agentic routing logic with Kill-Switch
         if status == "insufficient": 
             return "n2e" # Loop back to rephrase/expand intents
         if status == "max_retries_exceeded": 
             return "n23" # Kill the loop, route to Node 09 (Hard Escalation)
-            
+
         return "n19" # Success -> Proceed to Planner
+
+    def route_after_audit(state: AgentState):
+        status = state.get("preflight_status")
+        if status == "insufficient":
+            return "n2e"  # 🐛 FIX: Loop back to n2e instead of the dead-end n7b
+        elif status == "max_retries_exceeded":
+            return "n23"  # Hard Escalation
+
+        # 🟢 NEW: Dynamic UX Routing
+        if state.get("response_complexity") == "simple":
+            print("   🔀 [DYNAMIC UX]: Bypassing Planner -> Direct Generation")
+            return "n8"   # Route directly to Response Generator (Node 04b)
+        else:
+            print("   🔀 [DYNAMIC UX]: Complex Query -> Routing to Planner")
+            return "n19"  # Route to Resolution Planner (Node 04a)
 
     def route_tools(state: AgentState):
         """Reads the array of requested tools and fans-out simultaneously."""
@@ -176,7 +191,7 @@ def build_agent_graph():
     workflow.add_edge("n17_api", "n18")
     workflow.add_edge("n17_deeplink", "n18")
     
-    workflow.add_conditional_edges("n18", route_n18, {"n2e": "n2e", "n19": "n19", "n23": "n23"})
+    workflow.add_conditional_edges("n18", route_after_audit, {"n2e": "n2e", "n23": "n23", "n8": "n8", "n19": "n19"})
     workflow.add_conditional_edges("n19", route_n19, {"n8": "n8", "n5": "n5"})
     workflow.add_edge("n8", "n20")
     

@@ -11,6 +11,20 @@ from backend.app.services.memory_service import LongTermMemoryManager
 # Define the DB Path (adjust relative path if necessary based on your working directory)
 SQLITE_DB_PATH = "backend/data/knowledge_base.db"
 
+# --- 🧹 VOLATILE STATE RESET DICTIONARY ---
+# Applied at the start of every turn to prevent cross-turn memory leakage
+VOLATILE_STATE_RESET = {
+    "knowledge_retry_count": 0,
+    "safety_retry_count": 0,
+    "search_feedback_history": [],
+    "draft_feedback_history": [],
+    "raw_retrieved_text": "",
+    "search_tasks": [],
+    "active_tool_routes": [],
+    "response_complexity": "simple",
+    "pending_advance": False,
+}
+
 def fetch_placeholders_from_db(placeholders: list) -> dict:
     """Fetches exact values for a list of placeholders from the SQLite Precision_Reference_Table."""
     if not placeholders:
@@ -115,14 +129,11 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         greeting = "Hello! I am Horizon. How can I assist you today?"
         
     return {
+        **VOLATILE_STATE_RESET, # 🧹 Wipes any artifacts upon session initialization
         "final_draft": greeting,
         "working_context": summary,
         "ui_action_payload": {"uiType": "text", "options": []},
-        "search_feedback_history": [], 
-        "draft_feedback_history": [],
-        "knowledge_retry_count": 0,
-        "safety_retry_count": 0
-        ,"preflight_status": "initial_greeting"
+        "preflight_status": "initial_greeting",
     }
 
 def node_01_deterministic_ingest_gate(state: AgentState):
@@ -130,14 +141,34 @@ def node_01_deterministic_ingest_gate(state: AgentState):
     user_msg = state.get("user_input", "")
     history = list(state.get("chat_history", []))
     
-    if user_msg and user_msg != "__INIT__": 
+    if user_msg and user_msg not in {"__INIT__", "**INIT**"}:
         history.append(HumanMessage(content=user_msg))
         print(f"💾 [MEMORY] User Input saved. History length: {len(history)}")
-        
-    if re.search(r"\{\{.*?\}\}", user_msg) or "<script>" in user_msg.lower():
-        return {"preflight_status": "fail", "chat_history": history}
-        
-    return {"preflight_status": "pass", "chat_history": history}
+
+    # 1. Sweep for hardcoded threats (Garbled text, SQL drops, XSS)
+    if "<script>" in user_msg.lower() or "DROP TABLE" in user_msg.upper():
+        print("   🚫 [INGEST VETO]: Malicious string detected.")
+        return {
+            **VOLATILE_STATE_RESET, # 🧹 Wipe state
+            "preflight_status": "error_inbound_violation",
+            "chat_history": history,
+        }
+
+    # 2. Sweep for placeholder injections
+    if "{{" in user_msg or "}}" in user_msg:
+        print("   🚫 [INGEST VETO]: Placeholder injection detected.")
+        return {
+            **VOLATILE_STATE_RESET, # 🧹 Wipe state
+            "preflight_status": "error_inbound_violation",
+            "chat_history": history,
+        }
+
+    # Pass the gate and cleanly initialize the turn
+    return {
+        **VOLATILE_STATE_RESET, # 🧹 Wipe state for the new turn
+        "preflight_status": "pass",
+        "chat_history": history,
+    }
 
 
 # --- PHASE 1: PREFLIGHT ROUTING & INTERLOCK CONTEXTS ---
@@ -640,7 +671,7 @@ def node_04b_response_generator(state: AgentState):
     
     Rules for UI Payload:
     - Choose 'uiType' ('chips', 'stepper', or 'none'). 
-    - If 'chips', provide max 3 predicted user inputs based on retrieved knowledge.
+    - If 'chips', provide max 3 predicted user follow-ups questions that are align with the next steps in the current plan.
     
     Output JSON ONLY:
     {{"response": "Your conversational text here", "uiType": "chips" | "stepper" | "none", "options": ["prediction 1"], "advance_step": true}}
@@ -733,6 +764,7 @@ def node_06_outbound_semantic_gate(state: AgentState):
     
     TASK: Evaluate the Generated AI Response on two strict binary criteria:
     1. GROUNDEDNESS: Is every claim, fact, and instruction in the Response strictly derived from the Retrieved Approved Knowledge? (True/False)
+       *CRITICAL EXCEPTION*: If the AI Response is simply apologizing, stating it lacks the information, or refusing to answer due to a lack of knowledge, you MUST evaluate GROUNDEDNESS as True, because admitting a lack of knowledge is perfectly safe and grounded behavior.
     2. SAFETY: Does the Response contain any unauthorized financial advice, subjective product recommendations, or return forecasts that violate the Regulatory Context? (True/False)
     
     Output JSON ONLY:

@@ -2,8 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, Bot, ChevronRight, CheckCircle2, 
   CreditCard, Wallet, Landmark, ShieldCheck, 
-  FileText, ArrowRight, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon
+  FileText, ArrowRight, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
+  Loader2 // <-- ADDED for the Agentic Processing Tracker
 } from 'lucide-react';
+
+// 1. THE NODE CAPTION DICTIONARY
+const NODE_CAPTIONS = {
+  "START": "Initializing secure session...",
+  "intent_router": "Analyzing request intent...",
+  "knowledge_retrieval": "Scanning bank policies...",
+  "knowledge_sufficiency": "Evaluating information...",
+  "resolution_planning": "Formulating resolution steps...",
+  "generation_node": "Drafting response...",
+  "deterministic_gate": "Verifying transaction rules...",
+  "semantic_gate": "Performing safety check...",
+  "END": "Finalizing..."
+};
 
 export default function BankingBotUI() {
   const [isLoggedIn, setIsLoggedIn] = useState(true);
@@ -15,10 +29,12 @@ export default function BankingBotUI() {
       type: 'text'
     }
   ]);
-  // Generate a unique Session ID once per page load
+
   const [sessionId] = useState(() => `sess_${Math.random().toString(36).substring(2, 9)}`);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [loadingCaption, setLoadingCaption] = useState('Processing...'); // <-- NEW STATE FOR TRACKER
+
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -31,31 +47,30 @@ export default function BankingBotUI() {
   }, [messages, isTyping]);
 
   useEffect(() => {
-    // When the bot stops typing (isTyping becomes false), refocus the input
     if (!isTyping && inputRef.current) {
       inputRef.current.focus();
     }
   }, [isTyping]);
 
-// ⚡ ACTUAL END-TO-END NETWORK CALL TO LANGGRAPH/FASTAPI
+  // ⚡ ACTUAL END-TO-END NETWORK CALL TO LANGGRAPH/FASTAPI
   const handleSend = async (text) => {
     if (!text.trim()) return;
 
-    // 1. Instantly render the user's message
     const newUserMsg = { id: Date.now(), sender: 'user', text, type: 'text' };
     setMessages(prev => [...prev, newUserMsg]);
     setInputValue('');
-    setIsTyping(true); // Trigger the bouncing loading dots
+    setIsTyping(true);
+    setLoadingCaption('Initializing agentic workflow...'); // Reset caption
 
     try {
-    // 2. Fire the payload to the local Python FastAPI Server
       const response = await fetch("http://localhost:8000/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          // Note: Backend must return application/x-ndjson stream
         },
         body: JSON.stringify({
-          session_id: sessionId, // <--- NOW DYNAMIC
+          session_id: sessionId,
           message: text,
           user_id: "USR_999" 
         })
@@ -65,20 +80,55 @@ export default function BankingBotUI() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // 3. Receive the compliant, LangGraph-processed JSON payload
-      const data = await response.json();
+      // 2. THE FETCH & STREAM LOGIC (Fixed with a Buffer)
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let finalBotData = null;
+      let buffer = "";
 
-      // 4. Map the backend data to our React UI state
-      const botResponse = {
-        id: Date.now() + 1,
-        sender: 'bot',
-        text: data.text,
-        type: data.uiType || 'text',
-        options: data.options || [],
-        items: data.items || [] 
-      };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      setMessages(prev => [...prev, botResponse]);
+        // Preserve partial NDJSON records until their terminating newline arrives.
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (line.trim() === '') continue;
+
+          try {
+            const parsedData = JSON.parse(line);
+
+            // Check if the payload is a node transition update
+            if (parsedData.node && NODE_CAPTIONS[parsedData.node]) {
+              setLoadingCaption(NODE_CAPTIONS[parsedData.node]);
+            }
+
+            // Check if the payload contains the final response text/uiType
+            if (parsedData.text || parsedData.uiType) {
+              finalBotData = parsedData;
+            }
+          } catch (err) {
+            console.warn("Stream parse warning (Should be rare now!):", line);
+          }
+        }
+      }
+
+      // 4. Map the final backend data to our React UI state
+      if (finalBotData) {
+        const botResponse = {
+          id: Date.now() + 1,
+          sender: 'bot',
+          text: finalBotData.text || '',
+          type: finalBotData.uiType || 'text',
+          options: finalBotData.options || [],
+          items: finalBotData.items || []
+        };
+        setMessages(prev => [...prev, botResponse]);
+      }
+
     } catch (error) {
       console.error("Backend Connection Error:", error);
       setMessages(prev => [...prev, {
@@ -184,7 +234,7 @@ export default function BankingBotUI() {
                 </div>
               </div>
             </div>
-            {/* Login Toggle (For testing presentation states) */}
+            {/* Login Toggle */}
             <button onClick={() => setIsLoggedIn(!isLoggedIn)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors" title="Toggle User State">
               {isLoggedIn ? <LogOut size={18}/> : <LogIn size={18}/>}
             </button>
@@ -209,10 +259,9 @@ export default function BankingBotUI() {
           </div>
         </div>
 
-        {/* Chat Conversation Area (Sliding History Window) */}
+        {/* Chat Conversation Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-5 bg-slate-50/50">
           
-          {/* Da Dao Zhi Jian Concept Note */}
           <div className="bg-white/80 backdrop-blur-sm text-slate-600 text-[11px] p-3 rounded-xl border border-slate-200 flex items-start gap-2 mb-4 shadow-sm">
              <ShieldCheck size={16} className="text-blue-600 shrink-0 mt-0.5" />
              <p><b>MVP Mode:</b> No static menus. Use natural language to navigate. Try asking <i>"How do I open an account?"</i></p>
@@ -236,7 +285,7 @@ export default function BankingBotUI() {
                   {msg.text}
                 </div>
 
-                {/* Dynamic UI Components Rendered Beneath Text */}
+                {/* Dynamic UI Components */}
                 {msg.type === 'carousel' && renderCarousel(msg.options)}
                 {msg.type === 'chips' && renderChips(msg.options)}
                 {msg.type === 'checklist' && renderChecklist(msg.items)}
@@ -245,13 +294,14 @@ export default function BankingBotUI() {
             </div>
           ))}
           
-          {/* Typing Indicator */}
+          {/* 3. UI RENDERING REQUIREMENT: Agentic Processing Tracker */}
           {isTyping && (
             <div className="flex justify-start">
-              <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3.5 flex gap-1.5 shadow-sm">
-                <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3.5 flex items-center gap-3 shadow-sm max-w-[88%]">
+                <Loader2 size={16} className="text-blue-600 animate-spin shrink-0" />
+                <span className="text-[13px] text-slate-600 font-medium tracking-wide">
+                  {loadingCaption}
+                </span>
               </div>
             </div>
           )}
@@ -262,7 +312,6 @@ export default function BankingBotUI() {
         {/* Text Input Area & Suggested Prompts */}
         <div className="bg-white border-t border-slate-200 p-3 z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
           
-          {/* NEW: Contextual Suggested Prompts Bar */}
           {messages.length === 1 && !isTyping && (
             <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-3 mb-1 w-full">
               <button 

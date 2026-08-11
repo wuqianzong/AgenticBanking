@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, AIMessage  # FIXED: Added missing import
 
 import redis
 import json
+import asyncio
 
 # IMPORT THE NEW COMPILED TRI-TIER ENGINE
 from backend.app.orchestration.graph import app_graph
@@ -72,40 +74,79 @@ async def close_and_compact_session(payload: CloseSessionPayload):
 @app.post("/api/chat")
 async def process_chat(payload: ChatPayload):
     """
-    The Gateway now acts PURELY as a transport layer. 
-    It catches the HTTP request, packages the input, hands it to LangGraph,
-    and returns the JSON payload to the React frontend.
+    Upgraded to Streaming NDJSON Response.
+    Yields node execution progress in real-time before returning the final payload.
     """
     config = {"configurable": {"thread_id": payload.session_id}}
-    
+
     # --- FRONTEND INITIALIZATION INTERCEPTOR ---
-    if payload.message == "__INIT__":
-        # Check if the session already has memory saved in the checkpointer
+    if payload.message == "**INIT**":
         state_snapshot = app_graph.get_state(config)
         history = state_snapshot.values.get("chat_history", []) if state_snapshot.values else []
-        
-        if history:
-            # User refreshed the browser mid-conversation. 
-            # Return a special payload containing the history so React can render the chat log.
-            serialized_history = [{"role": "user" if isinstance(m, HumanMessage) else "ai", "content": m.content} for m in history]
-            return {
-                "text": "",
-                "uiType": "history_sync", 
-                "items": serialized_history
+
+        async def init_stream():
+            if history:
+                serialized_history = [
+                    {
+                        "role": "user" if isinstance(m, HumanMessage) else "ai",
+                        "content": m.content,
+                    }
+                    for m in history
+                ]
+                yield json.dumps({
+                    "type": "init",
+                    "uiType": "history_sync",
+                    "items": serialized_history,
+                }) + "\n"
+            else:
+                yield json.dumps({"type": "init", "uiType": "none", "items": []}) + "\n"
+
+        return StreamingResponse(init_stream(), media_type="application/x-ndjson")
+
+    # --- STANDARD INVOCATION (STREAMING) ---
+    async def chat_stream():
+        initial_turn_state = {"user_input": payload.message}
+
+        try:
+            # 1. Stream the Node Execution Progress
+            async for chunk in app_graph.astream(initial_turn_state, config=config):
+                for node_name, state_update in chunk.items():
+                    # Yield the name of the node currently executing to the frontend
+                    yield json.dumps({
+                        "type": "progress",
+                        "node": node_name,
+                    }) + "\n"
+                    # Pace progress events so React can render each transition.
+                    await asyncio.sleep(0.3)
+
+            # 2. Graph has finished. Fetch the final condensed state from the checkpointer.
+            state_snapshot = app_graph.get_state(config)
+            execution_result = state_snapshot.values
+
+            final_payload = {
+                "type": "complete",
+                "text": execution_result.get("final_response", ""),
+                "uiType": execution_result.get("ui_action_payload", {}).get("uiType", "text"),
+                "options": execution_result.get("ui_action_payload", {}).get("options", []),
+                "items": execution_result.get("ui_action_payload", {}).get("items", []),
             }
-        # If history is empty, let it fall through to invoke Node 00 (Greeting generation)
-    
-    # --- STANDARD INVOCATION ---
-    initial_turn_state = {"user_input": payload.message}
-    
-    # FIXED: Changed from .invoke() to await .ainvoke() to support async RAG workers
-    execution_result = await app_graph.ainvoke(initial_turn_state, config=config)
-    
-    final_payload = {
-        "text": execution_result.get("final_response", ""),
-        "uiType": execution_result.get("ui_action_payload", {}).get("uiType", "text"),
-        "options": execution_result.get("ui_action_payload", {}).get("options", []),
-        "items": execution_result.get("ui_action_payload", {}).get("items", [])
-    }
-    
-    return final_payload
+            yield json.dumps(final_payload) + "\n"
+
+        except Exception as e:
+            # Safe fallback if the graph crashes during execution
+            yield json.dumps({
+                "type": "complete",
+                "text": f"System encountered an error: {str(e)}",
+                "uiType": "text",
+                "options": [],
+            }) + "\n"
+
+    return StreamingResponse(
+        chat_stream(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

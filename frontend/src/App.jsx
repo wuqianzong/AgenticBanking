@@ -8,15 +8,21 @@ import {
 
 // 1. THE NODE CAPTION DICTIONARY
 const NODE_CAPTIONS = {
-  "START": "Initializing secure session...",
-  "intent_router": "Analyzing request intent...",
-  "knowledge_retrieval": "Scanning bank policies...",
-  "knowledge_sufficiency": "Evaluating information...",
-  "resolution_planning": "Formulating resolution steps...",
-  "generation_node": "Drafting response...",
-  "deterministic_gate": "Verifying transaction rules...",
-  "semantic_gate": "Performing safety check...",
-  "END": "Finalizing..."
+  "n00": "Securing your connection...",
+  "n3": "Reviewing our chat history...",
+  "n4": "Routing your request...",
+  "n16": "Reviewing bank guidelines...",
+  "n2d": "Understanding your request...",
+  "n2e": "Gathering the details...",
+  "n14": "Preparing to search...",
+  "n17_rag": "Searching Horizon Bank guides...",
+  "n18": "Reading the search results...",
+  "n19": "Making sure I have the complete answer...",
+  "n8": "Double-checking the requirements...",
+  "n20": "Planning the next steps...",
+  "n21": "Drafting my response...",
+  "n22": "Polishing the details...",
+  "n24": "Running a quick final safety check..."
 };
 
 export default function BankingBotUI() {
@@ -80,38 +86,59 @@ export default function BankingBotUI() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // 2. THE FETCH & STREAM LOGIC (Fixed with a Buffer)
+      // 2. THE FETCH & STREAM LOGIC (With X-Ray Debugging)
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let finalBotData = null;
       let buffer = "";
 
+      console.log("🚀 [STREAM START] Connected to backend, waiting for chunks...");
+
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
 
-        // Preserve partial NDJSON records until their terminating newline arrives.
-        buffer += decoder.decode(value, { stream: true });
+        if (done) {
+          console.log("🏁 [STREAM DONE] Connection closed by backend.");
+          break;
+        }
+
+        // Decode the raw network packet
+        const chunkString = decoder.decode(value, { stream: true });
+        // Use JSON.stringify so we can actually see the hidden \n characters in the console
+        console.log("📦 [RAW CHUNK ARRIVED]:", JSON.stringify(chunkString));
+
+        buffer += chunkString;
+
         const lines = buffer.split('\n');
-        buffer = lines.pop();
+        buffer = lines.pop(); // Hold back the incomplete line
+
+        console.log("✂️ [LINES EXTRACTED]:", lines);
+        console.log("💧 [BUFFER HELD BACK]:", JSON.stringify(buffer));
 
         for (const line of lines) {
-          if (line.trim() === '') continue;
+          if (line.trim() === '') {
+            continue;
+          }
 
           try {
+            console.log("🔍 [ATTEMPTING JSON PARSE ON]:", JSON.stringify(line));
             const parsedData = JSON.parse(line);
+            console.log("✅ [PARSE SUCCESS]:", parsedData);
 
             // Check if the payload is a node transition update
-            if (parsedData.node && NODE_CAPTIONS[parsedData.node]) {
-              setLoadingCaption(NODE_CAPTIONS[parsedData.node]);
+            if (parsedData.node) {
+              // Use the dictionary if it exists, otherwise show a generic processing message
+              const caption = NODE_CAPTIONS[parsedData.node] || `Processing step: ${parsedData.node}...`;
+              console.log("🔄 [UPDATING UI STATE TO]:", caption);
+              setLoadingCaption(caption);
             }
 
-            // Check if the payload contains the final response text/uiType
+            // Check if the payload contains the final response
             if (parsedData.text || parsedData.uiType) {
               finalBotData = parsedData;
             }
           } catch (err) {
-            console.warn("Stream parse warning (Should be rare now!):", line);
+            console.error("❌ [PARSE FAILED]:", err.message, "|| ON STRING:", JSON.stringify(line));
           }
         }
       }

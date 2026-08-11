@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 MODEL_A_GENERATOR = "openai/gpt-oss-120b"       # Groq: Conversational Engine
 MODEL_B_AUDITOR = "gemini-3.5-flash-lite"            # Google: Safety & Sufficiency Judge
-MODEL_C_PLANNER = "llama-3.1-8b-instant"            # Groq: Semantic Search Task Planner
+MODEL_C_PLANNER = "gemini-3.5-flash-lite"            # Google: Resolution Planner & Tool Calling Generator
 MODEL_D_PROMPT_GUARD = "meta-llama/llama-prompt-guard-2-86m"  # Groq: Cyber Security Pre-check
 MODEL_E_TRIAGE = "gemini-3.5-flash-lite"             # Google: Journey Classifier
 # --------------------------------------------

@@ -51,7 +51,24 @@ async def archive_session_history(payload: CloseSessionPayload, archive_reason: 
     history_sequence_offset = state_snapshot.values.get("history_sequence_offset", 0) if state_snapshot.values else 0
 
     if not active_history:
-        return {"status": "ignored", "reason": "No active conversation history found."}
+        # MemorySaver is intentionally ephemeral.  A server restart must not
+        # prevent logout/timeout from compacting the durable per-turn
+        # transcript that was already written to SQLite.
+        persisted_messages = await asyncio.to_thread(
+            LongTermMemoryManager.fetch_chat_history,
+            payload.user_id,
+            payload.session_id,
+        )
+        active_history = [
+            HumanMessage(content=message["content"])
+            if message["role"] == "user"
+            else AIMessage(content=message["content"])
+            for message in persisted_messages
+        ]
+        history_sequence_offset = 0
+
+    if not active_history:
+        return {"status": "ignored", "reason": "No conversation history found for this session."}
 
     if compact:
         summary = await asyncio.to_thread(

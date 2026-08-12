@@ -228,6 +228,7 @@ export default function BankingBotUI() {
     localStorage.setItem(ACTIVE_SESSION_KEY, newSessionId);
     setSessionId(newSessionId);
     setIsLoggedIn(true);
+    shouldAutoScrollRef.current = true;
     oldestSequenceRef.current = null;
     oldestPriorRowIdRef.current = null;
     hasMoreHistoryRef.current = false;
@@ -238,13 +239,23 @@ export default function BankingBotUI() {
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Scroll the chat pane itself. `scrollIntoView` can select the outer page
+    // instead of this nested, scrollable phone viewport.
+    const container = chatContainerRef.current;
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      return;
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   };
 
   useEffect(() => {
-    if (shouldAutoScrollRef.current) {
-      scrollToBottom();
-    }
+    if (!shouldAutoScrollRef.current) return;
+
+    // Wait for React to lay out a full answer/progress card before reading the
+    // container's height.
+    const frameId = requestAnimationFrame(scrollToBottom);
+    return () => cancelAnimationFrame(frameId);
   }, [messages, isTyping]);
 
   useEffect(() => {
@@ -369,6 +380,9 @@ export default function BankingBotUI() {
             createdAt: new Date().toISOString()
           })));
         } else if (finalBotData.text) {
+          // A completed assistant reply should always take the customer to the
+          // current answer, even if they previously loaded older history.
+          shouldAutoScrollRef.current = true;
           const botResponse = {
             id: Date.now() + 1,
             sender: 'bot',

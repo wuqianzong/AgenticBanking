@@ -123,7 +123,12 @@ def _parse_json_robustly(raw_text: str) -> dict:
 
 
 def _build_conversation_context(state: AgentState) -> str:
-    """Combine the rolling 10-turn window with compacted earlier context."""
+    """Combine durable conversation context with the current 10-turn window.
+
+    The compacted context may originate from a prior session.  It is advisory
+    conversation context only: it must never be interpreted as restored graph
+    state, a pending action, or a previously validated retrieval result.
+    """
     summary = state.get("compacted_history_summary", "").strip()
     history = state.get("chat_history", [])[-20:]
     recent_history = "\n".join(
@@ -131,7 +136,39 @@ def _build_conversation_context(state: AgentState) -> str:
         for message in history
     ) or "None"
     prior_context = summary or "None"
-    return f"Compacted Earlier Conversation:\n{prior_context}\n\nCurrent Session (latest 10 turns):\n{recent_history}"
+    return f"Long-Term Conversation Context (advisory only):\n{prior_context}\n\nCurrent Session (latest 10 turns):\n{recent_history}"
+
+
+def _generate_returning_customer_greeting(summary: str) -> str:
+    """Create a concise welcome without restoring workflow execution state."""
+    if not summary:
+        return "Hello! I am Horizon. How can I assist you today?"
+
+    prompt = f"""
+    You are Horizon, a banking assistant welcoming a returning customer.
+    Write a warm, concise greeting of at most two sentences based only on the
+    conversation context below. Briefly mention the most useful prior topic or
+    open question, then invite the customer either to continue naturally or to
+    ask about something new.
+
+    Important: this is a brand-new session. Do not claim that a workflow,
+    application, transfer, plan, approval, or pending action is still active.
+    Do not invent facts, provide banking advice, or use markdown.
+
+    Prior conversation context:
+    {summary}
+
+    Output JSON only: {{"greeting": "your greeting"}}.
+    """
+    try:
+        raw_response = call_groq_lpu(prompt).strip()
+        greeting = _parse_json_robustly(raw_response).get("greeting", "").strip()
+        if greeting:
+            return greeting
+    except Exception as error:
+        print(f"⚠️ [MEMORY SERVICE] Returning-customer greeting generation failed: {error}")
+
+    return "Welcome back. I can use our previous conversation to help you continue, or we can start with a new question."
 
 
 # --- PHASE 0: INGESTION & INGEST GUARDS ---
@@ -140,13 +177,24 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
     print("🟢 [NODE EXECUTING] Node 00: Context Hydrator & Greeting")
     customer_id = state.get("user_id", "USR_999")
     summary = LongTermMemoryManager.fetch_compact_footprint(customer_id)
-
-    greeting = f"Welcome back. Based on your previous visit: {summary}. How can I help you today?"
-    if not summary:
-        greeting = "Hello! I am Horizon. How can I assist you today?"
+    greeting = _generate_returning_customer_greeting(summary)
 
     return {
-        **VOLATILE_STATE_RESET, # 🧹 Wipes any artifacts upon session initialization
+        # A new login begins a clean graph.  Only this compact, durable
+        # conversation context crosses the session boundary; no plan, queue,
+        # journey, retrieval data, retry count, or other execution state does.
+        **VOLATILE_STATE_RESET,
+        "chat_history": [],
+        "history_sequence_offset": 0,
+        "compacted_history_summary": summary,
+        "active_user_journey": "",
+        "active_product_intents": [],
+        "active_plan": {},
+        "completed_steps": [],
+        "process_slots": {},
+        "pending_journey_switch": {},
+        "pending_journey_queue": [],
+        "raw_retrieved_text": "",
         "final_draft": greeting,
         "working_context": summary,
         "ui_action_payload": {"uiType": "text", "options": []},

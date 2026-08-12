@@ -13,6 +13,23 @@ MAX_SHORT_TERM_TURNS = 10
 MAX_SHORT_TERM_MESSAGES = MAX_SHORT_TERM_TURNS * 2
 TARGET_SUMMARY_TOKENS = 100
 
+
+def _extract_json_string(raw_response: str, field_name: str) -> str:
+    """Read a required string field from the JSON-only shared LLM client."""
+    cleaned = raw_response.strip()
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+    elif cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+
+    parsed = json.loads(cleaned.strip())
+    value = parsed.get(field_name, "")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"LLM response did not contain a non-empty '{field_name}' string.")
+    return value.strip()
+
 def ensure_db_dir_exists():
     """🔒 Self-Healing Safeguard: Programmatically forces folder creation if missing."""
     db_dir = os.path.dirname(DB_PATH)
@@ -35,11 +52,6 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
             session_exit_status TEXT
         )
     """)
-    existing_columns = {
-        row[1] for row in conn.execute("PRAGMA table_info(Persistent_Chat_Message)")
-    }
-    if "ui_payload" not in existing_columns:
-        conn.execute("ALTER TABLE Persistent_Chat_Message ADD COLUMN ui_payload TEXT")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS Persistent_Chat_Message (
             message_id TEXT PRIMARY KEY,
@@ -50,9 +62,17 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
             content TEXT NOT NULL,
             created_at TEXT NOT NULL,
             archive_reason TEXT NOT NULL,
+            ui_payload TEXT,
             UNIQUE(session_id, message_sequence)
         )
     """)
+    # Backward-compatible migration for databases created before structured UI
+    # payloads were persisted with each assistant message.
+    existing_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(Persistent_Chat_Message)")
+    }
+    if "ui_payload" not in existing_columns:
+        conn.execute("ALTER TABLE Persistent_Chat_Message ADD COLUMN ui_payload TEXT")
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_persistent_chat_message_owner
         ON Persistent_Chat_Message(customer_id, session_id, message_sequence)
@@ -98,9 +118,9 @@ class LongTermMemoryManager:
         Newly evicted conversation:
         {transcript}
 
-        Output only the updated compact memory.
+        Output JSON only: {{"summary": "updated compact memory"}}.
         """
-        return call_groq_lpu(prompt).strip()
+        return _extract_json_string(call_groq_lpu(prompt), "summary")
     @staticmethod
     def fetch_compact_footprint(customer_id: str) -> str:
         """
@@ -363,12 +383,16 @@ class LongTermMemoryManager:
         {serialized_transcript}
         \"\"\"
         
-        Output ONLY the concise, high-density summary string. No introduction or chat markers.
+        Output JSON only: {{"summary": "concise high-density summary"}}.
+        Do not include an introduction or chat markers in the summary value.
         """
         
         try:
             print(f"🔄 [MEMORY SERVICE] Launching out-of-band summary compilation pass via LLM...")
-            compact_summary = call_groq_lpu(compaction_prompt).strip()
+            compact_summary = _extract_json_string(
+                call_groq_lpu(compaction_prompt),
+                "summary",
+            )
             
             with sqlite3.connect(DB_PATH) as conn:
                 cursor = conn.cursor()

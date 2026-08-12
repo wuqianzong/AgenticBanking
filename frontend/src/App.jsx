@@ -384,6 +384,13 @@ export default function BankingBotUI() {
           };
           setMessages(prev => [...prev, botResponse]);
         }
+
+        // Turn 0 is a plain greeting, so it is safe to replace it with the
+        // persisted version here. This also obtains the prior-history metadata
+        // needed to show the "Load earlier messages" control on a fresh login.
+        if (isInitialization) {
+          await loadHistoryPage(targetSessionId, null, true);
+        }
       }
 
     } catch (error) {

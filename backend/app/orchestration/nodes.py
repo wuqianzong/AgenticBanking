@@ -24,7 +24,6 @@ VOLATILE_STATE_RESET = {
     "safety_retry_count": 0,
     "search_feedback_history": [],
     "draft_feedback_history": [],
-    "raw_retrieved_text": "",
     "search_tasks": [],
     "active_tool_routes": [],
     "response_complexity": "simple",
@@ -430,15 +429,21 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                     }
         return {
             "preflight_status": route, "active_user_journey": target_journey, "active_product_intents": new_matrix,
-            "active_plan": {}, "completed_steps": [], "search_tasks": search_tasks
+            "active_plan": {}, "completed_steps": [], "search_tasks": search_tasks,
+            "raw_retrieved_text": ""
         }
         
     elif route == "journey_change":
         return {"preflight_status": route, "pending_journey_switch": {"target_journey": target_journey, "target_product_intents": new_matrix}, "search_tasks": search_tasks}
         
     elif route == "intent_drift":
-        return {"preflight_status": route, "active_user_journey": target_journey, "active_product_intents": new_matrix, "active_plan": {}, "search_tasks": search_tasks}
+        return {
+            "preflight_status": route, "active_user_journey": target_journey, "active_product_intents": new_matrix,
+            "active_plan": {}, "search_tasks": search_tasks,
+            "raw_retrieved_text": ""
+        }
         
+    # The old knowledge (or empty results) carries over to the next step.
     return {"preflight_status": route, "search_tasks": search_tasks}
 
 def node_02f_contract_writer(state: AgentState):
@@ -635,10 +640,10 @@ def node_04b_response_generator(state: AgentState):
     is_conclusion = bool(steps and idx >= len(steps))
     
     if routing_status in ["intent_clarification_needed", "CLARIFICATION"]:
-        current_step = "The user's request is vague, small talk, or asks you to make a choice. Respond naturally and clarify."
+        current_step = "The user's request is vague, small talk, or asks you to make a choice. Respond naturally. If the request is about banking, ask the user to clarify their intent. If the request is unrelated to banking, politely decline, explain you are a banking assistant only, and ask if they have a banking question."
     elif not steps:
         # 🟢 CHANGE: Force a complete data dump when the planner is bypassed
-        current_step = "Provide a complete, comprehensive, and direct answer to the user's query using the Retrieved Knowledge. Give all the information at once. Do NOT use a stepper."
+        current_step = "Provide a complete, comprehensive, and direct answer to the user's query using the Retrieved Knowledge. Give all the information at once."
     elif is_conclusion:
         if pending_queue:
             next_task = pending_queue[0]["journey"]
@@ -665,14 +670,14 @@ def node_04b_response_generator(state: AgentState):
     {feedback_str}
 
     Rules for Text Generation:
-    - If 'Current Step' is the first step, draft a conversational response addressing the entire plan. The response should be concise, clear, and provide a complete overview of the process, with each step being a short directive, with a UI Payload about the next step (if any).
-    - If 'Current Step' is not the first step, draft a conversational response addressing ONLY the 'Current Step', with a UI Payload about next steps that eases cognitive load.
+    - If 'Current Step' is the first step, draft a conversational response addressing the entire plan. The response should be concise, clear, and provide a complete overview of the process, with each step being a short directive, with a UI Payload about the next actions.
+    - If 'Current Step' is not the first step, draft a conversational response addressing ONLY the 'Current Step', with a UI Payload about next actions.
     - ZERO HALLUCINATION: Rely EXCLUSIVELY on 'Retrieved Knowledge'.
     - If quoting exact numerical rates or fees, you MUST ONLY use the exact {{placeholders}} provided in the 'Retrieved Knowledge'. Do NOT invent, alter, or hallucinate placeholders.
     
     Rules for UI Payload:
     - Choose 'uiType' ('chips', 'stepper', or 'none') based on the context to ease user cognitive load. 
-    - If 'chips', provide max 2 predicted next steps in the current plan, if they exist. Otherwise, provide max 3 predicted user follow-ups queries which can be answered by the retrieved knowledge.
+    - If 'chips', provide max 2 predicted next actions which can be answered by the retrieved knowledge.
     - If 'stepper', provide max 2 next step for the user to follow, with each step being a concise directive. 
     - If 'none', provide no UI payload.
     

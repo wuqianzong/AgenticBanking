@@ -18,6 +18,39 @@ def ensure_db_dir_exists():
         print(f"🛠️ [MEMORY SERVICE] Parent directory missing. Creating path: {db_dir}")
         os.makedirs(db_dir, exist_ok=True)
 
+
+def ensure_memory_schema(conn: sqlite3.Connection) -> None:
+    """Create the durable, user-scoped conversation history tables."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Persistent_Customer_Dialogue_Registry (
+            history_id TEXT PRIMARY KEY,
+            customer_id TEXT,
+            session_id TEXT,
+            session_start_timestamp TEXT,
+            session_end_timestamp TEXT,
+            raw_chat_transcript TEXT,
+            compact_summary_footprint TEXT,
+            session_exit_status TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Persistent_Chat_Message (
+            message_id TEXT PRIMARY KEY,
+            customer_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            message_sequence INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            archive_reason TEXT NOT NULL,
+            UNIQUE(session_id, message_sequence)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_persistent_chat_message_owner
+        ON Persistent_Chat_Message(customer_id, session_id, message_sequence)
+    """)
+
 class ShortTermMemoryManager:
     @staticmethod
     def trim_history(messages: List[BaseMessage]) -> List[BaseMessage]:
@@ -54,18 +87,7 @@ class LongTermMemoryManager:
         try:
             with sqlite3.connect(DB_PATH) as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS Persistent_Customer_Dialogue_Registry (
-                        history_id TEXT PRIMARY KEY,
-                        customer_id TEXT,
-                        session_id TEXT,
-                        session_start_timestamp TEXT,
-                        session_end_timestamp TEXT,
-                        raw_chat_transcript TEXT,
-                        compact_summary_footprint TEXT,
-                        session_exit_status TEXT
-                    )
-                """)
+                ensure_memory_schema(conn)
                 conn.commit()
                 
                 cursor.execute(query, (customer_id,))
@@ -76,10 +98,183 @@ class LongTermMemoryManager:
         except Exception as e:
             print(f"⚠️ [MEMORY SERVICE Warning] SQLite read failed: {e}")
             
-        return "System Profile: Authenticated Customer Mr. Wu. No prior session context flagged."
+        return ""
 
     @staticmethod
-    def compile_and_archive_session(customer_id: str, session_id: str, messages: List[BaseMessage]) -> str:
+    def persist_chat_history(
+        customer_id: str,
+        session_id: str,
+        messages: List[BaseMessage],
+        archive_reason: str,
+        starting_sequence: int = 0,
+    ) -> int:
+        """Idempotently persist an exact, chronologically ordered session transcript."""
+        if not messages:
+            return 0
+
+        ensure_db_dir_exists()
+        archived_at = datetime.now().isoformat(timespec="seconds")
+        rows = [
+            (
+                str(uuid.uuid4()),
+                customer_id,
+                session_id,
+                sequence,
+                "user" if isinstance(message, HumanMessage) else "assistant",
+                str(message.content),
+                archived_at,
+                archive_reason,
+            )
+            for sequence, message in enumerate(messages, start=starting_sequence)
+        ]
+
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                ensure_memory_schema(conn)
+                before_count = conn.total_changes
+                conn.executemany("""
+                    INSERT OR IGNORE INTO Persistent_Chat_Message
+                    (message_id, customer_id, session_id, message_sequence, role, content, created_at, archive_reason)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, rows)
+                conn.commit()
+                inserted_count = conn.total_changes - before_count
+            print(
+                f"💾 [MEMORY SERVICE] Archived {inserted_count} chat messages for "
+                f"user '{customer_id}', session '{session_id}' ({archive_reason})."
+            )
+            return inserted_count
+        except Exception as e:
+            print(f"🚨 [MEMORY SERVICE] Chat-history archive failed: {e}")
+            raise
+
+    @staticmethod
+    def fetch_chat_history(customer_id: str, session_id: str | None = None) -> List[Dict[str, Any]]:
+        """Read only this customer's ordered transcript; never mix customer records."""
+        ensure_db_dir_exists()
+        query = """
+            SELECT session_id, message_sequence, role, content, created_at
+            FROM Persistent_Chat_Message
+            WHERE customer_id = ?
+        """
+        params: List[str] = [customer_id]
+        if session_id:
+            query += " AND session_id = ?"
+            params.append(session_id)
+        query += " ORDER BY session_id, message_sequence"
+
+        with sqlite3.connect(DB_PATH) as conn:
+            ensure_memory_schema(conn)
+            rows = conn.execute(query, params).fetchall()
+        return [
+            {
+                "session_id": row[0],
+                "sequence": row[1],
+                "role": row[2],
+                "content": row[3],
+                "created_at": row[4],
+            }
+            for row in rows
+        ]
+
+    @staticmethod
+    def fetch_chat_history_page(
+        customer_id: str,
+        session_id: str,
+        limit: int,
+        before_sequence: int | None = None,
+    ) -> Dict[str, Any]:
+        """Return one user-owned transcript page, newest first at the query boundary."""
+        ensure_db_dir_exists()
+        where_clause = "customer_id = ? AND session_id = ?"
+        params: List[Any] = [customer_id, session_id]
+        if before_sequence is not None:
+            where_clause += " AND message_sequence < ?"
+            params.append(before_sequence)
+
+        query = f"""
+            SELECT message_sequence, role, content, created_at
+            FROM Persistent_Chat_Message
+            WHERE {where_clause}
+            ORDER BY message_sequence DESC
+            LIMIT ?
+        """
+        with sqlite3.connect(DB_PATH) as conn:
+            ensure_memory_schema(conn)
+            rows = conn.execute(query, [*params, limit]).fetchall()
+            has_prior_history = conn.execute("""
+                SELECT 1 FROM Persistent_Chat_Message
+                WHERE customer_id = ? AND session_id != ?
+                LIMIT 1
+            """, (customer_id, session_id)).fetchone() is not None
+
+        messages = [
+            {
+                "sequence": row[0],
+                "role": row[1],
+                "content": row[2],
+                "created_at": row[3],
+            }
+            for row in reversed(rows)
+        ]
+        oldest_sequence = messages[0]["sequence"] if messages else None
+        return {
+            "messages": messages,
+            "next_before_sequence": oldest_sequence,
+            "has_more": len(rows) == limit and oldest_sequence is not None and oldest_sequence > 0,
+            "has_prior_history": has_prior_history,
+        }
+
+    @staticmethod
+    def fetch_prior_session_history_page(
+        customer_id: str,
+        current_session_id: str,
+        limit: int,
+        before_row_id: int | None = None,
+    ) -> Dict[str, Any]:
+        """Page through this user's earlier sessions, newest messages first."""
+        ensure_db_dir_exists()
+        where_clause = "customer_id = ? AND session_id != ?"
+        params: List[Any] = [customer_id, current_session_id]
+        if before_row_id is not None:
+            where_clause += " AND rowid < ?"
+            params.append(before_row_id)
+
+        query = f"""
+            SELECT rowid, session_id, message_sequence, role, content, created_at
+            FROM Persistent_Chat_Message
+            WHERE {where_clause}
+            ORDER BY rowid DESC
+            LIMIT ?
+        """
+        with sqlite3.connect(DB_PATH) as conn:
+            ensure_memory_schema(conn)
+            rows = conn.execute(query, [*params, limit]).fetchall()
+
+        messages = [
+            {
+                "row_id": row[0],
+                "session_id": row[1],
+                "sequence": row[2],
+                "role": row[3],
+                "content": row[4],
+                "created_at": row[5],
+            }
+            for row in reversed(rows)
+        ]
+        return {
+            "messages": messages,
+            "next_before_row_id": messages[0]["row_id"] if messages else None,
+            "has_more": len(rows) == limit,
+        }
+
+    @staticmethod
+    def compile_and_archive_session(
+        customer_id: str,
+        session_id: str,
+        messages: List[BaseMessage],
+        starting_sequence: int = 0,
+    ) -> str:
         """
         Asymmetric State Compaction: Triggered at session checkout/timeout.
         """
@@ -87,11 +282,19 @@ class LongTermMemoryManager:
             return "Empty session thread discarded."
             
         ensure_db_dir_exists()
-            
-        serialized_transcript = ""
-        for msg in messages:
-            role = "Customer" if isinstance(msg, HumanMessage) else "Horizon Bot"
-            serialized_transcript += f"{role}: {msg.content}\n"
+        LongTermMemoryManager.persist_chat_history(
+            customer_id=customer_id,
+            session_id=session_id,
+            messages=messages,
+            archive_reason="session_checkout",
+            starting_sequence=starting_sequence,
+        )
+
+        persisted_messages = LongTermMemoryManager.fetch_chat_history(customer_id, session_id)
+        serialized_transcript = "".join(
+            f"{'Customer' if message['role'] == 'user' else 'Horizon Bot'}: {message['content']}\n"
+            for message in persisted_messages
+        )
             
         compaction_prompt = f"""
         You are an enterprise banking context-compaction utility module.
@@ -117,6 +320,7 @@ class LongTermMemoryManager:
             
             with sqlite3.connect(DB_PATH) as conn:
                 cursor = conn.cursor()
+                ensure_memory_schema(conn)
                 cursor.execute("""
                     INSERT INTO Persistent_Customer_Dialogue_Registry 
                     (history_id, customer_id, session_id, session_start_timestamp, session_end_timestamp, raw_chat_transcript, compact_summary_footprint, session_exit_status)

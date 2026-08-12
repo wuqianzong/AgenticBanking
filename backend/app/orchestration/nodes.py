@@ -126,21 +126,17 @@ def _parse_json_robustly(raw_text: str) -> dict:
 
 def node_00_context_hydrator_and_greeting(state: AgentState):
     print("🟢 [NODE EXECUTING] Node 00: Context Hydrator & Greeting")
-    customer_id = "USR_999"
+    customer_id = state.get("user_id", "USR_999")
     summary = LongTermMemoryManager.fetch_compact_footprint(customer_id)
 
     greeting = f"Welcome back. Based on your previous visit: {summary}. How can I help you today?"
     if not summary:
         greeting = "Hello! I am Horizon. How can I assist you today?"
 
-    history = list(state.get("chat_history", []))
-    history.append(AIMessage(content=greeting))
-
     return {
         **VOLATILE_STATE_RESET, # 🧹 Wipes any artifacts upon session initialization
         "final_draft": greeting,
         "working_context": summary,
-        "chat_history": history,
         "ui_action_payload": {"uiType": "text", "options": []},
         "preflight_status": "initial_greeting",
     }
@@ -887,8 +883,13 @@ def node_09_hard_escalation_broker(state: AgentState):
     print("🟢 [NODE 09] Executing Hard Escalation Broker")
     summary_items = [f"RAG Diagnostics: {f}" for f in state.get("search_feedback_history", [])] + [f"Safety: {f}" for f in state.get("draft_feedback_history", [])]
     history = list(state.get("chat_history", []))
-    if state.get("final_response", ""): history.append(AIMessage(content=state.get("final_response", "")))
-    return {"final_response": "I am transferring you to a human agent.", "ui_action_payload": {"uiType": "case_summary", "items": summary_items}}
+    response = "I am transferring you to a human agent."
+    history.append(AIMessage(content=response))
+    return {
+        "final_response": response,
+        "ui_action_payload": {"uiType": "case_summary", "items": summary_items},
+        "chat_history": history,
+    }
 
 def node_10_standard_rejection(state: AgentState):
     status = state.get("preflight_status", "fail")

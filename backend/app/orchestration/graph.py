@@ -49,7 +49,7 @@ def build_agent_graph():
         print(f"📦 [STATE CHECK] chat_history length: {len(history)}")
         print(f"🗣️  [INPUT] user_input: '{state.get('user_input', '')}'")
         
-        if not history: 
+        if not history and state.get("user_input") in {"__INIT__", "**INIT__"}:
             print("🔀 [ROUTE] History empty -> Routing to n00 (Greeting/Init)")
             print("="*50 + "\n")
             return "n00" # Turn 1

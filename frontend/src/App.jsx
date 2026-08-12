@@ -25,25 +25,203 @@ const NODE_CAPTIONS = {
   "n24": "Running a quick final safety check..."
 };
 
+const MOCK_PROFILE = {
+  userId: "USR_999",
+  displayName: "Mr. Wu"
+};
+const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+const HISTORY_PAGE_SIZE = 20;
+const ACTIVE_SESSION_KEY = `horizon_active_session_${MOCK_PROFILE.userId}`;
+
+const createSessionId = () => `sess_${crypto.randomUUID()}`;
+
 export default function BankingBotUI() {
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [sessionId, setSessionId] = useState(() => localStorage.getItem(ACTIVE_SESSION_KEY));
+  const [isLoggedIn, setIsLoggedIn] = useState(() => Boolean(localStorage.getItem(ACTIVE_SESSION_KEY)));
   const [messages, setMessages] = useState([]);
 
-  const [sessionId] = useState(() => `sess_${Math.random().toString(36).substring(2, 9)}`);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [loadingCaption, setLoadingCaption] = useState('Processing...'); // <-- NEW STATE FOR TRACKER
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
-  const hasInitializedRef = useRef(false);
+  const chatContainerRef = useRef(null);
+  const sessionTimeoutRef = useRef(null);
+  const isArchivingRef = useRef(false);
+  const isLoadingHistoryRef = useRef(false);
+  const hasMoreHistoryRef = useRef(false);
+  const hasMoreCurrentSessionRef = useRef(false);
+  const oldestSequenceRef = useRef(null);
+  const oldestPriorRowIdRef = useRef(null);
+  const shouldAutoScrollRef = useRef(true);
+
+  const toUiMessage = (message, targetSessionId) => ({
+    id: `${message.session_id || targetSessionId}-${message.sequence}`,
+    sender: message.role === 'user' ? 'user' : 'bot',
+    text: message.content,
+    type: 'text'
+  });
+
+  const loadHistoryPage = async (targetSessionId, beforeSequence = null, replace = false) => {
+    if (!targetSessionId || isLoadingHistoryRef.current) return;
+    isLoadingHistoryRef.current = true;
+
+    try {
+      const query = new URLSearchParams({
+        session_id: targetSessionId,
+        limit: String(HISTORY_PAGE_SIZE)
+      });
+      if (beforeSequence !== null) query.set('before_sequence', String(beforeSequence));
+
+      const response = await fetch(`http://localhost:8000/api/history/${MOCK_PROFILE.userId}?${query}`);
+      if (!response.ok) throw new Error(`History request failed: ${response.status}`);
+      const page = await response.json();
+      const historyMessages = page.messages.map((message) => toUiMessage(message, targetSessionId));
+      const container = chatContainerRef.current;
+      const previousHeight = container?.scrollHeight ?? 0;
+      const previousTop = container?.scrollTop ?? 0;
+      if (!replace) shouldAutoScrollRef.current = false;
+
+      setMessages((currentMessages) => {
+        if (replace) return historyMessages;
+        const knownIds = new Set(currentMessages.map((message) => message.id));
+        return [...historyMessages.filter((message) => !knownIds.has(message.id)), ...currentMessages];
+      });
+
+      hasMoreHistoryRef.current = page.has_more;
+      hasMoreCurrentSessionRef.current = page.has_more;
+      oldestSequenceRef.current = page.next_before_sequence;
+      if (replace) oldestPriorRowIdRef.current = null;
+      const moreHistoryAvailable = page.has_more || page.has_prior_history;
+      hasMoreHistoryRef.current = moreHistoryAvailable;
+      setHasMoreHistory(moreHistoryAvailable);
+      if (!replace && container) {
+        requestAnimationFrame(() => {
+          container.scrollTop = previousTop + (container.scrollHeight - previousHeight);
+        });
+      }
+    } catch (error) {
+      console.error("Chat-history retrieval failed:", error);
+    } finally {
+      isLoadingHistoryRef.current = false;
+    }
+  };
+
+  const loadPriorSessionHistory = async (targetSessionId) => {
+    if (!targetSessionId || isLoadingHistoryRef.current) return;
+    isLoadingHistoryRef.current = true;
+
+    try {
+      const query = new URLSearchParams({
+        current_session_id: targetSessionId,
+        limit: String(HISTORY_PAGE_SIZE)
+      });
+      if (oldestPriorRowIdRef.current !== null) {
+        query.set('before_row_id', String(oldestPriorRowIdRef.current));
+      }
+
+      const response = await fetch(`http://localhost:8000/api/history/${MOCK_PROFILE.userId}/previous?${query}`);
+      if (!response.ok) throw new Error(`Prior-history request failed: ${response.status}`);
+      const page = await response.json();
+      const historyMessages = page.messages.map((message) => toUiMessage(message, targetSessionId));
+      const container = chatContainerRef.current;
+      const previousHeight = container?.scrollHeight ?? 0;
+      const previousTop = container?.scrollTop ?? 0;
+      shouldAutoScrollRef.current = false;
+
+      setMessages((currentMessages) => {
+        const knownIds = new Set(currentMessages.map((message) => message.id));
+        return [...historyMessages.filter((message) => !knownIds.has(message.id)), ...currentMessages];
+      });
+      oldestPriorRowIdRef.current = page.next_before_row_id;
+      hasMoreHistoryRef.current = page.has_more;
+      setHasMoreHistory(page.has_more);
+      if (container) {
+        requestAnimationFrame(() => {
+          container.scrollTop = previousTop + (container.scrollHeight - previousHeight);
+        });
+      }
+    } catch (error) {
+      console.error("Earlier chat-history retrieval failed:", error);
+    } finally {
+      isLoadingHistoryRef.current = false;
+    }
+  };
+
+  const archiveActiveSession = async (reason) => {
+    if (!sessionId || isArchivingRef.current) return;
+    isArchivingRef.current = true;
+
+    try {
+      await fetch("http://localhost:8000/api/session/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          user_id: MOCK_PROFILE.userId,
+          reason
+        })
+      });
+    } catch (error) {
+      console.error("Session archive failed:", error);
+    } finally {
+      isArchivingRef.current = false;
+    }
+  };
+
+  const scheduleSessionTimeout = () => {
+    window.clearTimeout(sessionTimeoutRef.current);
+    sessionTimeoutRef.current = window.setTimeout(async () => {
+      await archiveActiveSession("timeout");
+      setIsLoggedIn(false);
+      setMessages([]);
+      setSessionId(null);
+      oldestSequenceRef.current = null;
+      oldestPriorRowIdRef.current = null;
+      hasMoreHistoryRef.current = false;
+      setHasMoreHistory(false);
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+    }, SESSION_TIMEOUT_MS);
+  };
+
+  const handleLoginToggle = async () => {
+    if (isLoggedIn) {
+      window.clearTimeout(sessionTimeoutRef.current);
+      await archiveActiveSession("logout");
+      setIsLoggedIn(false);
+      setMessages([]);
+      setSessionId(null);
+      oldestSequenceRef.current = null;
+      oldestPriorRowIdRef.current = null;
+      hasMoreHistoryRef.current = false;
+      setHasMoreHistory(false);
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+      return;
+    }
+
+    const newSessionId = createSessionId();
+    localStorage.setItem(ACTIVE_SESSION_KEY, newSessionId);
+    setSessionId(newSessionId);
+    setIsLoggedIn(true);
+    oldestSequenceRef.current = null;
+    oldestPriorRowIdRef.current = null;
+    hasMoreHistoryRef.current = false;
+    setHasMoreHistory(false);
+    setMessages([]);
+    await handleSend("**INIT**", { isInitialization: true, sessionIdOverride: newSessionId });
+    scheduleSessionTimeout();
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (shouldAutoScrollRef.current) {
+      scrollToBottom();
+    }
   }, [messages, isTyping]);
 
   useEffect(() => {
@@ -53,16 +231,22 @@ export default function BankingBotUI() {
   }, [isTyping]);
 
   useEffect(() => {
-    if (hasInitializedRef.current) return;
-    hasInitializedRef.current = true;
-    void handleSend("**INIT**", { isInitialization: true });
+    if (sessionId) {
+      void loadHistoryPage(sessionId, null, true);
+      scheduleSessionTimeout();
+    }
+
+    return () => window.clearTimeout(sessionTimeoutRef.current);
   }, []);
 
   // ⚡ ACTUAL END-TO-END NETWORK CALL TO LANGGRAPH/FASTAPI
-  const handleSend = async (text, { isInitialization = false } = {}) => {
+  const handleSend = async (text, { isInitialization = false, sessionIdOverride = null } = {}) => {
     if (!text.trim()) return;
+    const targetSessionId = sessionIdOverride || sessionId;
+    if (!targetSessionId) return;
 
     if (!isInitialization) {
+      shouldAutoScrollRef.current = true;
       const newUserMsg = { id: Date.now(), sender: 'user', text, type: 'text' };
       setMessages(prev => [...prev, newUserMsg]);
       setInputValue('');
@@ -78,9 +262,9 @@ export default function BankingBotUI() {
           // Note: Backend must return application/x-ndjson stream
         },
         body: JSON.stringify({
-          session_id: sessionId,
+          session_id: targetSessionId,
           message: text,
-          user_id: "USR_999" 
+          user_id: MOCK_PROFILE.userId
         })
       });
 
@@ -165,6 +349,7 @@ export default function BankingBotUI() {
           };
           setMessages(prev => [...prev, botResponse]);
         }
+        await loadHistoryPage(targetSessionId, null, true);
       }
 
     } catch (error) {
@@ -177,6 +362,21 @@ export default function BankingBotUI() {
       }]);
     } finally {
       setIsTyping(false);
+      scheduleSessionTimeout();
+    }
+  };
+
+  const handleHistoryScroll = (event) => {
+    if (
+      event.currentTarget.scrollTop <= 24
+      && hasMoreHistoryRef.current
+      && oldestSequenceRef.current !== null
+    ) {
+      if (hasMoreCurrentSessionRef.current) {
+        void loadHistoryPage(sessionId, oldestSequenceRef.current);
+      } else {
+        void loadPriorSessionHistory(sessionId);
+      }
     }
   };
 
@@ -273,7 +473,7 @@ export default function BankingBotUI() {
               </div>
             </div>
             {/* Login Toggle */}
-            <button onClick={() => setIsLoggedIn(!isLoggedIn)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors" title="Toggle User State">
+            <button onClick={handleLoginToggle} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors" title="Toggle User State">
               {isLoggedIn ? <LogOut size={18}/> : <LogIn size={18}/>}
             </button>
           </div>
@@ -284,7 +484,7 @@ export default function BankingBotUI() {
                {isLoggedIn ? (
                  <>
                    <UserCheck size={14} className="text-blue-600"/>
-                   <span className="text-xs font-semibold text-blue-900">Mr. Wu</span>
+                   <span className="text-xs font-semibold text-blue-900">{MOCK_PROFILE.displayName}</span>
                  </>
                ) : (
                  <>
@@ -298,12 +498,34 @@ export default function BankingBotUI() {
         </div>
 
         {/* Chat Conversation Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-5 bg-slate-50/50">
+        <div
+          ref={chatContainerRef}
+          onScroll={handleHistoryScroll}
+          className="flex-1 overflow-y-auto p-4 space-y-5 bg-slate-50/50"
+        >
           
           <div className="bg-white/80 backdrop-blur-sm text-slate-600 text-[11px] p-3 rounded-xl border border-slate-200 flex items-start gap-2 mb-4 shadow-sm">
              <ShieldCheck size={16} className="text-blue-600 shrink-0 mt-0.5" />
              <p><b>MVP Mode:</b> No static menus. Use natural language to navigate. Try asking <i>"How do I open an account?"</i></p>
           </div>
+
+          {isLoggedIn && hasMoreHistory && (
+            <div className="flex justify-center pb-1">
+              <button
+                onClick={() => {
+                  if (hasMoreCurrentSessionRef.current) {
+                    void loadHistoryPage(sessionId, oldestSequenceRef.current);
+                  } else {
+                    void loadPriorSessionHistory(sessionId);
+                  }
+                }}
+                disabled={isLoadingHistoryRef.current}
+                className="text-xs font-medium text-blue-700 hover:text-blue-900 disabled:opacity-50"
+              >
+                Load earlier messages
+              </button>
+            </div>
+          )}
 
           {messages.map((msg) => (
             <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -350,7 +572,7 @@ export default function BankingBotUI() {
         {/* Text Input Area & Suggested Prompts */}
         <div className="bg-white border-t border-slate-200 p-3 z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
           
-          {messages.length === 1 && !isTyping && (
+          {isLoggedIn && messages.length === 1 && !isTyping && (
             <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-3 mb-1 w-full">
               <button 
                 onClick={() => handleSend("How do I open an account?")} 
@@ -376,11 +598,11 @@ export default function BankingBotUI() {
               onKeyDown={(e) => e.key === 'Enter' && handleSend(inputValue)}
               placeholder="Type your message..."
               className="w-full bg-slate-100 text-slate-800 text-[15px] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-400"
-              disabled={isTyping}
+              disabled={isTyping || !isLoggedIn}
             />
             <button
               onClick={() => handleSend(inputValue)}
-              disabled={!inputValue.trim() || isTyping}
+              disabled={!inputValue.trim() || isTyping || !isLoggedIn}
               className="absolute right-1.5 bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-50 disabled:bg-slate-300 hover:bg-blue-700 transition-colors shadow-sm"
             >
               <Send size={18} className="ml-0.5" />

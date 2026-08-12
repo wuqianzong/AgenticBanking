@@ -4,6 +4,7 @@ from langchain_core.messages import BaseMessage
 class AgentState(TypedDict):
     # --- PERSISTENT MEMORY (Cross-Turn) ---
     chat_history: List[BaseMessage]
+    history_sequence_offset: int                 # Number of trimmed messages before chat_history
     
     # V2.1: The User Journey (UI Sandbox)
     active_user_journey: str                     # e.g., "ACCOUNT_OPENING"
@@ -19,6 +20,7 @@ class AgentState(TypedDict):
     pending_journey_queue: List[Dict[str, Any]]  # Stores: {"journey": str, "product_intents": list, "plan": dict, "completed_steps": list}
     
     # --- VOLATILE TURN STATE (Reset per turn) ---
+    user_id: str
     user_input: str
     preflight_status: str                        # Maps edge routing conditions
     knowledge_blueprint: Dict[str, Any] 

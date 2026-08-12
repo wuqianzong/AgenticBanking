@@ -10,6 +10,9 @@ import asyncio
 
 # IMPORT THE NEW COMPILED TRI-TIER ENGINE
 from backend.app.orchestration.graph import app_graph
+from backend.app.services.memory_service import LongTermMemoryManager, ShortTermMemoryManager
+
+ARCHIVE_EVERY_USER_TURNS = 10
 
 app = FastAPI(title="Production Horizon Core Gateway")
 
@@ -38,6 +41,38 @@ class ChatPayload(BaseModel):
 class CloseSessionPayload(BaseModel):
     session_id: str
     user_id: str
+    reason: str = "logout"
+
+
+async def archive_session_history(payload: CloseSessionPayload, archive_reason: str, compact: bool = False):
+    """Write the complete in-memory transcript to SQLite before a session boundary."""
+    config = {"configurable": {"thread_id": payload.session_id}}
+    state_snapshot = app_graph.get_state(config)
+    active_history = state_snapshot.values.get("chat_history", []) if state_snapshot.values else []
+    history_sequence_offset = state_snapshot.values.get("history_sequence_offset", 0) if state_snapshot.values else 0
+
+    if not active_history:
+        return {"status": "ignored", "reason": "No active conversation history found."}
+
+    if compact:
+        summary = await asyncio.to_thread(
+            LongTermMemoryManager.compile_and_archive_session,
+            payload.user_id,
+            payload.session_id,
+            active_history,
+            history_sequence_offset,
+        )
+        return {"status": "archived", "message_count": len(active_history), "summary": summary}
+
+    inserted_count = await asyncio.to_thread(
+        LongTermMemoryManager.persist_chat_history,
+        payload.user_id,
+        payload.session_id,
+        active_history,
+        archive_reason,
+        history_sequence_offset,
+    )
+    return {"status": "archived", "message_count": len(active_history), "new_messages": inserted_count}
 
 @app.post("/api/session/checkout")
 async def close_and_compact_session(payload: CloseSessionPayload):
@@ -45,31 +80,49 @@ async def close_and_compact_session(payload: CloseSessionPayload):
     Asynchronous Compaction Webhook Trigger.
     Saves and condenses active short-term chat logs right upon thread close event.
     """
-    # FIXED: Updated absolute import path for safety
-    from backend.app.orchestration.graph import app_graph
-    
-    # 1. Fetch current short-term state payload from LangGraph Checkpointer storage tracking table
-    config = {"configurable": {"thread_id": payload.session_id}}
-    state_snapshot = app_graph.get_state(config)
-    
-    if not state_snapshot.values or "chat_history" not in state_snapshot.values:
-        return {"status": "ignored", "reason": "No active conversation matrix trace found."}
-        
-    active_history = state_snapshot.values["chat_history"]
-    
-    # 2. Run out-of-band high-density compaction routine
-    from backend.app.services.memory_service import LongTermMemoryManager
-    summary = LongTermMemoryManager.compile_and_archive_session(
-        customer_id=payload.user_id,
-        session_id=payload.session_id,
-        messages=active_history
+    result = await archive_session_history(payload, payload.reason, compact=True)
+    result["session_id"] = payload.session_id
+    return result
+
+
+@app.get("/api/history/{user_id}")
+async def get_chat_history(
+    user_id: str,
+    session_id: str,
+    limit: int = 20,
+    before_sequence: int | None = None,
+):
+    """Return one ordered, user-filtered transcript page (20 messages = 10 turns)."""
+    if not 1 <= limit <= 100:
+        return {"user_id": user_id, "messages": [], "has_more": False, "error": "limit must be 1-100"}
+    page = await asyncio.to_thread(
+        LongTermMemoryManager.fetch_chat_history_page,
+        user_id,
+        session_id,
+        limit,
+        before_sequence,
     )
-    
-    return {
-        "status": "archived",
-        "session_id": payload.session_id,
-        "compiled_footprint_token": summary
-    }
+    return {"user_id": user_id, "session_id": session_id, **page}
+
+
+@app.get("/api/history/{user_id}/previous")
+async def get_prior_session_history(
+    user_id: str,
+    current_session_id: str,
+    limit: int = 20,
+    before_row_id: int | None = None,
+):
+    """Page through earlier sessions owned by this user, excluding the active one."""
+    if not 1 <= limit <= 100:
+        return {"user_id": user_id, "messages": [], "has_more": False, "error": "limit must be 1-100"}
+    page = await asyncio.to_thread(
+        LongTermMemoryManager.fetch_prior_session_history_page,
+        user_id,
+        current_session_id,
+        limit,
+        before_row_id,
+    )
+    return {"user_id": user_id, "session_id": current_session_id, **page}
 
 @app.post("/api/chat")
 async def process_chat(payload: ChatPayload):
@@ -105,7 +158,13 @@ async def process_chat(payload: ChatPayload):
 
     # --- STANDARD INVOCATION (STREAMING) ---
     async def chat_stream():
-        initial_turn_state = {"user_input": "__INIT__" if is_initialization else payload.message}
+        previous_snapshot = app_graph.get_state(config)
+        previous_turn_count = previous_snapshot.values.get("turn_count", 0) if previous_snapshot.values else 0
+        initial_turn_state = {
+            "user_id": payload.user_id,
+            "user_input": "__INIT__" if is_initialization else payload.message,
+            "turn_count": previous_turn_count if is_initialization else previous_turn_count + 1,
+        }
 
         try:
             # 1. Stream the Node Execution Progress
@@ -122,6 +181,34 @@ async def process_chat(payload: ChatPayload):
             # 2. Graph has finished. Fetch the final condensed state from the checkpointer.
             state_snapshot = app_graph.get_state(config)
             execution_result = state_snapshot.values
+
+            # Persist every completed turn so a browser refresh can restore the
+            # transcript. Inserts are idempotent by session-wide sequence number.
+            archive_reason = "turn_0" if is_initialization else "turn_complete"
+            await archive_session_history(
+                CloseSessionPayload(
+                    session_id=payload.session_id,
+                    user_id=payload.user_id,
+                    reason=archive_reason,
+                ),
+                archive_reason=archive_reason,
+            )
+
+            # Persist and bound working memory every ten user turns. The SQLite
+            # transcript remains complete; LangGraph retains only recent context.
+            turn_count = execution_result.get("turn_count", 0)
+            if not is_initialization and turn_count and turn_count % ARCHIVE_EVERY_USER_TURNS == 0:
+                trimmed_history = ShortTermMemoryManager.trim_history(
+                    execution_result.get("chat_history", [])
+                )
+                history_sequence_offset = execution_result.get("history_sequence_offset", 0)
+                discarded_count = len(execution_result.get("chat_history", [])) - len(trimmed_history)
+                app_graph.update_state(config, {
+                    "chat_history": trimmed_history,
+                    "history_sequence_offset": history_sequence_offset + discarded_count,
+                })
+                execution_result = app_graph.get_state(config).values
+                print("💾 [MEMORY SERVICE] Turn-limit archive complete; graph history trimmed.")
 
             final_payload = {
                 "type": "complete",

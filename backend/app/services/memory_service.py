@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import uuid
+import json
 from datetime import datetime
 from typing import List, Dict, Any
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -33,6 +34,11 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
             session_exit_status TEXT
         )
     """)
+    existing_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(Persistent_Chat_Message)")
+    }
+    if "ui_payload" not in existing_columns:
+        conn.execute("ALTER TABLE Persistent_Chat_Message ADD COLUMN ui_payload TEXT")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS Persistent_Chat_Message (
             message_id TEXT PRIMARY KEY,
@@ -193,7 +199,7 @@ class LongTermMemoryManager:
             params.append(before_sequence)
 
         query = f"""
-            SELECT message_sequence, role, content, created_at
+            SELECT message_sequence, role, content, created_at, ui_payload
             FROM Persistent_Chat_Message
             WHERE {where_clause}
             ORDER BY message_sequence DESC
@@ -214,6 +220,7 @@ class LongTermMemoryManager:
                 "role": row[1],
                 "content": row[2],
                 "created_at": row[3],
+                "ui_payload": json.loads(row[4]) if row[4] else None,
             }
             for row in reversed(rows)
         ]
@@ -241,7 +248,7 @@ class LongTermMemoryManager:
             params.append(before_row_id)
 
         query = f"""
-            SELECT rowid, session_id, message_sequence, role, content, created_at
+            SELECT rowid, session_id, message_sequence, role, content, created_at, ui_payload
             FROM Persistent_Chat_Message
             WHERE {where_clause}
             ORDER BY rowid DESC
@@ -259,6 +266,7 @@ class LongTermMemoryManager:
                 "role": row[3],
                 "content": row[4],
                 "created_at": row[5],
+                "ui_payload": json.loads(row[6]) if row[6] else None,
             }
             for row in reversed(rows)
         ]
@@ -267,6 +275,24 @@ class LongTermMemoryManager:
             "next_before_row_id": messages[0]["row_id"] if messages else None,
             "has_more": len(rows) == limit,
         }
+
+    @staticmethod
+    def persist_message_ui_payload(
+        customer_id: str,
+        session_id: str,
+        message_sequence: int,
+        ui_payload: Dict[str, Any],
+    ) -> None:
+        """Attach the structured UI contract to its persisted assistant message."""
+        ensure_db_dir_exists()
+        with sqlite3.connect(DB_PATH) as conn:
+            ensure_memory_schema(conn)
+            conn.execute("""
+                UPDATE Persistent_Chat_Message
+                SET ui_payload = ?
+                WHERE customer_id = ? AND session_id = ? AND message_sequence = ? AND role = 'assistant'
+            """, (json.dumps(ui_payload), customer_id, session_id, message_sequence))
+            conn.commit()
 
     @staticmethod
     def compile_and_archive_session(

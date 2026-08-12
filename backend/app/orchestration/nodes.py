@@ -628,6 +628,23 @@ def node_04a_resolution_planner(state: AgentState):
     except Exception as e:
         return {"preflight_status": "fail"}
 
+
+def _build_stepper_payload(steps: list, current_step_index: int) -> dict:
+    """Create a deterministic plan-progress payload for the frontend stepper."""
+    return {
+        "uiType": "stepper",
+        "items": [
+            {
+                "number": index + 1,
+                "label": step,
+                "status": "completed" if index < current_step_index else "current" if index == current_step_index else "upcoming",
+            }
+            for index, step in enumerate(steps)
+        ],
+        "currentStep": current_step_index + 1,
+        "totalSteps": len(steps),
+    }
+
 def node_04b_response_generator(state: AgentState):
     print("🟢 [NODE 04b] Executing Response Generator")
     plan = state.get("active_plan", {})
@@ -696,6 +713,7 @@ def node_04b_response_generator(state: AgentState):
             
         ui_type = res.get("uiType", "none")
         options = res.get("options", [])
+        ui_items = []
         
         if is_conclusion:
             ui_type = "chips"
@@ -704,8 +722,31 @@ def node_04b_response_generator(state: AgentState):
             completed_steps = []
             print(f"   🧹 [STATE CLEANUP]: Wiped active plan and completed steps.")
         elif ui_type == "none": options = [] 
+
+        # A multi-step plan always gets a deterministic progress payload. This
+        # prevents the LLM from omitting the user's overall process view.
+        if len(steps) > 1 and not is_conclusion:
+            stepper_payload = _build_stepper_payload(steps, idx)
+            ui_type = stepper_payload["uiType"]
+            ui_items = stepper_payload["items"]
+            current_step_number = stepper_payload["currentStep"]
+            total_steps = stepper_payload["totalSteps"]
+            print(f"   🧭 [STEPPER PAYLOAD]: Step {current_step_number}/{total_steps}")
         
-        return {"final_draft": draft, "active_plan": plan, "completed_steps": completed_steps, "ui_action_payload": {"uiType": ui_type, "options": options}, "pending_advance": pending_advance}
+        return {
+            "final_draft": draft,
+            "active_plan": plan,
+            "completed_steps": completed_steps,
+            "ui_action_payload": {
+                "uiType": ui_type,
+                "options": options,
+                "items": ui_items,
+                "stepDetail": draft if ui_type == "stepper" else "",
+                "currentStep": idx + 1 if ui_type == "stepper" else None,
+                "totalSteps": len(steps) if ui_type == "stepper" else None,
+            },
+            "pending_advance": pending_advance,
+        }
     except Exception as e:
         return {"final_draft": "I encountered an error. Please try again.", "preflight_status": "fail"}
 

@@ -70,13 +70,21 @@ export default function BankingBotUI() {
   const oldestPriorRowIdRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
 
-  const toUiMessage = (message, targetSessionId) => ({
-    id: `${message.session_id || targetSessionId}-${message.sequence}`,
-    sender: message.role === 'user' ? 'user' : 'bot',
-    text: message.content,
-    type: 'text',
-    createdAt: message.created_at
-  });
+  const toUiMessage = (message, targetSessionId) => {
+    const payload = message.ui_payload || {};
+    return {
+      id: `${message.session_id || targetSessionId}-${message.sequence}`,
+      sender: message.role === 'user' ? 'user' : 'bot',
+      text: message.content,
+      type: payload.uiType || 'text',
+      options: payload.options || [],
+      items: payload.items || [],
+      stepDetail: payload.stepDetail || '',
+      currentStep: payload.currentStep,
+      totalSteps: payload.totalSteps,
+      createdAt: message.created_at
+    };
+  };
 
   const loadHistoryPage = async (targetSessionId, beforeSequence = null, replace = false) => {
     if (!targetSessionId || isLoadingHistoryRef.current) return;
@@ -367,11 +375,13 @@ export default function BankingBotUI() {
             type: finalBotData.uiType || 'text',
             options: finalBotData.options || [],
             items: finalBotData.items || [],
+            stepDetail: finalBotData.stepDetail || '',
+            currentStep: finalBotData.currentStep,
+            totalSteps: finalBotData.totalSteps,
             createdAt: new Date().toISOString()
           };
           setMessages(prev => [...prev, botResponse]);
         }
-        await loadHistoryPage(targetSessionId, null, true);
       }
 
     } catch (error) {
@@ -435,6 +445,62 @@ export default function BankingBotUI() {
           {opt}
         </button>
       ))}
+    </div>
+  );
+
+  const renderStepper = (items, currentStep, totalSteps, options, stepDetail) => (
+    <div className="mt-3 w-full max-w-sm overflow-hidden rounded-xl border border-blue-100 bg-white shadow-sm">
+      <div className="border-b border-blue-100 bg-blue-50 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-blue-900">
+            <FileText size={16} className="text-blue-600" />
+            <span className="text-sm font-semibold">Your guided process</span>
+          </div>
+          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-blue-700 shadow-sm">
+            Step {currentStep} of {totalSteps}
+          </span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
+          <div
+            className="h-full rounded-full bg-blue-600 transition-all duration-500"
+            style={{ width: `${totalSteps ? (currentStep / totalSteps) * 100 : 0}%` }}
+          />
+        </div>
+      </div>
+      <ol className="space-y-0 px-4 py-2">
+        {items?.map((item, index) => {
+          const isCompleted = item.status === 'completed';
+          const isCurrent = item.status === 'current';
+          return (
+            <li key={`${item.number}-${item.label}`} className="flex gap-3 py-2.5">
+              <div className="flex flex-col items-center">
+                <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                  isCompleted
+                    ? 'bg-emerald-500 text-white'
+                    : isCurrent
+                      ? 'bg-blue-600 text-white ring-4 ring-blue-100'
+                      : 'border border-slate-200 bg-white text-slate-400'
+                }`}>
+                  {isCompleted ? <CheckCircle2 size={14} /> : item.number}
+                </div>
+                {index < items.length - 1 && <div className={`mt-1 h-5 w-px ${isCompleted ? 'bg-emerald-300' : 'bg-slate-200'}`} />}
+              </div>
+              <div className="min-w-0 pt-0.5">
+                <p className={`text-sm leading-snug ${isCurrent ? 'font-semibold text-slate-800' : isCompleted ? 'text-slate-500 line-through decoration-slate-300' : 'text-slate-500'}`}>
+                  {item.label}
+                </p>
+                {isCurrent && <span className="mt-1 inline-block text-[10px] font-bold uppercase tracking-wide text-blue-600">Current step</span>}
+                {isCurrent && stepDetail && (
+                  <p className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+                    {stepDetail}
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {options?.length > 0 && <div className="border-t border-slate-100 px-4 pb-3">{renderChips(options)}</div>}
     </div>
   );
 
@@ -573,21 +639,26 @@ export default function BankingBotUI() {
                       </div>
                     )}
 
-                    <div className={`p-3.5 text-[15px] leading-relaxed shadow-sm whitespace-pre-wrap
-                      ${msg.sender === 'user'
-                        ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm'
-                        : 'bg-white border border-slate-200 text-slate-700 rounded-2xl rounded-tl-sm'
-                      }`}
-                    >
-                      {msg.text}
-                    </div>
-                    <div className={`mt-1 text-[10px] tabular-nums text-slate-400 ${msg.sender === 'user' ? 'text-right mr-1' : 'ml-1'}`}>
-                      {formatMessageTime(timestamp)}
-                    </div>
+                    {msg.type !== 'stepper' && (
+                      <>
+                        <div className={`p-3.5 text-[15px] leading-relaxed shadow-sm whitespace-pre-wrap
+                          ${msg.sender === 'user'
+                            ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm'
+                            : 'bg-white border border-slate-200 text-slate-700 rounded-2xl rounded-tl-sm'
+                          }`}
+                        >
+                          {msg.text}
+                        </div>
+                        <div className={`mt-1 text-[10px] tabular-nums text-slate-400 ${msg.sender === 'user' ? 'text-right mr-1' : 'ml-1'}`}>
+                          {formatMessageTime(timestamp)}
+                        </div>
+                      </>
+                    )}
 
                     {/* Dynamic UI Components */}
                     {msg.type === 'carousel' && renderCarousel(msg.options)}
                     {msg.type === 'chips' && renderChips(msg.options)}
+                    {msg.type === 'stepper' && renderStepper(msg.items, msg.currentStep, msg.totalSteps, msg.options, msg.stepDetail)}
                     {msg.type === 'checklist' && renderChecklist(msg.items)}
                     {msg.type === 'escalation' && renderEscalation()}
                   </div>

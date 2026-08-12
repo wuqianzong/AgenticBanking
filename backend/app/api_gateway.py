@@ -193,6 +193,16 @@ async def process_chat(payload: ChatPayload):
                 ),
                 archive_reason=archive_reason,
             )
+            active_history = execution_result.get("chat_history", [])
+            if active_history:
+                history_sequence_offset = execution_result.get("history_sequence_offset", 0)
+                await asyncio.to_thread(
+                    LongTermMemoryManager.persist_message_ui_payload,
+                    payload.user_id,
+                    payload.session_id,
+                    history_sequence_offset + len(active_history) - 1,
+                    execution_result.get("ui_action_payload", {}),
+                )
 
             # Persist and bound working memory every ten user turns. The SQLite
             # transcript remains complete; LangGraph retains only recent context.
@@ -216,6 +226,9 @@ async def process_chat(payload: ChatPayload):
                 "uiType": execution_result.get("ui_action_payload", {}).get("uiType", "text"),
                 "options": execution_result.get("ui_action_payload", {}).get("options", []),
                 "items": execution_result.get("ui_action_payload", {}).get("items", []),
+                "stepDetail": execution_result.get("ui_action_payload", {}).get("stepDetail", ""),
+                "currentStep": execution_result.get("ui_action_payload", {}).get("currentStep"),
+                "totalSteps": execution_result.get("ui_action_payload", {}).get("totalSteps"),
             }
             yield json.dumps(final_payload) + "\n"
 

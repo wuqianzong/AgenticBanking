@@ -746,13 +746,13 @@ def node_04b_response_generator(state: AgentState):
     {feedback_str}
 
     Rules for Text Generation:
-    - Draft a conversational response addressing ONLY the 'Current Step', with a UI Payload about previous action and next action.
+    - Draft a response to guide user to complete ONLY the 'Current Step' with explanation to the current step.
     - ZERO HALLUCINATION: Rely EXCLUSIVELY on 'Retrieved Knowledge'.
     - If quoting exact numerical rates or fees, you MUST ONLY use the exact {{placeholders}} provided in the 'Retrieved Knowledge'. Do NOT invent, alter, or hallucinate placeholders.
     
     Rules for UI Payload:
     - Choose 'uiType' ('chips' or 'none') based on the context to ease user cognitive load.
-    - If 'chips', provide max 2 predicted next actions which can be answered by the retrieved knowledge.
+    - Choose 'chips' ONLY if the current plan is empty, if 'chips', provide max 2 predicted next actions which can be answered by the retrieved knowledge.
     - If 'none', provide no UI payload.
     
     Output JSON ONLY:

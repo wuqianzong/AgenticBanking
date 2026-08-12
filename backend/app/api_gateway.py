@@ -79,13 +79,15 @@ async def process_chat(payload: ChatPayload):
     """
     config = {"configurable": {"thread_id": payload.session_id}}
 
-    # --- FRONTEND INITIALIZATION INTERCEPTOR ---
-    if payload.message == "**INIT**":
+    # --- FRONTEND INITIALIZATION ---
+    # Restore an existing thread, or run Turn 0 to generate and persist a greeting.
+    is_initialization = payload.message == "**INIT**"
+    if is_initialization:
         state_snapshot = app_graph.get_state(config)
         history = state_snapshot.values.get("chat_history", []) if state_snapshot.values else []
 
-        async def init_stream():
-            if history:
+        if history:
+            async def history_stream():
                 serialized_history = [
                     {
                         "role": "user" if isinstance(m, HumanMessage) else "ai",
@@ -98,14 +100,12 @@ async def process_chat(payload: ChatPayload):
                     "uiType": "history_sync",
                     "items": serialized_history,
                 }) + "\n"
-            else:
-                yield json.dumps({"type": "init", "uiType": "none", "items": []}) + "\n"
 
-        return StreamingResponse(init_stream(), media_type="application/x-ndjson")
+            return StreamingResponse(history_stream(), media_type="application/x-ndjson")
 
     # --- STANDARD INVOCATION (STREAMING) ---
     async def chat_stream():
-        initial_turn_state = {"user_input": payload.message}
+        initial_turn_state = {"user_input": "__INIT__" if is_initialization else payload.message}
 
         try:
             # 1. Stream the Node Execution Progress

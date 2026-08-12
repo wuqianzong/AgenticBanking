@@ -27,14 +27,7 @@ const NODE_CAPTIONS = {
 
 export default function BankingBotUI() {
   const [isLoggedIn, setIsLoggedIn] = useState(true);
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      sender: 'bot',
-      text: "Hello. I'm Horizon, your digital banking assistant. I can guide you through our products, onboarding processes, and service requests.\n\n⚠️ Please note: For your security, I cannot execute financial transactions or provide investment advice.",
-      type: 'text'
-    }
-  ]);
+  const [messages, setMessages] = useState([]);
 
   const [sessionId] = useState(() => `sess_${Math.random().toString(36).substring(2, 9)}`);
   const [inputValue, setInputValue] = useState('');
@@ -43,6 +36,7 @@ export default function BankingBotUI() {
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const hasInitializedRef = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -58,13 +52,21 @@ export default function BankingBotUI() {
     }
   }, [isTyping]);
 
+  useEffect(() => {
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+    void handleSend("**INIT**", { isInitialization: true });
+  }, []);
+
   // ⚡ ACTUAL END-TO-END NETWORK CALL TO LANGGRAPH/FASTAPI
-  const handleSend = async (text) => {
+  const handleSend = async (text, { isInitialization = false } = {}) => {
     if (!text.trim()) return;
 
-    const newUserMsg = { id: Date.now(), sender: 'user', text, type: 'text' };
-    setMessages(prev => [...prev, newUserMsg]);
-    setInputValue('');
+    if (!isInitialization) {
+      const newUserMsg = { id: Date.now(), sender: 'user', text, type: 'text' };
+      setMessages(prev => [...prev, newUserMsg]);
+      setInputValue('');
+    }
     setIsTyping(true);
     setLoadingCaption('Initializing agentic workflow...'); // Reset caption
 
@@ -145,15 +147,24 @@ export default function BankingBotUI() {
 
       // 4. Map the final backend data to our React UI state
       if (finalBotData) {
-        const botResponse = {
-          id: Date.now() + 1,
-          sender: 'bot',
-          text: finalBotData.text || '',
-          type: finalBotData.uiType || 'text',
-          options: finalBotData.options || [],
-          items: finalBotData.items || []
-        };
-        setMessages(prev => [...prev, botResponse]);
+        if (finalBotData.uiType === 'history_sync') {
+          setMessages(finalBotData.items.map((message, index) => ({
+            id: `history-${index}`,
+            sender: message.role === 'user' ? 'user' : 'bot',
+            text: message.content,
+            type: 'text'
+          })));
+        } else if (finalBotData.text) {
+          const botResponse = {
+            id: Date.now() + 1,
+            sender: 'bot',
+            text: finalBotData.text,
+            type: finalBotData.uiType || 'text',
+            options: finalBotData.options || [],
+            items: finalBotData.items || []
+          };
+          setMessages(prev => [...prev, botResponse]);
+        }
       }
 
     } catch (error) {

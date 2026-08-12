@@ -128,15 +128,19 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
     print("🟢 [NODE EXECUTING] Node 00: Context Hydrator & Greeting")
     customer_id = "USR_999"
     summary = LongTermMemoryManager.fetch_compact_footprint(customer_id)
-    
+
     greeting = f"Welcome back. Based on your previous visit: {summary}. How can I help you today?"
     if not summary:
         greeting = "Hello! I am Horizon. How can I assist you today?"
-        
+
+    history = list(state.get("chat_history", []))
+    history.append(AIMessage(content=greeting))
+
     return {
         **VOLATILE_STATE_RESET, # 🧹 Wipes any artifacts upon session initialization
         "final_draft": greeting,
         "working_context": summary,
+        "chat_history": history,
         "ui_action_payload": {"uiType": "text", "options": []},
         "preflight_status": "initial_greeting",
     }
@@ -797,7 +801,11 @@ def node_06_outbound_semantic_gate(state: AgentState):
     # 2. Evaluate Judge Results
 
     # 🟢 UPDATE: Deterministic Guardrail Exemption (include initial greeting)
-    is_exempt = state.get("triage_status") == "CLARIFICATION" or state.get("preflight_status") in ["intent_clarification_needed", "initial_greeting"]
+    is_exempt = (
+        state.get("user_input") in {"__INIT__", "**INIT**"}
+        or state.get("triage_status") == "CLARIFICATION"
+        or state.get("preflight_status") in ["intent_clarification_needed", "initial_greeting"]
+    )
 
     if is_exempt:
         print(f"   💡 [GUARDRAIL EXEMPTION]: {state.get('preflight_status', 'CLARIFICATION')} detected. Bypassing Groundedness requirement.")

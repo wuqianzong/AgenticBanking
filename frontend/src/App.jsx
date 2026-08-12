@@ -35,6 +35,19 @@ const ACTIVE_SESSION_KEY = `horizon_active_session_${MOCK_PROFILE.userId}`;
 
 const createSessionId = () => `sess_${crypto.randomUUID()}`;
 
+const formatMessageDate = (timestamp) => new Intl.DateTimeFormat('en-SG', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric'
+}).format(new Date(timestamp));
+
+const formatMessageTime = (timestamp) => new Intl.DateTimeFormat('en-SG', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false
+}).format(new Date(timestamp));
+
 export default function BankingBotUI() {
   const [sessionId, setSessionId] = useState(() => localStorage.getItem(ACTIVE_SESSION_KEY));
   const [isLoggedIn, setIsLoggedIn] = useState(() => Boolean(localStorage.getItem(ACTIVE_SESSION_KEY)));
@@ -61,7 +74,8 @@ export default function BankingBotUI() {
     id: `${message.session_id || targetSessionId}-${message.sequence}`,
     sender: message.role === 'user' ? 'user' : 'bot',
     text: message.content,
-    type: 'text'
+    type: 'text',
+    createdAt: message.created_at
   });
 
   const loadHistoryPage = async (targetSessionId, beforeSequence = null, replace = false) => {
@@ -247,7 +261,13 @@ export default function BankingBotUI() {
 
     if (!isInitialization) {
       shouldAutoScrollRef.current = true;
-      const newUserMsg = { id: Date.now(), sender: 'user', text, type: 'text' };
+      const newUserMsg = {
+        id: Date.now(),
+        sender: 'user',
+        text,
+        type: 'text',
+        createdAt: new Date().toISOString()
+      };
       setMessages(prev => [...prev, newUserMsg]);
       setInputValue('');
     }
@@ -336,7 +356,8 @@ export default function BankingBotUI() {
             id: `history-${index}`,
             sender: message.role === 'user' ? 'user' : 'bot',
             text: message.content,
-            type: 'text'
+            type: 'text',
+            createdAt: new Date().toISOString()
           })));
         } else if (finalBotData.text) {
           const botResponse = {
@@ -345,7 +366,8 @@ export default function BankingBotUI() {
             text: finalBotData.text,
             type: finalBotData.uiType || 'text',
             options: finalBotData.options || [],
-            items: finalBotData.items || []
+            items: finalBotData.items || [],
+            createdAt: new Date().toISOString()
           };
           setMessages(prev => [...prev, botResponse]);
         }
@@ -527,32 +549,52 @@ export default function BankingBotUI() {
             </div>
           )}
 
-          {messages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className="max-w-[88%]">
-                {msg.sender === 'bot' && (
-                  <div className="flex items-end gap-2 mb-1.5 ml-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Horizon</span>
+          {messages.map((msg, index) => {
+            const timestamp = msg.createdAt || new Date().toISOString();
+            const dateLabel = formatMessageDate(timestamp);
+            const previousDateLabel = index > 0
+              ? formatMessageDate(messages[index - 1].createdAt || timestamp)
+              : null;
+
+            return (
+              <React.Fragment key={msg.id}>
+                {dateLabel !== previousDateLabel && (
+                  <div className="flex items-center gap-3 py-1">
+                    <div className="h-px flex-1 bg-slate-200" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{dateLabel}</span>
+                    <div className="h-px flex-1 bg-slate-200" />
                   </div>
                 )}
-                
-                <div className={`p-3.5 text-[15px] leading-relaxed shadow-sm whitespace-pre-wrap
-                  ${msg.sender === 'user' 
-                    ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm' 
-                    : 'bg-white border border-slate-200 text-slate-700 rounded-2xl rounded-tl-sm'
-                  }`}
-                >
-                  {msg.text}
-                </div>
+                <div className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className="max-w-[88%]">
+                    {msg.sender === 'bot' && (
+                      <div className="flex items-end gap-2 mb-1.5 ml-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Horizon</span>
+                      </div>
+                    )}
 
-                {/* Dynamic UI Components */}
-                {msg.type === 'carousel' && renderCarousel(msg.options)}
-                {msg.type === 'chips' && renderChips(msg.options)}
-                {msg.type === 'checklist' && renderChecklist(msg.items)}
-                {msg.type === 'escalation' && renderEscalation()}
-              </div>
-            </div>
-          ))}
+                    <div className={`p-3.5 text-[15px] leading-relaxed shadow-sm whitespace-pre-wrap
+                      ${msg.sender === 'user'
+                        ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm'
+                        : 'bg-white border border-slate-200 text-slate-700 rounded-2xl rounded-tl-sm'
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
+                    <div className={`mt-1 text-[10px] tabular-nums text-slate-400 ${msg.sender === 'user' ? 'text-right mr-1' : 'ml-1'}`}>
+                      {formatMessageTime(timestamp)}
+                    </div>
+
+                    {/* Dynamic UI Components */}
+                    {msg.type === 'carousel' && renderCarousel(msg.options)}
+                    {msg.type === 'chips' && renderChips(msg.options)}
+                    {msg.type === 'checklist' && renderChecklist(msg.items)}
+                    {msg.type === 'escalation' && renderEscalation()}
+                  </div>
+                </div>
+              </React.Fragment>
+            );
+          })}
           
           {/* 3. UI RENDERING REQUIREMENT: Agentic Processing Tracker */}
           {isTyping && (

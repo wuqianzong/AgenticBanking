@@ -901,9 +901,11 @@ def node_07_precision_substitution(state: AgentState):
     # Extract unique placeholders globally
     combined_text = draft + " " + " ".join(options)
     placeholders_in_draft = list(set(re.findall(r"\{\{(.*?)\}\}", combined_text)))
+    precision_substituted = False
     
     if placeholders_in_draft:
         valid_map = fetch_placeholders_from_db(placeholders_in_draft)
+        precision_substituted = bool(valid_map)
         
         # 1. Substitute in the main draft
         for p_id, p_val in valid_map.items():
@@ -919,7 +921,10 @@ def node_07_precision_substitution(state: AgentState):
             updated_options.append(updated_opt)
             
         payload["options"] = updated_options
-            
+        if payload.get("stepDetail"):
+            payload["stepDetail"] = draft
+
+    payload["precisionSubstituted"] = precision_substituted
     return {"final_response": draft, "ui_action_payload": payload}
 
 

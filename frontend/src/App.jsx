@@ -80,6 +80,7 @@ export default function BankingBotUI() {
       options: payload.options || [],
       items: payload.items || [],
       stepDetail: payload.stepDetail || '',
+      precisionSubstituted: payload.precisionSubstituted || false,
       currentStep: payload.currentStep,
       totalSteps: payload.totalSteps,
       createdAt: message.created_at
@@ -376,6 +377,7 @@ export default function BankingBotUI() {
             options: finalBotData.options || [],
             items: finalBotData.items || [],
             stepDetail: finalBotData.stepDetail || '',
+            precisionSubstituted: finalBotData.precisionSubstituted || false,
             currentStep: finalBotData.currentStep,
             totalSteps: finalBotData.totalSteps,
             createdAt: new Date().toISOString()
@@ -448,13 +450,21 @@ export default function BankingBotUI() {
     </div>
   );
 
-  const renderStepper = (items, currentStep, totalSteps, options, stepDetail) => (
+  const renderPrecisionBadge = () => (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 normal-case tracking-normal">
+      <CheckCircle2 size={10} />
+      Number accurate
+    </span>
+  );
+
+  const renderStepper = (items, currentStep, totalSteps, options, stepDetail, precisionSubstituted) => (
     <div className="mt-3 w-full max-w-sm overflow-hidden rounded-xl border border-blue-100 bg-white shadow-sm">
       <div className="border-b border-blue-100 bg-blue-50 px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-blue-900">
             <FileText size={16} className="text-blue-600" />
             <span className="text-sm font-semibold">Your guided process</span>
+            {precisionSubstituted && renderPrecisionBadge()}
           </div>
           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-blue-700 shadow-sm">
             Step {currentStep} of {totalSteps}
@@ -636,6 +646,7 @@ export default function BankingBotUI() {
                     {msg.sender === 'bot' && (
                       <div className="flex items-end gap-2 mb-1.5 ml-1">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Horizon</span>
+                        {msg.precisionSubstituted && renderPrecisionBadge()}
                       </div>
                     )}
 
@@ -658,7 +669,7 @@ export default function BankingBotUI() {
                     {/* Dynamic UI Components */}
                     {msg.type === 'carousel' && renderCarousel(msg.options)}
                     {msg.type === 'chips' && renderChips(msg.options)}
-                    {msg.type === 'stepper' && renderStepper(msg.items, msg.currentStep, msg.totalSteps, msg.options, msg.stepDetail)}
+                    {msg.type === 'stepper' && renderStepper(msg.items, msg.currentStep, msg.totalSteps, msg.options, msg.stepDetail, msg.precisionSubstituted)}
                     {msg.type === 'checklist' && renderChecklist(msg.items)}
                     {msg.type === 'escalation' && renderEscalation()}
                   </div>

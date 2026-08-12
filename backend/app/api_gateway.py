@@ -227,6 +227,7 @@ async def process_chat(payload: ChatPayload):
                 "options": execution_result.get("ui_action_payload", {}).get("options", []),
                 "items": execution_result.get("ui_action_payload", {}).get("items", []),
                 "stepDetail": execution_result.get("ui_action_payload", {}).get("stepDetail", ""),
+                "precisionSubstituted": execution_result.get("ui_action_payload", {}).get("precisionSubstituted", False),
                 "currentStep": execution_result.get("ui_action_payload", {}).get("currentStep"),
                 "totalSteps": execution_result.get("ui_action_payload", {}).get("totalSteps"),
             }

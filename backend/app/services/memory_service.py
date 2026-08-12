@@ -9,7 +9,8 @@ from backend.app.core.llm_service import call_groq_lpu
 
 # ⚡ FIXED PATH: Resolves up TWO levels from backend/app/services/ to find backend/data/
 DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "simulated_ledger.db"))
-MAX_SHORT_TERM_TURNS = 6  # Rolling sliding context window constraint limit
+MAX_SHORT_TERM_TURNS = 10
+MAX_SHORT_TERM_MESSAGES = MAX_SHORT_TERM_TURNS * 2
 TARGET_SUMMARY_TOKENS = 100
 
 def ensure_db_dir_exists():
@@ -67,14 +68,39 @@ class ShortTermMemoryManager:
         if not messages:
             return []
             
-        if len(messages) <= MAX_SHORT_TERM_TURNS:
+        if len(messages) <= MAX_SHORT_TERM_MESSAGES:
             return messages
             
-        print(f"✂️ [MEMORY SERVICE] Trimming short-term cache from {len(messages)} to last {MAX_SHORT_TERM_TURNS} messages.")
-        return messages[-MAX_SHORT_TERM_TURNS:]
+        print(f"✂️ [MEMORY SERVICE] Trimming short-term cache from {len(messages)} to last {MAX_SHORT_TERM_TURNS} turns.")
+        return messages[-MAX_SHORT_TERM_MESSAGES:]
 
 
 class LongTermMemoryManager:
+    @staticmethod
+    def summarize_trimmed_history(existing_summary: str, messages: List[BaseMessage]) -> str:
+        """Merge evicted messages into a compact continuation context."""
+        if not messages:
+            return existing_summary
+
+        transcript = "\n".join(
+            f"{'Customer' if isinstance(message, HumanMessage) else 'Horizon Bot'}: {message.content}"
+            for message in messages
+        )
+        prompt = f"""
+        Update a compact banking conversation memory for a future assistant turn.
+        Preserve: user goals, product/journey, verified facts provided, decisions,
+        completed steps, unresolved questions, and required next actions.
+        Do not invent facts. Keep it under {TARGET_SUMMARY_TOKENS} tokens.
+
+        Existing compact memory:
+        {existing_summary or 'None'}
+
+        Newly evicted conversation:
+        {transcript}
+
+        Output only the updated compact memory.
+        """
+        return call_groq_lpu(prompt).strip()
     @staticmethod
     def fetch_compact_footprint(customer_id: str) -> str:
         """

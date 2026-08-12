@@ -122,6 +122,18 @@ def _parse_json_robustly(raw_text: str) -> dict:
         raise e
 
 
+def _build_conversation_context(state: AgentState) -> str:
+    """Combine the rolling 10-turn window with compacted earlier context."""
+    summary = state.get("compacted_history_summary", "").strip()
+    history = state.get("chat_history", [])[-20:]
+    recent_history = "\n".join(
+        f"{'User' if isinstance(message, HumanMessage) else 'AI'}: {message.content}"
+        for message in history
+    ) or "None"
+    prior_context = summary or "None"
+    return f"Compacted Earlier Conversation:\n{prior_context}\n\nCurrent Session (latest 10 turns):\n{recent_history}"
+
+
 # --- PHASE 0: INGESTION & INGEST GUARDS ---
 
 def node_00_context_hydrator_and_greeting(state: AgentState):
@@ -282,8 +294,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     """n2d: Global Triage & User Journey Extractor (Brain 1)"""
     print("🟢 [NODE 02d] Executing User Journey Classifier & Triage")
     user_msg = state.get("user_input", "")
-    history = state.get("chat_history", [])
-    history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in history[-6:]])
+    history_str = _build_conversation_context(state)
     
     prompt = f"""
     ROLE ALIGNMENT:
@@ -341,8 +352,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     target_journey = extracted_journeys[0] if extracted_journeys else active_journey
     active_matrix = state.get("active_product_intents", [])
     
-    history = state.get("chat_history", [])
-    history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in history[-4:]])
+    history_str = _build_conversation_context(state)
     
     feedback = state.get("search_feedback_history", [])
     feedback_str = f"PREVIOUS SEARCH FAILED. ADJUST QUERIES/NOUNS/VERBS BASED ON THIS FEEDBACK: {feedback[-1]}" if feedback else ""
@@ -526,8 +536,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
     
     combined_knowledge = f"{state.get('rag_payload', '')}\n{state.get('api_payload', '')}\n{state.get('deeplink_payload', '')}".strip()
     user_input = state.get("user_input", "")
-    history = state.get("chat_history", [])
-    history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in history[-4:]])
+    history_str = _build_conversation_context(state)
     
     prompt = f"""
     Evaluate if the Retrieved Knowledge is sufficient to answer or reasonably address the User Query by 普适操作 or 日常惯例.
@@ -544,7 +553,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
     TASK 2: UX PRESENTATION COMPLEXITY
     If the knowledge is SUFFICIENT, analyze the User's tone and the nature of the data to determine the optimal UI presentation:
     - "simple": Use this if the user asks a single factual question, explicitly asks for "all information/everything", implies urgency, OR if the retrieved answer is relatively short.
-    - "multi-step": Use this ONLY if the user asks a broad query AND the retrieved knowledge is a highly complex, multi-stage procedure that requires hand-holding.
+    - "multi-step": Use this if the user's query is about account opening, onboarding processes or any other procedural requirements that requires multi-step guidance.
        
     If INSUFFICIENT, determine the error_level (1 or 2).
     
@@ -609,6 +618,7 @@ def node_04a_resolution_planner(state: AgentState):
     {completed_str}
     
     ARCHITECTURAL PRINCIPLES (Strictly Enforce): 
+    0. ONBOARDING OPTIMIZATION: If the Active Journey is an onboarding journey like account opening or product enrollment, break down the answer into smaller, manageable steps and prioritize those that guide them through the process.
     1. EXACT MATCH EXTRACTION (NO VOLUNTEERING): ONLY plan steps that directly answer the query. 
     2. THE PROCEED TRAP: Do not guess procedures if they are missing from the text.
     3. THE EMPTY ARRAY RULE: If the exact answer is missing or already covered by Milestones, output {{"steps": [], "current_step_index": 0}}.
@@ -673,7 +683,7 @@ def node_04b_response_generator(state: AgentState):
         
     print(f"   📍 [CURRENT TARGET STEP]: {current_step} (Index {idx})")
     
-    history_str = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in state.get("chat_history", [])[-6:]])
+    history_str = _build_conversation_context(state)
     feedback = state.get("draft_feedback_history", [])
     feedback_str = f"CRITICAL CORRECTION NEEDED: {feedback[-1]}" if feedback else ""
 

@@ -12,8 +12,6 @@ import asyncio
 from backend.app.orchestration.graph import app_graph
 from backend.app.services.memory_service import LongTermMemoryManager, ShortTermMemoryManager
 
-ARCHIVE_EVERY_USER_TURNS = 10
-
 app = FastAPI(title="Production Horizon Core Gateway")
 
 app.add_middleware(
@@ -73,6 +71,39 @@ async def archive_session_history(payload: CloseSessionPayload, archive_reason: 
         history_sequence_offset,
     )
     return {"status": "archived", "message_count": len(active_history), "new_messages": inserted_count}
+
+
+async def compact_working_history_in_background(config: dict) -> None:
+    """Keep only 10 turns in graph memory after replying; never block that reply."""
+    try:
+        state_snapshot = app_graph.get_state(config)
+        state = state_snapshot.values
+        history = state.get("chat_history", [])
+        trimmed_history = ShortTermMemoryManager.trim_history(history)
+        discarded_count = len(history) - len(trimmed_history)
+        if discarded_count <= 0:
+            return
+
+        prior_summary = state.get("compacted_history_summary", "")
+        evicted_messages = history[:discarded_count]
+        updated_summary = await asyncio.to_thread(
+            LongTermMemoryManager.summarize_trimmed_history,
+            prior_summary,
+            evicted_messages,
+        )
+        app_graph.update_state(config, {
+            "chat_history": trimmed_history,
+            "history_sequence_offset": state.get("history_sequence_offset", 0) + discarded_count,
+            "compacted_history_summary": updated_summary,
+        })
+        print(
+            f"🧾 [MEMORY SERVICE] Compacted {discarded_count} earlier messages; "
+            f"retained the latest 10 turns in graph memory."
+        )
+    except Exception as error:
+        # The durable transcript has already been persisted; a failed summary
+        # must never affect an already-completed customer response.
+        print(f"⚠️ [MEMORY SERVICE] Background history compaction skipped: {error}")
 
 @app.post("/api/session/checkout")
 async def close_and_compact_session(payload: CloseSessionPayload):
@@ -204,22 +235,6 @@ async def process_chat(payload: ChatPayload):
                     execution_result.get("ui_action_payload", {}),
                 )
 
-            # Persist and bound working memory every ten user turns. The SQLite
-            # transcript remains complete; LangGraph retains only recent context.
-            turn_count = execution_result.get("turn_count", 0)
-            if not is_initialization and turn_count and turn_count % ARCHIVE_EVERY_USER_TURNS == 0:
-                trimmed_history = ShortTermMemoryManager.trim_history(
-                    execution_result.get("chat_history", [])
-                )
-                history_sequence_offset = execution_result.get("history_sequence_offset", 0)
-                discarded_count = len(execution_result.get("chat_history", [])) - len(trimmed_history)
-                app_graph.update_state(config, {
-                    "chat_history": trimmed_history,
-                    "history_sequence_offset": history_sequence_offset + discarded_count,
-                })
-                execution_result = app_graph.get_state(config).values
-                print("💾 [MEMORY SERVICE] Turn-limit archive complete; graph history trimmed.")
-
             final_payload = {
                 "type": "complete",
                 "text": execution_result.get("final_response", ""),
@@ -232,6 +247,11 @@ async def process_chat(payload: ChatPayload):
                 "totalSteps": execution_result.get("ui_action_payload", {}).get("totalSteps"),
             }
             yield json.dumps(final_payload) + "\n"
+
+            # Schedule after the payload is yielded. The customer sees the
+            # response immediately while older context is compacted in back.
+            if not is_initialization:
+                asyncio.create_task(compact_working_history_in_background(config))
 
         except Exception as e:
             # Safe fallback if the graph crashes during execution

@@ -5,6 +5,7 @@ class AgentState(TypedDict):
     # --- PERSISTENT MEMORY (Cross-Turn) ---
     chat_history: List[BaseMessage]
     history_sequence_offset: int                 # Number of trimmed messages before chat_history
+    compacted_history_summary: str               # Rolling summary of messages trimmed from graph memory
     
     # V2.1: The User Journey (UI Sandbox)
     active_user_journey: str                     # e.g., "ACCOUNT_OPENING"

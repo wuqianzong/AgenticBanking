@@ -537,13 +537,14 @@ def node_03c_sufficiency_auditor(state: AgentState):
 
     CRITICAL INSTRUCTION FOR SUFFICIENCY:
     - Do NOT require a literal word-for-word match. 
+    - If the user latest query is a follow-up, you MUST inherit the context from the previous conversation.
     - Only mark INSUFFICIENT if the core factual information needed to answer the user is entirely absent from the text.
     - PLACEHOLDER RULE (CRITICAL): The text contains encrypted placeholders in the format {{{{faq_abc_123}}}}. These placeholders represent exact numbers, rates, fees, limits, and times (e.g., {{{{faq_123}}}}am). You MUST treat these placeholders as valid, sufficient numerical data.
 
     TASK 2: UX PRESENTATION COMPLEXITY
     If the knowledge is SUFFICIENT, analyze the User's tone and the nature of the data to determine the optimal UI presentation:
     - "simple": Use this if the user asks a single factual question, explicitly asks for "all information/everything", implies urgency, OR if the retrieved answer is relatively short.
-    - "multi-step": Use this ONLY if the user asks a broad "How do I..." query AND the retrieved knowledge is a highly complex, multi-stage procedure that requires hand-holding.
+    - "multi-step": Use this ONLY if the user asks a broad query AND the retrieved knowledge is a highly complex, multi-stage procedure that requires hand-holding.
        
     If INSUFFICIENT, determine the error_level (1 or 2).
     
@@ -607,13 +608,12 @@ def node_04a_resolution_planner(state: AgentState):
     MILESTONES COMPLETED:
     {completed_str}
     
-    ARCHITECTURAL PRINCIPLES (Strictly Enforce):
-    1. If the plan is consisted of multiple steps, the first step should be a briefing to the user about the list of steps of the entire process, with each step being a short directive. The briefing should give user a clear overview of the process and what to expect.  
-    2. EXACT MATCH EXTRACTION (NO VOLUNTEERING): ONLY plan steps that directly answer the query. 
-    3. THE PROCEED TRAP: Do not guess procedures if they are missing from the text.
-    4. THE EMPTY ARRAY RULE: If the exact answer is missing or already covered by Milestones, output {{"steps": [], "current_step_index": 0}}.
-    5. LEAN PLANNING: Short, abstract directives.
-    6. LEDGER STRICT AVOIDANCE: DO NOT repeat any step from MILESTONES COMPLETED.
+    ARCHITECTURAL PRINCIPLES (Strictly Enforce): 
+    1. EXACT MATCH EXTRACTION (NO VOLUNTEERING): ONLY plan steps that directly answer the query. 
+    2. THE PROCEED TRAP: Do not guess procedures if they are missing from the text.
+    3. THE EMPTY ARRAY RULE: If the exact answer is missing or already covered by Milestones, output {{"steps": [], "current_step_index": 0}}.
+    4. LEAN PLANNING: Short, abstract directives.
+    5. LEDGER STRICT AVOIDANCE: DO NOT repeat any step from MILESTONES COMPLETED.
 
     
     Output JSON ONLY:
@@ -651,6 +651,7 @@ def node_04b_response_generator(state: AgentState):
     idx = plan.get("current_step_index", 0)
     steps = plan.get("steps", [])
     routing_status = state.get("preflight_status", "")
+    response_complexity = state.get("response_complexity", "simple")
     
     completed_steps = state.get("completed_steps", [])
     pending_queue = state.get("pending_journey_queue", [])
@@ -687,19 +688,17 @@ def node_04b_response_generator(state: AgentState):
     {feedback_str}
 
     Rules for Text Generation:
-    - If 'Current Step' is the first step, draft a conversational response addressing the entire plan. The response should be concise, clear, and provide a complete overview of the process, with each step being a short directive, with a UI Payload about the next actions.
-    - If 'Current Step' is not the first step, draft a conversational response addressing ONLY the 'Current Step', with a UI Payload about next actions.
+    - Draft a conversational response addressing ONLY the 'Current Step', with a UI Payload about previous action and next action.
     - ZERO HALLUCINATION: Rely EXCLUSIVELY on 'Retrieved Knowledge'.
     - If quoting exact numerical rates or fees, you MUST ONLY use the exact {{placeholders}} provided in the 'Retrieved Knowledge'. Do NOT invent, alter, or hallucinate placeholders.
     
     Rules for UI Payload:
-    - Choose 'uiType' ('chips', 'stepper', or 'none') based on the context to ease user cognitive load. 
+    - Choose 'uiType' ('chips' or 'none') based on the context to ease user cognitive load.
     - If 'chips', provide max 2 predicted next actions which can be answered by the retrieved knowledge.
-    - If 'stepper', provide max 2 next step for the user to follow, with each step being a concise directive. 
     - If 'none', provide no UI payload.
     
     Output JSON ONLY:
-    {{"response": "Your conversational text here", "uiType": "chips" | "stepper" | "none", "options": ["prediction 1"], "advance_step": true}}
+    {{"response": "Your conversational text here", "uiType": "chips" | "none", "options": ["prediction 1"], "advance_step": true}}
     """
     
     try:
@@ -714,6 +713,18 @@ def node_04b_response_generator(state: AgentState):
         ui_type = res.get("uiType", "none")
         options = res.get("options", [])
         ui_items = []
+        use_progress_mode = (
+            response_complexity == "multi-step"
+            and len(steps) > 1
+            and not is_conclusion
+        )
+
+        # The complexity classification is authoritative. A direct-generation
+        # response must always stay a normal text response, even if an LLM
+        # incorrectly requests a stepper.
+        if not use_progress_mode and ui_type == "stepper":
+            ui_type = "none"
+            options = []
         
         if is_conclusion:
             ui_type = "chips"
@@ -723,15 +734,17 @@ def node_04b_response_generator(state: AgentState):
             print(f"   🧹 [STATE CLEANUP]: Wiped active plan and completed steps.")
         elif ui_type == "none": options = [] 
 
-        # A multi-step plan always gets a deterministic progress payload. This
-        # prevents the LLM from omitting the user's overall process view.
-        if len(steps) > 1 and not is_conclusion:
+        # Only the auditor-approved multi-step path receives the deterministic
+        # progress payload; simple/direct generation remains standard text.
+        if use_progress_mode:
             stepper_payload = _build_stepper_payload(steps, idx)
             ui_type = stepper_payload["uiType"]
             ui_items = stepper_payload["items"]
             current_step_number = stepper_payload["currentStep"]
             total_steps = stepper_payload["totalSteps"]
             print(f"   🧭 [STEPPER PAYLOAD]: Step {current_step_number}/{total_steps}")
+        else:
+            print(f"   📝 [NORMAL RESPONSE MODE]: Complexity={response_complexity}")
         
         return {
             "final_draft": draft,

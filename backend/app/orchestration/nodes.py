@@ -771,11 +771,14 @@ def node_04b_response_generator(state: AgentState):
         ui_type = res.get("uiType", "none")
         options = res.get("options", [])
         ui_items = []
-        use_progress_mode = (
-            response_complexity == "multi-step"
-            and len(steps) > 1
-            and not is_conclusion
-        )
+        # `response_complexity` decides whether a new response should enter
+        # planning mode. Once that decision has produced a multi-step plan,
+        # the plan itself is the durable UI contract for every later step.
+        # Node 01 deliberately resets volatile turn values (including
+        # response_complexity), so relying on that value here would make the
+        # stepper disappear as soon as the customer clicks "Completed".
+        has_active_multi_step_plan = len(steps) > 1 and not is_conclusion
+        use_progress_mode = has_active_multi_step_plan
 
         # The complexity classification is authoritative. A direct-generation
         # response must always stay a normal text response, even if an LLM
@@ -802,7 +805,10 @@ def node_04b_response_generator(state: AgentState):
             total_steps = stepper_payload["totalSteps"]
             print(f"   🧭 [STEPPER PAYLOAD]: Step {current_step_number}/{total_steps}")
         else:
-            print(f"   📝 [NORMAL RESPONSE MODE]: Complexity={response_complexity}")
+            print(
+                f"   📝 [NORMAL RESPONSE MODE]: Complexity={response_complexity} | "
+                f"Active multi-step plan={has_active_multi_step_plan}"
+            )
         
         return {
             "final_draft": draft,

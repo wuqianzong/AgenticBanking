@@ -526,6 +526,24 @@ export default function BankingBotUI() {
                     {stepDetail}
                   </p>
                 )}
+                {isCurrent && (
+                  <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
+                      onChange={(event) => {
+                        if (event.target.checked) {
+                          handleSend(
+                            currentStep === totalSteps
+                              ? "I've completed all the steps."
+                              : "I've completed this step, continue."
+                          );
+                        }
+                      }}
+                    />
+                    {currentStep === totalSteps ? "Completed all steps" : "Completed"}
+                  </label>
+                )}
               </div>
             </li>
           );

@@ -11,6 +11,7 @@ import asyncio
 # IMPORT THE NEW COMPILED TRI-TIER ENGINE
 from backend.app.orchestration.graph import app_graph
 from backend.app.services.memory_service import LongTermMemoryManager, ShortTermMemoryManager
+from backend.app.core.system_logger import log_event, reset_request_context, set_request_context
 
 app = FastAPI(title="Production Horizon Core Gateway")
 
@@ -111,9 +112,18 @@ async def close_and_compact_session(payload: CloseSessionPayload):
     Asynchronous Compaction Webhook Trigger.
     Saves and condenses active short-term chat logs right upon thread close event.
     """
-    result = await archive_session_history(payload, payload.reason, compact=True)
-    result["session_id"] = payload.session_id
-    return result
+    token = set_request_context(session_id=payload.session_id, user_id=payload.user_id)
+    try:
+        log_event("session.checkout", reason=payload.reason)
+        result = await archive_session_history(payload, payload.reason, compact=True)
+        result["session_id"] = payload.session_id
+        log_event("session.checkout.completed", status=result["status"])
+        return result
+    except Exception as error:
+        log_event("session.checkout.failed", level="ERROR", error=str(error))
+        raise
+    finally:
+        reset_request_context(token)
 
 
 @app.get("/api/history/{user_id}")
@@ -162,6 +172,7 @@ async def process_chat(payload: ChatPayload):
     Yields node execution progress in real-time before returning the final payload.
     """
     config = {"configurable": {"thread_id": payload.session_id}}
+    log_event("chat.request", session_id=payload.session_id, user_id=payload.user_id, message=payload.message)
 
     # --- FRONTEND INITIALIZATION ---
     # Restore an existing thread, or run Turn 0 to generate and persist a greeting.
@@ -172,23 +183,29 @@ async def process_chat(payload: ChatPayload):
 
         if history:
             async def history_stream():
-                serialized_history = [
-                    {
-                        "role": "user" if isinstance(m, HumanMessage) else "ai",
-                        "content": m.content,
-                    }
-                    for m in history
-                ]
-                yield json.dumps({
-                    "type": "init",
-                    "uiType": "history_sync",
-                    "items": serialized_history,
-                }) + "\n"
+                context_token = set_request_context(session_id=payload.session_id, user_id=payload.user_id)
+                try:
+                    serialized_history = [
+                        {
+                            "role": "user" if isinstance(m, HumanMessage) else "ai",
+                            "content": m.content,
+                        }
+                        for m in history
+                    ]
+                    log_event("chat.history_sync", message_count=len(serialized_history))
+                    yield json.dumps({
+                        "type": "init",
+                        "uiType": "history_sync",
+                        "items": serialized_history,
+                    }) + "\n"
+                finally:
+                    reset_request_context(context_token)
 
             return StreamingResponse(history_stream(), media_type="application/x-ndjson")
 
     # --- STANDARD INVOCATION (STREAMING) ---
     async def chat_stream():
+        context_token = set_request_context(session_id=payload.session_id, user_id=payload.user_id)
         previous_snapshot = app_graph.get_state(config)
         previous_turn_count = previous_snapshot.values.get("turn_count", 0) if previous_snapshot.values else 0
         initial_turn_state = {
@@ -201,6 +218,7 @@ async def process_chat(payload: ChatPayload):
             # 1. Stream the Node Execution Progress
             async for chunk in app_graph.astream(initial_turn_state, config=config):
                 for node_name, state_update in chunk.items():
+                    log_event("graph.node.completed", node=node_name, state_keys=list(state_update.keys()))
                     # Yield the name of the node currently executing to the frontend
                     yield json.dumps({
                         "type": "progress",
@@ -247,6 +265,7 @@ async def process_chat(payload: ChatPayload):
                 "totalSteps": execution_result.get("ui_action_payload", {}).get("totalSteps"),
             }
             yield json.dumps(final_payload) + "\n"
+            log_event("chat.response", ui_type=final_payload["uiType"], response_length=len(final_payload["text"]))
 
             # Schedule after the payload is yielded. The customer sees the
             # response immediately while older context is compacted in back.
@@ -261,6 +280,9 @@ async def process_chat(payload: ChatPayload):
                 "uiType": "text",
                 "options": [],
             }) + "\n"
+            log_event("chat.error", level="ERROR", error=str(e))
+        finally:
+            reset_request_context(context_token)
 
     return StreamingResponse(
         chat_stream(),

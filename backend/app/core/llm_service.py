@@ -1,9 +1,11 @@
 import os
+import time
 from typing import List
 from groq import Groq
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
+from backend.app.core.system_logger import log_event
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 MODEL_A_GENERATOR = "openai/gpt-oss-120b"       # Groq: Conversational Engine
@@ -60,11 +62,8 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
     Centralized remote inference client manager.
     Supports Groq LPUs and dynamic Google GenAI Pydantic Structured Outputs.
     """
-    print("\n" + "░"*60)
-    print(f"📤 [LLM PROMPT DISPATCHED TO: {model_id}]")
-    print("-" * 60)
-    print(prompt.strip()[:1000] + ("..." if len(prompt) > 1000 else "")) # Truncated print for cleaner terminal
-    print("░"*60 + "\n")
+    started_at = time.perf_counter()
+    log_event("llm.request", model_id=model_id, raw_prompt=prompt)
 
     try:
         # 🟡 BRANCH 1: Google Gemini Models (Bifurcation Judge & Classifiers)
@@ -99,7 +98,7 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
                 contents=prompt,
                 config=types.GenerateContentConfig(**config_kwargs),
             )
-            return response.text
+            result = response.text
 
         # 🟢 BRANCH 2: Groq Text Classifier Model (Prompt Guard)
         elif model_id == MODEL_D_PROMPT_GUARD:
@@ -111,7 +110,7 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
                 model=model_id,
                 messages=[{"role": "user", "content": prompt}]
             )
-            return chat_completion.choices[0].message.content
+            result = chat_completion.choices[0].message.content
             
         # 🔵 BRANCH 3: Groq Generative Models (JSON Mode)
         else:
@@ -125,10 +124,26 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
                 response_format={"type": "json_object"},
                 temperature=0.0, 
             )
-            return chat_completion.choices[0].message.content
+            result = chat_completion.choices[0].message.content
+
+        log_event(
+            "llm.response",
+            model_id=model_id,
+            raw_response=result,
+            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
+        return result
         
     except Exception as e:
         print(f"🚨 [LLM Service Error]: {e}")
+        log_event(
+            "llm.error",
+            level="ERROR",
+            model_id=model_id,
+            raw_prompt=prompt,
+            error=str(e),
+            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
         raise e
 
 # 🔗 BACKWARD COMPATIBILITY ALIAS

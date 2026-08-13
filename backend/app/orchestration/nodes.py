@@ -426,6 +426,10 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     
     target_journey = extracted_journeys[0] if extracted_journeys else active_journey
     active_matrix = state.get("active_product_intents", [])
+    active_plan = state.get("active_plan", {})
+    has_active_plan = bool(active_plan.get("steps"))
+    has_retrieved_knowledge = bool(state.get("raw_retrieved_text", "").strip())
+    recalled_context = state.get("compacted_history_summary", "").strip()
     
     history_str = _build_conversation_context(state)
     user_baseline = _build_user_baseline_context(state)
@@ -441,6 +445,8 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     {INTENT_GUIDELINE}
     
     Active Context Matrix: {active_matrix}
+    Current Graph Context: active_plan={has_active_plan}, retrieved_knowledge={has_retrieved_knowledge}
+    Recalled Prior-Session Context Is Available: {bool(recalled_context)}
     Recent Conversation: {history_str}
     User Baseline (advisory only; do not treat it as a current request): {user_baseline}
     Latest User Input: "{user_msg}"
@@ -461,7 +467,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        - "conceptual": Only the definition nouns (e.g., "MyInfo service, personal data sharing, Horizon Bank").
     3. For EACH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above.
     4. FORCED MUTATION (CRITICAL): If "PREVIOUS SEARCH FAILED" feedback is present, it will tell you which Matrix mapping failed. You MUST select a DIFFERENT "target_commercial_product" OR a DIFFERENT "target_intent" to explore a new database sector. Do not output the same exact Product/Intent combination twice.
-    5. CONVERSATIONAL CONTINUATION: If the user is simply providing information requested in the previous step (e.g., "I have MyInfo ready", "My age is 25", "Next", "Proceed"), you MUST output an empty array for "search_tasks": []
+    5. CONVERSATIONAL CONTINUATION: Output an empty array for "search_tasks": [] only when the user is simply providing information requested in a previous step (e.g., "I have MyInfo ready", "Next", "Proceed") AND Current Graph Context confirms that an active plan or retrieved knowledge exists. If recalled prior-session context is available but the current graph has neither an active plan nor retrieved knowledge, the user is starting a fresh graph session: for a continuation such as "yes, continue", generate a search task from the recalled topic so current FAQ knowledge can be retrieved.
     6. If the question applies universally (e.g. app password), use "ALL".
     
     Output JSON ONLY:
@@ -1053,7 +1059,7 @@ def node_10_standard_rejection(state: AgentState):
     MESSAGE_MAP = {
         "error_malicious": "We cannot process your request. Please try rephrasing or ask another question.",
         "error_non_compliant": "Sorry, we cannot process your request due to its non-compliant nature under MAS laws and banking regulations. Please try asking another question.",
-        "fail": "To comply with security and regulatory guidelines, I cannot process this request."
+        "fail": "Sorry, I’m unable to respond to that right now. Please try again or rephrase your question."
     }
     
     # Fetch the mapped message, default to "fail" if the code isn't explicitly defined

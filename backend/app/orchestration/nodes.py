@@ -139,6 +139,12 @@ def _build_conversation_context(state: AgentState) -> str:
     return f"Long-Term Conversation Context (advisory only):\n{prior_context}\n\nCurrent Session (latest 10 turns):\n{recent_history}"
 
 
+def _build_user_baseline_context(state: AgentState) -> str:
+    """Return optional personalization context for selected non-safety prompts."""
+    baseline = state.get("user_baseline_summary", "").strip()
+    return baseline or "None"
+
+
 def _generate_returning_customer_greeting(summary: str) -> str:
     """Create a concise welcome without restoring workflow execution state."""
     if not summary:
@@ -177,7 +183,8 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
     print("🟢 [NODE EXECUTING] Node 00: Context Hydrator & Greeting")
     customer_id = state.get("user_id", "USR_999")
     summary = LongTermMemoryManager.fetch_compact_footprint(customer_id)
-    greeting = _generate_returning_customer_greeting(summary)
+    user_baseline = LongTermMemoryManager.fetch_user_baseline(customer_id)
+    greeting = _generate_returning_customer_greeting(summary or user_baseline)
 
     return {
         # A new login begins a clean graph.  Only this compact, durable
@@ -187,6 +194,7 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         "chat_history": [],
         "history_sequence_offset": 0,
         "compacted_history_summary": summary,
+        "user_baseline_summary": user_baseline,
         "active_user_journey": "",
         "active_product_intents": [],
         "active_plan": {},
@@ -343,6 +351,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     print("🟢 [NODE 02d] Executing User Journey Classifier & Triage")
     user_msg = state.get("user_input", "")
     history_str = _build_conversation_context(state)
+    user_baseline = _build_user_baseline_context(state)
     
     prompt = f"""
     ROLE ALIGNMENT:
@@ -352,6 +361,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     {USER_JOURNEY_CLASSIFICATION_GUIDELINE}
     
     Recent Conversation Context: {history_str}
+    User Baseline (advisory only; do not treat it as a current request): {user_baseline}
     Latest User Input: "{user_msg}"
     
     TASK: Triage the user input based on the stage of their journey.
@@ -401,6 +411,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     active_matrix = state.get("active_product_intents", [])
     
     history_str = _build_conversation_context(state)
+    user_baseline = _build_user_baseline_context(state)
     
     feedback = state.get("search_feedback_history", [])
     feedback_str = f"PREVIOUS SEARCH FAILED. ADJUST QUERIES/NOUNS/VERBS BASED ON THIS FEEDBACK: {feedback[-1]}" if feedback else ""
@@ -414,6 +425,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     
     Active Context Matrix: {active_matrix}
     Recent Conversation: {history_str}
+    User Baseline (advisory only; do not treat it as a current request): {user_baseline}
     Latest User Input: "{user_msg}"
     {feedback_str}
     
@@ -732,6 +744,7 @@ def node_04b_response_generator(state: AgentState):
     print(f"   📍 [CURRENT TARGET STEP]: {current_step} (Index {idx})")
     
     history_str = _build_conversation_context(state)
+    user_baseline = _build_user_baseline_context(state)
     feedback = state.get("draft_feedback_history", [])
     feedback_str = f"CRITICAL CORRECTION NEEDED: {feedback[-1]}" if feedback else ""
 
@@ -743,6 +756,7 @@ def node_04b_response_generator(state: AgentState):
     Current Step to Execute: "{current_step}"
     Retrieved Knowledge: "{state.get("raw_retrieved_text", "")}"
     Recent Conversation: {history_str}
+    User Baseline (advisory only; adapt communication only when relevant): {user_baseline}
     {feedback_str}
 
     Rules for Text Generation:

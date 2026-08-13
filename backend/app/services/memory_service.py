@@ -12,6 +12,8 @@ DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "d
 MAX_SHORT_TERM_TURNS = 10
 MAX_SHORT_TERM_MESSAGES = MAX_SHORT_TERM_TURNS * 2
 TARGET_SUMMARY_TOKENS = 100
+USER_BASELINE_SESSION_LIMIT = 5
+USER_BASELINE_TARGET_TOKENS = 150
 
 
 def _extract_json_string(raw_response: str, field_name: str) -> str:
@@ -66,6 +68,15 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
             UNIQUE(session_id, message_sequence)
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Persistent_User_Baseline_Memory (
+            customer_id TEXT PRIMARY KEY,
+            baseline_summary TEXT NOT NULL,
+            source_session_ids TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            schema_version INTEGER NOT NULL
+        )
+    """)
     # Backward-compatible migration for databases created before structured UI
     # payloads were persisted with each assistant message.
     existing_columns = {
@@ -97,8 +108,105 @@ class ShortTermMemoryManager:
 
 class LongTermMemoryManager:
     @staticmethod
+    def fetch_user_baseline(customer_id: str) -> str:
+        """Fetch optional advisory baseline; a missing record is normal."""
+        ensure_db_dir_exists()
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                ensure_memory_schema(conn)
+                row = conn.execute("""
+                    SELECT baseline_summary
+                    FROM Persistent_User_Baseline_Memory
+                    WHERE customer_id = ?
+                """, (customer_id,)).fetchone()
+            return row[0].strip() if row and row[0] else ""
+        except Exception as error:
+            print(f"⚠️ [MEMORY SERVICE] User baseline read failed: {error}")
+            return ""
+
+    @staticmethod
+    def refresh_user_baseline(customer_id: str) -> str:
+        """Consolidate up to five completed session summaries into user context."""
+        ensure_db_dir_exists()
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                ensure_memory_schema(conn)
+                rows = conn.execute("""
+                    SELECT session_id, compact_summary_footprint
+                    FROM Persistent_Customer_Dialogue_Registry
+                    WHERE customer_id = ?
+                      AND compact_summary_footprint IS NOT NULL
+                      AND TRIM(compact_summary_footprint) != ''
+                      AND compact_summary_footprint NOT LIKE 'Error packing%'
+                    GROUP BY session_id
+                    ORDER BY MAX(session_end_timestamp) DESC
+                    LIMIT ?
+                """, (customer_id, USER_BASELINE_SESSION_LIMIT)).fetchall()
+
+            # First-time users and summaries that failed to compile simply have
+            # no baseline. The session itself remains fully usable.
+            if not rows:
+                return ""
+
+            source_session_ids = [row[0] for row in rows]
+            session_summaries = "\n".join(
+                f"Session {index + 1} (newest first): {row[1]}"
+                for index, row in enumerate(rows)
+            )
+            prompt = f"""
+            Build a read-only customer baseline from up to {USER_BASELINE_SESSION_LIMIT}
+            completed banking-chat session summaries. Keep it under
+            {USER_BASELINE_TARGET_TOKENS} tokens.
+
+            Preserve only stable, useful context: recurring banking topics,
+            explicit communication preferences, explicitly stated facts, and
+            unresolved themes. Prefer newer explicit information if sessions
+            conflict. Do not infer financial preferences or make decisions for
+            the customer.
+
+            STRICT UI EXCLUSION: Never include chips, buttons, checkbox labels,
+            stepper items, suggested replies, or UI payloads. They are not user
+            choices. Do not claim any workflow or application remains active.
+
+            Completed session summaries:
+            {session_summaries}
+
+            Output JSON only: {{"baseline": "concise user baseline"}}.
+            """
+            baseline = _extract_json_string(call_groq_lpu(prompt), "baseline")
+            with sqlite3.connect(DB_PATH) as conn:
+                ensure_memory_schema(conn)
+                conn.execute("""
+                    INSERT INTO Persistent_User_Baseline_Memory
+                    (customer_id, baseline_summary, source_session_ids, updated_at, schema_version)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(customer_id) DO UPDATE SET
+                        baseline_summary = excluded.baseline_summary,
+                        source_session_ids = excluded.source_session_ids,
+                        updated_at = excluded.updated_at,
+                        schema_version = excluded.schema_version
+                """, (
+                    customer_id,
+                    baseline,
+                    json.dumps(source_session_ids),
+                    datetime.now().isoformat(timespec="seconds"),
+                    1,
+                ))
+                conn.commit()
+            print(
+                f"🧠 [MEMORY SERVICE] Refreshed user baseline for '{customer_id}' "
+                f"from {len(source_session_ids)} completed session(s)."
+            )
+            return baseline
+        except Exception as error:
+            # A baseline is optional personalization. Preserve the previous
+            # version if this refresh fails, rather than breaking checkout.
+            print(f"⚠️ [MEMORY SERVICE] User baseline refresh skipped: {error}")
+            return LongTermMemoryManager.fetch_user_baseline(customer_id)
+
+    @staticmethod
     def summarize_trimmed_history(existing_summary: str, messages: List[BaseMessage]) -> str:
-        """Merge evicted messages into a compact continuation context."""
+        """Merge evicted messages into compact context, excluding UI metadata."""
         if not messages:
             return existing_summary
 
@@ -111,6 +219,12 @@ class LongTermMemoryManager:
         Preserve: user goals, product/journey, verified facts provided, decisions,
         completed steps, unresolved questions, and required next actions.
         Do not invent facts. Keep it under {TARGET_SUMMARY_TOKENS} tokens.
+
+        STRICT UI EXCLUSION:
+        Chips, buttons, checkbox labels, stepper items, suggested replies, and
+        every other UI payload are presentation metadata, not customer choices
+        or conversation facts. Do not summarize, infer, or retain them. Only a
+        message explicitly sent by the customer is a customer decision.
 
         Existing compact memory:
         {existing_summary or 'None'}
@@ -133,7 +247,10 @@ class LongTermMemoryManager:
         query = """
             SELECT compact_summary_footprint 
             FROM Persistent_Customer_Dialogue_Registry 
-            WHERE customer_id = ? 
+            WHERE customer_id = ?
+              AND compact_summary_footprint IS NOT NULL
+              AND TRIM(compact_summary_footprint) != ''
+              AND compact_summary_footprint NOT LIKE 'Error packing%'
             ORDER BY session_end_timestamp DESC LIMIT 1
         """
         try:
@@ -377,6 +494,13 @@ class LongTermMemoryManager:
         - What specific banking product was the customer exploring?
         - What precise bottleneck did they hit (missing papers, policy validation, etc.)?
         - What was the unresolved next step?
+
+        STRICT UI EXCLUSION:
+        Do not include chips, buttons, checkbox labels, stepper entries,
+        suggested replies, UI actions, or any other payload options in this
+        summary. They are not user choices and must not influence the recalled
+        context. Preserve only explicit customer messages and the assistant's
+        substantive textual answer.
         
         Raw Log to Compact:
         \"\"\"
@@ -412,6 +536,7 @@ class LongTermMemoryManager:
                     "CHECKOUT"
                 ))
                 conn.commit()
+            LongTermMemoryManager.refresh_user_baseline(customer_id)
             print(f"✅ [MEMORY SERVICE] Successfully archived compiled summary to database for {customer_id}.")
             return compact_summary
         except Exception as e:

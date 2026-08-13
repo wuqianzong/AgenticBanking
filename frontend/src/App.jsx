@@ -57,6 +57,9 @@ export default function BankingBotUI() {
   const [isTyping, setIsTyping] = useState(false);
   const [loadingCaption, setLoadingCaption] = useState('Processing...'); // <-- NEW STATE FOR TRACKER
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  // Only the latest live stepper can submit a completion action. Historical
+  // steppers are a read-only record and cannot safely resume graph state.
+  const [activeProgressMessageId, setActiveProgressMessageId] = useState(null);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -200,6 +203,7 @@ export default function BankingBotUI() {
       await archiveActiveSession("timeout");
       setIsLoggedIn(false);
       setMessages([]);
+      setActiveProgressMessageId(null);
       setSessionId(null);
       oldestSequenceRef.current = null;
       oldestPriorRowIdRef.current = null;
@@ -234,6 +238,7 @@ export default function BankingBotUI() {
     hasMoreHistoryRef.current = false;
     setHasMoreHistory(false);
     setMessages([]);
+    setActiveProgressMessageId(null);
     await handleSend("**INIT**", { isInitialization: true, sessionIdOverride: newSessionId });
     scheduleSessionTimeout();
   };
@@ -281,6 +286,7 @@ export default function BankingBotUI() {
 
     if (!isInitialization) {
       shouldAutoScrollRef.current = true;
+      setActiveProgressMessageId(null);
       const newUserMsg = {
         id: Date.now(),
         sender: 'user',
@@ -396,6 +402,9 @@ export default function BankingBotUI() {
             totalSteps: finalBotData.totalSteps,
             createdAt: new Date().toISOString()
           };
+          setActiveProgressMessageId(
+            botResponse.type === 'stepper' ? botResponse.id : null
+          );
           setMessages(prev => [...prev, botResponse]);
         }
 
@@ -478,7 +487,7 @@ export default function BankingBotUI() {
     </span>
   );
 
-  const renderStepper = (items, currentStep, totalSteps, options, stepDetail, precisionSubstituted) => (
+  const renderStepper = (items, currentStep, totalSteps, options, stepDetail, precisionSubstituted, isLive) => (
     <div className="mt-3 w-full max-w-sm overflow-hidden rounded-xl border border-blue-100 bg-white shadow-sm">
       <div className="border-b border-blue-100 bg-blue-50 px-4 py-3">
         <div className="flex items-center justify-between gap-3">
@@ -527,9 +536,17 @@ export default function BankingBotUI() {
                   </p>
                 )}
                 {isCurrent && (
-                  <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100">
+                  <label
+                    title={isLive ? 'Mark this step as completed' : 'Past progress is shown for reference only'}
+                    className={`mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                      isLive
+                        ? 'cursor-pointer border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                        : 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
+                    }`}
+                  >
                     <input
                       type="checkbox"
+                      disabled={!isLive}
                       className="h-4 w-4 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
                       onChange={(event) => {
                         if (event.target.checked) {
@@ -708,7 +725,20 @@ export default function BankingBotUI() {
                     {/* Dynamic UI Components */}
                     {msg.type === 'carousel' && renderCarousel(msg.options)}
                     {msg.type === 'chips' && renderChips(msg.options)}
-                    {msg.type === 'stepper' && renderStepper(msg.items, msg.currentStep, msg.totalSteps, msg.options, msg.stepDetail, msg.precisionSubstituted)}
+                    {msg.type === 'stepper' && renderStepper(
+                      msg.items,
+                      msg.currentStep,
+                      msg.totalSteps,
+                      msg.options,
+                      msg.stepDetail,
+                      msg.precisionSubstituted,
+                      msg.id === activeProgressMessageId
+                    )}
+                    {msg.type === 'stepper' && (
+                      <div className="mt-1 ml-1 text-[10px] tabular-nums text-slate-400">
+                        {formatMessageTime(timestamp)}
+                      </div>
+                    )}
                     {msg.type === 'checklist' && renderChecklist(msg.items)}
                     {msg.type === 'escalation' && renderEscalation()}
                   </div>

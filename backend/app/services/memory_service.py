@@ -64,6 +64,7 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
             content TEXT NOT NULL,
             created_at TEXT NOT NULL,
             archive_reason TEXT NOT NULL,
+            trust_status TEXT NOT NULL DEFAULT 'trusted',
             ui_payload TEXT,
             UNIQUE(session_id, message_sequence)
         )
@@ -84,6 +85,11 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
     }
     if "ui_payload" not in existing_columns:
         conn.execute("ALTER TABLE Persistent_Chat_Message ADD COLUMN ui_payload TEXT")
+    if "trust_status" not in existing_columns:
+        conn.execute(
+            "ALTER TABLE Persistent_Chat_Message "
+            "ADD COLUMN trust_status TEXT NOT NULL DEFAULT 'trusted'"
+        )
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_persistent_chat_message_owner
         ON Persistent_Chat_Message(customer_id, session_id, message_sequence)
@@ -107,6 +113,13 @@ class ShortTermMemoryManager:
 
 
 class LongTermMemoryManager:
+    @staticmethod
+    def _message_trust_status(message: BaseMessage) -> str:
+        """Assistant output is approved; user text is untrusted until the gate promotes it."""
+        if not isinstance(message, HumanMessage):
+            return "trusted"
+        return message.additional_kwargs.get("trust_status", "untrusted")
+
     @staticmethod
     def fetch_user_baseline(customer_id: str) -> str:
         """Fetch optional advisory baseline; a missing record is normal."""
@@ -164,6 +177,14 @@ class LongTermMemoryManager:
             conflict. Do not infer financial preferences or make decisions for
             the customer.
 
+            BANKING-ONLY AND ANTI-HALLUCINATION RULES:
+            - Retain only information relevant to banking FAQ assistance.
+            - Omit small talk, unrelated topics, model speculation, and vague
+              or unsupported claims.
+            - Never infer, embellish, combine assumptions, or fill gaps. If a
+              fact is not explicitly supported by the session summaries, omit
+              it rather than guessing.
+
             STRICT UI EXCLUSION: Never include chips, buttons, checkbox labels,
             stepper items, suggested replies, or UI payloads. They are not user
             choices. Do not claim any workflow or application remains active.
@@ -210,15 +231,26 @@ class LongTermMemoryManager:
         if not messages:
             return existing_summary
 
+        trusted_messages = [
+            message for message in messages
+            if not isinstance(message, HumanMessage)
+            or LongTermMemoryManager._message_trust_status(message) == "trusted"
+        ]
+        if not trusted_messages:
+            return existing_summary
+
         transcript = "\n".join(
             f"{'Customer' if isinstance(message, HumanMessage) else 'Horizon Bot'}: {message.content}"
-            for message in messages
+            for message in trusted_messages
         )
         prompt = f"""
         Update a compact banking conversation memory for a future assistant turn.
         Preserve: user goals, product/journey, verified facts provided, decisions,
         completed steps, unresolved questions, and required next actions.
-        Do not invent facts. Keep it under {TARGET_SUMMARY_TOKENS} tokens.
+        Retain only banking-FAQ-relevant information; omit small talk and
+        unrelated topics. Do not invent, infer, embellish, or fill gaps. If a
+        fact is uncertain or not explicitly supported, omit it. Keep it under
+        {TARGET_SUMMARY_TOKENS} tokens.
 
         STRICT UI EXCLUSION:
         Chips, buttons, checkbox labels, stepper items, suggested replies, and
@@ -293,6 +325,7 @@ class LongTermMemoryManager:
                 str(message.content),
                 archived_at,
                 archive_reason,
+                LongTermMemoryManager._message_trust_status(message),
             )
             for sequence, message in enumerate(messages, start=starting_sequence)
         ]
@@ -303,8 +336,8 @@ class LongTermMemoryManager:
                 before_count = conn.total_changes
                 conn.executemany("""
                     INSERT OR IGNORE INTO Persistent_Chat_Message
-                    (message_id, customer_id, session_id, message_sequence, role, content, created_at, archive_reason)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (message_id, customer_id, session_id, message_sequence, role, content, created_at, archive_reason, trust_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, rows)
                 conn.commit()
                 inserted_count = conn.total_changes - before_count
@@ -318,11 +351,15 @@ class LongTermMemoryManager:
             raise
 
     @staticmethod
-    def fetch_chat_history(customer_id: str, session_id: str | None = None) -> List[Dict[str, Any]]:
+    def fetch_chat_history(
+        customer_id: str,
+        session_id: str | None = None,
+        trusted_user_messages_only: bool = False,
+    ) -> List[Dict[str, Any]]:
         """Read only this customer's ordered transcript; never mix customer records."""
         ensure_db_dir_exists()
         query = """
-            SELECT session_id, message_sequence, role, content, created_at
+            SELECT session_id, message_sequence, role, content, created_at, trust_status
             FROM Persistent_Chat_Message
             WHERE customer_id = ?
         """
@@ -330,6 +367,8 @@ class LongTermMemoryManager:
         if session_id:
             query += " AND session_id = ?"
             params.append(session_id)
+        if trusted_user_messages_only:
+            query += " AND (role != 'user' OR trust_status = 'trusted')"
         query += " ORDER BY session_id, message_sequence"
 
         with sqlite3.connect(DB_PATH) as conn:
@@ -342,6 +381,7 @@ class LongTermMemoryManager:
                 "role": row[2],
                 "content": row[3],
                 "created_at": row[4],
+                "trust_status": row[5],
             }
             for row in rows
         ]
@@ -362,7 +402,7 @@ class LongTermMemoryManager:
             params.append(before_sequence)
 
         query = f"""
-            SELECT message_sequence, role, content, created_at, ui_payload
+            SELECT message_sequence, role, content, created_at, ui_payload, trust_status
             FROM Persistent_Chat_Message
             WHERE {where_clause}
             ORDER BY message_sequence DESC
@@ -384,6 +424,7 @@ class LongTermMemoryManager:
                 "content": row[2],
                 "created_at": row[3],
                 "ui_payload": json.loads(row[4]) if row[4] else None,
+                "trust_status": row[5],
             }
             for row in reversed(rows)
         ]
@@ -411,7 +452,7 @@ class LongTermMemoryManager:
             params.append(before_row_id)
 
         query = f"""
-            SELECT rowid, session_id, message_sequence, role, content, created_at, ui_payload
+            SELECT rowid, session_id, message_sequence, role, content, created_at, ui_payload, trust_status
             FROM Persistent_Chat_Message
             WHERE {where_clause}
             ORDER BY rowid DESC
@@ -430,6 +471,7 @@ class LongTermMemoryManager:
                 "content": row[4],
                 "created_at": row[5],
                 "ui_payload": json.loads(row[6]) if row[6] else None,
+                "trust_status": row[7],
             }
             for row in reversed(rows)
         ]
@@ -479,7 +521,11 @@ class LongTermMemoryManager:
             starting_sequence=starting_sequence,
         )
 
-        persisted_messages = LongTermMemoryManager.fetch_chat_history(customer_id, session_id)
+        persisted_messages = LongTermMemoryManager.fetch_chat_history(
+            customer_id,
+            session_id,
+            trusted_user_messages_only=True,
+        )
         serialized_transcript = "".join(
             f"{'Customer' if message['role'] == 'user' else 'Horizon Bot'}: {message['content']}\n"
             for message in persisted_messages
@@ -494,6 +540,12 @@ class LongTermMemoryManager:
         - What specific banking product was the customer exploring?
         - What precise bottleneck did they hit (missing papers, policy validation, etc.)?
         - What was the unresolved next step?
+
+        BANKING-ONLY AND ANTI-HALLUCINATION RULES:
+        Retain only information relevant to banking FAQ assistance. Omit small
+        talk, unrelated topics, model speculation, and unsupported claims.
+        Never infer, embellish, combine assumptions, or fill gaps. If a detail
+        is not explicitly present in the raw log, omit it rather than guessing.
 
         STRICT UI EXCLUSION:
         Do not include chips, buttons, checkbox labels, stepper entries,

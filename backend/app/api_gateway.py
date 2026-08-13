@@ -91,8 +91,8 @@ async def archive_session_history(payload: CloseSessionPayload, archive_reason: 
     return {"status": "archived", "message_count": len(active_history), "new_messages": inserted_count}
 
 
-async def compact_working_history_in_background(config: dict) -> None:
-    """Keep only 10 turns in graph memory after replying; never block that reply."""
+async def compact_working_history(config: dict) -> dict:
+    """Keep only 10 turns in graph memory before a scheduled new turn."""
     try:
         state_snapshot = app_graph.get_state(config)
         state = state_snapshot.values
@@ -100,7 +100,7 @@ async def compact_working_history_in_background(config: dict) -> None:
         trimmed_history = ShortTermMemoryManager.trim_history(history)
         discarded_count = len(history) - len(trimmed_history)
         if discarded_count <= 0:
-            return
+            return {"compacted": False, "discarded_messages": 0}
 
         prior_summary = state.get("compacted_history_summary", "")
         evicted_messages = history[:discarded_count]
@@ -118,10 +118,12 @@ async def compact_working_history_in_background(config: dict) -> None:
             f"🧾 [MEMORY SERVICE] Compacted {discarded_count} earlier messages; "
             f"retained the latest 10 turns in graph memory."
         )
+        return {"compacted": True, "discarded_messages": discarded_count}
     except Exception as error:
         # The durable transcript has already been persisted; a failed summary
         # must never affect an already-completed customer response.
         print(f"⚠️ [MEMORY SERVICE] Background history compaction skipped: {error}")
+        return {"compacted": False, "discarded_messages": 0, "error": str(error)}
 
 @app.post("/api/session/checkout")
 async def close_and_compact_session(payload: CloseSessionPayload):
@@ -232,6 +234,23 @@ async def process_chat(payload: ChatPayload):
         }
 
         try:
+            # Compact before turns 11, 21, 31, ... rather than after a reply.
+            # The submitted message has already disabled the input in React,
+            # so no graph turn can race this state update. Stream it as a
+            # regular progress stage so the customer can see the work.
+            is_scheduled_compaction_turn = (
+                not is_initialization
+                and previous_turn_count > 0
+                and (previous_turn_count + 1) % 10 == 1
+            )
+            if is_scheduled_compaction_turn:
+                yield json.dumps({
+                    "type": "progress",
+                    "node": "memory_compaction",
+                }) + "\n"
+                compaction_result = await compact_working_history(config)
+                log_event("memory.compaction.completed", **compaction_result)
+
             # 1. Stream the Node Execution Progress
             async for chunk in app_graph.astream(initial_turn_state, config=config):
                 for node_name, state_update in chunk.items():
@@ -283,11 +302,6 @@ async def process_chat(payload: ChatPayload):
             }
             yield json.dumps(final_payload) + "\n"
             log_event("chat.response", ui_type=final_payload["uiType"], response_length=len(final_payload["text"]))
-
-            # Schedule after the payload is yielded. The customer sees the
-            # response immediately while older context is compacted in back.
-            if not is_initialization:
-                asyncio.create_task(compact_working_history_in_background(config))
 
         except Exception as e:
             # Safe fallback if the graph crashes during execution

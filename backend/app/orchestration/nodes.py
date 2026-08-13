@@ -131,9 +131,14 @@ def _build_conversation_context(state: AgentState) -> str:
     """
     summary = state.get("compacted_history_summary", "").strip()
     history = state.get("chat_history", [])[-20:]
+    trusted_history = [
+        message for message in history
+        if not isinstance(message, HumanMessage)
+        or message.additional_kwargs.get("trust_status") == "trusted"
+    ]
     recent_history = "\n".join(
         f"{'User' if isinstance(message, HumanMessage) else 'AI'}: {message.content}"
-        for message in history
+        for message in trusted_history
     ) or "None"
     prior_context = summary or "None"
     return f"Long-Term Conversation Context (advisory only):\n{prior_context}\n\nCurrent Session (latest 10 turns):\n{recent_history}"
@@ -153,13 +158,22 @@ def _generate_returning_customer_greeting(summary: str) -> str:
     prompt = f"""
     You are Horizon, a banking assistant welcoming a returning customer.
     Write a warm, concise greeting of at most two sentences based only on the
-    conversation context below. Briefly mention the most useful prior topic or
-    open question, then invite the customer either to continue naturally or to
-    ask about something new.
+    conversation context below. Frame the prior session as FAQ guidance that
+    Horizon previously explained, not as an application or banking process
+    Horizon is carrying out. If the context identifies a particular explained
+    step or topic, you may mention it as a reminder. Then neutrally invite the
+    customer to continue the discussion or ask about something new.
 
     Important: this is a brand-new session. Do not claim that a workflow,
     application, transfer, plan, approval, or pending action is still active.
-    Do not invent facts, provide banking advice, or use markdown.
+    Do not ask for age, income, residency, identity, documents, account data,
+    or any other customer information. Do not tell the customer to complete a
+    banking action or imply Horizon can complete one for them. Do not invent
+    facts, provide banking advice, or use markdown.
+
+    Good style: "Welcome back. Last time, I shared the FAQ steps for applying
+    for a personal loan, including the information needed at the next stage.
+    Would you like to continue that discussion or explore something else?"
 
     Prior conversation context:
     {summary}
@@ -215,8 +229,11 @@ def node_01_deterministic_ingest_gate(state: AgentState):
     history = list(state.get("chat_history", []))
     
     if user_msg and user_msg not in {"__INIT__", "**INIT**"}:
-        history.append(HumanMessage(content=user_msg))
-        print(f"💾 [MEMORY] User Input saved. History length: {len(history)}")
+        # Keep every customer message for the visible transcript, but do not
+        # allow it into summarized prompt context until the semantic gate
+        # explicitly promotes it.
+        history.append(HumanMessage(content=user_msg, additional_kwargs={"trust_status": "untrusted"}))
+        print(f"💾 [MEMORY] User input stored as untrusted. History length: {len(history)}")
 
     # 1. Sweep for hardcoded threats (Garbled text, SQL drops, XSS)
     if "<script>" in user_msg.lower() or "DROP TABLE" in user_msg.upper():
@@ -343,7 +360,14 @@ def node_02c_inbound_semantic_gate(state: AgentState):
         return {"preflight_status": "error_malicious"}
         
     print(f"   ✅ [INBOUND PASS]: User input is SAFE from injections. Attack Probability: {res}")
-    return {"preflight_status": "pass"}
+    history = list(state.get("chat_history", []))
+    if history and isinstance(history[-1], HumanMessage):
+        latest_message = history[-1]
+        history[-1] = HumanMessage(
+            content=latest_message.content,
+            additional_kwargs={**latest_message.additional_kwargs, "trust_status": "trusted"},
+        )
+    return {"preflight_status": "pass", "chat_history": history}
 
 
 def node_02d_user_journey_classifier_and_triage(state: AgentState):

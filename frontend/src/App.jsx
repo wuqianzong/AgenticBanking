@@ -8,6 +8,7 @@ import {
 
 // 1. THE NODE CAPTION DICTIONARY
 const NODE_CAPTIONS = {
+  "memory_compaction": "Organizing your conversation context...",
   "n00": "Securing your connection...",
   "n3": "Reviewing our chat history...",
   "n4": "Routing your request...",
@@ -55,6 +56,7 @@ export default function BankingBotUI() {
 
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isCompactingMemory, setIsCompactingMemory] = useState(false);
   const [loadingCaption, setLoadingCaption] = useState('Processing...'); // <-- NEW STATE FOR TRACKER
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   // Only the latest live stepper can submit a completion action. Historical
@@ -357,6 +359,17 @@ export default function BankingBotUI() {
             const parsedData = JSON.parse(line);
             console.log("✅ [PARSE SUCCESS]:", parsedData);
 
+            if (parsedData.type === 'memory_compaction') {
+              const isStarting = parsedData.status === 'started';
+              setIsCompactingMemory(isStarting);
+              setLoadingCaption(
+                isStarting
+                  ? 'Organizing your conversation context...'
+                  : 'Conversation context organized.'
+              );
+              continue;
+            }
+
             // Check if the payload is a node transition update
             if (parsedData.node) {
               // Use the dictionary if it exists, otherwise show a generic processing message
@@ -425,6 +438,7 @@ export default function BankingBotUI() {
         type: 'escalation'
       }]);
     } finally {
+      setIsCompactingMemory(false);
       setIsTyping(false);
       scheduleSessionTimeout();
     }
@@ -472,7 +486,8 @@ export default function BankingBotUI() {
         <button
           key={idx}
           onClick={() => handleSend(opt)}
-          className="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-sm"
+          disabled={isTyping || isCompactingMemory}
+          className="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
           {opt}
         </button>
@@ -546,7 +561,7 @@ export default function BankingBotUI() {
                   >
                     <input
                       type="checkbox"
-                      disabled={!isLive}
+                      disabled={!isLive || isTyping || isCompactingMemory}
                       className="h-4 w-4 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
                       onChange={(event) => {
                         if (event.target.checked) {

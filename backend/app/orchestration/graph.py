@@ -59,21 +59,22 @@ def build_agent_graph():
         return "n3"      # Turns 2+
         
     def route_n3(state: AgentState):
-        if state.get("preflight_status") == "fail": return "n5"
-        return "n4"
+        # Do not forward a deterministic ingest veto to any model-backed gate.
+        if state.get("preflight_status") != "pass": return "n5"
+        return "n16"
 
     def route_n4(state: AgentState):
         if state.get("preflight_status") == "yes": return "n6"
-        return "n16"
+        return "n2d"
 
     def route_n6(state: AgentState):
         status = state.get("preflight_status")
         if status == "yes": return "n14"
         if status == "no": return "n8"
-        return "n16" # Else (Ambiguous)
+        return "n2d" # Else (Ambiguous)
 
     def route_n16(state: AgentState):
-        if state.get("preflight_status") == "pass": return "n2d"
+        if state.get("preflight_status") == "pass": return "n4"
         return "n5"
 
 
@@ -168,12 +169,12 @@ def build_agent_graph():
     
     # Phase 0
     workflow.add_edge("n00", "n20")
-    workflow.add_conditional_edges("n3", route_n3, {"n4": "n4", "n5": "n5"})
+    workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n5": "n5"})
     
     # Phase 1
-    workflow.add_conditional_edges("n4", route_n4, {"n6": "n6", "n16": "n16"})
-    workflow.add_conditional_edges("n6", route_n6, {"n14": "n14", "n8": "n8", "n16": "n16"})
-    workflow.add_conditional_edges("n16", route_n16, {"n2d": "n2d", "n5": "n5"})
+    workflow.add_conditional_edges("n4", route_n4, {"n6": "n6", "n2d": "n2d"})
+    workflow.add_conditional_edges("n6", route_n6, {"n14": "n14", "n8": "n8", "n2d": "n2d"})
+    workflow.add_conditional_edges("n16", route_n16, {"n4": "n4", "n5": "n5"})
     workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n8": "n8", "n2e": "n2e"})
     workflow.add_conditional_edges("n2e", route_n2e, {"n2f": "n2f", "n14": "n14", "n19": "n19", "n18": "n18", "n5": "n5"})
     workflow.add_edge("n2f", END)

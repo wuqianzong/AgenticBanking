@@ -55,6 +55,12 @@ class QueryFormulation(BaseModel):
 class SupervisorRouting(BaseModel):
     active_tool_routes: List[str] = Field(description="Array of selected tools (e.g., 'n17_rag', 'n17_api').")
 
+# 6. MEMORY SUMMARY VALIDATOR
+class MemorySummaryEvaluation(BaseModel):
+    is_grounded: bool = Field(description="True only when every retained claim is supported by the source text.")
+    has_non_compliant_content: bool = Field(description="True if candidate contains unauthorized banking advice, transaction handling, or non-compliant claims.")
+    reason: str = Field(description="Brief validation reason or correction guidance.")
+
 # =====================================================================
 
 def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
@@ -85,6 +91,8 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
                 active_schema = QueryFormulation
             elif "Determine which retrieval tools are necessary" in prompt:
                 active_schema = SupervisorRouting
+            elif "MEMORY SUMMARY SECURITY VALIDATION" in prompt:
+                active_schema = MemorySummaryEvaluation
                 
             config_kwargs = {
                 "response_mime_type": "application/json",

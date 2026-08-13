@@ -9,6 +9,7 @@ import {
 // 1. THE NODE CAPTION DICTIONARY
 const NODE_CAPTIONS = {
   "memory_compaction": "Organizing your conversation context...",
+  "memory_validation": "Validating saved conversation context...",
   "n00": "Securing your connection...",
   "n3": "Reviewing our chat history...",
   "n4": "Routing your request...",

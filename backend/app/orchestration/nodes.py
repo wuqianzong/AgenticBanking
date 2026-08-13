@@ -13,6 +13,7 @@ from backend.app.core.llm_service import (
     MODEL_D_PROMPT_GUARD,
     MODEL_E_TRIAGE,
 )
+from backend.app.core.compliance import MAS_REGULATIONS_CONTEXT
 
 # Define the DB Path (adjust relative path if necessary based on your working directory)
 SQLITE_DB_PATH = "backend/data/knowledge_base.db"
@@ -88,14 +89,6 @@ Rewards And Promotions: Earning points, cashback, merchant coupons, referral bon
 Authentication And Security: Login issues, password/PIN resets, OTP failures, tokens, fraud. 
 Branch And ATM Locator: Finding physical infrastructure. 
 General Inquiries: Catch-all. App navigation, UI bugs, compliance, generic notifications.
-"""
-
-# --- MAS REGULATORY COMPLIANCE CONTEXT ---
-MAS_REGULATIONS_CONTEXT = """
-1. Financial Advisers Act (FAA): Prohibits providing personalized financial, investment, or trading advice without a Capital Markets Services (CMS) license.
-2. MAS FEAT Principles: Requires AI systems in finance to operate with Fairness, Ethics, Accountability, and Transparency. Forbids biased, unethical, or deceptive behavior.
-3. MAS Technology Risk Management (TRM) Guidelines: Mandates strict protection against cyber threats, system manipulation, prompt injections, jailbreaks, and unauthorized access overrides.
-4. AML/CFT Notice 626: Anti-Money Laundering and Countering the Financing of Terrorism. Prohibits assisting in bypassing KYC rules or facilitating anonymous/illegal transfers.
 """
 
 USER_JOURNEY_CLASSIFICATION_GUIDELINE = """
@@ -344,8 +337,8 @@ def node_02c_inbound_semantic_gate(state: AgentState):
         # 🐛 FIX: Parse the raw float probability from the model
         try:
             probability_score = float(res.strip())
-            # If the probability of being an attack is > 50%, mark as unsafe
-            is_safe = probability_score < 0.5
+            # A message must remain below the 10% risk threshold to be trusted.
+            is_safe = probability_score < 0.10
         except ValueError:
             # Fallback just in case the API ever returns text instead of a number
             is_safe = "safe" in str(res).lower()

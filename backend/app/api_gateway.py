@@ -248,6 +248,11 @@ async def process_chat(payload: ChatPayload):
                     "type": "progress",
                     "node": "memory_compaction",
                 }) + "\n"
+                await asyncio.sleep(0.3)
+                yield json.dumps({
+                    "type": "progress",
+                    "node": "memory_validation",
+                }) + "\n"
                 compaction_result = await compact_working_history(config)
                 log_event("memory.compaction.completed", **compaction_result)
 

@@ -2,6 +2,7 @@ import json
 import re
 import sqlite3
 import os
+import asyncio
 from langchain_core.messages import HumanMessage, AIMessage
 from backend.app.orchestration.state import AgentState
 from backend.app.orchestration.rag_engine import RAGEngine
@@ -14,6 +15,7 @@ from backend.app.core.llm_service import (
     MODEL_E_TRIAGE,
 )
 from backend.app.core.compliance import MAS_REGULATIONS_CONTEXT
+from backend.app.core.system_logger import log_event
 
 # Define the DB Path (adjust relative path if necessary based on your working directory)
 SQLITE_DB_PATH = "backend/data/knowledge_base.db"
@@ -21,15 +23,26 @@ SQLITE_DB_PATH = "backend/data/knowledge_base.db"
 # --- 🧹 VOLATILE STATE RESET DICTIONARY ---
 # Applied at the start of every turn to prevent cross-turn memory leakage
 VOLATILE_STATE_RESET = {
-    "knowledge_retry_count": 0,
     "safety_retry_count": 0,
     "search_feedback_history": [],
     "draft_feedback_history": [],
     "search_tasks": [],
+    "task_results": [],
+    "task_retry_counts": {},
+    "task_feedback": {},
+    "task_resolution_instructions": [],
+    "safe_answer_for_fallback": "",
+    "clarification_fallback_required": False,
+    "final_answer": "",
+    "final_clarification": "",
+    "selected_ux_journey": "INFORMATIONAL",
+    "presentation_plan": {},
+    "pending_evidence_cache_updates": {},
     "active_tool_routes": [],
-    "response_complexity": "simple",
     "pending_advance": False,
 }
+
+MAX_APPROVED_EVIDENCE_CACHE_ENTRIES = 30
 
 def fetch_placeholders_from_db(placeholders: list) -> dict:
     """Fetches exact values for a list of placeholders from the SQLite Precision_Reference_Table."""
@@ -91,19 +104,6 @@ Branch And ATM Locator: Finding physical infrastructure.
 General Inquiries: Catch-all. App navigation, UI bugs, compliance, generic notifications.
 """
 
-USER_JOURNEY_CLASSIFICATION_GUIDELINE = """
-1. ACCOUNT_OPENING: Users attempting to establish a new banking relationship or open a new account type. (Keywords: Eligibility, required documents like NRIC/Singpass, application status tracking).
-2. DEPOSIT_ACCOUNTS: Managing active cash deposits, interest earnings, and daily operations. (Keywords: Interest yields, balances, Savings Pots, account restrictions/fees, reactivating dormant accounts).
-3. DEBIT_CARDS: Lifecycle and security of everyday spending debit cards. (Keywords: Activation, checkout declines, reporting lost cards, PIN management).
-4. CREDIT_CARDS: Applying for, managing, or disputing charges on personal credit lines. (Keywords: Annual fee waivers, checking limits, transaction declines, chargebacks, disputes).
-5. DIGITAL_BANKING: App access, login authentication, and credential safety. (Keywords: Password/passcode reset, biometric lockouts, delayed OTPs, security token issues).
-6. STATEMENTS: Obtaining or understanding monthly banking statements. (Keywords: PDF downloads, missing statements, explaining confusing merchant names).
-7. LOANS: Seeking personal lending, credit conversions, or cash liquidity. (Keywords: Loan features, EIR, application status, missed payments, late penalties).
-8. BRANCHES: Locating physical bank touchpoints and automated teller machines. (Keywords: Branch/ATM locator, opening hours, checking service availability like cash deposit or card printing).
-9. PROFILE: Authenticated customers managing personal records. (Keywords: Updating registered mobile/email/address, tracking address verification PIN mailers).
-10. INVESTMENTS: Wealth management, trading, and automated investments. (Keywords: Stocks, ETFs, Mutual Funds, AutoInvest, portfolios, trading fees).
-"""
-
 def _parse_json_robustly(raw_text: str) -> dict:
     clean_text = raw_text.strip()
     if clean_text.startswith("```json"): clean_text = clean_text[7:]
@@ -113,6 +113,36 @@ def _parse_json_robustly(raw_text: str) -> dict:
     except Exception as e:
         print(f"🚨 [JSON PARSE ERROR]: {e} \nRaw text was: {raw_text}")
         raise e
+
+
+def _task_evidence_cache_key(task: dict) -> str:
+    """Return an order- and case-insensitive product/intent cache key."""
+    product = str(task.get("target_commercial_product", "")).strip().casefold()
+    intents = task.get("target_intent", [])
+    if isinstance(intents, str):
+        intents = [intents]
+    intent_set = {
+        str(intent).strip().casefold()
+        for intent in intents
+        if str(intent).strip()
+    }
+    if not product or not intent_set:
+        return ""
+    return f"{product}|{','.join(sorted(intent_set))}"
+
+
+def _terminal_retrieval_feedback(task_id: str, feedback: str, reason: str, unapproved_parents: list[dict]) -> dict:
+    """Keep terminal retrieval context internal until clarification generation."""
+    return {
+        "task_id": task_id,
+        "type": "TERMINAL_RETRIEVAL_FEEDBACK",
+        "feedback": feedback,
+        "reason": reason,
+        # These are exact database records retrieved for the task but not
+        # approved as an answer.  They may be offered only as grounded topic
+        # suggestions, never as an answer to the original request.
+        "unapproved_parents": unapproved_parents,
+    }
 
 
 def _build_conversation_context(state: AgentState) -> str:
@@ -195,22 +225,22 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
 
     return {
         # A new login begins a clean graph.  Only this compact, durable
-        # conversation context crosses the session boundary; no plan, queue,
-        # journey, retrieval data, retry count, or other execution state does.
+        # conversation context crosses the session boundary; no plan, task
+        # evidence, retry data, or other execution state does.
         **VOLATILE_STATE_RESET,
         "chat_history": [],
         "history_sequence_offset": 0,
         "compacted_history_summary": summary,
         "user_baseline_summary": user_baseline,
-        "active_user_journey": "",
         "active_product_intents": [],
         "active_plan": {},
         "completed_steps": [],
         "process_slots": {},
-        "pending_journey_switch": {},
-        "pending_journey_queue": [],
+        "approved_evidence_cache": {},
         "raw_retrieved_text": "",
         "final_draft": greeting,
+        "final_answer": greeting,
+        "final_clarification": "",
         "working_context": summary,
         "ui_action_payload": {"uiType": "text", "options": []},
         "preflight_status": "initial_greeting",
@@ -254,78 +284,7 @@ def node_01_deterministic_ingest_gate(state: AgentState):
     }
 
 
-# --- PHASE 1: PREFLIGHT ROUTING & INTERLOCK CONTEXTS ---
-
-def node_02a_pending_contract_check(state: AgentState):
-    print("🟢 [NODE 02a] Executing Pending Contract Check")
-    pending = state.get("pending_journey_switch", {})
-    if pending and pending.get("target_journey"):
-        print(f"   🔒 [STATE INTERLOCKED]: Pending switch to '{pending.get('target_journey')}'")
-        return {"preflight_status": "yes"} 
-    
-    print("   🔓 [STATE OPEN]: No pending contracts.")
-    return {"preflight_status": "no"}      
-
-def node_02b_confirmation_gate(state: AgentState):
-    print("🟢 [NODE 02b] Executing Confirmation Gate")
-    user_msg = state.get("user_input", "")
-    pending_journey = state.get("pending_journey_switch", {}).get("target_journey", "")
-    pending_matrix = state.get("pending_journey_switch", {}).get("target_product_intents", [])
-    
-    prompt = f"""
-    Evaluate user input: "{user_msg}"
-    Did they agree to pause their progress and switch to {pending_journey}?
-    Reply ONLY with JSON: {{"decision": "yes" | "no" | "else"}}
-    """
-    try: decision = _parse_json_robustly(call_groq_lpu(prompt)).get("decision", "else")
-    except: decision = "else"
-        
-    if decision == "yes":
-        current_queue = state.get("pending_journey_queue", [])
-        
-        # 1. PUSH current progress into the queue
-        current_queue.append({
-            "journey": state.get("active_user_journey"),
-            "product_intents": state.get("active_product_intents"),
-            "plan": state.get("active_plan"),
-            "completed_steps": state.get("completed_steps")
-        })
-        print(f"   📦 [QUEUE PUSH]: Saved progress for -> {state.get('active_user_journey')}")
-        
-        # 2. CHECK if target is in queue to resume
-        for i, q in enumerate(current_queue):
-            if q["journey"] == pending_journey:
-                resumed = current_queue.pop(i)
-                print(f"   📦 [QUEUE POP]: Resuming paused task -> {pending_journey}")
-                return {
-                    "user_input": f"Resume my previous request about {pending_journey}",
-                    "active_user_journey": resumed["journey"], 
-                    "active_product_intents": resumed["product_intents"],
-                    "active_plan": resumed["plan"], 
-                    "completed_steps": resumed["completed_steps"],
-                    "pending_journey_queue": current_queue, 
-                    "pending_journey_switch": {}, 
-                    "preflight_status": "yes"
-                }
-
-        # 3. Otherwise start fresh
-        return {
-            "user_input": f"I want to proceed with {pending_journey}",
-            "active_user_journey": pending_journey, 
-            "active_product_intents": pending_matrix,
-            "active_plan": {}, 
-            "completed_steps": [],
-            "pending_journey_queue": current_queue, 
-            "pending_journey_switch": {}, 
-            "preflight_status": "yes"
-        }
-        
-    elif decision == "no":
-        return {"pending_journey_switch": {}, "preflight_status": "no"}
-    else:
-        return {"active_user_journey": "", "active_product_intents": [], "pending_journey_switch": {}, "preflight_status": "else"}
-
-
+# --- PHASE 1: INBOUND SAFETY, TRIAGE, AND TASK DECOMPOSITION ---
 def node_02c_inbound_semantic_gate(state: AgentState):
     print("🟢 [NODE 02c] Executing Inbound Semantic Gate (Prompt Guard)")
     user_input = state.get("user_input", "")
@@ -364,8 +323,8 @@ def node_02c_inbound_semantic_gate(state: AgentState):
 
 
 def node_02d_user_journey_classifier_and_triage(state: AgentState):
-    """n2d: Global Triage & User Journey Extractor (Brain 1)"""
-    print("🟢 [NODE 02d] Executing User Journey Classifier & Triage")
+    """n2d: safety-preserving triage; UX selection happens after retrieval."""
+    print("🟢 [NODE 02d] Executing Request Triage")
     user_msg = state.get("user_input", "")
     history_str = _build_conversation_context(state)
     user_baseline = _build_user_baseline_context(state)
@@ -374,57 +333,40 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     ROLE ALIGNMENT:
     You are an impartial, read-only Horizon Bank UI routing agent. You do NOT give financial advice, and you CANNOT make product choices for the user. 
     
-    USER JOURNEY GUIDELINES (UI Sandbox):
-    {USER_JOURNEY_CLASSIFICATION_GUIDELINE}
-    
     Recent Conversation Context: {history_str}
     User Baseline (advisory only; do not treat it as a current request): {user_baseline}
     Latest User Input: "{user_msg}"
     
-    TASK: Triage the user input based on the stage of their journey.
+    TRIAGE A BANKING REQUEST.
     1. ESCALATION: User explicitly demands a human agent or manager.
     2. CLARIFICATION: The input is PURELY chitchat, greetings, or completely unrelated to banking (e.g., "Hello", "How are you", "What is the weather"). 
-    3. VALID_JOURNEY: A valid query mapping to one of the 10 Journeys above.
-    
-    If VALID_JOURNEY, output an ordered array of target_journeys (primary first).
+    3. VALID_REQUEST: A banking question, follow-up, or request that can be answered from Horizon FAQ knowledge.
     
     Output JSON ONLY:
-    {{"triage_status": "ESCALATION" | "CLARIFICATION" | "VALID_JOURNEY", "target_journeys": ["JOURNEY_1"]}}
+    {{"triage_status": "ESCALATION" | "CLARIFICATION" | "VALID_REQUEST"}}
     """
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
         triage_status = res.get("triage_status", "CLARIFICATION")
-        target_journeys = res.get("target_journeys", [])
     except Exception as e:
         print(f"🚨 [NODE 02d EXCEPTION]: {e}")
         triage_status = "CLARIFICATION"
-        target_journeys = []
+    if triage_status not in {"ESCALATION", "CLARIFICATION", "VALID_REQUEST"}:
+        triage_status = "CLARIFICATION"
 
-    print(f"   🧠 [TRIAGE STATUS]: {triage_status} | JOURNEYS: {target_journeys}")
-    
-    current_queue = state.get("pending_journey_queue", [])
-    if len(target_journeys) > 1:
-        for j in target_journeys[1:]:
-            current_queue.append({"journey": j, "product_intents": [], "plan": {}, "completed_steps": []})
-            print(f"   📥 [QUEUE PUSH]: Pushed secondary journey {j} to queue.")
+    print(f"   🧠 [TRIAGE STATUS]: {triage_status}")
 
     mapped_preflight = "intent_clarification_needed" if triage_status == "CLARIFICATION" else triage_status
 
     return {
         "triage_status": triage_status,
         "preflight_status": mapped_preflight, 
-        "extracted_journeys": target_journeys,
-        "pending_journey_queue": current_queue
     }
 
 def node_02e_intent_classifier_and_query_formulator(state: AgentState):
-    """n2e: Query Formulator & 2D Matrix Extractor (Brain 2)"""
-    print("🟢 [NODE 02e] Executing 2D Matrix Query Formulator")
+    """n2e: create or selectively refine up to three independent RAG tasks."""
+    print("🟢 [NODE 02e] Executing Multi-Task Query Formulator")
     user_msg = state.get("user_input", "")
-    active_journey = state.get("active_user_journey", "")
-    extracted_journeys = state.get("extracted_journeys", [])
-    
-    target_journey = extracted_journeys[0] if extracted_journeys else active_journey
     active_matrix = state.get("active_product_intents", [])
     active_plan = state.get("active_plan", {})
     has_active_plan = bool(active_plan.get("steps"))
@@ -434,8 +376,21 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     history_str = _build_conversation_context(state)
     user_baseline = _build_user_baseline_context(state)
     
-    feedback = state.get("search_feedback_history", [])
-    feedback_str = f"PREVIOUS SEARCH FAILED. ADJUST QUERIES/NOUNS/VERBS BASED ON THIS FEEDBACK: {feedback[-1]}" if feedback else ""
+    prior_tasks = state.get("search_tasks", [])
+    task_results = state.get("task_results", [])
+    retry_feedback = state.get("task_feedback", {})
+    retry_task_ids = [
+        result.get("task_id") for result in task_results
+        if result.get("status") == "RETRY" and result.get("task_id")
+    ]
+    retry_tasks = [task for task in prior_tasks if task.get("task_id") in retry_task_ids]
+    retry_context = ""
+    if retry_tasks:
+        retry_context = f"""
+        RETRY MODE: Rewrite ONLY these existing tasks. Preserve each task_id exactly.
+        Failed tasks: {retry_tasks}
+        Task-specific feedback: {retry_feedback}
+        """
     
     prompt = f"""
     PRODUCT/INTENT MATRIX (Valid Nouns and Verbs):
@@ -450,8 +405,6 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     Recent Conversation: {history_str}
     User Baseline (advisory only; do not treat it as a current request): {user_baseline}
     Latest User Input: "{user_msg}"
-    {feedback_str}
-    
     TASK: Act as a Decoupled Database Search Architect.
     
     CRITICAL RULES FOR VECTOR DENSITY:
@@ -461,25 +414,43 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     - Format each angle as a concise, comma-separated string of keywords.
     
     1. CONTEXTUAL INHERITANCE: Clean & Rephrase the user input. If it is a follow-up question, you MUST inherit the Product (Noun) from the "Active Context Matrix" or recent AI response. Do not default to "ALL" if they are discussing a specific active product process.
-    2. Decompose multi-part questions into distinct tasks. For EACH task, formulate Three Distinct Semantic Angles based strictly on the density rules above:
+    2. Decompose multi-part questions into at most THREE distinct tasks. For EACH task, formulate Three Distinct Semantic Angles based strictly on the density rules above:
        - "procedural": Only the action verbs and tool nouns (e.g., "Horizon App, navigation, setup MyInfo, verification process").
        - "policy": Only the rule nouns and constraints (e.g., "eligibility rules, required documents, security policy, restrictions").
        - "conceptual": Only the definition nouns (e.g., "MyInfo service, personal data sharing, Horizon Bank").
     3. For EACH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above.
-    4. FORCED MUTATION (CRITICAL): If "PREVIOUS SEARCH FAILED" feedback is present, it will tell you which Matrix mapping failed. You MUST select a DIFFERENT "target_commercial_product" OR a DIFFERENT "target_intent" to explore a new database sector. Do not output the same exact Product/Intent combination twice.
+    4. Each task MUST contain task_id. On a new request use task_1, task_2, task_3 in order. In RETRY MODE preserve the supplied task_id and use its feedback to change the search terms, product, or intent.
     5. CONVERSATIONAL CONTINUATION: Output an empty array for "search_tasks": [] only when the user is simply providing information requested in a previous step (e.g., "I have MyInfo ready", "Next", "Proceed") AND Current Graph Context confirms that an active plan or retrieved knowledge exists. If recalled prior-session context is available but the current graph has neither an active plan nor retrieved knowledge, the user is starting a fresh graph session: for a continuation such as "yes, continue", generate a search task from the recalled topic so current FAQ knowledge can be retrieved.
-    6. If the question applies universally (e.g. app password), use "ALL".
+    6. If the question applies universally (e.g. app password), use "ALL". Labels are retrieval filters, not a reason to discard a valid free-form request.
     
     Output JSON ONLY:
-    {{"search_tasks": [{{"procedural": "...", "policy": "...", "conceptual": "...", "target_commercial_product": "Credit_Card", "target_intent": ["Transaction Disputes"]}}]}}
+    {{"search_tasks": [{{"task_id": "task_1", "procedural": "...", "policy": "...", "conceptual": "...", "target_commercial_product": "Credit_Card", "target_intent": ["Transaction Disputes"]}}]}}
+    {retry_context}
     """
     
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
-        search_tasks = res.get("search_tasks", [])
+        formulated_tasks = res.get("search_tasks", [])
     except Exception as e:
         print(f"🚨 [NODE 02e EXCEPTION]: {e}")
-        search_tasks = []
+        formulated_tasks = []
+
+    if retry_tasks:
+        replacements = {task.get("task_id"): task for task in formulated_tasks if task.get("task_id") in retry_task_ids}
+        search_tasks = [replacements.get(task.get("task_id"), task) for task in prior_tasks]
+    else:
+        search_tasks = formulated_tasks[:3]
+
+    # Keep task identity deterministic even if a model response omits or
+    # duplicates an identifier. Retries always retain the original IDs.
+    if not retry_tasks:
+        seen_task_ids = set()
+        for index, task in enumerate(search_tasks, start=1):
+            task_id = str(task.get("task_id", "")).strip() or f"task_{index}"
+            if task_id in seen_task_ids:
+                task_id = f"task_{index}"
+            task["task_id"] = task_id
+            seen_task_ids.add(task_id)
 
     # Compile the new relational matrix to track drift
     new_matrix = []
@@ -491,122 +462,106 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             new_matrix.append({"product": prod, "intents": ints})
             
     print(f"   🔎 [SEARCH TASKS]: {len(search_tasks)} tasks | Matrix: {new_matrix}")
+    log_event("task.formulated", task_ids=[task.get("task_id") for task in search_tasks], task_count=len(search_tasks), retry_mode=bool(retry_tasks))
 
-    plan = state.get("active_plan", {})
-    process_complete = bool(plan.get("steps") and plan.get("current_step_index", 0) >= len(plan.get("steps", [])))
-    current_queue = state.get("pending_journey_queue", [])
-    
-    # Mathematical Routing Logic
-    if not target_journey:
-        route = "intent_clarification_needed"
-    elif target_journey != active_journey:
-        route = "new_journey" if (not active_journey or process_complete) else "journey_change"
-    elif str(new_matrix) != str(active_matrix) and new_matrix:
-        # String comparison is safe here for matrix drift detection
-        route = "intent_drift"
+    if not search_tasks:
+        if active_plan.get("steps") or has_retrieved_knowledge:
+            return {"preflight_status": "continue_plan", "search_tasks": []}
+        return {"preflight_status": "intent_clarification_needed", "search_tasks": []}
+
+    # Cache routing is deliberately deterministic and happens only after the
+    # formulator has independently created the current task set.  A retry must
+    # run a new RAG search; a prior cache insufficiency is not a RAG attempt.
+    cached_results = []
+    cache_hits = 0
+    if not retry_tasks:
+        evidence_cache = state.get("approved_evidence_cache", {})
+        cache_candidates = [
+            (task, _task_evidence_cache_key(task), evidence_cache.get(_task_evidence_cache_key(task), {}))
+            for task in search_tasks
+        ]
+        if any(entry.get("approved_parent_ids") for _, _, entry in cache_candidates):
+            evidence_store = RAGEngine()
+            for task, cache_key, entry in cache_candidates:
+                parent_ids = entry.get("approved_parent_ids", []) if cache_key else []
+                if not parent_ids:
+                    continue
+                parents = evidence_store.hydrate_parent_ids(parent_ids)
+                if not parents:
+                    log_event("evidence_cache.stale", task_id=task.get("task_id"), cache_key=cache_key)
+                    continue
+                cached_results.append({
+                    "task_id": task.get("task_id"),
+                    "status": "CACHED",
+                    "origin": "CACHE",
+                    "cache_key": cache_key,
+                    "parents": parents,
+                })
+                cache_hits += 1
+                log_event(
+                    "evidence_cache.hit",
+                    task_id=task.get("task_id"),
+                    cache_key=cache_key,
+                    parent_ids=[parent.get("parent_id") for parent in parents],
+                )
+
+    cache_misses = len(search_tasks) - cache_hits
+    if cache_hits:
+        print(f"   ⚡ [EVIDENCE CACHE]: {cache_hits} hit(s), {cache_misses} RAG task(s).")
     else:
-        route = "topic_persist"
-
-    print(f"   🎯 [PYTHON ROUTER]: {route.upper()}")
-    
-    if route == "new_journey":
-        for i, task in enumerate(current_queue):
-            if task["journey"] == target_journey:
-                popped = current_queue.pop(i)
-                print(f"   📦 [QUEUE POP]: Resuming -> {target_journey}")
-                return {
-                    "preflight_status": "topic_persist", 
-                    "active_user_journey": popped["journey"], "active_product_intents": popped["product_intents"],
-                    "active_plan": popped["plan"], "completed_steps": popped["completed_steps"],
-                        "pending_journey_queue": current_queue, "search_tasks": search_tasks
-                    }
-        return {
-            "preflight_status": route, "active_user_journey": target_journey, "active_product_intents": new_matrix,
-            "active_plan": {}, "completed_steps": [], "search_tasks": search_tasks,
-            "raw_retrieved_text": ""
-        }
-        
-    elif route == "journey_change":
-        return {"preflight_status": route, "pending_journey_switch": {"target_journey": target_journey, "target_product_intents": new_matrix}, "search_tasks": search_tasks}
-        
-    elif route == "intent_drift":
-        return {
-            "preflight_status": route, "active_user_journey": target_journey, "active_product_intents": new_matrix,
-            "active_plan": {}, "search_tasks": search_tasks,
-            "raw_retrieved_text": ""
-        }
-        
-    # The old knowledge (or empty results) carries over to the next step.
-    return {"preflight_status": route, "search_tasks": search_tasks}
-
-def node_02f_contract_writer(state: AgentState):
-    print("🟢 [NODE 02f] Executing Contract Writer")
-    target = state.get("pending_journey_switch", {}).get("target_journey", "a new topic")
-    active = state.get("active_user_journey", "")
-    
-    if active:
-        msg = f"You are currently in the middle of a request regarding {active}. Would you like to pause this to look at {target}? I can save your progress and we can resume it later."
-    else:
-        msg = f"Would you like to switch to {target}?"
-    
-    history = list(state.get("chat_history", []))
-    history.append(AIMessage(content=msg))
-    
+        print("   🎯 [TASK ROUTER]: No approved-evidence cache match; retrieval required.")
+    log_event("evidence_cache.route", hit_count=cache_hits, miss_count=cache_misses, retry_mode=bool(retry_tasks))
     return {
-        "final_response": msg,
-        "chat_history": history,
-        "ui_action_payload": {"uiType": "chips", "options": ["Yes", "No"]}
+        "preflight_status": "validate_cached" if cache_hits == len(search_tasks) else "retrieve",
+        "search_tasks": search_tasks,
+        "task_results": cached_results if not retry_tasks else task_results,
+        "active_product_intents": new_matrix,
+        "active_plan": {} if not retry_tasks else active_plan,
+        "completed_steps": [] if not retry_tasks else state.get("completed_steps", []),
+        "raw_retrieved_text": "" if not retry_tasks else state.get("raw_retrieved_text", ""),
     }
 
 # --- PHASE 2: BOUNDED RAG ARCHITECTURE ---
 
 def node_03a_knowledge_blueprint_planner(state: AgentState):
-    print("🟢 [NODE 03a] Executing Supervisor Tool Router")
-    user_input = state.get("user_input", "")
-    active_journey = state.get("active_user_journey", "")
-    active_matrix = state.get("active_product_intents", [])
-    
-    prompt = f"""
-    You are the Cognitive Supervisor for a banking AI.
-    User Input: "{user_input}"
-    Active Journey: "{active_journey}" | Active Matrix: {active_matrix}
-    
-    TASK: Determine which retrieval tools are necessary to answer the query. You can select multiple tools.
-    1. "n17_rag": Use for fetching bank policies, rules, limits, or general guidelines. (Always include this for standard inquiries).
-    2. "n17_api": Use ONLY if the user is asking to look up specific personal numerical data.
-    3. "n17_deeplink": Use ONLY if the user wants to navigate the app or take an action.
-    
-    Output JSON ONLY matching this schema:
-    {{"active_tool_routes": ["n17_rag", "n17_api"]}}
-    """
-    try: blueprint = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER))
-    except: blueprint = {}
-    routes = ["n17_rag"] if state.get("search_tasks") else []
+    print("🟢 [NODE 03a] Preparing Task-Level RAG Retrieval")
+    prior_results = {result.get("task_id"): result for result in state.get("task_results", [])}
+    tasks_to_retrieve = [
+        task for task in state.get("search_tasks", [])
+        if prior_results.get(task.get("task_id"), {}).get("status") not in {"CACHED", "SUFFICIENT", "UNAVAILABLE"}
+    ]
+    routes = ["n17_rag"] if tasks_to_retrieve else []
         
     print(f"   🔀 [SUPERVISOR DISPATCH]: Fanning out to -> {routes}")
     return {"active_tool_routes": routes, "rag_payload": "", "api_payload": "", "deeplink_payload": ""}
 
 async def node_03b_rag_worker(state: AgentState):
-    print("🟢 [NODE 03b_1] Executing RAG Worker (Tri-Angle RRF)")
+    print("🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Tri-Angle RRF)")
     tasks = state.get("search_tasks", [])
-    if not tasks: return {"rag_payload": "NO_KNOWLEDGE_FOUND"}
-        
+    prior_results = {result.get("task_id"): result for result in state.get("task_results", [])}
+    tasks_to_retrieve = [
+        task for task in tasks
+        if prior_results.get(task.get("task_id"), {}).get("status") not in {"CACHED", "SUFFICIENT", "UNAVAILABLE"}
+    ]
+    if not tasks_to_retrieve:
+        return {"rag_payload": "", "task_results": list(prior_results.values())}
+
     engine = RAGEngine()
-    hydrated_payloads = []
-    
-    for task in tasks:
+    async def retrieve_task(task: dict) -> dict:
         target_product = task.get("target_commercial_product", "ALL")
         product_tags = [target_product] if isinstance(target_product, str) else target_product
-        
-        text = await engine.execute_multi_angle_search(
+        parents = await engine.execute_multi_angle_search(
             blueprint=task,
             product_tags=product_tags,
             intent_families=task.get("target_intent", [])
         )
-        hydrated_payloads.append(text)
-        
-    final_text = "\n\n---\n\n".join(hydrated_payloads)
-    return {"rag_payload": f"[RAG DATA]:\n{final_text.strip()}"}
+        return {"task_id": task.get("task_id"), "status": "RETRIEVED", "origin": "RAG", "parents": parents}
+
+    retrieved_results = await asyncio.gather(*(retrieve_task(task) for task in tasks_to_retrieve))
+    merged_results = {**prior_results, **{result["task_id"]: result for result in retrieved_results}}
+    print(f"   🔎 [TASK RAG]: Retrieved {len(retrieved_results)} task result set(s) in parallel.")
+    log_event("task.rag.completed", task_ids=[result.get("task_id") for result in retrieved_results])
+    return {"rag_payload": "", "task_results": list(merged_results.values())}
 
 def node_03b_api_worker(state: AgentState):
     return {"api_payload": "[API DATA]:\nNo API data requested for this MVP."}
@@ -615,111 +570,271 @@ def node_03b_deeplink_worker(state: AgentState):
     return {"deeplink_payload": "[DEEPLINK DATA]:\nNo Deep-links requested for this MVP."}
 
 def node_03c_sufficiency_auditor(state: AgentState):
-    print("🟢 [NODE 03c] Executing Sufficiency Auditor & Reducer")
-    
-    combined_knowledge = f"{state.get('rag_payload', '')}\n{state.get('api_payload', '')}\n{state.get('deeplink_payload', '')}".strip()
-    user_input = state.get("user_input", "")
-    history_str = _build_conversation_context(state)
-    
-    prompt = f"""
-    Evaluate if the Retrieved Knowledge is sufficient to answer or reasonably address the User Query by 普适操作 or 日常惯例.
-    Recent Conversation Context: {history_str}
-    User Latest Query: "{user_input}"
-    Retrieved Knowledge: "{combined_knowledge}"
+    print("🟢 [NODE 03c] Executing Task-Level Sufficiency & Evidence Selection")
+    tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", [])}
+    current_results = {result.get("task_id"): result for result in state.get("task_results", [])}
+    evidence_candidates = [
+        result for result in current_results.values()
+        if result.get("status") in {"RETRIEVED", "CACHED"}
+    ]
+    retry_counts = dict(state.get("task_retry_counts", {}))
+    feedback = dict(state.get("task_feedback", {}))
 
-    CRITICAL INSTRUCTION FOR SUFFICIENCY:
-    - Do NOT require a literal word-for-word match. 
-    - If the user latest query is a follow-up, you MUST inherit the context from the previous conversation.
-    - Only mark INSUFFICIENT if the core factual information needed to answer the user is entirely absent from the text.
-    - PLACEHOLDER RULE (CRITICAL): The text contains encrypted placeholders in the format {{{{faq_abc_123}}}}. These placeholders represent exact numbers, rates, fees, limits, and times (e.g., {{{{faq_123}}}}am). You MUST treat these placeholders as valid, sufficient numerical data.
+    evaluation_inputs = [
+        {
+            "task_id": result.get("task_id"),
+            "task": tasks_by_id.get(result.get("task_id"), {}),
+            "parents": result.get("parents", []),
+        }
+        for result in evidence_candidates
+    ]
+    auditor_results = {}
+    if evaluation_inputs:
+        prompt = f"""
+        TASK-LEVEL SUFFICIENCY AND EVIDENCE SELECTION
+        You are a groundedness auditor for a read-only Horizon Bank FAQ assistant.
+        Evaluate EACH supplied task independently. A parent is sufficient only if it directly supports that task.
 
-    TASK 2: UX PRESENTATION COMPLEXITY
-    If the knowledge is SUFFICIENT, analyze the User's tone and the nature of the data to determine the optimal UI presentation:
-    - "simple": Use this if the user asks a single factual question, explicitly asks for "all information/everything", implies urgency, OR if the retrieved answer is relatively short.
-    - "multi-step": Use this if the user's query is about account opening, onboarding processes or any other procedural requirements that requires multi-step guidance.
-       
-    If INSUFFICIENT, determine the error_level (1 or 2).
-    
-    Output JSON ONLY:
-    {{"status": "SUFFICIENT" | "INSUFFICIENT", "reason": "...", "error_level": 1 | 2, "complexity": "simple" | "multi-step"}}
-    """
-    
-    try:
-        res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
-        status = res.get("status", "INSUFFICIENT")
-        reason = res.get("reason", "Failed to validate knowledge.")
-        error_level = res.get("error_level", 1)
-        complexity = res.get("complexity", "simple")
-    except:
-        status, reason, error_level, complexity = "INSUFFICIENT", "Exception during audit.", 1, "simple"
+        User Request: {state.get("user_input", "")}
+        Trusted Conversation Context: { _build_conversation_context(state) }
+        Task Inputs: {json.dumps(evaluation_inputs, ensure_ascii=False)}
 
-    if status == "INSUFFICIENT" or "NO_KNOWLEDGE_FOUND" in combined_knowledge:
-        count = state.get("knowledge_retry_count", 0) + 1
-        history = state.get("search_feedback_history", [])
-        
-        attempted_tasks = state.get("search_tasks", [])
-        history.append(f"Attempt {count} Failed (Level {error_level}). Tried Matrix: {attempted_tasks}. Reason: {reason}")
-        
-        if count >= 3:
-            print("   🚨 [AUDIT]: MAX RETRIES EXCEEDED.")
-            # It's fine to pass the bad knowledge here so the Human Agent can see what the bot was looking at
-            return {"knowledge_retry_count": count, "search_feedback_history": history, "preflight_status": "max_retries_exceeded", "raw_retrieved_text": combined_knowledge}
-            
-        print(f"   ⚠️ [AUDIT]: Triggering CRAG Retry {count}/3 (Level {error_level})")
-        # 🐛 THE Fix: Remove 'raw_retrieved_text' from this return dict!
-        # This protects the GOOD knowledge from the previous turn from being overwritten by this bad attempt.
-        return {"knowledge_retry_count": count, "search_feedback_history": history, "preflight_status": "insufficient"}
-        
-    # If we reach here, it's a success. We safely commit the fresh knowledge to the state!
-    return {"preflight_status": "sufficient", "knowledge_retry_count": 0, "raw_retrieved_text": combined_knowledge, "response_complexity": complexity}
+        Rules:
+        - Return one result for every supplied task_id.
+        - For SUFFICIENT, return only parent IDs from that exact task that are directly relevant. At least one approved ID is required.
+        - For RETRY, return no approved IDs and concise query-refinement feedback. The backend determines terminal UNAVAILABLE status after three failed attempts.
+        - Treat {{placeholders}} in parent content as valid approved facts.
+        - Never invent a parent ID, fact, or instruction.
+
+        Output JSON only: {{"task_results": [{{"task_id": "...", "status": "SUFFICIENT" | "RETRY" | "UNAVAILABLE", "approved_parent_ids": ["..."], "reason": "...", "search_feedback": "..."}}]}}
+        """
+        try:
+            auditor_results = {
+                result.get("task_id"): result
+                for result in _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR)).get("task_results", [])
+            }
+        except Exception as error:
+            print(f"🚨 [NODE 03c EXCEPTION]: {error}")
+
+    for result in evidence_candidates:
+        task_id = result.get("task_id")
+        available_ids = {parent.get("parent_id") for parent in result.get("parents", [])}
+        audit = auditor_results.get(task_id, {})
+        approved_ids = [parent_id for parent_id in audit.get("approved_parent_ids", []) if parent_id in available_ids]
+        requested_status = audit.get("status", "RETRY")
+        reason = audit.get("reason", "No sufficient grounded FAQ evidence was selected.")
+        if requested_status == "SUFFICIENT" and approved_ids:
+            # The sufficiency model is permitted to select identifiers only.  Do
+            # not retain any model-visible parent text: re-read this exact
+            # allow-listed ID set from SQLite, the authoritative FAQ source.
+            approved_parents = RAGEngine().hydrate_parent_ids(approved_ids)
+            hydrated_ids = {parent.get("parent_id") for parent in approved_parents}
+            approved_ids = [parent_id for parent_id in approved_ids if parent_id in hydrated_ids]
+            if not approved_ids:
+                requested_status = "RETRY"
+                reason = "The approved FAQ parent could not be re-hydrated from the knowledge database."
+            else:
+                current_results[task_id] = {
+                    "task_id": task_id,
+                    "status": "SUFFICIENT",
+                    "origin": result.get("origin", "RAG"),
+                    "cache_key": result.get("cache_key", _task_evidence_cache_key(tasks_by_id.get(task_id, {}))),
+                    "approved_parent_ids": approved_ids,
+                    "parents": approved_parents,
+                    "reason": reason,
+                }
+                feedback.pop(task_id, None)
+                continue
+
+        cache_fallback = result.get("origin") == "CACHE"
+        # A cached result that fails sufficiency must fall through to a live
+        # retrieval without consuming a RAG retry.  It therefore may not have
+        # a retry counter yet.
+        attempt_count = retry_counts.get(task_id, 0)
+        if not cache_fallback:
+            attempt_count += 1
+            retry_counts[task_id] = attempt_count
+        refinement = audit.get("search_feedback") or reason
+        # An unsupported task remains retryable until its third failed
+        # retrieval attempt; only then ask the user for targeted clarification.
+        if attempt_count >= 3:
+            unapproved_ids = [parent.get("parent_id") for parent in result.get("parents", []) if parent.get("parent_id")]
+            unapproved_parents = RAGEngine().hydrate_parent_ids(unapproved_ids)
+            current_results[task_id] = {
+                "task_id": task_id,
+                "status": "CLARIFICATION_REQUIRED",
+                "parents": [],
+                "approved_parent_ids": [],
+                "reason": reason,
+                "terminal_feedback": refinement,
+                "unapproved_parents": unapproved_parents,
+            }
+            feedback.pop(task_id, None)
+        else:
+            current_results[task_id] = {"task_id": task_id, "status": "RETRY", "parents": [], "approved_parent_ids": [], "reason": reason}
+            feedback[task_id] = refinement
+            if cache_fallback:
+                log_event("evidence_cache.insufficient", task_id=task_id, cache_key=result.get("cache_key", ""), reason=reason)
+
+    approved_blocks = []
+    for result in current_results.values():
+        if result.get("status") != "SUFFICIENT":
+            continue
+        for parent in result.get("parents", []):
+            approved_blocks.append(f"[Task {result.get('task_id')} | Parent {parent.get('parent_id')}]\n{parent.get('content', '')}")
+    approved_knowledge = "\n\n---\n\n".join(approved_blocks)
+    unresolved = [result for result in current_results.values() if result.get("status") == "RETRY"]
+    pending_cache_updates = {}
+    for result in current_results.values():
+        if result.get("status") != "SUFFICIENT":
+            continue
+        cache_key = result.get("cache_key") or _task_evidence_cache_key(tasks_by_id.get(result.get("task_id"), {}))
+        parent_ids = result.get("approved_parent_ids", [])
+        if cache_key and parent_ids:
+            pending_cache_updates[cache_key] = {"approved_parent_ids": parent_ids}
+    task_resolution_instructions = [
+        _terminal_retrieval_feedback(
+            result.get("task_id"),
+            result.get("terminal_feedback", result.get("reason", "")),
+            result.get("reason", ""),
+            result.get("unapproved_parents", []),
+        )
+        for result in current_results.values()
+        if result.get("status") == "CLARIFICATION_REQUIRED"
+    ]
+    print(f"   ✅ [TASK AUDIT]: {sum(result.get('status') == 'SUFFICIENT' for result in current_results.values())} sufficient, {len(unresolved)} pending retry.")
+    for result in current_results.values():
+        event = "task.sufficiency.completed" if result.get("status") == "SUFFICIENT" else "task.retry" if result.get("status") == "RETRY" else "task.clarification_required"
+        log_event(event, task_id=result.get("task_id"), status=result.get("status"), approved_parent_ids=result.get("approved_parent_ids", []), reason=result.get("reason", ""))
+    return {
+        "preflight_status": "retry_tasks" if unresolved else "task_resolution_ready",
+        "task_results": list(current_results.values()),
+        "task_retry_counts": retry_counts,
+        "task_feedback": feedback,
+        "task_resolution_instructions": task_resolution_instructions,
+        "pending_evidence_cache_updates": pending_cache_updates,
+        "raw_retrieved_text": approved_knowledge,
+    }
 
 
 # --- PHASE 3: RESOLUTION BLUEPRINT & STEP-BY-STEP RESPONSE ---
 
 def node_04a_resolution_planner(state: AgentState):
-    print("🟢 [NODE 04a] Executing Resolution Planner")
-    plan = state.get("active_plan", {})
-    idx = plan.get("current_step_index", 0)
-    
-    if plan.get("steps") and idx < len(plan.get("steps", [])):
-        print("   ⏩ [PLAN EXISTS]: Preserving current active_plan. Bypassing replan.")
-        return {"preflight_status": "pass"}
-        
-    completed_steps = state.get("completed_steps", [])
-    completed_str = "\n".join([f"- {s}" for s in completed_steps]) if completed_steps else "None"
-    
-    prompt = f"""
-    ROLE ALIGNMENT: 
-    You are a Strict Information Extraction Engine. You are NOT a helpful assistant. Your ONLY function is to read a user's query, search the text for the exact answer, and output a clinical plan.
-    
-    User Request: "{state.get("user_input", "")}"
-    Active Journey: "{state.get("active_user_journey", "")}"
-    Active Matrix: {state.get("active_product_intents", [])}
-    Retrieved Knowledge: "{state.get("raw_retrieved_text", "")}"
-    
-    MILESTONES COMPLETED:
-    {completed_str}
-    
-    ARCHITECTURAL PRINCIPLES (Strictly Enforce): 
-    0. ONBOARDING OPTIMIZATION: If the Active Journey is an onboarding journey like account opening or product enrollment, break down the answer into smaller, manageable steps and prioritize those that guide them through the process.
-    1. EXACT MATCH EXTRACTION (NO VOLUNTEERING): ONLY plan steps that directly answer the query. 
-    2. THE PROCEED TRAP: Do not guess procedures if they are missing from the text.
-    3. THE EMPTY ARRAY RULE: If the exact answer is missing or already covered by Milestones, output {{"steps": [], "current_step_index": 0}}.
-    4. LEAN PLANNING: Short, abstract directives.
-    5. LEDGER STRICT AVOIDANCE: DO NOT repeat any step from MILESTONES COMPLETED.
+    """n19: choose the UX journey after task evidence is sufficient or terminal."""
+    print("🟢 [NODE 04a] Executing User Journey V2.0 Presentation Planner")
+    existing_plan = state.get("active_plan", {})
+    existing_steps = existing_plan.get("steps", [])
+    existing_index = existing_plan.get("current_step_index", 0)
+    if state.get("preflight_status") == "continue_plan" and existing_steps:
+        return {
+            "preflight_status": "presentation_ready",
+            "selected_ux_journey": "GUIDED_PROCESS",
+            "presentation_plan": state.get("presentation_plan", {"journey": "GUIDED_PROCESS", "steps": existing_steps, "options": []}),
+        }
 
-    
-    Output JSON ONLY:
-    {{"steps": ["Short directive for step 1"...], "current_step_index": 0}}
+    task_results = state.get("task_results", [])
+    planner_tasks = []
+    approved_by_task = {}
+    for result in task_results:
+        task_id = result.get("task_id")
+        parents = result.get("parents", []) if result.get("status") == "SUFFICIENT" else []
+        approved_ids = {parent.get("parent_id") for parent in parents}
+        approved_by_task[task_id] = approved_ids
+        planner_tasks.append({
+            "task_id": task_id,
+            "status": result.get("status"),
+            "reason": result.get("reason", ""),
+            "approved_parents": parents,
+        })
+
+    prompt = f"""
+    USER JOURNEY V2.0 PRESENTATION PLANNER
+    You are designing the presentation for a read-only Horizon Bank FAQ response.
+    Decide the user experience only after reviewing task-level approved evidence.
+
+    User request: {state.get("user_input", "")}
+    Task results: {json.dumps(planner_tasks, ensure_ascii=False)}
+
+    Choose exactly one journey:
+    - INFORMATIONAL: factual answer or several factual sections.
+    - GUIDED_PROCESS: exactly one primary task has directly supported, genuinely sequential steps.
+    - TROUBLESHOOTING: evidence supports diagnosis/resolution of an issue.
+    - CLARIFICATION: more than one supported guided process competes, or no task has usable FAQ evidence.
+    - ESCALATION: only when human assistance was explicitly requested or required.
+
+    Rules:
+    - Never invent facts, steps, parent IDs, or a banking action.
+    - Select evidence_parent_ids only from approved parents of the same task.
+    - A GUIDED_PROCESS requires at least two short steps, grounded only in selected evidence.
+    - Do not create more than one active guided process.
+    - Mark unavailable tasks as UNAVAILABLE and use no evidence IDs for them.
+    - If two guided processes are supported, choose CLARIFICATION and provide at most two user-choice options.
+
+    Output JSON only with journey, primary_task_id, presentation_tasks, steps, options, and reason.
     """
-    
     try:
-        res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER))
-        if "steps" not in res or not isinstance(res["steps"], list): res = {"steps": [], "current_step_index": 0}
-        print(f"   📋 [ACTIVE PLAN SAVED]: {res}")
-        return {"active_plan": res, "preflight_status": "pass"}
-    except Exception as e:
-        return {"preflight_status": "fail"}
+        plan = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER))
+    except Exception as error:
+        print(f"🚨 [USER JOURNEY PLANNER ERROR]: {error}")
+        plan = {"journey": "CLARIFICATION", "primary_task_id": "", "presentation_tasks": [], "steps": [], "options": [], "reason": "Planner unavailable."}
+
+    journey = plan.get("journey", "CLARIFICATION")
+    if journey not in {"INFORMATIONAL", "GUIDED_PROCESS", "TROUBLESHOOTING", "CLARIFICATION", "ESCALATION"}:
+        journey = "CLARIFICATION"
+    valid_task_ids = set(approved_by_task)
+    presentations = []
+    selected_blocks = []
+    for item in plan.get("presentation_tasks", []):
+        task_id = item.get("task_id")
+        if task_id not in valid_task_ids:
+            continue
+        valid_ids = [parent_id for parent_id in item.get("evidence_parent_ids", []) if parent_id in approved_by_task[task_id]]
+        result = next((value for value in task_results if value.get("task_id") == task_id), {})
+        if result.get("status") == "SUFFICIENT" and not valid_ids:
+            valid_ids = list(approved_by_task[task_id])
+        presentations.append({
+            "task_id": task_id,
+            "display_mode": item.get("display_mode", "SECTION"),
+            "evidence_parent_ids": valid_ids,
+            "section_title": item.get("section_title", "Horizon Bank guidance"),
+        })
+        for parent in result.get("parents", []):
+            if parent.get("parent_id") in valid_ids:
+                selected_blocks.append(f"[Task {task_id} | {item.get('section_title', 'Horizon Bank guidance')} | Parent {parent.get('parent_id')}]\n{parent.get('content', '')}")
+
+    if not presentations:
+        for result in task_results:
+            if result.get("status") == "SUFFICIENT":
+                parent_ids = [parent.get("parent_id") for parent in result.get("parents", [])]
+                presentations.append({"task_id": result.get("task_id"), "display_mode": "SECTION", "evidence_parent_ids": parent_ids, "section_title": "Horizon Bank guidance"})
+                selected_blocks.extend(f"[Task {result.get('task_id')} | Parent {parent.get('parent_id')}]\n{parent.get('content', '')}" for parent in result.get("parents", []))
+
+    steps = [step for step in plan.get("steps", []) if isinstance(step, str) and step.strip()]
+    primary_task_id = plan.get("primary_task_id", "")
+    if journey == "GUIDED_PROCESS" and (primary_task_id not in valid_task_ids or len(steps) < 2):
+        journey = "INFORMATIONAL" if presentations else "CLARIFICATION"
+        steps = []
+    if journey != "GUIDED_PROCESS":
+        steps = []
+
+    normalized_plan = {
+        "journey": journey,
+        "primary_task_id": primary_task_id,
+        "presentation_tasks": presentations,
+        "steps": steps,
+        "options": [option for option in plan.get("options", []) if isinstance(option, str)][:2],
+        "reason": plan.get("reason", ""),
+    }
+    print(f"   🧭 [USER JOURNEY V2]: {journey} | Tasks shown: {len(presentations)}")
+    log_event("journey.planned", journey=journey, primary_task_id=primary_task_id, presentation_task_ids=[item.get("task_id") for item in presentations])
+    return {
+        "preflight_status": "presentation_ready",
+        "selected_ux_journey": journey,
+        "presentation_plan": normalized_plan,
+        "active_plan": {"steps": steps, "current_step_index": 0} if journey == "GUIDED_PROCESS" else {},
+        "completed_steps": [] if journey != "GUIDED_PROCESS" else state.get("completed_steps", []),
+        "raw_retrieved_text": "\n\n---\n\n".join(selected_blocks),
+    }
 
 
 def _build_stepper_payload(steps: list, current_step_index: int) -> dict:
@@ -744,23 +859,44 @@ def node_04b_response_generator(state: AgentState):
     idx = plan.get("current_step_index", 0)
     steps = plan.get("steps", [])
     routing_status = state.get("preflight_status", "")
-    response_complexity = state.get("response_complexity", "simple")
-    
+    journey = state.get("selected_ux_journey", "INFORMATIONAL")
+    presentation_plan = state.get("presentation_plan", {})
+    task_resolution_instructions = state.get("task_resolution_instructions", [])
+    has_terminal_retrieval_feedback = bool(task_resolution_instructions)
+    unapproved_suggestion_blocks = []
+    for instruction in task_resolution_instructions:
+        for parent in instruction.get("unapproved_parents", []):
+            parent_id = parent.get("parent_id", "")
+            content = parent.get("content", "")
+            if content:
+                unapproved_suggestion_blocks.append(
+                    f"[Task {instruction.get('task_id')} | Unapproved Parent {parent_id}]\n{content}"
+                )
+    unapproved_suggestion_knowledge = "\n\n---\n\n".join(unapproved_suggestion_blocks)
+    terminal_feedback_context = [
+        {
+            "task_id": instruction.get("task_id"),
+            "feedback": instruction.get("feedback", ""),
+            "reason": instruction.get("reason", ""),
+        }
+        for instruction in task_resolution_instructions
+    ]
     completed_steps = state.get("completed_steps", [])
-    pending_queue = state.get("pending_journey_queue", [])
     is_conclusion = bool(steps and idx >= len(steps))
     
-    if routing_status in ["intent_clarification_needed", "CLARIFICATION"]:
+    if has_terminal_retrieval_feedback:
+        current_step = "Answer supported tasks using selected approved FAQ evidence. For each unresolved task, briefly apologize that relevant FAQ details could not be found, then ask a concise, general clarification question."
+    elif routing_status in ["intent_clarification_needed", "CLARIFICATION"]:
         current_step = "The user's request is vague, small talk, or asks you to make a choice. Respond naturally. If the request is about banking, ask the user to clarify their intent. If the request is unrelated to banking, politely decline, explain you are a banking assistant only, and ask if they have a banking question."
     elif not steps:
-        # 🟢 CHANGE: Force a complete data dump when the planner is bypassed
-        current_step = "Provide a complete, comprehensive, and direct answer to the user's query using the Retrieved Knowledge. Give all the information at once."
-    elif is_conclusion:
-        if pending_queue:
-            next_task = pending_queue[0]["journey"]
-            current_step = f"State this request is finished. Ask to resume '{next_task}'. YOU MUST set uiType to 'chips' and generate exactly TWO options: ['Resume {next_task}', 'No, I am done']."
+        if journey == "CLARIFICATION":
+            current_step = "Ask a concise clarification or explain that the available FAQs do not contain enough information. Do not invent a banking process."
+        elif journey == "ESCALATION":
+            current_step = "State that a human agent can assist with the request."
         else:
-            current_step = "State this request is finished. Summarize. YOU MUST set uiType to 'chips' and generate exactly TWO custom UI chips."
+            current_step = "Provide a complete, direct answer using only the selected approved FAQ evidence. Group distinct task topics under their supplied section titles."
+    elif is_conclusion:
+        current_step = "State that this guided FAQ is complete. Offer at most two general next actions."
     else:
         current_step = steps[idx]
         
@@ -777,60 +913,75 @@ def node_04b_response_generator(state: AgentState):
     
     Current Plan: {steps}
     Current Step to Execute: "{current_step}"
-    Retrieved Knowledge: "{state.get("raw_retrieved_text", "")}"
+    Selected User Journey: {journey}
+    Presentation Plan: {presentation_plan}
+    Selected Approved Knowledge: "{state.get("raw_retrieved_text", "")}"
+    Terminal Retrieval Feedback (internal guidance only; do not quote it or treat it as FAQ knowledge): {json.dumps(terminal_feedback_context, ensure_ascii=False)}
+    Unapproved Retrieved Knowledge for Clarification Suggestions (not approved answer evidence): "{unapproved_suggestion_knowledge}"
     Recent Conversation: {history_str}
     User Baseline (advisory only; adapt communication only when relevant): {user_baseline}
     {feedback_str}
 
     Rules for Text Generation:
-    - Draft a response to guide user to complete ONLY the 'Current Step' with explanation to the current step.
-    - ZERO HALLUCINATION: Rely EXCLUSIVELY on 'Retrieved Knowledge'.
+    - For GUIDED_PROCESS, explain ONLY the Current Step.
+    - For INFORMATIONAL, group answers by presentation-plan section title when more than one task is present.
+    - For a terminal retrieval feedback item, the clarification MUST begin with a brief apology/inability statement (for example, "Sorry, I couldn't find relevant FAQ details to answer that.").
+    - When the user has multiple requests, explicitly name the unresolved term exactly as the user wrote it in the apology (for example, "Sorry, I couldn't find relevant FAQ details about ABGX loan."). Never use an ambiguous reference such as "that", "it", or "the remaining part" in its place.
+    - You may then offer up to two potentially related FAQ topics, but ONLY when each topic is explicitly present in Unapproved Retrieved Knowledge for Clarification Suggestions. Make clear these are possible related topics, not an answer to the customer's request.
+    - End with a general, natural invitation to clarify if those suggested topics are irrelevant. If no suitable suggestion exists, ask only the general clarification question.
+    - Do not request specific details such as an amount, term, purpose, eligibility, or application information unless they are explicitly supported by Unapproved Retrieved Knowledge for Clarification Suggestions.
+    - Treat terminal retrieval feedback as uncertain internal guidance: do not quote it, turn it into a customer-facing product label, or treat it as a fact.
+    - Do not offer UI options for an unresolved task.
+    - ZERO HALLUCINATION: Rely EXCLUSIVELY on Selected Approved Knowledge, except for a safe clarification, apology, or inability statement.
     - If quoting exact numerical rates or fees, you MUST ONLY use the exact {{placeholders}} provided in the 'Retrieved Knowledge'. Do NOT invent, alter, or hallucinate placeholders.
     
-    Rules for UI Payload:
-    - Choose 'uiType' ('chips' or 'none') based on the context to ease user cognitive load.
-    - Choose 'chips' ONLY if the current plan is empty, if 'chips', provide max 2 predicted next actions which can be answered by the retrieved knowledge.
-    - If 'none', provide no UI payload.
-    
     Output JSON ONLY:
-    {{"response": "Your conversational text here", "uiType": "chips" | "none", "options": ["prediction 1"], "advance_step": true}}
+    {{"answer": "Grounded answer text only, or an empty string", "clarification": "Natural clarification question only, or an empty string", "options": ["Grounded answer-related next action"], "advance_step": true}}
     """
     
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt))
-        draft = res.get("response", "Could you please clarify your request?")
+        answer = res.get("answer", res.get("response", "")).strip()
+        clarification = res.get("clarification", "").strip()
+        if has_terminal_retrieval_feedback and not clarification:
+            clarification = (
+                "Sorry, I couldn't find relevant FAQ details to answer that. "
+                "Could you clarify what information you are looking for?"
+            )
+        if has_terminal_retrieval_feedback and not state.get("raw_retrieved_text", "").strip():
+            answer = ""
+        draft = "\n\n".join(part for part in [answer, clarification] if part)
+        if not draft:
+            draft = "Could you please clarify your request?"
+            answer = draft
         print(f"   💬 [DRAFT RESPONSE]: {draft}")
         
         # V4.1 FIX: Do NOT advance the step here! The text might fail the safety gates.
         # Instead, set a volatile flag indicating this step *should* advance if it passes.
         pending_advance = res.get("advance_step") and steps and idx < len(steps) and routing_status != "intent_clarification_needed"
             
-        ui_type = res.get("uiType", "none")
         options = res.get("options", [])
         ui_items = []
-        # `response_complexity` decides whether a new response should enter
-        # planning mode. Once that decision has produced a multi-step plan,
-        # the plan itself is the durable UI contract for every later step.
-        # Node 01 deliberately resets volatile turn values (including
-        # response_complexity), so relying on that value here would make the
-        # stepper disappear as soon as the customer clicks "Completed".
-        has_active_multi_step_plan = len(steps) > 1 and not is_conclusion
-        use_progress_mode = has_active_multi_step_plan
+        use_progress_mode = journey == "GUIDED_PROCESS" and len(steps) > 1 and not is_conclusion
+        ui_type = "stepper" if use_progress_mode else "none"
 
-        # The complexity classification is authoritative. A direct-generation
-        # response must always stay a normal text response, even if an LLM
-        # incorrectly requests a stepper.
-        if not use_progress_mode and ui_type == "stepper":
-            ui_type = "none"
-            options = []
-        
         if is_conclusion:
             ui_type = "chips"
             if not options or len(options) < 2: options = ["That's all, thank you.", "I have another question."]
             plan = {}
             completed_steps = []
             print(f"   🧹 [STATE CLEANUP]: Wiped active plan and completed steps.")
-        elif ui_type == "none": options = [] 
+        elif has_terminal_retrieval_feedback:
+            ui_type = "none"
+            options = []
+        elif journey == "CLARIFICATION":
+            ui_type = "chips" if presentation_plan.get("options") else "none"
+            options = presentation_plan.get("options", [])
+        elif journey == "TROUBLESHOOTING":
+            ui_type = "chips" if presentation_plan.get("options") else "none"
+            options = presentation_plan.get("options", [])
+        elif ui_type == "none":
+            options = []
 
         # Only the auditor-approved multi-step path receives the deterministic
         # progress payload; simple/direct generation remains standard text.
@@ -843,12 +994,14 @@ def node_04b_response_generator(state: AgentState):
             print(f"   🧭 [STEPPER PAYLOAD]: Step {current_step_number}/{total_steps}")
         else:
             print(
-                f"   📝 [NORMAL RESPONSE MODE]: Complexity={response_complexity} | "
-                f"Active multi-step plan={has_active_multi_step_plan}"
+                f"   📝 [USER JOURNEY RESPONSE MODE]: Journey={journey} | "
+                f"Active multi-step plan={use_progress_mode}"
             )
         
         return {
             "final_draft": draft,
+            "final_answer": answer,
+            "final_clarification": clarification,
             "active_plan": plan,
             "completed_steps": completed_steps,
             "ui_action_payload": {
@@ -906,11 +1059,37 @@ def node_06_outbound_semantic_gate(state: AgentState):
     print("🟢 [NODE 06] Executing Outbound Semantic Gate (MAS Compliance & Groundedness)")
     
     draft = state.get("final_draft", "")
+    answer_text = state.get("final_answer", draft)
+    clarification_text = state.get("final_clarification", "")
     payload = state.get("ui_action_payload", {})
     options = payload.get("options", [])
-    combined_response = f"Chat Text: {draft}\nUI Buttons: {options}"
-    
-    retrieved_knowledge = state.get("raw_retrieved_text", "")
+    answer_with_options = f"Answer Text: {answer_text}\nAnswer UI Buttons: {options}"
+
+    # `raw_retrieved_text` is the planner's final evidence subset used for this
+    # response.  Independently rebuild every parent that node 03c approved, so
+    # the gate can also reject unsafe evidence before any subset is presented.
+    selected_knowledge = state.get("raw_retrieved_text", "")
+    approved_evidence_blocks = []
+    for task_result in state.get("task_results", []):
+        approved_ids = set(task_result.get("approved_parent_ids", []))
+        for parent in task_result.get("parents", []):
+            parent_id = parent.get("parent_id")
+            if parent_id in approved_ids:
+                approved_evidence_blocks.append(
+                    f"[Task {task_result.get('task_id')} | Parent {parent_id}]\n{parent.get('content', '')}"
+                )
+    approved_knowledge = "\n\n---\n\n".join(approved_evidence_blocks)
+    terminal_retrieval_feedback = state.get("task_resolution_instructions", [])
+    unapproved_clarification_blocks = []
+    for instruction in terminal_retrieval_feedback:
+        for parent in instruction.get("unapproved_parents", []):
+            parent_id = parent.get("parent_id", "")
+            content = parent.get("content", "")
+            if content:
+                unapproved_clarification_blocks.append(
+                    f"[Task {instruction.get('task_id')} | Unapproved Parent {parent_id}]\n{content}"
+                )
+    unapproved_clarification_knowledge = "\n\n---\n\n".join(unapproved_clarification_blocks)
     
     # 1. The LLM-as-a-Judge Prompt
     prompt = f"""
@@ -918,26 +1097,46 @@ def node_06_outbound_semantic_gate(state: AgentState):
     
     Regulatory Context:
     {MAS_REGULATIONS_CONTEXT}
+
+    User Request:
+    "{state.get('user_input', '')}"
     
-    Retrieved Approved Knowledge:
-    "{retrieved_knowledge}"
+    Task-Level Approved Knowledge (all parent IDs approved by the sufficiency checker):
+    "{approved_knowledge}"
+
+    Selected Approved Knowledge Used for This Response:
+    "{selected_knowledge}"
+
+    Unapproved Retrieved Knowledge for Clarification Suggestions:
+    "{unapproved_clarification_knowledge}"
     
-    Generated AI Response (Text and UI Buttons):
-    "{combined_response}"
+    Generated Answer and Answer UI Options:
+    "{answer_with_options}"
+
+    Generated Clarification Text:
+    "{clarification_text}"
     
-    TASK: Evaluate the Generated AI Response on two strict binary criteria:
-    1. GROUNDEDNESS: Is every claim, fact, and instruction in the Response strictly derived from the Retrieved Approved Knowledge? (True/False)
-       *CRITICAL EXCEPTION*: If the AI Response is simply apologizing, stating it lacks the information, or refusing to answer due to a lack of knowledge, you MUST evaluate GROUNDEDNESS as True, because admitting a lack of knowledge is perfectly safe and grounded behavior.
-    2. SAFETY: Does the Response contain any unauthorized financial advice, subjective product recommendations, or return forecasts that violate the Regulatory Context? (True/False)
+    TASK: Evaluate the selected approved knowledge, answer, answer UI options, and clarification on six strict binary criteria:
+    1. APPROVED-KNOWLEDGE SAFETY: Is the Task-Level Approved Knowledge safe and compliant to use in a read-only banking FAQ response under the Regulatory Context? It must not contain unauthorized personalized financial advice, transaction execution instructions, deceptive claims, or instructions to bypass security, KYC, AML/CFT, or other controls. (True/False)
+       The parent-ID headers are metadata, not customer-facing content. If no knowledge is supplied because the response is a safe clarification, apology, or inability statement, evaluate this as True.
+    2. ANSWER GROUNDEDNESS: Is every claim, fact, instruction, and UI button in the Generated Answer and Answer UI Options strictly derived from the Selected Approved Knowledge? An empty answer and no options are grounded. (True/False)
+    3. CLARIFICATION GROUNDEDNESS: Is every banking topic, product reference, and factual suggestion in the Generated Clarification Text directly supported by the Unapproved Retrieved Knowledge for Clarification Suggestions? A generic apology and general request for clarification are grounded without that source. (True/False)
+    4. CLARIFICATION CONNECTION: If the clarification addresses an unresolved portion of a multi-part request, does it explicitly name or unambiguously identify that customer-supplied term from User Request? It must not use an ambiguous reference such as "that" or "it" after answering another task. A pure generic clarification where no term can be identified is True. (True/False)
+    5. CLARIFICATION COMPLIANCE: Is the Generated Clarification Text a safe, neutral request for more detail? It must not state unsupported banking facts, product claims, rates, requirements, or procedural instructions. (True/False)
+    6. RESPONSE SAFETY: Does any generated answer, clarification, or UI option contain unauthorized financial advice, subjective product recommendations, or return forecasts that violate the Regulatory Context? (True/False)
     
     Output JSON ONLY:
-    {{"is_grounded": true/false, "contains_advice": true/false, "reason": "..."}}
+    {{"is_approved_knowledge_compliant": true/false, "is_grounded": true/false, "is_clarification_grounded": true/false, "is_clarification_connected": true/false, "is_clarification_compliant": true/false, "contains_advice": true/false, "reason": "..."}}
     """
 
     # 🐛 FIX: Pre-initialize variables so they always exist in memory even if the API crashes
     res = {}
     is_grounded = False
     contains_advice = True
+    is_clarification_grounded = False
+    is_clarification_connected = False
+    is_clarification_compliant = False
+    is_approved_knowledge_compliant = False
     reason = "API Evaluation Failed"
 
     
@@ -945,9 +1144,13 @@ def node_06_outbound_semantic_gate(state: AgentState):
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
         is_grounded = res.get("is_grounded", False)
         contains_advice = res.get("contains_advice", True)
+        is_clarification_grounded = res.get("is_clarification_grounded", False)
+        is_clarification_connected = res.get("is_clarification_connected", False)
+        is_clarification_compliant = res.get("is_clarification_compliant", False)
+        is_approved_knowledge_compliant = res.get("is_approved_knowledge_compliant", False)
     except Exception as e:
         print(f"🚨 [SEMANTIC GATE ERROR]: {e}")
-        is_grounded, contains_advice = False, True # Fail-safe defaults
+        is_grounded, contains_advice, is_clarification_grounded, is_clarification_connected, is_clarification_compliant, is_approved_knowledge_compliant = False, True, False, False, False, False # Fail-safe defaults
 
     # 2. Evaluate Judge Results
 
@@ -955,28 +1158,46 @@ def node_06_outbound_semantic_gate(state: AgentState):
     is_exempt = (
         state.get("user_input") in {"__INIT__", "**INIT**"}
         or state.get("triage_status") == "CLARIFICATION"
+        or (state.get("selected_ux_journey") == "CLARIFICATION" and not selected_knowledge.strip() and not answer_text.strip())
         or state.get("preflight_status") in ["intent_clarification_needed", "initial_greeting"]
     )
 
     if is_exempt:
         print(f"   💡 [GUARDRAIL EXEMPTION]: {state.get('preflight_status', 'CLARIFICATION')} detected. Bypassing Groundedness requirement.")
         is_grounded = True # Deterministically override the LLM's failure
+        # There is no selected FAQ evidence for a greeting or clarification.
+        is_approved_knowledge_compliant = True
     # -----------------------------------------------------
 
-    if not is_grounded or contains_advice:
-        print(f"   🚫 [SEMANTIC VETO]: Grounded: {is_grounded} | Contains Advice: {contains_advice}")
+    clarification_failed = not is_clarification_grounded or not is_clarification_connected or not is_clarification_compliant
+    answer_safe_for_fallback = (
+        is_grounded
+        and not contains_advice
+        and is_approved_knowledge_compliant
+    )
+    if not is_grounded or contains_advice or clarification_failed or not is_approved_knowledge_compliant:
+        print(f"   🚫 [SEMANTIC VETO]: Evidence compliant: {is_approved_knowledge_compliant} | Answer grounded: {is_grounded} | Clarification grounded: {is_clarification_grounded} | Clarification connected: {is_clarification_connected} | Clarification compliant: {is_clarification_compliant} | Contains Advice: {contains_advice}")
         count = state.get("safety_retry_count", 0) + 1
         history = state.get("draft_feedback_history", [])
-        history.append(f"Semantic compliance failed. Grounded: {is_grounded}. Contained Advice: {contains_advice}. Reason: {res.get('reason', 'Violation')}. Rewrite to be 100% factual and objective.")
+        history.append(f"Semantic compliance failed. Approved evidence compliant: {is_approved_knowledge_compliant}. Answer grounded: {is_grounded}. Clarification grounded: {is_clarification_grounded}. Clarification connected: {is_clarification_connected}. Clarification compliant: {is_clarification_compliant}. Contained Advice: {contains_advice}. Reason: {res.get('reason', 'Violation')}. Rewrite with a connected, grounded answer and safe, neutral clarification.")
+
+        # Preserve an individually safe answer across clarification-only
+        # retries.  If all three clarification rewrites fail, the graph can
+        # still deliver this answer with a deterministic, neutral fallback.
+        terminal_clarification = bool(state.get("task_resolution_instructions"))
+        preserve_answer = terminal_clarification and clarification_failed and answer_safe_for_fallback
+        safe_answer = answer_text if preserve_answer and answer_text.strip() else state.get("safe_answer_for_fallback", "")
         
         return {
             "safety_retry_count": count, 
             "draft_feedback_history": history, 
             "preflight_status": "fail",
-            "pending_advance": False # Block ledger update
+            "pending_advance": False, # Block ledger update
+            "safe_answer_for_fallback": safe_answer,
+            "clarification_fallback_required": preserve_answer,
         }
 
-    print("   ✅ [SEMANTIC PASS]: Response is strictly grounded and MAS-compliant.")
+    print("   ✅ [SEMANTIC PASS]: Approved evidence and response are grounded and MAS-compliant.")
 
     # 3. ATOMIC LEDGER UPDATE: Safe to advance step progression!
     plan = state.get("active_plan", {})
@@ -989,8 +1210,32 @@ def node_06_outbound_semantic_gate(state: AgentState):
             completed_steps.append(steps[idx])
             plan["current_step_index"] = idx + 1
             print(f"   ⏩ [ATOMIC LEDGER UPDATE]: Safely advanced to step index {plan['current_step_index']}")
-            
-    return {"preflight_status": "pass", "active_plan": plan, "completed_steps": completed_steps, "pending_advance": False}
+
+    # Promote parent IDs only after the outbound gate has approved both the
+    # selected evidence and the response. The cache intentionally stores no
+    # parent text; every cache hit is re-read from SQLite.
+    evidence_cache = dict(state.get("approved_evidence_cache", {}))
+    for cache_key, entry in state.get("pending_evidence_cache_updates", {}).items():
+        parent_ids = entry.get("approved_parent_ids", [])
+        if not cache_key or not parent_ids:
+            continue
+        evidence_cache.pop(cache_key, None)
+        evidence_cache[cache_key] = {"approved_parent_ids": parent_ids}
+    while len(evidence_cache) > MAX_APPROVED_EVIDENCE_CACHE_ENTRIES:
+        evidence_cache.pop(next(iter(evidence_cache)))
+    if state.get("pending_evidence_cache_updates"):
+        log_event("evidence_cache.promoted", entry_count=len(evidence_cache), keys=list(state.get("pending_evidence_cache_updates", {}).keys()))
+
+    return {
+        "preflight_status": "pass",
+        "active_plan": plan,
+        "completed_steps": completed_steps,
+        "pending_advance": False,
+        "approved_evidence_cache": evidence_cache,
+        "pending_evidence_cache_updates": {},
+        "safe_answer_for_fallback": "",
+        "clarification_fallback_required": False,
+    }
 
 
 def node_07_precision_substitution(state: AgentState):
@@ -1073,4 +1318,32 @@ def node_10_standard_rejection(state: AgentState):
         "final_response": draft, 
         "ui_action_payload": {"uiType": "none", "options": []}, 
         "chat_history": history
+    }
+
+
+def node_11_deterministic_clarification_fallback(state: AgentState):
+    """Safe terminal path when three generated clarifications fail review."""
+    print("🟡 [NODE 11] Executing Deterministic Clarification Fallback")
+    answer = state.get("safe_answer_for_fallback", "").strip()
+    clarification = (
+        "Sorry, I couldn't find relevant FAQ details for the remaining part of your request. "
+        "Could you clarify what information you are looking for?"
+        if answer
+        else "Sorry, I couldn't find relevant FAQ details to answer that. Could you clarify what information you are looking for?"
+    )
+    response = "\n\n".join(part for part in [answer, clarification] if part)
+    history = list(state.get("chat_history", []))
+    history.append(AIMessage(content=response))
+    log_event(
+        "clarification.deterministic_fallback",
+        retained_answer=bool(answer),
+        safety_retry_count=state.get("safety_retry_count", 0),
+    )
+    return {
+        "final_response": response,
+        "final_answer": answer,
+        "final_clarification": clarification,
+        "ui_action_payload": {"uiType": "none", "options": []},
+        "chat_history": history,
+        "pending_advance": False,
     }

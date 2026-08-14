@@ -81,25 +81,30 @@ class RAGEngine:
                 })
         return formatted_hits
 
-    def _hydrate_parents_from_sqlite(self, parent_ids: list) -> str:
-        """Fetches the full, unfragmented text for the winning parents."""
+    def _hydrate_parents_from_sqlite(self, parent_ids: list) -> List[Dict[str, str]]:
+        """Fetch full parent text while preserving the evidence identifier."""
         if not parent_ids:
-            return "NO_KNOWLEDGE_FOUND"
+            return []
 
         cursor = sqlite_conn.cursor()
         placeholders = ','.join('?' for _ in parent_ids)
-        query = f"SELECT content FROM knowledge_parents WHERE parent_id IN ({placeholders})"
+        query = f"SELECT parent_id, content FROM knowledge_parents WHERE parent_id IN ({placeholders})"
         cursor.execute(query, parent_ids)
+        rows_by_id = {parent_id: content for parent_id, content in cursor.fetchall()}
+        hydrated_payload = [
+            {"parent_id": parent_id, "content": rows_by_id[parent_id]}
+            for parent_id in parent_ids
+            if parent_id in rows_by_id
+        ]
         
-        rows = cursor.fetchall()
-        
-        # Concatenate all winning payloads
-        hydrated_payload = "\n\n---\n\n".join([row[0] for row in rows])
-        
-        print(f"    🧱 [RAG HYDRATION] Hydrated {len(rows)} intact parent chunks from SQLite.")
+        print(f"    🧱 [RAG HYDRATION] Hydrated {len(hydrated_payload)} intact parent chunks from SQLite.")
         return hydrated_payload
 
-    async def execute_multi_angle_search(self, blueprint: dict, product_tags: list, intent_families: list) -> str:
+    def hydrate_parent_ids(self, parent_ids: list) -> List[Dict[str, str]]:
+        """Re-read a vetted parent-ID set from the authoritative knowledge DB."""
+        return self._hydrate_parents_from_sqlite(parent_ids)
+
+    async def execute_multi_angle_search(self, blueprint: dict, product_tags: list, intent_families: list) -> List[Dict[str, str]]:
         """The Main Entrypoint for Tri-Angle RRF Search."""
         
         start_time = time.time() # Start Telemetry Timer
@@ -173,7 +178,7 @@ class RAGEngine:
             execution_time = (time.time() - start_time) * 1000
             print(f" ⏱️  [RAG ENGINE] Total Execution Time: {execution_time:.2f} ms")
             print("═"*60 + "\n")
-            return "NO_KNOWLEDGE_FOUND"
+            return []
 
         # The 50% Drop-Off Rule Calculation
         print("\n    [RAG TELEMETRY] --- Final RRF Standings & Drop-Off Selection ---")

@@ -8,7 +8,7 @@ The assistant is a read-only FAQ/navigation service. Memory is advisory context 
 
 ## 2. Design principles
 
-- **Clean graph sessions:** Login does not restore a prior plan, journey, pending contract, queue, RAG payload, retry counter, or other execution state.
+- **Clean graph sessions:** Login does not restore a prior plan, task evidence, RAG payload, retry counter, or other execution state.
 - **Durable history, bounded prompts:** Complete history is retained for UI/audit retrieval; prompt context is bounded through a rolling ten-turn window and compaction.
 - **User isolation:** Durable records are scoped by `customer_id`; the active UI mock profile currently uses `USR_999`.
 - **Trust before reuse:** A user message is untrusted until it passes the inbound safety gate. Untrusted text remains visible in history but must not enter memory summaries or prompt history.
@@ -36,14 +36,14 @@ The assistant is a read-only FAQ/navigation service. Memory is advisory context 
 │ LangGraph MemorySaver (ephemeral graph state)                        │
 │ - latest 10 turns / 20 messages                                      │
 │ - rolling compact summary                                             │
-│ - active journey, plan and turn-only state                            │
+│ - active presentation plan and turn-only state                        │
 └───────┬────────────────────────────┬────────────────────────────────┘
         │                            │
         │ checkout / timeout         │ prompt context
         ▼                            ▼
 ┌─────────────────────┐     ┌────────────────────────────────────────┐
 │ SQLite durable store │     │ Selected LLM prompts                    │
-│ simulated_ledger.db │     │ - journey classifier                    │
+│ simulated_ledger.db │     │ - request triage                       │
 │                     │     │ - intent/query formulator               │
 │ transcript          │     │ - response generator                    │
 │ session summary     │     │ (only trusted recent user messages)     │
@@ -56,7 +56,7 @@ The assistant is a read-only FAQ/navigation service. Memory is advisory context 
 
 | Layer | Storage | Lifetime / size | Primary use |
 |---|---|---|---|
-| Graph working memory | LangGraph `MemorySaver` | Process-local; current thread | Current journey, plan, queues, recent message objects, turn state. |
+| Graph working memory | LangGraph `MemorySaver` | Process-local; current thread | Active plan, task-level evidence, recent message objects, and turn state. |
 | Recent conversation window | `chat_history` in graph state | Latest 20 messages / 10 turns | Short-term prompt context. |
 | Rolling compact memory | `compacted_history_summary` in graph state | Current graph session; target 100 tokens | Compounded summary of messages removed from the recent window. |
 | Durable chat history | `Persistent_Chat_Message` | SQLite; paginated | UI “Load earlier messages”, refresh recovery, audit transcript. |
@@ -73,14 +73,14 @@ The assistant is a read-only FAQ/navigation service. Memory is advisory context 
 - `history_sequence_offset`: number of messages previously removed from graph history.
 - `compacted_history_summary`: compounded compact context for removed messages.
 - `user_baseline_summary`: read-only baseline loaded at Turn 0.
-- Workflow state such as `active_user_journey`, `active_product_intents`, `active_plan`, `completed_steps`, `pending_journey_switch`, and `pending_journey_queue`.
+- Workflow state such as `active_product_intents`, `active_plan`, `completed_steps`, task-level evidence, and the selected response experience.
 
 ### 5.2 New login behavior
 
 Turn 0 (`**INIT**`) runs the context hydrator. It loads the latest valid session summary and optional user baseline, creates a returning greeting, then explicitly starts graph execution state clean:
 
 - empty `chat_history`;
-- no active journey, plan, queue, pending switch, retrieved text, or process slots;
+- no active plan, task evidence, retrieved text, or process slots;
 - retry trackers and other volatile fields reset.
 
 The latest summary and baseline are advisory context only. They do not resume a plan or authorize an unfinished operation.

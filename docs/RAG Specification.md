@@ -1,0 +1,133 @@
+# **RAG Specification (User Journey v2.0)**
+
+**Project:** Agentic AI Chatbot for Consumer Banking (MSc FinTech Capstone)  
+**Module:** Document Ingestion & Knowledge Retrieval Execution  
+**Target Environment:** Local execution on 16GB Unified Memory M1 Mac
+
+## 
+
+## **1\. Architecture**
+
+The RAG architecture implements a **Hybrid Processing Paradigm** combined with a **Hierarchical (Parent-Child) Chunking Strategy**.
+
+* **LLM compute** is provided by Groq-hosted generation models and Gemini 3.5 Flash Lite for task-level sufficiency and outbound semantic evaluation.  
+* **Vector Math & Privacy:** Localized to the M1 Mac using a local ChromaDB instance and the lightweight sentence-transformers/all-MiniLM-L6-v2 embedding model.
+
+Retrieval Metadata and Presentation Separation: Product and intent families deterministically restrict the eligible Chroma records for each task’s RAG search. RRF and direct-hit selection then rank eligible parent records. User Journey v2.0 is selected only after task-level evidence passes sufficiency evaluation and controls response presentation rather than retrieval eligibility.
+
+## 
+
+## **2\. Data Extraction & Pre-Processing Pipeline**
+
+Raw banking data is sourced from publicly available FAQ structures (modeled on SG Trust Bank) but not exact copy for proprietary reason. The extraction process now utilizes a "Decoupled ETL approach", strictly separating raw data retrieval from the Capstone taxonomy mapping.
+
+### **2.1 Extraction Methodology (Synchronous Scraper)**
+
+* **Tooling:** Python requests and BeautifulSoup4. Heavy headless browsers (e.g., Selenium) are strictly banned to conserve local M1 RAM.  
+* **Logic:** The script parses static HTML DOM trees, isolating accordion containers (div.faq-accordion-block) to extract Question and Answer text pairs natively. The script now dynamically crawls the root FAQ homepage first to discover all available taxonomy branches before extracting the Q\&A pairs.  
+* **Sanitization:** The parser strips erratic newline characters and converts HTML list tags (\<li\>) into logical string bullet points.
+
+### **2.2 Decoupled Two-Tier Transformation**
+
+The raw extraction output is passed through an LLM-powered Synthetic Pre-Processing Pipeline. This layer performs two critical functions:
+
+1. Proprietary Cleansing: It comprehensively paraphrases the raw banking FAQs into original compositions, rebranding all institutional references to "Horizon Bank" to create a Horizon Bank–branded synthetic dataset and reduce dependence on source phrasing.  
+2. **Product Tagging:** The pipeline now utilizes a 'Deterministic Product Mapping \+ LLM Inferential Fallback' script to assign product\_tag lists (e.g., \['Credit\_Card'\] or \['ALL'\]).
+
+### **2.3 Semantic Intent Consolidation**
+
+To ensure architectural stability, a Rectification Engine (1c\_consolidate\_intents.py) maps thousands of dynamic raw intents into 16 standardized Master Intents. This prevents vector drift and ensures that Node 03b operates on a finite, high-confidence semantic search space.
+
+### **2.4 Dynamic Product-Intent Map Extraction**
+
+An automated utility (4\_generate\_intent\_map.py) scans the synthesized corpus to generate a relational mapping of Products and Intents. The generated product/intent mapping informs corpus quality and the application product/intent taxonomy. At runtime, Node 02e produces up to three task-level retrieval definitions containing target\_commercial\_product and target\_intent values; these values are used as deterministic Chroma metadata filters.
+
+  {
+
+    "faq\_id": "faq\_495693bf",
+
+    "product\_tags": \["REWARDS\_PROGRAM"\],
+
+    "intent\_families": \["Linkpoints", "Merchant Promos"\],
+
+    "synth\_question": "What steps can I take to accumulate rewards points...",
+
+    "synth\_answer": "To earn rewards, start by either tapping your physical Horizon card...",
+
+    "tokenized\_answer": "To earn rewards, start by either tapping your physical Horizon card..."
+
+  }
+
+## **3\. The Data Staging Layer (prepare\_chunks.py)**
+
+To enforce Separation of Concerns, all complex string manipulation and LangChain splitting math is decoupled from database insertion. This script ingests the tokenized dataset and outputs a highly structured ready\_for\_ingestion.json containing two distinct, pre-computed arrays: parent\_data and child\_data. Note: The detailed logic regarding LangChain Recursive Text Splitting, Overlap Windows, Pre-Compression Context Prepending, and Multi-Intent Duplication, previously in the Ingestion section, has been migrated to this staging layer.
+
+## **4\. The Database Ingestion Engine (ingest.py)**
+
+The Ingestion Engine is now a strictly dedicated database writer. It reads the pre-computed arrays from ready\_for\_ingestion.json and blindly routes them to their respective local storage environments. This monolithic decoupling ensures that database connection drops do not require re-running complex chunking algorithms.
+
+### **4.1 Parent Chunk Storage (SQLite)**
+
+* **Concept:** The complete, un-fragmented Q\&A pair.  
+* **Execution:** The ingestion script concatenates the Question and Answer strings and writes them to a local lightweight SQLite database (knowledge\_parents).  
+* **Schema Columns:** parent\_id (PK), product\_tags (TEXT), intent\_families (TEXT), content (TEXT).  
+* The system employs an Asymmetric Tokenization Strategy. The content column in SQLite stores the tokenized\_answer (where all financial figures, rates, and thresholds have been replaced with opaque deterministic placeholders like {{faq\_xyz\_001}}). This enables deterministic validation and substitution of approved numerical placeholders, substantially reducing numeric-hallucination risk.
+
+### **4.2 Child Chunk Generation (Faceted Indexing) & Vector Storage (ChromaDB)**
+
+* ingest.py iterates over the pre-staged parent\_data array to execute bulk INSERT statements into SQLite, and iterates over the pre-staged child\_data array to execute batch embeddings into the persistent ChromaDB collection using the all-MiniLM-L6-v2 transformer.  
+* **Embedding & Storage (Data Loss Prevention):** The system utilizes 'Document-Side Optimization' via a strict 'Split First, Compress Second' order of operations. To prevent LLM 'Lost in the Middle' syndrome, massive Q+A blobs are mechanically evaluated for size before LLM processing. If the raw text is small, it proceeds to compression. If it is massive, it is split first to help preserve granular data (fees, rates) during the compression phase.  
+* **The Tri-Angle Lock and Key Mechanism:** The three concise child chunks generated during ETL strictly correspond to the Procedural, Policy, and Conceptual lenses. This strips out conversational filler, maximizes the Signal-to-Noise Ratio (SNR) in the dense vector space, and mathematically aligns with the 3-angle queries generated at runtime.  
+* **Pre-Compression Context Prepending:** For large FAQs that require LangChain recursive splitting, the system combats Semantic Orphan Fragmentation by programmatically prepending the raw FAQ Question string to the absolute front of every splintered raw Answer fragment. Crucially, this happens prior to LLM compression. The LLM is then fed this 'Question \+ Fragment' pair to generate the dense Tri-Angle chunks. This sequence helps preserve question context for split answer fragments without vector dilution.  
+* **Two-Tier Metadata Tagging:** Every Child Chunk is injected with strict tracking pointers:  
+  {"parent\_id": "acc\_open\_elig\_001", "product\_tag": \["Deposit\_Account"\], "intent\_family": \["ELIGIBILITY"\]}  
+* **Multi-Intent Duplication Protocol:** To support One-to-Many Intent Classification (e.g., an FAQ covering both 'Fees' and 'Statement queries'), the ingestion loop iterates over the intent\_families array generated by the Semantic LLM Mapper. The exact same Child Chunk is duplicated and embedded multiple times into ChromaDB—once for each intent string. This supports deterministic metadata eligibility filtering for each intent lane, regardless of which specific intent lane the Orchestrator has locked the user into.  
+* **Asymmetric Vectorization:** While SQLite stores the tokenized text, ChromaDB stores the unmasked synth\_answer (containing the actual numbers). This ensures that if a user queries a specific numerical value (e.g., "S$50"), the dense vector index retains the exact mathematical and semantic relationships necessary to achieve a high cosine similarity score. The orchestrator links the unmasked vector back to the masked SQLite payload using the parent\_id.  
+* **Token Economy / Universal 'ALL' Bucket Strategy:** FAQs that are universally applicable across the bank (e.g., "How to update contact details") are tagged with product\_tag: \["ALL"\]. This makes these chunks eligible across product filters when their intent-family metadata also matches the task.
+
+## 
+
+## **5\. User Journey v2.0 Task-Level RAG Orchestration**
+
+The RAG pipeline operates as an isolated sequence within the main conversational state machine, seamlessly integrating with the Orchestrator's routing variables.
+
+### **5.1 Runtime State**
+
+search\_tasks (List\[Dict\]): Up to three independently formulated retrieval tasks. Each task contains a stable task\_id, procedural/policy/conceptual query angles, target\_commercial\_product, and target\_intent.
+
+* task\_results (List\[Dict\]): Per-task retrieval and evaluation state, including CACHED, RETRIEVED, SUFFICIENT, RETRY, or CLARIFICATION\_REQUIRED status, candidate parents, approved parent IDs, and source origin.  
+* task\_retry\_counts (Dict\[str, int\]): Live-RAG insufficiency count per task ID. Cache insufficiency does not consume this count.  
+* task\_feedback (Dict\[str, str\]): Task-specific refinement feedback used only when Node 02e retries unresolved tasks.  
+* approved\_evidence\_cache (Dict): Session-scoped cache of approved SQLite parent IDs, keyed by normalized product and unordered intent-family set.  
+* pending\_evidence\_cache\_updates (Dict): Candidate cache promotions held until the outbound semantic gate approves the evidence and generated response.  
+* task\_resolution\_instructions (List\[Dict\]): Terminal retrieval context for unresolved tasks, including exact rejected SQLite parent records that may be used only as clarification-topic suggestions.  
+* raw\_retrieved\_text (str): The selected approved evidence subset used by the presentation planner, response generator, and outbound answer-groundedness check.
+
+### **5.2 Node 02e: Intent Formulator and Task Router**
+
+* **Function:** Task-level semantic query formulation.  
+* **Logic:** \- Decomposes a valid request into up to three stable tasks. \- Produces procedural, policy, and conceptual angles for each task. \- Preserves task IDs and reformulates only failed tasks during retry mode. \- Independently formulates current tasks before deterministic cache comparison. \- Compares each task by normalized product plus unordered intent-family set. Routing: \- All cache hits route directly to Node 03c for fresh sufficiency validation. \- Any cache miss routes to Node 03a. \- A retry always performs live RAG for the failed task; it does not reuse previously insufficient cache evidence.
+
+### **5.3 Node 03a and Node 03b: Retrieval Dispatch and Task-Level RAG**
+
+* Node 03a is deterministic. It identifies only cache-miss and retry tasks and dispatches RAG only when live retrieval is needed. Node 03b retrieves eligible tasks concurrently. For each task, it: 1\. applies the product/intent metadata filter, including the universal ALL product bucket; 2\. executes concurrent procedural, policy, and conceptual Chroma searches; 3\. applies direct-hit selection, parent-centric RRF, the 50% drop-off rule, and MAX\_PARENTS \= 4; 4\. hydrates the selected parent IDs from SQLite; 5\. returns parent records grouped by task\_id. Cached tasks bypass Node 03a and Node 03b, but their parent IDs are rehydrated from SQLite before Node 03c evaluates them again.
+
+### **5.4 Node 03c: Task-Level Sufficiency Auditor and Evidence Selector**
+
+* **Function:** Gemini task-level evidence evaluation.  
+* **Logic:** \- Evaluates each task’s parent records independently. \- A sufficient task may approve only parent IDs supplied for that same task. \- Approved parent IDs are rehydrated directly from SQLite before downstream use; the auditor never generates evidence text. \- Successful tasks retain their approved evidence while only RETRY tasks loop back to Node 02e. \- A cached task that fails sufficiency falls back to live RAG without consuming a live-RAG retry. \- After three failed live retrieval attempts, the task becomes CLARIFICATION\_REQUIRED rather than triggering hard escalation. \- Rejected retrieved parent records are retained as suggestion-only evidence; they cannot support factual answers, instructions, or UI actions. Routing: \- Any RETRY task → Node 02e. \- All tasks SUFFICIENT or CLARIFICATION\_REQUIRED → User Journey v2 presentation planning.
+
+### **5.5 Approved-Evidence Cache**
+
+The approved-evidence cache is session-scoped and stores approved parent IDs only, never cached parent text. Cache key: normalized target\_commercial\_product \+ sorted unique target\_intent values. Rules: \- Node 02e formulates tasks independently before cache comparison. \- Matching tasks are rehydrated from SQLite and revalidated by Node 03c. \- Mixed requests retrieve only cache-miss tasks while cached task evidence remains available for the same sufficiency pass. \- Cache entries are promoted only after the outbound semantic gate approves the selected evidence and generated response. \- Cache insufficiency triggers live RAG and does not decrement the three-attempt live-RAG retry budget.
+
+### **5.6 Terminal Insufficiency and Clarification Evidence**
+
+A task that remains insufficient after three live retrieval attempts becomes CLARIFICATION\_REQUIRED. The system may still answer other tasks whose evidence was approved. For an unresolved task, the exact SQLite parent records returned by the final failed retrieval attempt are passed to the response layer only as possible related-topic suggestions. The response must: \- apologise that relevant FAQ details were not found; \- name the unresolved customer-supplied term clearly in multi-part requests; \- suggest no more than two related topics explicitly supported by rejected retrieved records; \- ask for general clarification if those topics are irrelevant; \- For a terminal clarification response, the current implementation returns no UI options, including when other tasks have approved answers. Rejected evidence cannot support an answer, banking instruction, product claim, or suggested customer action.
+
+### **5.7 Outbound Validation of RAG Evidence**
+
+The outbound semantic gate evaluates: 1\. safety/compliance of all task-level approved evidence; 2\. answer text and answer UI options against the selected approved evidence; 3\. clarification-topic grounding against rejected suggestion-only evidence; 4\. clarification connection to the unresolved term in the user request; 5\. MAS compliance and unauthorized-advice risk across answer, clarification, and UI options. If a clarification fails validation, it is regenerated up to three times. If only the clarification repeatedly fails while an answer remains independently safe, a deterministic fallback preserves the safe answer and appends a neutral general clarification. Unsafe or ungrounded answer/evidence failures continue to hard escalation.
+
+### 
+

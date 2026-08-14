@@ -73,7 +73,7 @@ This phase retrieves and validates FAQ evidence per task. Cache-miss and retry t
   * **Routing:** Routes directly to Node 03c for task-level sufficiency evaluation.
 
 * **Node 03c: Task-Level Sufficiency Auditor and Evidence Selector**  
-  * **Logic:** Evaluates each task independently using its own candidate parent records. For a sufficient task, approves only exact supplied parent IDs and rehydrates those IDs directly from SQLite. Builds approved evidence only from approved parent records. For an insufficient live-RAG task, stores query-refinement feedback and loops only that task back to Node 02e. Cached evidence that fails sufficiency falls back to live RAG without consuming a live-RAG retry. After three failed live retrieval attempts, marks only that task CLARIFICATION\_REQUIRED rather than escalating the entire request. Preserves exact rejected SQLite parent records as suggestion-only evidence for the clarification flow. They are never used as answer evidence.  
+  * **Logic:** Evaluates each task independently using its own candidate parent records. For a sufficient task, approves only exact supplied parent IDs and rehydrates those IDs directly from SQLite. Builds approved evidence only from approved parent records. For an insufficient live-RAG task, stores query-refinement feedback and loops only that task back to Node 02e. Cached evidence that fails sufficiency falls back to live RAG without consuming a live-RAG retry. After three failed live retrieval attempts, marks only that task CLARIFICATION\_REQUIRED rather than escalating the entire request. Preserves the exact SQLite parent records returned by the final failed retrieval attempt as suggestion-only evidence for the clarification flow. They are never used as answer evidence.  
   * **Routing:**  
     * Any RETRY task → Node 02e. All tasks SUFFICIENT or CLARIFICATION\_REQUIRED → Node 04a.
 
@@ -88,7 +88,7 @@ This layer converts approved task-level FAQ evidence into the most suitable cust
   * **Routing:** Presentation ready → Node 04b. Planning failure → Node 10\.
 
 * **Node 04b: Response Generator (Model A Generation)**  
-  * **Logic:** Generates answers only from selected approved evidence. Uses a progress/stepper payload only for a supported GUIDED\_PROCESS with multiple steps. Keeps standard informational answers as normal text. For mixed results, answers sufficient tasks and separately clarifies unresolved tasks. For terminally unresolved tasks, begins with an apology, may suggest up to two related topics only from rejected retrieved SQLite records, and asks for a general clarification. Must explicitly name the unresolved customer-supplied term in multi-part requests; it must not use ambiguous references such as “that” or “it”. Does not create UI options for unresolved clarification tasks. Does not request unsupported specifics such as amount, term, purpose, eligibility, or application details unless those appear in the rejected suggestion evidence.  
+  * **Logic:** Generates answers only from selected approved evidence. Uses a progress/stepper payload only for a supported GUIDED\_PROCESS with multiple steps. Keeps standard informational answers as normal text. For mixed results, answers sufficient tasks and separately clarifies unresolved tasks. For terminally unresolved tasks, begins with an apology, may suggest up to two related topics only from rejected retrieved SQLite records, and asks for a general clarification. Must explicitly name the unresolved customer-supplied term in multi-part requests; it must not use ambiguous references such as “that” or “it”. For a terminal clarification response, returns no UI options, including when other tasks have approved answers. Does not request unsupported specifics such as amount, term, purpose, eligibility, or application details unless those appear in the rejected suggestion evidence.  
   * **Routing:** Moves output downstream to **Node 05**. 
 
 ### 
@@ -110,7 +110,7 @@ This multi-tier verification layer checks outbound responses to maintain accurac
     * Pass → Node 07\. Fail with retry count below 3 → Node 04b. Third failure caused only by clarification grounding, connection, or compliance, while the answer remains independently safe → Node 11\. Any other third outbound safety failure → Node 09\.
 
 * **Node 07: Precision Substitution (Deterministic Rule Engine)**  
-  * **Logic:** Precision substitution applies to approved answer text and UI options after the semantic pass. Replaces identified placeholders with mapped number values ensuring absolute accuracy.  
+  * **Logic:** Precision substitution applies to approved answer text and UI options after the semantic pass. Replaces validated placeholders with their exact values from SQLite.  
   * **Routing:** Routes to **Node 08**.
 
 * **Node 08: Soft Escalation Analyzer (Deterministic Telemetry Monitor)**  

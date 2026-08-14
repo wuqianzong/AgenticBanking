@@ -36,13 +36,17 @@ Each RAG task retains the selected parent documents as `{parent_id, content}`. T
 
 Successful task evidence is never overwritten by a retry for another task. A task
 that remains unsupported after three attempts is marked
-`CLARIFICATION_REQUIRED`. Its unapproved retrieval content is not sent
-downstream; instead, terminal retrieval feedback is sent to the response
-generator as internal context. The generator produces a natural clarification
-without quoting that feedback or asserting unsupported banking facts. Answer
-text and answer-related UI options remain grounded in approved FAQ evidence;
-clarification is separately checked for compliance and safety. Clarification
-does not create UI options.
+`CLARIFICATION_REQUIRED`. The exact SQLite parent records returned by that
+task's final failed retrieval attempt are passed downstream only as
+suggestion-only clarification evidence. The generator may use them to offer up
+to two related topics, but may not use them as an answer, instruction, product
+claim, or UI action. It produces a natural clarification without quoting the
+internal retrieval feedback or asserting unsupported banking facts. Answer text
+and answer-related UI options remain grounded in approved FAQ evidence;
+clarification is separately checked for suggestion-evidence grounding,
+connection to the unresolved customer term, compliance, and safety. A terminal
+clarification response does not create UI options, including when another task
+has approved answer evidence.
 
 ### Session evidence cache
 
@@ -63,7 +67,7 @@ not restored across login sessions.
 | All tasks factual and sufficient | `INFORMATIONAL` grouped by task topic. |
 | One task has grounded sequential steps | `GUIDED_PROCESS` for that task, with supporting factual topics in the response. |
 | Two or more tasks require guided processes | `CLARIFICATION` with up to two user choices; no hidden queue. |
-| A task is unavailable after retries | Show a safe availability notice while answering supported tasks. |
+| A task is terminally unresolved after retries | Answer supported tasks, then provide a safe, connected clarification; do not include UI options. |
 
 ## Removed v1 behavior
 

@@ -14,6 +14,14 @@ Product, intent, and free-form task queries determine what FAQ knowledge is retr
 
 Clarification is response content, not a presentation type. It can be appended to `TEXT`, `PROGRESS`, or `LIST` while retaining its separate groundedness and compliance checks. Only one interactive presentation may be active in a response. Multiple business tasks are allowed.
 
+## Presentation decision principle
+
+The planner visualizes the mental model the customer needs at that moment. A need to understand uses `TEXT`; a need to scan or remember independent items uses `LIST`; and a need to know where they are in, or complete, a process uses `PROGRESS`. Supported choices may be appended as up to two chips when the customer needs to choose a next action or topic. A comparison remains organised `TEXT` until a dedicated comparison component is introduced.
+
+When multiple tasks are supported, `LIST` and `PROGRESS` have one primary task only. Their title and items or stages must be derived only from that primary task's approved evidence. Other supported tasks are displayed as separate supporting text rather than mixed into the primary payload.
+
+The customer’s higher-level intent selects the presentation, while approved FAQ evidence constrains every displayed fact. Account-opening and application/onboarding requests therefore prefer `PROGRESS` when the evidence supports at least two honest actions, prerequisites, or constraints that can be expressed as preparation stages. The planner must not invent app navigation or represent preparation as a complete bank workflow.
+
 ## Execution flow
 
 ```text
@@ -56,6 +64,11 @@ to a Product and Intent retrieval task. It retains the exact unresolved
 customer wording and an internal reason; it never guesses a product merely to
 create a search task.
 
+Durable memory is advisory only. Node 02e must not revive a clarification from
+a prior-session or baseline summary unless the latest user input explicitly
+continues that topic. This scope is guided by the intent-formulator prompt,
+rather than a brittle deterministic text-match rule.
+
 Searchable tasks continue through RAG and task-level sufficiency normally.
 Intent clarification tasks bypass RAG and travel with any approved evidence to
 the presentation and response layers. The generator answers supported tasks,
@@ -89,6 +102,7 @@ not restored across login sessions.
 |---|---|
 | All tasks factual and sufficient | `TEXT`, grouped by task topic when useful. |
 | One task has grounded sequential steps | `PROGRESS` for that task, with supporting factual topics in the response. |
+| Account opening or application asks how to proceed | Prefer `PROGRESS` when approved evidence supports at least two honest preparation stages. |
 | Three or more independent requirements or review items | `LIST` with a concise dynamic title and green check markers. |
 | Two or more tasks could support progress processes | Select the single most helpful `PROGRESS` process from the customer context; present other supported topics as concise supporting information rather than asking the customer to choose a workflow. |
 | A task is terminally unresolved after retries | Answer supported tasks, then provide a safe, connected clarification; do not include UI options. |

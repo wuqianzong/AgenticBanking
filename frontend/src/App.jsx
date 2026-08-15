@@ -88,6 +88,7 @@ export default function BankingBotUI() {
       clarificationText: payload.clarificationText || '',
       listTitle: payload.listTitle || '',
       listIntro: payload.listIntro || '',
+      listSupportingText: payload.listSupportingText || '',
       listClarificationText: payload.listClarificationText || '',
       precisionSubstituted: payload.precisionSubstituted || false,
       currentStep: payload.currentStep,
@@ -416,6 +417,7 @@ export default function BankingBotUI() {
             clarificationText: finalBotData.clarificationText || '',
             listTitle: finalBotData.listTitle || '',
             listIntro: finalBotData.listIntro || '',
+            listSupportingText: finalBotData.listSupportingText || '',
             listClarificationText: finalBotData.listClarificationText || '',
             precisionSubstituted: finalBotData.precisionSubstituted || false,
             currentStep: finalBotData.currentStep,
@@ -580,7 +582,7 @@ export default function BankingBotUI() {
     </div>
   );
 
-  const renderChecklist = (items, title) => (
+  const renderChecklist = (items, title, options = []) => (
     <div className="bg-white rounded-xl border border-slate-200 p-4 mt-2 shadow-sm w-full max-w-sm">
       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100">
         <FileText size={18} className="text-blue-600" />
@@ -594,6 +596,7 @@ export default function BankingBotUI() {
           </li>
         ))}
       </ul>
+      {options.length > 0 && <div className="mt-4 border-t border-slate-100 pt-3">{renderChips(options)}</div>}
     </div>
   );
 
@@ -753,7 +756,12 @@ export default function BankingBotUI() {
                         {msg.listIntro}
                       </div>
                     )}
-                    {msg.type === 'checklist' && renderChecklist(msg.items, msg.listTitle)}
+                    {msg.type === 'checklist' && renderChecklist(msg.items, msg.listTitle, msg.options)}
+                    {msg.type === 'checklist' && msg.listSupportingText && (
+                      <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+                        {msg.listSupportingText}
+                      </div>
+                    )}
                     {msg.type === 'checklist' && msg.listClarificationText && renderClarificationCard(msg.listClarificationText)}
                     {(msg.type === 'stepper' || msg.type === 'checklist') && (
                       <div className="mt-1 ml-1 text-[10px] tabular-nums text-slate-400">

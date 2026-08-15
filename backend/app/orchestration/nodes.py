@@ -422,7 +422,8 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     3. For EACH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above.
     4. Each task MUST contain task_id. On a new request use task_1, task_2, task_3 in order. In RETRY MODE preserve the supplied task_id and use its feedback to change the search terms, product, or intent.
     5. CONVERSATIONAL CONTINUATION: Output an empty array for "search_tasks": [] only when the user is simply providing information requested in a previous step (e.g., "I have MyInfo ready", "Next", "Proceed") AND Current Graph Context confirms that an active plan or retrieved knowledge exists. If recalled prior-session context is available but the current graph has neither an active plan nor retrieved knowledge, the user is starting a fresh graph session: for a continuation such as "yes, continue", generate a search task from the recalled topic so current FAQ knowledge can be retrieved.
-    6. INTENT CLARIFICATION: If a component of a valid banking request is too ambiguous to map to a valid Product/Intent search task, do NOT guess a product or create a generic task merely to fill the array. Put that component in "clarification_tasks". Copy the ambiguous customer term into "unresolved_request" and explain internally why it cannot be searched. You may return both search_tasks and clarification_tasks for a multi-part request. Do not put a searchable component into clarification_tasks.
+    6. INTENT CLARIFICATION: If a component of the LATEST USER INPUT is too ambiguous to map to a valid Product/Intent search task, do NOT guess a product or create a generic task merely to fill the array. Put that component in "clarification_tasks". Copy the ambiguous customer term into "unresolved_request" and explain internally why it cannot be searched. You may return both search_tasks and clarification_tasks for a multi-part request. Do not put a searchable component into clarification_tasks.
+       Recalled prior-session context and the user baseline are advisory context only: NEVER create a search task or clarification task solely because they mention an old pending issue. Use them only when the latest user input explicitly continues or refers to that topic.
     7. If the question applies universally (e.g. app password), use "ALL". Labels are retrieval filters, not a reason to discard a valid free-form request.
     
     Output JSON ONLY:
@@ -810,20 +811,25 @@ def node_04a_resolution_planner(state: AgentState):
     Task results: {json.dumps(planner_tasks, ensure_ascii=False)}
     Intent-level clarification tasks (unresolved user-derived components; no FAQ evidence): {json.dumps(intent_clarification_tasks, ensure_ascii=False)}
 
+    DEEPER PRESENTATION PRINCIPLE:
+    Select the presentation that visualizes the mental model the customer needs at this moment. The customer's higher-level intent selects the experience; approved FAQ evidence limits every title, item, stage, and option within that experience.
+
     Choose exactly one presentation_type:
-    - TEXT: a factual answer, explanation, or several concise topic sections.
-    - PROGRESS: exactly one primary task has directly supported, genuinely sequential steps.
-    - LIST: three or more independent items the customer should review, prepare, or meet, such as eligibility criteria, required documents, prerequisites, fees, limits, or security checks.
-    - ESCALATION: only when human assistance was explicitly requested or required.
+    - TEXT — use when the customer needs to understand an explanation, policy, factual answer, or comparison. For a comparison, organise the supported facts into clear labelled sections; there is no dedicated comparison table yet.
+    - LIST — use when the customer needs to scan or remember independent items. This is optimal for three or more eligibility criteria, required documents, prerequisites, fees, limits, or security checks.
+    - PROGRESS — use when the customer needs to know where they are in, or complete, a process. This is especially appropriate for an account-opening or application/onboarding request asking how to proceed, how to apply, or what steps remain.
+    - ESCALATION — use only when human assistance was explicitly requested or required.
 
     Rules:
     - Never invent facts, steps, parent IDs, or a banking action.
     - Select evidence_parent_ids only from approved parents of the same task.
-    - A PROGRESS presentation requires at least two grounded steps. Each item in `steps` is a short navigational title of 2-7 words, not a full instruction or sentence. The response generator will create the expandable detail later. For example: "Sign in to the Horizon App", "Select your physical card", "Choose an activation method".
+    - A PROGRESS presentation requires at least two grounded stages. Each item in `steps` is a short navigational title of 2-7 words, not a full instruction or sentence. The response generator will create the expandable detail later. For example: "Sign in to the Horizon App", "Select your physical card", "Choose an activation method".
+    - For account-opening or application/onboarding requests, prefer PROGRESS when approved evidence supports two or more distinct actions, prerequisites, or constraints that can be presented as honest preparation stages. Do not invent app clicks or claim a complete bank workflow when the evidence only supports preparation. For example, evidence about residency, MyInfo, and local submission can support stages such as "Confirm you can apply", "Prepare MyInfo verification", and "Submit locally in Singapore".
     - A LIST presentation requires at least three independent, grounded items. Provide a concise `list_title` describing the list, such as "What you'll need" or "Eligibility requirements". Do not use LIST when order matters.
     - Do not create more than one active progress process. When several supported topics could be presented as progress processes, choose the single most helpful primary progress process from the customer's context. Present the remaining supported topics as concise supporting information where appropriate; never ask the customer to choose a presentation format or workflow.
     - Mark unavailable tasks as UNAVAILABLE and use no evidence IDs for them.
     - Intent-level clarification tasks do not have FAQ evidence and must not be treated as answerable tasks or UI choices.
+    - Use up to two grounded `options` only when the customer needs to choose a supported next action or topic. Options are supplementary interaction, not a replacement for the selected presentation type. Leave options empty when the answer is complete, clarification is required, or the evidence does not support a meaningful choice.
 
     CRITICAL OUTPUT CONTRACT:
     - The JSON key MUST be `presentation_type`. Never output `journey`.
@@ -932,8 +938,30 @@ def node_04b_response_generator(state: AgentState):
     routing_status = state.get("preflight_status", "")
     presentation_type = state.get("selected_ux_journey", "TEXT")
     presentation_plan = state.get("presentation_plan", {})
+    comparison_request = bool(re.search(
+        r"\b(compare|comparison|same|different|difference|versus|vs\.?|better)\b",
+        state.get("user_input", "").lower(),
+    ))
     task_resolution_instructions = state.get("task_resolution_instructions", [])
     intent_clarification_tasks = state.get("intent_clarification_tasks", [])
+    primary_task_id = presentation_plan.get("primary_task_id", "")
+    primary_list_evidence = []
+    supporting_evidence = []
+    if presentation_type == "LIST":
+        presentation_by_task = {
+            item.get("task_id"): set(item.get("evidence_parent_ids", []))
+            for item in presentation_plan.get("presentation_tasks", [])
+        }
+        for result in state.get("task_results", []):
+            task_id = result.get("task_id")
+            selected_ids = presentation_by_task.get(task_id, set())
+            for parent in result.get("parents", []):
+                if parent.get("parent_id") not in selected_ids:
+                    continue
+                block = f"[Task {task_id} | Parent {parent.get('parent_id')}]\n{parent.get('content', '')}"
+                (primary_list_evidence if task_id == primary_task_id else supporting_evidence).append(block)
+    primary_list_knowledge = "\n\n---\n\n".join(primary_list_evidence)
+    supporting_task_knowledge = "\n\n---\n\n".join(supporting_evidence)
     has_terminal_retrieval_feedback = bool(task_resolution_instructions)
     has_intent_clarification = bool(intent_clarification_tasks)
     has_any_clarification = has_terminal_retrieval_feedback or has_intent_clarification
@@ -995,8 +1023,11 @@ def node_04b_response_generator(state: AgentState):
     Current Plan: {steps}
     Current Step to Execute: "{current_step}"
     Selected Presentation Type: {presentation_type}
+    Comparison Request: {comparison_request}
     Presentation Plan: {presentation_plan}
     Selected Approved Knowledge: "{state.get("raw_retrieved_text", "")}"
+    Primary LIST Evidence (use ONLY this evidence for list_items): "{primary_list_knowledge}"
+    Supporting Task Evidence (do not place in list_items): "{supporting_task_knowledge}"
     Intent Clarification Tasks (user-derived internal guidance only; do not quote reason text): {json.dumps(intent_clarification_context, ensure_ascii=False)}
     Terminal Retrieval Feedback (internal guidance only; do not quote it or treat it as FAQ knowledge): {json.dumps(terminal_feedback_context, ensure_ascii=False)}
     Unapproved Retrieved Knowledge for Clarification Suggestions (not approved answer evidence): "{unapproved_suggestion_knowledge}"
@@ -1006,8 +1037,9 @@ def node_04b_response_generator(state: AgentState):
 
     Rules for Text Generation:
     - For PROGRESS with multiple steps, write one concise, grounded detail for EVERY item in Current Plan, in the same order. A detail must provide the concrete instruction behind its short step title; do not merely repeat or lightly paraphrase the title. These details will appear in an expandable progress payload, so each one must explain only its matching step and may not rely on an earlier or later detail being visible.
-    - For LIST, provide 3-8 concise, independent `list_items` derived strictly from Selected Approved Knowledge. Each item must be meaningful on its own. Do not use a list for ordered instructions. Supply a brief `answer` introduction only when it improves comprehension.
+    - For LIST, provide 3-8 concise, independent `list_items` derived strictly from Primary LIST Evidence only. Each item must belong to the primary task named by the list title. Do not use a list for ordered instructions. Put every other supported task in `supporting_text`, using its section title where helpful; never mix a supporting task into list_items. Supply a brief `answer` introduction only when it improves comprehension.
     - For TEXT, group answers by presentation-plan section title when more than one task is present.
+    - If Comparison Request is true, begin with a direct, concise comparison conclusion that answers whether the products are the same or different using only the approved evidence. Then explain the relevant similarities and differences under clearly named product headings. Do not merely place two unrelated product summaries next to each other. Put the complete comparison in `answer`.
     - For every Intent Clarification Task, state what exactly needs clarification by explicitly naming its unresolved_request. Never replace it with an ambiguous reference such as "that", "it", "the request", or "the remaining part". Do not guess a product, policy, or banking fact beyond the customer's wording.
     - For a terminal retrieval feedback item, the clarification MUST begin with a brief apology/inability statement (for example, "Sorry, I couldn't find relevant FAQ details to answer that.").
     - When the user has multiple requests, explicitly name the unresolved term exactly as the user wrote it in the apology (for example, "Sorry, I couldn't find relevant FAQ details about ABGX loan."). Never use an ambiguous reference such as "that", "it", or "the remaining part" in its place.
@@ -1016,11 +1048,12 @@ def node_04b_response_generator(state: AgentState):
     - Do not request specific details such as an amount, term, purpose, eligibility, or application information unless they are explicitly supported by Unapproved Retrieved Knowledge for Clarification Suggestions.
     - Treat all clarification guidance as uncertain internal guidance: do not quote internal reason text, turn it into a customer-facing product label, or treat it as a fact.
     - Do not offer UI options when any unresolved task requires clarification. Answer UI options are allowed only when every component is supported.
+    - Never expose internal metadata to the customer, including task IDs, parent IDs such as `faq_abc12345`, retrieval labels, model names, audit results, or internal feedback. Parent-ID headers are evidence metadata only, not citations.
     - ZERO HALLUCINATION: Rely EXCLUSIVELY on Selected Approved Knowledge for the answer. Intent clarification may rely only on the user's stated unresolved_request; terminal retrieval suggestions may additionally rely on Unapproved Retrieved Knowledge for Clarification Suggestions.
     - If quoting exact numerical rates or fees, you MUST ONLY use the exact {{placeholders}} provided in the 'Retrieved Knowledge'. Do NOT invent, alter, or hallucinate placeholders.
     
     Output JSON ONLY:
-    {{"answer": "Grounded answer text only, or an empty string", "step_details": ["Grounded detail for Current Plan step 1"], "list_items": ["Grounded independent list item"], "clarification": "Natural clarification question only, or an empty string", "options": ["Grounded answer-related next action"], "advance_step": true}}
+    {{"answer": "Grounded answer text only, or an empty string", "step_details": ["Grounded detail for Current Plan step 1"], "list_items": ["Grounded independent list item"], "supporting_text": "Grounded text for non-primary LIST tasks, or empty", "clarification": "Natural clarification question only, or an empty string", "options": ["Grounded answer-related next action"], "advance_step": true}}
     """
     
     try:
@@ -1029,12 +1062,23 @@ def node_04b_response_generator(state: AgentState):
         clarification = res.get("clarification", "").strip()
         generated_step_details = res.get("step_details", []) or []
         generated_list_items = res.get("list_items", []) or []
+        generated_supporting_text = res.get("supporting_text", "").strip()
+        supporting_text = generated_supporting_text if presentation_type == "LIST" else ""
+        if presentation_type == "TEXT" and generated_supporting_text:
+            # Be tolerant of a model that still separates a secondary product
+            # despite the comparison instruction. Preserve it in the visible
+            # answer rather than silently dropping half the comparison.
+            answer = "\n\n".join(part for part in [answer, generated_supporting_text] if part)
         step_details = []
         list_items = []
         list_intro = answer
         if is_progress_mode:
             existing_step_details = plan.get("step_details", [])
-            if isinstance(existing_step_details, list) and len(existing_step_details) == len(steps) and all(isinstance(detail, str) and detail.strip() for detail in existing_step_details):
+            # Reuse saved details only for a later customer interaction. A
+            # safety retry must regenerate them; otherwise the semantic gate
+            # keeps reviewing the first rejected details despite a corrected
+            # model response.
+            if not feedback and isinstance(existing_step_details, list) and len(existing_step_details) == len(steps) and all(isinstance(detail, str) and detail.strip() for detail in existing_step_details):
                 step_details = [detail.strip() for detail in existing_step_details]
             elif isinstance(generated_step_details, list) and len(generated_step_details) == len(steps) and all(isinstance(detail, str) and detail.strip() for detail in generated_step_details):
                 step_details = [detail.strip() for detail in generated_step_details]
@@ -1059,7 +1103,7 @@ def node_04b_response_generator(state: AgentState):
             )
         if has_terminal_retrieval_feedback and not state.get("raw_retrieved_text", "").strip():
             answer = ""
-        answer_for_record = "\n".join(part for part in [list_intro, *list_items] if part) if list_items else answer
+        answer_for_record = "\n".join(part for part in [list_intro, *list_items, supporting_text] if part) if list_items else answer
         draft = "\n\n".join(part for part in [answer_for_record, clarification] if part)
         if not draft:
             draft = "Could you please clarify your request?"
@@ -1072,6 +1116,8 @@ def node_04b_response_generator(state: AgentState):
         pending_advance = res.get("advance_step") and steps and idx < len(steps) and routing_status != "intent_clarification_needed"
             
         options = res.get("options", [])
+        if not options:
+            options = presentation_plan.get("options", [])
         ui_items = []
         use_progress_mode = is_progress_mode
         use_list_mode = presentation_type == "LIST" and len(list_items) >= 3
@@ -1089,7 +1135,9 @@ def node_04b_response_generator(state: AgentState):
         elif presentation_type == "ESCALATION":
             ui_type = "chips" if presentation_plan.get("options") else "none"
             options = presentation_plan.get("options", [])
-        elif ui_type == "none":
+        elif presentation_type == "TEXT" and options:
+            ui_type = "chips"
+        elif ui_type == "none" and presentation_type != "LIST":
             options = []
 
         # Only the auditor-approved multi-step path receives the deterministic
@@ -1136,6 +1184,7 @@ def node_04b_response_generator(state: AgentState):
                 "clarificationText": clarification if ui_type == "stepper" else "",
                 "listTitle": presentation_plan.get("list_title", "Key information") if ui_type == "checklist" else "",
                 "listIntro": list_intro if ui_type == "checklist" else "",
+                "listSupportingText": supporting_text if ui_type == "checklist" else "",
                 "listClarificationText": clarification if ui_type == "checklist" else "",
                 "currentStep": idx + 1 if ui_type == "stepper" else None,
                 "totalSteps": len(steps) if ui_type == "stepper" else None,
@@ -1156,11 +1205,16 @@ def node_05_outbound_deterministic_gate(state: AgentState):
     list_items = payload.get("items", []) if payload.get("uiType") == "checklist" else []
     list_title = payload.get("listTitle", "")
     list_intro = payload.get("listIntro", "")
+    list_supporting_text = payload.get("listSupportingText", "")
     list_clarification = payload.get("listClarificationText", "")
     
     # 1. Combine draft text AND UI options to sweep globally
-    combined_text = " ".join([draft, *options, *step_details, *list_items, list_title, list_intro, list_clarification])
+    combined_text = " ".join([draft, *options, *step_details, *list_items, list_title, list_intro, list_supporting_text, list_clarification])
     placeholders_in_draft = re.findall(r"\{\{(.*?)\}\}", combined_text)
+    # Parent IDs identify internal FAQ records. They are allowed inside a
+    # placeholder until Node 07 substitutes its exact value, but must never
+    # appear as customer-facing citations or prose.
+    exposed_parent_ids = re.findall(r"(?<!\{)faq_[0-9a-f]{8}(?![_}])", combined_text, flags=re.IGNORECASE)
     
     illegal_detected = []
     if placeholders_in_draft:
@@ -1170,12 +1224,12 @@ def node_05_outbound_deterministic_gate(state: AgentState):
                 illegal_detected.append(p)
     
     # 2. Trigger Safety Loop if any placeholder is invalid
-    if illegal_detected or "ILLEGAL_WORD" in combined_text:
-        print(f"   🚫 [HARD GATE VETO]: Illegal/invented placeholders detected: {illegal_detected}")
+    if illegal_detected or exposed_parent_ids or "ILLEGAL_WORD" in combined_text:
+        print(f"   🚫 [HARD GATE VETO]: Invalid placeholders: {illegal_detected} | Exposed parent IDs: {exposed_parent_ids}")
         count = state.get("safety_retry_count", 0) + 1
         history = state.get("draft_feedback_history", [])
         
-        history.append(f"Draft or UI chips contained invalid placeholders: {illegal_detected}. You MUST ONLY use placeholders explicitly present in the Retrieved Knowledge.")
+        history.append(f"Draft or UI payload contained invalid placeholders: {illegal_detected} or exposed internal parent IDs: {exposed_parent_ids}. Never display FAQ parent IDs; use the supported facts without citations.")
         
         return {
             "safety_retry_count": count, 
@@ -1200,8 +1254,9 @@ def node_06_outbound_semantic_gate(state: AgentState):
     list_items = payload.get("items", []) if payload.get("uiType") == "checklist" else []
     list_title = payload.get("listTitle", "")
     list_intro = payload.get("listIntro", "")
+    list_supporting_text = payload.get("listSupportingText", "")
     list_clarification = payload.get("listClarificationText", "")
-    answer_with_options = f"Answer Text: {answer_text}\nAnswer UI Buttons: {options}\nAnswer Step Details: {step_details}\nAnswer List Title: {list_title}\nAnswer List Introduction: {list_intro}\nAnswer List Items: {list_items}"
+    answer_with_options = f"Answer Text: {answer_text}\nAnswer UI Buttons: {options}\nAnswer Step Details: {step_details}\nAnswer List Title: {list_title}\nAnswer List Introduction: {list_intro}\nAnswer List Items: {list_items}\nAnswer List Supporting Text: {list_supporting_text}"
 
     # `raw_retrieved_text` is the planner's final evidence subset used for this
     # response.  Independently rebuild every parent that node 03c approved, so
@@ -1400,10 +1455,11 @@ def node_07_precision_substitution(state: AgentState):
     list_items = payload.get("items", []) if payload.get("uiType") == "checklist" else []
     list_title = payload.get("listTitle", "")
     list_intro = payload.get("listIntro", "")
+    list_supporting_text = payload.get("listSupportingText", "")
     list_clarification = payload.get("listClarificationText", "")
     
     # Extract unique placeholders globally
-    combined_text = " ".join([draft, *options, *step_details, *list_items, list_title, list_intro, list_clarification])
+    combined_text = " ".join([draft, *options, *step_details, *list_items, list_title, list_intro, list_supporting_text, list_clarification])
     placeholders_in_draft = list(set(re.findall(r"\{\{(.*?)\}\}", combined_text)))
     precision_substituted = False
     
@@ -1443,6 +1499,7 @@ def node_07_precision_substitution(state: AgentState):
         for field, value in {
             "listTitle": list_title,
             "listIntro": list_intro,
+            "listSupportingText": list_supporting_text,
             "listClarificationText": list_clarification,
         }.items():
             updated_value = value

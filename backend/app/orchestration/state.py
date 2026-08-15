@@ -40,10 +40,11 @@ class AgentState(TypedDict):
     task_results: List[Dict[str, Any]]           # RAG parents and sufficiency result per task
     task_retry_counts: Dict[str, int]            # Retry count keyed by task_id
     task_feedback: Dict[str, str]                # Task-specific RAG refinement feedback
+    intent_clarification_tasks: List[Dict[str, Any]]  # Unresolved user-derived components that cannot form a valid retrieval task
     task_resolution_instructions: List[Dict[str, Any]]  # Terminal retrieval feedback for natural clarification generation
     safe_answer_for_fallback: str                 # Individually approved answer retained for deterministic clarification fallback
     clarification_fallback_required: bool         # True only when clarification retries exhausted while answer remains safe
-    selected_ux_journey: str                     # INFORMATIONAL, GUIDED_PROCESS, TROUBLESHOOTING, CLARIFICATION, ESCALATION
+    selected_ux_journey: str                     # TEXT, PROGRESS, LIST, or ESCALATION presentation type
     presentation_plan: Dict[str, Any]            # Evidence-selected UI and response plan
     pending_evidence_cache_updates: Dict[str, Dict[str, Any]]  # Promote only after outbound semantic approval
     pending_advance: bool                           # V4.1 Fix: Tracks if the current step should advance upon safety clearance

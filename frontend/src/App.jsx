@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, Bot, ChevronRight, CheckCircle2, 
   CreditCard, Wallet, Landmark, ShieldCheck, 
-  FileText, ArrowRight, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
+  FileText, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
   Loader2 // <-- ADDED for the Agentic Processing Tracker
 } from 'lucide-react';
 
@@ -59,9 +59,7 @@ export default function BankingBotUI() {
   const [isCompactingMemory, setIsCompactingMemory] = useState(false);
   const [loadingCaption, setLoadingCaption] = useState('Processing...'); // <-- NEW STATE FOR TRACKER
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
-  // Only the latest live stepper can submit a completion action. Historical
-  // steppers are a read-only record and cannot safely resume graph state.
-  const [activeProgressMessageId, setActiveProgressMessageId] = useState(null);
+  const [expandedProgressSteps, setExpandedProgressSteps] = useState({});
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -84,7 +82,13 @@ export default function BankingBotUI() {
       type: payload.uiType || 'text',
       options: payload.options || [],
       items: payload.items || [],
+      progressTitle: payload.progressTitle || '',
       stepDetail: payload.stepDetail || '',
+      stepDetails: payload.stepDetails || [],
+      clarificationText: payload.clarificationText || '',
+      listTitle: payload.listTitle || '',
+      listIntro: payload.listIntro || '',
+      listClarificationText: payload.listClarificationText || '',
       precisionSubstituted: payload.precisionSubstituted || false,
       currentStep: payload.currentStep,
       totalSteps: payload.totalSteps,
@@ -205,7 +209,6 @@ export default function BankingBotUI() {
       await archiveActiveSession("timeout");
       setIsLoggedIn(false);
       setMessages([]);
-      setActiveProgressMessageId(null);
       setSessionId(null);
       oldestSequenceRef.current = null;
       oldestPriorRowIdRef.current = null;
@@ -240,7 +243,6 @@ export default function BankingBotUI() {
     hasMoreHistoryRef.current = false;
     setHasMoreHistory(false);
     setMessages([]);
-    setActiveProgressMessageId(null);
     await handleSend("**INIT**", { isInitialization: true, sessionIdOverride: newSessionId });
     scheduleSessionTimeout();
   };
@@ -288,7 +290,6 @@ export default function BankingBotUI() {
 
     if (!isInitialization) {
       shouldAutoScrollRef.current = true;
-      setActiveProgressMessageId(null);
       const newUserMsg = {
         id: Date.now(),
         sender: 'user',
@@ -409,15 +410,21 @@ export default function BankingBotUI() {
             type: finalBotData.uiType || 'text',
             options: finalBotData.options || [],
             items: finalBotData.items || [],
+            progressTitle: finalBotData.progressTitle || '',
             stepDetail: finalBotData.stepDetail || '',
+            stepDetails: finalBotData.stepDetails || [],
+            clarificationText: finalBotData.clarificationText || '',
+            listTitle: finalBotData.listTitle || '',
+            listIntro: finalBotData.listIntro || '',
+            listClarificationText: finalBotData.listClarificationText || '',
             precisionSubstituted: finalBotData.precisionSubstituted || false,
             currentStep: finalBotData.currentStep,
             totalSteps: finalBotData.totalSteps,
             createdAt: new Date().toISOString()
           };
-          setActiveProgressMessageId(
-            botResponse.type === 'stepper' ? botResponse.id : null
-          );
+          if (botResponse.type === 'stepper') {
+            setExpandedProgressSteps(prev => ({ ...prev, [botResponse.id]: 1 }));
+          }
           setMessages(prev => [...prev, botResponse]);
         }
 
@@ -502,79 +509,60 @@ export default function BankingBotUI() {
     </span>
   );
 
-  const renderStepper = (items, currentStep, totalSteps, options, stepDetail, precisionSubstituted, isLive) => (
+  const renderStepper = (items, progressTitle, totalSteps, options, stepDetail, stepDetails, expandedStepNumber, onToggleStep) => (
     <div className="mt-3 w-full max-w-sm overflow-hidden rounded-xl border border-blue-100 bg-white shadow-sm">
       <div className="border-b border-blue-100 bg-blue-50 px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-blue-900">
             <FileText size={16} className="text-blue-600" />
-            <span className="text-sm font-semibold">Your guided process</span>
-            {precisionSubstituted && renderPrecisionBadge()}
+            <span className="text-sm font-semibold">{progressTitle || 'Horizon Bank guided process'}</span>
           </div>
           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-blue-700 shadow-sm">
-            Step {currentStep} of {totalSteps}
+            {expandedStepNumber}/{totalSteps}
           </span>
         </div>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
           <div
             className="h-full rounded-full bg-blue-600 transition-all duration-500"
-            style={{ width: `${totalSteps ? (currentStep / totalSteps) * 100 : 0}%` }}
+            style={{ width: `${totalSteps ? (expandedStepNumber / totalSteps) * 100 : 0}%` }}
           />
         </div>
       </div>
-      <ol className="space-y-0 px-4 py-2">
+      <ol className="space-y-0 px-3 py-1.5">
         {items?.map((item, index) => {
           const isCompleted = item.status === 'completed';
-          const isCurrent = item.status === 'current';
+          const isExpanded = expandedStepNumber === item.number;
+          const detail = stepDetails?.[index] || (item.number === 1 ? stepDetail : '');
           return (
-            <li key={`${item.number}-${item.label}`} className="flex gap-3 py-2.5">
+            <li key={`${item.number}-${item.label}`} className="flex gap-2 py-2">
               <div className="flex flex-col items-center">
-                <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
                   isCompleted
                     ? 'bg-emerald-500 text-white'
-                    : isCurrent
+                    : isExpanded
                       ? 'bg-blue-600 text-white ring-4 ring-blue-100'
                       : 'border border-slate-200 bg-white text-slate-400'
                 }`}>
-                  {isCompleted ? <CheckCircle2 size={14} /> : item.number}
+                  {isCompleted ? <CheckCircle2 size={12} /> : item.number}
                 </div>
-                {index < items.length - 1 && <div className={`mt-1 h-5 w-px ${isCompleted ? 'bg-emerald-300' : 'bg-slate-200'}`} />}
+                {index < items.length - 1 && <div className={`mt-1 h-3 w-px ${isCompleted ? 'bg-emerald-300' : 'bg-slate-200'}`} />}
               </div>
-              <div className="min-w-0 pt-0.5">
-                <p className={`text-sm leading-snug ${isCurrent ? 'font-semibold text-slate-800' : isCompleted ? 'text-slate-500 line-through decoration-slate-300' : 'text-slate-500'}`}>
-                  {item.label}
-                </p>
-                {isCurrent && <span className="mt-1 inline-block text-[10px] font-bold uppercase tracking-wide text-blue-600">Current step</span>}
-                {isCurrent && stepDetail && (
-                  <p className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
-                    {stepDetail}
+              <div className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => onToggleStep(item.number)}
+                  className="flex w-full items-start justify-between gap-2 text-left"
+                  aria-expanded={isExpanded}
+                >
+                  <span className={`text-sm leading-snug ${isExpanded ? 'font-semibold text-slate-800' : 'text-slate-500'}`}>
+                    {item.label}
+                  </span>
+                  <ChevronRight size={16} className={`mt-0.5 shrink-0 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                </button>
+                {isExpanded && detail && (
+                  <p className="mt-1.5 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-2 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+                    {detail}
                   </p>
-                )}
-                {isCurrent && (
-                  <label
-                    title={isLive ? 'Mark this step as completed' : 'Past progress is shown for reference only'}
-                    className={`mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                      isLive
-                        ? 'cursor-pointer border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                        : 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      disabled={!isLive || isTyping || isCompactingMemory}
-                      className="h-4 w-4 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
-                      onChange={(event) => {
-                        if (event.target.checked) {
-                          handleSend(
-                            currentStep === totalSteps
-                              ? "I've completed all the steps."
-                              : "I've completed this step, continue."
-                          );
-                        }
-                      }}
-                    />
-                    {currentStep === totalSteps ? "Completed all steps" : "Completed"}
-                  </label>
                 )}
               </div>
             </li>
@@ -585,13 +573,20 @@ export default function BankingBotUI() {
     </div>
   );
 
-  const renderChecklist = (items) => (
+  const renderClarificationCard = (text) => (
+    <div className="mt-3 flex max-w-sm items-start gap-2.5 rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 shadow-sm">
+      <AlertCircle size={16} className="mt-1 shrink-0 text-blue-600" aria-hidden="true" />
+      <span className="whitespace-pre-wrap">{text}</span>
+    </div>
+  );
+
+  const renderChecklist = (items, title) => (
     <div className="bg-white rounded-xl border border-slate-200 p-4 mt-2 shadow-sm w-full max-w-sm">
       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100">
         <FileText size={18} className="text-blue-600" />
-        <h4 className="font-semibold text-slate-800 text-sm">Verification Requirements</h4>
+        <h4 className="font-semibold text-slate-800 text-sm">{title || 'Key information'}</h4>
       </div>
-      <ul className="space-y-3 mb-4">
+      <ul className="space-y-3">
         {items?.map((item, idx) => (
           <li key={idx} className="flex items-start gap-3">
             <CheckCircle2 size={18} className="text-emerald-500 shrink-0 mt-0.5" />
@@ -599,9 +594,6 @@ export default function BankingBotUI() {
           </li>
         ))}
       </ul>
-      <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
-        Start KYC Application <ArrowRight size={16} />
-      </button>
     </div>
   );
 
@@ -721,7 +713,7 @@ export default function BankingBotUI() {
                       </div>
                     )}
 
-                    {msg.type !== 'stepper' && (
+                    {msg.type !== 'stepper' && msg.type !== 'checklist' && (
                       <>
                         <div className={`p-3.5 text-[15px] leading-relaxed shadow-sm whitespace-pre-wrap
                           ${msg.sender === 'user'
@@ -742,19 +734,32 @@ export default function BankingBotUI() {
                     {msg.type === 'chips' && renderChips(msg.options)}
                     {msg.type === 'stepper' && renderStepper(
                       msg.items,
-                      msg.currentStep,
+                      msg.progressTitle,
                       msg.totalSteps,
                       msg.options,
                       msg.stepDetail,
-                      msg.precisionSubstituted,
-                      msg.id === activeProgressMessageId
+                      msg.stepDetails,
+                      expandedProgressSteps[msg.id] ?? 1,
+                      (stepNumber) => setExpandedProgressSteps(prev => ({
+                        ...prev,
+                        [msg.id]: stepNumber
+                      }))
                     )}
-                    {msg.type === 'stepper' && (
+                    {msg.type === 'stepper' && msg.clarificationText && (
+                      renderClarificationCard(msg.clarificationText)
+                    )}
+                    {msg.type === 'checklist' && msg.listIntro && (
+                      <div className="mt-2 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+                        {msg.listIntro}
+                      </div>
+                    )}
+                    {msg.type === 'checklist' && renderChecklist(msg.items, msg.listTitle)}
+                    {msg.type === 'checklist' && msg.listClarificationText && renderClarificationCard(msg.listClarificationText)}
+                    {(msg.type === 'stepper' || msg.type === 'checklist') && (
                       <div className="mt-1 ml-1 text-[10px] tabular-nums text-slate-400">
                         {formatMessageTime(timestamp)}
                       </div>
                     )}
-                    {msg.type === 'checklist' && renderChecklist(msg.items)}
                     {msg.type === 'escalation' && renderEscalation()}
                   </div>
                 </div>

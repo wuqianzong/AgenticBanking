@@ -25,9 +25,10 @@ google_api_key = os.environ.get("GOOGLE_API_KEY", "AQ.Ab8RN6JT4AL6142h9RH5kjIvS9
 # 1. OUTBOUND SEMANTIC GATE (Node 06)
 class SemanticEvaluation(BaseModel):
     is_grounded: bool = Field(description="True if answer text and answer-related UI options are derived from approved knowledge. Empty answers are True.")
+    is_answer_compliant: bool = Field(description="True if answer text and answer-related UI options are safe, neutral, and contain no unauthorized financial advice or non-compliant instruction. Empty answers are True.")
     contains_advice: bool = Field(description="True if the response contains unauthorized financial advice.")
-    is_clarification_grounded: bool = Field(description="True if every banking topic or factual suggestion in the clarification is directly supported by the supplied unapproved retrieved knowledge. A generic apology and request for clarification are True.")
-    is_clarification_connected: bool = Field(description="True if a clarification for an unresolved sub-request explicitly names or unambiguously identifies the relevant term from the user's request, rather than using ambiguous references such as 'that' or 'it'.")
+    is_clarification_grounded: bool = Field(description="True if retrieval-based clarification suggestions are supported by supplied unapproved evidence, and intent-level clarification names only the supplied user-derived unresolved term without adding product facts. A generic apology and request for clarification are True.")
+    is_clarification_connected: bool = Field(description="True if every clarification explicitly names or unambiguously identifies its supplied unresolved customer term, rather than using ambiguous references such as 'that' or 'it'.")
     is_clarification_compliant: bool = Field(description="True if clarification text is safe, neutral, and contains no unsupported banking claims or instructions.")
     is_approved_knowledge_compliant: bool = Field(description="True if the selected approved FAQ evidence is safe and compliant for use in a read-only banking response.")
     reason: str = Field(description="A brief sentence explaining the reasoning.")
@@ -56,8 +57,14 @@ class SearchTask(BaseModel):
     target_commercial_product: str = Field(description="The exact Noun from the Product Matrix.")
     target_intent: List[str] = Field(description="List of 1-3 Verbs from the Intent Matrix.")
 
+class IntentClarificationTask(BaseModel):
+    clarification_id: str = Field(description="Stable identifier, e.g. intent_clarification_1.")
+    unresolved_request: str = Field(description="The exact ambiguous product, service, or request component from the user's wording.")
+    reason: str = Field(description="A concise internal explanation of why a valid search task cannot be formed without clarification.")
+
 class QueryFormulation(BaseModel):
     search_tasks: List[SearchTask] = Field(description="Array of semantic search tasks generated from the prompt.")
+    clarification_tasks: List[IntentClarificationTask] = Field(description="User-derived unresolved components that cannot be safely formulated as search tasks.")
 
 # 5. USER JOURNEY PLANNER
 class PresentationTask(BaseModel):
@@ -67,12 +74,13 @@ class PresentationTask(BaseModel):
     section_title: str = Field(description="Short user-facing title.")
 
 class UserJourneyPlan(BaseModel):
-    journey: str = Field(description="INFORMATIONAL, GUIDED_PROCESS, TROUBLESHOOTING, CLARIFICATION, or ESCALATION.")
-    primary_task_id: str = Field(description="Task ID selected as the primary experience, or empty string.")
+    presentation_type: str = Field(description="Must be exactly TEXT, PROGRESS, LIST, or ESCALATION.")
+    primary_task_id: str = Field(description="Task ID selected as the primary presentation, or empty string.")
     presentation_tasks: List[PresentationTask] = Field(description="One presentation decision for each task.")
-    steps: List[str] = Field(description="Grounded steps for GUIDED_PROCESS only; otherwise empty.")
-    options: List[str] = Field(description="At most two grounded choice or next-action labels.")
-    reason: str = Field(description="Brief explanation of the selected user journey.")
+    steps: List[str] = Field(description="Grounded short step titles for PROGRESS only; otherwise empty.")
+    list_title: str = Field(description="Concise customer-facing title for LIST only; otherwise empty.")
+    options: List[str] = Field(description="At most two grounded answer-related next-action labels.")
+    reason: str = Field(description="Brief explanation of the selected presentation type.")
 
 # 5. SUPERVISOR TOOL ROUTER (Node 03a)
 class SupervisorRouting(BaseModel):

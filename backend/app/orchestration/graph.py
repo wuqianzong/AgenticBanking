@@ -66,6 +66,8 @@ def build_agent_graph():
             return "n18"
         if status == "continue_plan":
             return "n19"
+        if status == "intent_clarification":
+            return "n19"
         return "n8"
 
     def route_tools(state: AgentState):

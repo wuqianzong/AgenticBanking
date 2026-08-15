@@ -101,12 +101,13 @@ search\_tasks (List\[Dict\]): Up to three independently formulated retrieval tas
 * approved\_evidence\_cache (Dict): Session-scoped cache of approved SQLite parent IDs, keyed by normalized product and unordered intent-family set.  
 * pending\_evidence\_cache\_updates (Dict): Candidate cache promotions held until the outbound semantic gate approves the evidence and generated response.  
 * task\_resolution\_instructions (List\[Dict\]): Terminal retrieval context for unresolved tasks, including exact rejected SQLite parent records that may be used only as clarification-topic suggestions.  
+* intent\_clarification\_tasks (List\[Dict\]): User-derived request components that Node 02e cannot safely map to a valid Product/Intent retrieval task. They bypass RAG and may only support a neutral clarification.
 * raw\_retrieved\_text (str): The selected approved evidence subset used by the presentation planner, response generator, and outbound answer-groundedness check.
 
 ### **5.2 Node 02e: Intent Formulator and Task Router**
 
 * **Function:** Task-level semantic query formulation.  
-* **Logic:** \- Decomposes a valid request into up to three stable tasks. \- Produces procedural, policy, and conceptual angles for each task. \- Preserves task IDs and reformulates only failed tasks during retry mode. \- Independently formulates current tasks before deterministic cache comparison. \- Compares each task by normalized product plus unordered intent-family set. Routing: \- All cache hits route directly to Node 03c for fresh sufficiency validation. \- Any cache miss routes to Node 03a. \- A retry always performs live RAG for the failed task; it does not reuse previously insufficient cache evidence.
+* **Logic:** \- Decomposes a valid request into up to three stable tasks. \- Produces procedural, policy, and conceptual angles for each task. \- When a valid request component cannot be safely mapped to a Product/Intent task, records it as an intent clarification task instead of guessing a product. \- May return searchable and intent-clarification tasks together. \- Preserves task IDs and reformulates only failed tasks during retry mode. \- Independently formulates current tasks before deterministic cache comparison. \- Compares each task by normalized product plus unordered intent-family set. Routing: \- All cache hits route directly to Node 03c for fresh sufficiency validation. \- Any cache miss routes to Node 03a. \- Intent clarification tasks bypass RAG and join the response layer with approved evidence. \- A retry always performs live RAG for the failed task; it does not reuse previously insufficient cache evidence.
 
 ### **5.3 Node 03a and Node 03b: Retrieval Dispatch and Task-Level RAG**
 
@@ -127,7 +128,6 @@ A task that remains insufficient after three live retrieval attempts becomes CLA
 
 ### **5.7 Outbound Validation of RAG Evidence**
 
-The outbound semantic gate evaluates: 1\. safety/compliance of all task-level approved evidence; 2\. answer text and answer UI options against the selected approved evidence; 3\. clarification-topic grounding against rejected suggestion-only evidence; 4\. clarification connection to the unresolved term in the user request; 5\. MAS compliance and unauthorized-advice risk across answer, clarification, and UI options. If a clarification fails validation, it is regenerated up to three times. If only the clarification repeatedly fails while an answer remains independently safe, a deterministic fallback preserves the safe answer and appends a neutral general clarification. Unsafe or ungrounded answer/evidence failures continue to hard escalation.
+The outbound semantic gate evaluates: 1\. safety/compliance of all task-level approved evidence; 2\. answer text and answer UI options against the selected approved evidence; 3\. retrieval-clarification topic grounding against rejected suggestion-only evidence; 4\. intent-clarification terms against the supplied user-derived unresolved request; 5\. clarification connection to the unresolved term in the user request; 6\. MAS compliance and unauthorized-advice risk across answer, clarification, and UI options. If a clarification fails validation, it is regenerated up to three times. If only the clarification repeatedly fails while an answer remains independently safe, a deterministic fallback preserves the safe answer and appends a neutral general clarification. Unsafe or ungrounded answer/evidence failures continue to hard escalation.
 
 ### 
-

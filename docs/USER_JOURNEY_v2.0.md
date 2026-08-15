@@ -3,17 +3,16 @@
 ## Purpose
 
 User Journey v2.0 separates banking-topic retrieval from response presentation.
-Product, intent, and free-form task queries determine what FAQ knowledge is retrieved. The user journey is selected only after task-level evidence has passed sufficiency.
+Product, intent, and free-form task queries determine what FAQ knowledge is retrieved. The presentation type is selected only after task-level evidence has passed sufficiency.
 
-## Journey set
+## Presentation types
 
-- `INFORMATIONAL` — factual answer, optionally organised into topic sections.
-- `GUIDED_PROCESS` — one supported, multi-step FAQ procedure displayed as a progress payload.
-- `TROUBLESHOOTING` — supported diagnostic or resolution guidance, optionally with chips.
-- `CLARIFICATION` — missing evidence or competing guided procedures; asks the user for direction.
+- `TEXT` — factual answer, explanation, or concise topic sections.
+- `PROGRESS` — one supported, multi-step FAQ procedure displayed as an expandable progress payload. All grounded step details are delivered together; the first step is expanded initially and customers may open any other step.
+- `LIST` — a titled checklist of three or more independent, grounded items, such as eligibility criteria, required documents, prerequisites, fees, limits, or security checks. Each item has a green check marker.
 - `ESCALATION` — human assistance is required or explicitly requested.
 
-Only one interactive journey may be active in a response. Multiple business tasks are allowed.
+Clarification is response content, not a presentation type. It can be appended to `TEXT`, `PROGRESS`, or `LIST` while retaining its separate groundedness and compliance checks. Only one interactive presentation may be active in a response. Multiple business tasks are allowed.
 
 ## Execution flow
 
@@ -48,6 +47,30 @@ connection to the unresolved customer term, compliance, and safety. A terminal
 clarification response does not create UI options, including when another task
 has approved answer evidence.
 
+### Intent-Formulation Clarification (Clarification v2.0)
+
+Node 02e may return valid `search_tasks` and user-derived
+`intent_clarification_tasks` in the same turn. An intent clarification task is
+used only when a component of a valid banking request cannot be safely mapped
+to a Product and Intent retrieval task. It retains the exact unresolved
+customer wording and an internal reason; it never guesses a product merely to
+create a search task.
+
+Searchable tasks continue through RAG and task-level sufficiency normally.
+Intent clarification tasks bypass RAG and travel with any approved evidence to
+the presentation and response layers. The generator answers supported tasks,
+then names each unresolved customer term explicitly and asks for clarification.
+It must not replace the term with “that”, “it”, or an internal label. Any
+unresolved task disables UI options for the response.
+
+The semantic gate validates answer grounding against approved evidence,
+retrieval-based suggestions against rejected retrieval evidence, and
+intent-level clarification terms against the original user request. If three
+clarification rewrites fail, the deterministic fallback preserves an
+independently safe answer. When no retrieval task could be formed at all, it
+uses a distinct full-intent fallback that asks for the product or service and
+the information the customer wants.
+
 ### Session evidence cache
 
 The graph keeps a session-scoped, bounded cache of approved parent IDs only. Its
@@ -64,9 +87,10 @@ not restored across login sessions.
 
 | Evidence outcome | Presentation |
 |---|---|
-| All tasks factual and sufficient | `INFORMATIONAL` grouped by task topic. |
-| One task has grounded sequential steps | `GUIDED_PROCESS` for that task, with supporting factual topics in the response. |
-| Two or more tasks require guided processes | `CLARIFICATION` with up to two user choices; no hidden queue. |
+| All tasks factual and sufficient | `TEXT`, grouped by task topic when useful. |
+| One task has grounded sequential steps | `PROGRESS` for that task, with supporting factual topics in the response. |
+| Three or more independent requirements or review items | `LIST` with a concise dynamic title and green check markers. |
+| Two or more tasks could support progress processes | Select the single most helpful `PROGRESS` process from the customer context; present other supported topics as concise supporting information rather than asking the customer to choose a workflow. |
 | A task is terminally unresolved after retries | Answer supported tasks, then provide a safe, connected clarification; do not include UI options. |
 
 ## Removed v1 behavior
@@ -77,6 +101,6 @@ V2.0 removes product/topic-labelled user journeys, `pending_journey_queue`, `pen
 
 The system log records task formulation, evidence-cache hits/misses/promotions,
 retrieval completion, sufficiency outcome, retry/unavailable decisions,
-approved parent IDs, and the final journey decision. Existing trusted-input,
+approved parent IDs, and the final presentation decision. Existing trusted-input,
 Prompt Guard, outbound groundedness, precision substitution, and memory-safety
 controls remain in force.

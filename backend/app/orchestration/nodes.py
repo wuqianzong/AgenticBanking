@@ -174,10 +174,28 @@ def _build_user_baseline_context(state: AgentState) -> str:
     return baseline or "None"
 
 
-def _generate_returning_customer_greeting(summary: str) -> str:
-    """Create a concise welcome without restoring workflow execution state."""
-    if not summary:
-        return "Hello! I am Horizon. How can I assist you today?"
+def _build_greeting_memory_context(last_session_summary: str, user_baseline: str) -> str:
+    """Label durable sources used to personalize a new-session greeting."""
+    return (
+        f"Latest Session Memory:\n{last_session_summary.strip() or 'None'}\n\n"
+        f"User Baseline Memory:\n{user_baseline.strip() or 'None'}"
+    )
+
+
+def _generate_returning_customer_greeting(
+    last_session_summary: str,
+    user_baseline: str,
+) -> tuple[str, list[str]]:
+    """Create a concise welcome and optional, memory-grounded continuation chips.
+
+    Durable memory provides conversational context only; it never restores a
+    graph workflow. First-time customers see a clean greeting with no
+    artificial suggested prompts.
+    """
+    if not last_session_summary.strip() and not user_baseline.strip():
+        return "Hello! I am Horizon. How can I assist you today?", []
+
+    memory_context = _build_greeting_memory_context(last_session_summary, user_baseline)
 
     prompt = f"""
     You are Horizon, a banking assistant welcoming a returning customer.
@@ -199,20 +217,42 @@ def _generate_returning_customer_greeting(summary: str) -> str:
     for a personal loan, including the information needed at the next stage.
     Would you like to continue that discussion or explore something else?"
 
-    Prior conversation context:
-    {summary}
+    Durable memory context:
+    {memory_context}
 
-    Output JSON only: {{"greeting": "your greeting"}}.
+    Suggested actions:
+    - Provide zero to two only when the prior context supports a concrete FAQ
+      question that Horizon can answer after retrieval.
+    - Each option MUST itself be a complete, specific banking FAQ question.
+      It must name both a concrete product/topic from the prior context and a
+      factual aspect to explain, such as "How do I apply for an Instant Loan?"
+      or "What are the eligibility requirements for a Savings Account?".
+    - Do NOT return generic conversational labels such as "Continue",
+      "Continue discussing...", "Ask another question", "Explore something
+      else", or "Learn more". They are not useful customer inputs.
+    - Do not ask the customer to provide personal data, documents, income,
+      residency, identity, or an application status. Do not invent a product,
+      process, or pending task.
+    - Return an empty array when the prior context does not identify a concrete
+      answerable product/topic and FAQ aspect. An empty array is preferred to a
+      vague suggestion.
+
+    Output JSON only: {{"greeting": "your greeting", "options": ["short action"]}}.
     """
     try:
         raw_response = call_groq_lpu(prompt).strip()
-        greeting = _parse_json_robustly(raw_response).get("greeting", "").strip()
+        parsed = _parse_json_robustly(raw_response)
+        greeting = parsed.get("greeting", "").strip()
         if greeting:
-            return greeting
+            raw_options = parsed.get("options", [])
+            if not isinstance(raw_options, list):
+                raw_options = []
+            options = [option.strip() for option in raw_options if isinstance(option, str) and option.strip()][:2]
+            return greeting, options
     except Exception as error:
         print(f"⚠️ [MEMORY SERVICE] Returning-customer greeting generation failed: {error}")
 
-    return "Welcome back. I can use our previous conversation to help you continue, or we can start with a new question."
+    return "Welcome back. I can use our previous conversation to help you continue, or we can start with a new question.", []
 
 
 # --- PHASE 0: INGESTION & INGEST GUARDS ---
@@ -222,7 +262,7 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
     customer_id = state.get("user_id", "USR_999")
     summary = LongTermMemoryManager.fetch_compact_footprint(customer_id)
     user_baseline = LongTermMemoryManager.fetch_user_baseline(customer_id)
-    greeting = _generate_returning_customer_greeting(summary or user_baseline)
+    greeting, greeting_options = _generate_returning_customer_greeting(summary, user_baseline)
 
     return {
         # A new login begins a clean graph.  Only this compact, durable
@@ -243,7 +283,10 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         "final_answer": greeting,
         "final_clarification": "",
         "working_context": summary,
-        "ui_action_payload": {"uiType": "text", "options": []},
+        "ui_action_payload": {
+            "uiType": "chips" if greeting_options else "text",
+            "options": greeting_options,
+        },
         "preflight_status": "initial_greeting",
     }
 
@@ -1257,6 +1300,14 @@ def node_06_outbound_semantic_gate(state: AgentState):
     list_supporting_text = payload.get("listSupportingText", "")
     list_clarification = payload.get("listClarificationText", "")
     answer_with_options = f"Answer Text: {answer_text}\nAnswer UI Buttons: {options}\nAnswer Step Details: {step_details}\nAnswer List Title: {list_title}\nAnswer List Introduction: {list_intro}\nAnswer List Items: {list_items}\nAnswer List Supporting Text: {list_supporting_text}"
+    is_initial_greeting = (
+        state.get("user_input") in {"__INIT__", "**INIT**"}
+        or state.get("preflight_status") == "initial_greeting"
+    )
+    greeting_memory_context = _build_greeting_memory_context(
+        state.get("compacted_history_summary", ""),
+        state.get("user_baseline_summary", ""),
+    )
 
     # `raw_retrieved_text` is the planner's final evidence subset used for this
     # response.  Independently rebuild every parent that node 03c approved, so
@@ -1313,6 +1364,9 @@ def node_06_outbound_semantic_gate(state: AgentState):
 
     Intent Clarification Tasks Derived From the User Request:
     "{json.dumps(intent_clarification_context, ensure_ascii=False)}"
+
+    Durable Memory Context for Initial Greeting Only:
+    "{greeting_memory_context}"
     
     Generated Answer and Answer UI Options:
     "{answer_with_options}"
@@ -1323,11 +1377,11 @@ def node_06_outbound_semantic_gate(state: AgentState):
     TASK: Evaluate the selected approved knowledge, answer, answer UI options, and clarification on seven strict binary criteria:
     1. APPROVED-KNOWLEDGE SAFETY: Is the Task-Level Approved Knowledge safe and compliant to use in a read-only banking FAQ response under the Regulatory Context? It must not contain unauthorized personalized financial advice, transaction execution instructions, deceptive claims, or instructions to bypass security, KYC, AML/CFT, or other controls. (True/False)
        The parent-ID headers are metadata, not customer-facing content. If no knowledge is supplied because the response is a safe clarification, apology, or inability statement, evaluate this as True.
-    2. ANSWER GROUNDEDNESS: Is every claim, fact, instruction, and UI button in the Generated Answer and Answer UI Options strictly derived from the Selected Approved Knowledge? An empty answer and no options are grounded. (True/False)
+    2. ANSWER GROUNDEDNESS: Is every claim, fact, instruction, and UI button in the Generated Answer and Answer UI Options strictly derived from the Selected Approved Knowledge? For an initial greeting (`User Request` is `__INIT__` or `**INIT**`), assess it instead against Durable Memory Context for Initial Greeting Only. A first-time greeting with no memory is grounded only if it is generic and makes no personalized factual claim; its options must be empty. An empty answer and no options are grounded. (True/False)
     3. ANSWER COMPLIANCE: Is the Generated Answer and Answer UI Options safe, neutral, and compliant under the Regulatory Context? An empty answer and no options are compliant. (True/False)
     4. CLARIFICATION GROUNDEDNESS: For terminal retrieval clarifications, is every banking topic, product reference, and factual suggestion directly supported by Unapproved Retrieved Knowledge for Clarification Suggestions? For intent clarifications, is every named unresolved term derived from Intent Clarification Tasks or User Request, with no guessed product, policy, or banking fact? A generic apology and general request for clarification are grounded without either source. (True/False)
     5. CLARIFICATION CONNECTION: Does each clarification explicitly name or unambiguously identify its corresponding customer-supplied unresolved term from Intent Clarification Tasks or User Request? It must not use an ambiguous reference such as "that" or "it" after answering another task. A pure generic clarification where no term can be identified is True. (True/False)
-    6. CLARIFICATION COMPLIANCE: Is the Generated Clarification Text a safe, neutral request for more detail? It must not state unsupported banking facts, product claims, rates, requirements, or procedural instructions. (True/False)
+    6. CLARIFICATION COMPLIANCE: Is the Generated Clarification Text a safe, neutral request for more detail? It must not state unsupported banking facts, product claims, rates, requirements, or procedural instructions. If no clarification text is supplied, evaluate criteria 4-6 as True. (True/False)
     7. RESPONSE SAFETY: Does any generated answer, clarification, or UI option contain unauthorized financial advice, subjective product recommendations, or return forecasts that violate the Regulatory Context? (True/False)
     
     Output JSON ONLY:
@@ -1361,12 +1415,13 @@ def node_06_outbound_semantic_gate(state: AgentState):
 
     # 2. Evaluate Judge Results
 
-    # 🟢 UPDATE: Deterministic Guardrail Exemption (include initial greeting)
+    # Clarification-only responses have no answer evidence. Initial greetings
+    # are deliberately excluded: their text and chips are grounded against the
+    # durable-memory context above and must receive a real semantic verdict.
     is_exempt = (
-        state.get("user_input") in {"__INIT__", "**INIT**"}
-        or state.get("triage_status") == "CLARIFICATION"
+        state.get("triage_status") == "CLARIFICATION"
         or (bool(intent_clarification_tasks) and not selected_knowledge.strip() and not answer_text.strip())
-        or state.get("preflight_status") in ["intent_clarification_needed", "initial_greeting"]
+        or state.get("preflight_status") == "intent_clarification_needed"
     )
 
     if is_exempt:
@@ -1384,6 +1439,21 @@ def node_06_outbound_semantic_gate(state: AgentState):
         and is_approved_knowledge_compliant
     )
     if not is_grounded or contains_advice or clarification_failed or not is_approved_knowledge_compliant:
+        if is_initial_greeting:
+            # A greeting cannot safely enter the normal generation retry path:
+            # there is no retrieved answer evidence to regenerate from. Degrade
+            # to a generic welcome without memory-derived claims or chips.
+            print("   🚫 [GREETING VETO]: Falling back to generic greeting without suggested actions.")
+            generic_greeting = "Hello! I am Horizon. How can I assist you today?"
+            return {
+                "preflight_status": "pass",
+                "final_draft": generic_greeting,
+                "final_answer": generic_greeting,
+                "final_clarification": "",
+                "ui_action_payload": {"uiType": "text", "options": []},
+                "pending_advance": False,
+                "pending_evidence_cache_updates": {},
+            }
         print(f"   🚫 [SEMANTIC VETO]: Evidence compliant: {is_approved_knowledge_compliant} | Answer grounded: {is_grounded} | Answer compliant: {is_answer_compliant} | Clarification grounded: {is_clarification_grounded} | Clarification connected: {is_clarification_connected} | Clarification compliant: {is_clarification_compliant} | Contains Advice: {contains_advice}")
         count = state.get("safety_retry_count", 0) + 1
         history = state.get("draft_feedback_history", [])

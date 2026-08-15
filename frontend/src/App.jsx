@@ -790,26 +790,8 @@ export default function BankingBotUI() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Text Input Area & Suggested Prompts */}
+        {/* Text Input Area */}
         <div className="bg-white border-t border-slate-200 p-3 z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-          
-          {isLoggedIn && messages.length === 1 && !isTyping && (
-            <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-3 mb-1 w-full">
-              <button 
-                onClick={() => handleSend("How do I open an account?")} 
-                className="shrink-0 bg-blue-50 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 text-blue-800 text-[13px] px-4 py-1.5 rounded-full font-medium transition-colors shadow-sm whitespace-nowrap"
-              >
-                "How do I open an account?"
-              </button>
-              <button 
-                onClick={() => handleSend("Check application status")} 
-                className="shrink-0 bg-blue-50 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 text-blue-800 text-[13px] px-4 py-1.5 rounded-full font-medium transition-colors shadow-sm whitespace-nowrap"
-              >
-                "Check app status"
-              </button>
-            </div>
-          )}
-
           <div className="relative flex items-center">
             <input
               ref={inputRef}

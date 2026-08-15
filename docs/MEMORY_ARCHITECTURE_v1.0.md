@@ -203,7 +203,7 @@ If graph memory is unavailable after a backend restart, checkout falls back to t
 
 ### 9.2 Retrieval and greeting
 
-`fetch_compact_footprint(customer_id)` selects the latest non-empty session summary and ignores known error placeholder summaries. The context hydrator uses it to produce a neutral FAQ-recall greeting.
+`fetch_compact_footprint(customer_id)` reads the most recent non-error session record. An explicit empty summary is a valid “no recallable context” marker and deliberately prevents fallback to an older summary. The context hydrator uses a non-empty result to produce a neutral FAQ-recall greeting.
 
 Returning greetings must not request age, income, residency, identity, documents, or account data; imply a transaction is in progress; or claim the assistant can perform a banking action. They may recall prior FAQ guidance and invite the user to continue the discussion or start a new topic.
 
@@ -223,9 +223,9 @@ Table: `Persistent_User_Baseline_Memory`.
 
 ### 10.2 Creation
 
-After each successful session-summary write, `refresh_user_baseline()` reads up to five most-recent valid session summaries for the user, builds a new bounded baseline, and upserts it. The baseline is overwritten as a consolidated view; it does not grow indefinitely.
+After each successful session-summary write, `refresh_user_baseline()` reads up to five most-recent non-empty session summaries for the user, builds a new bounded baseline, and upserts it. The baseline is overwritten as a consolidated view; it does not grow indefinitely. An explicit empty baseline result, or no eligible source sessions, clears the previous baseline rather than retaining stale context.
 
-The baseline prompt retains only stable banking topics, explicit communication preferences, explicitly stated facts, and unresolved themes. It favors newer explicit information on conflict and must not infer financial preferences, make decisions, preserve UI metadata, or claim a workflow remains active.
+The baseline prompt retains only stable banking topics that were substantively answered, explicit communication preferences, and explicitly stated facts. It excludes unresolved themes, ambiguous product references, unanswered questions, failed retrievals, missing details, pending next steps, and requests for clarification. It favors newer explicit information on conflict and must not infer financial preferences, make decisions, preserve UI metadata, or claim a workflow remains active.
 
 ### 10.3 Use
 
@@ -260,7 +260,7 @@ Memory summary calls request JSON objects and parse a required string field (`su
 
 ### 11.3 Dedicated memory-summary validation node
 
-`LongTermMemoryManager.node_memory_summary_validator()` validates every candidate rolling compact, last-session summary, and five-session baseline before storage. It first applies Prompt Guard using the same **10% cutoff**: a probability of `0.10` or greater fails validation. No rejected candidate is stored as a rolling compact, session summary, or baseline. Prompt Guard is solely responsible for malicious-intent and prompt-injection assessment. Gemini 3.5 Flash Lite then focuses on grounding against the original eligible source and non-compliant banking content. The Gemini validator and live outbound semantic gate share the same `MAS_REGULATIONS_CONTEXT` from `backend/app/core/compliance.py`.
+`LongTermMemoryManager.node_memory_summary_validator()` validates every candidate rolling compact, last-session summary, and five-session baseline before storage. It first applies Prompt Guard using the same **10% cutoff**: a probability of `0.10` or greater fails validation. No rejected candidate is stored as a rolling compact, session summary, or baseline. Prompt Guard is solely responsible for malicious-intent and prompt-injection assessment. Gemini 3.5 Flash Lite then focuses on grounding against the original eligible source and non-compliant banking content. For durable last-session and baseline memory, Gemini also rejects clarification-dependent content: unresolved or ambiguous requests, unanswered questions, missing information, failed retrievals, pending next steps, and requests for clarification. Rolling compact memory may retain this context only within the active graph session. The Gemini validator and live outbound semantic gate share the same `MAS_REGULATIONS_CONTEXT` from `backend/app/core/compliance.py`.
 
 Each memory generator has up to three generate/validate attempts. Validation feedback is supplied to the next rewrite. After the third failure, no new memory is stored: rolling compaction keeps the prior graph state, last-session compaction does not create a summary record, and baseline refresh retains the prior baseline.
 
@@ -273,6 +273,7 @@ Regular assistant replies traverse outbound deterministic and semantic gates. Pr
 | Condition | Behavior |
 |---|---|
 | No prior session summary or baseline | First-time greeting; no personalization context. |
+| Latest session has an explicit empty summary | No last-session recall and no fallback to older session context. |
 | Session summary exists, baseline absent | Greeting uses the latest session summary only. |
 | Baseline exists, latest session summary absent | Greeting can use the baseline. |
 | Baseline refresh fails | Previous baseline is retained; checkout and chat continue. |

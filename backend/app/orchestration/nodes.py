@@ -116,6 +116,39 @@ def _parse_json_robustly(raw_text: str) -> dict:
         raise e
 
 
+def _ui_option_texts(options: list) -> list[str]:
+    """Return every customer-visible and submitted value in chip payloads.
+
+    Legacy payloads use a string, while structured chips use ``label`` for the
+    compact visible text and ``message`` for the clearer input sent on click.
+    Both values are customer-facing and must pass the same safety checks.
+    """
+    texts = []
+    for option in options:
+        if isinstance(option, str):
+            texts.append(option)
+        elif isinstance(option, dict):
+            for field in ("label", "message"):
+                value = option.get(field, "")
+                if isinstance(value, str) and value.strip():
+                    texts.append(value)
+    return texts
+
+
+def _normalize_ui_options(options: list) -> list:
+    """Keep valid structured chips and legacy string chips, at most two."""
+    normalized = []
+    for option in options if isinstance(options, list) else []:
+        if isinstance(option, str) and option.strip():
+            normalized.append(option.strip())
+        elif isinstance(option, dict):
+            label = option.get("label", "")
+            message = option.get("message", "")
+            if isinstance(label, str) and label.strip() and isinstance(message, str) and message.strip():
+                normalized.append({"label": label.strip(), "message": message.strip()})
+    return normalized[:2]
+
+
 def _task_evidence_cache_key(task: dict) -> str:
     """Return an order- and case-insensitive product/intent cache key."""
     product = str(task.get("target_commercial_product", "")).strip().casefold()
@@ -223,10 +256,12 @@ def _generate_returning_customer_greeting(
     Suggested actions:
     - Provide zero to two only when the prior context supports a concrete FAQ
       question that Horizon can answer after retrieval.
-    - Each option MUST itself be a complete, specific banking FAQ question.
-      It must name both a concrete product/topic from the prior context and a
-      factual aspect to explain, such as "How do I apply for an Instant Loan?"
-      or "What are the eligibility requirements for a Savings Account?".
+    - Each option MUST be an object with two values: a concise visible `label`
+      (2-6 words) and a complete `message` that will be sent when clicked.
+      The message must be a specific banking FAQ question that names both a
+      concrete product/topic from the prior context and a factual aspect to
+      explain, such as label "Instant Loan application" with message "How do
+      I apply for an Instant Loan?".
     - Do NOT return generic conversational labels such as "Continue",
       "Continue discussing...", "Ask another question", "Explore something
       else", or "Learn more". They are not useful customer inputs.
@@ -237,7 +272,7 @@ def _generate_returning_customer_greeting(
       answerable product/topic and FAQ aspect. An empty array is preferred to a
       vague suggestion.
 
-    Output JSON only: {{"greeting": "your greeting", "options": ["short action"]}}.
+    Output JSON only: {{"greeting": "your greeting", "options": [{{"label": "short topic", "message": "complete FAQ question"}}]}}.
     """
     try:
         raw_response = call_groq_lpu(prompt).strip()
@@ -247,7 +282,7 @@ def _generate_returning_customer_greeting(
             raw_options = parsed.get("options", [])
             if not isinstance(raw_options, list):
                 raw_options = []
-            options = [option.strip() for option in raw_options if isinstance(option, str) and option.strip()][:2]
+            options = [option for option in _normalize_ui_options(raw_options) if isinstance(option, dict)]
             return greeting, options
     except Exception as error:
         print(f"⚠️ [MEMORY SERVICE] Returning-customer greeting generation failed: {error}")
@@ -872,7 +907,7 @@ def node_04a_resolution_planner(state: AgentState):
     - Do not create more than one active progress process. When several supported topics could be presented as progress processes, choose the single most helpful primary progress process from the customer's context. Present the remaining supported topics as concise supporting information where appropriate; never ask the customer to choose a presentation format or workflow.
     - Mark unavailable tasks as UNAVAILABLE and use no evidence IDs for them.
     - Intent-level clarification tasks do not have FAQ evidence and must not be treated as answerable tasks or UI choices.
-    - Use up to two grounded `options` only when the customer needs to choose a supported next action or topic. Options are supplementary interaction, not a replacement for the selected presentation type. Leave options empty when the answer is complete, clarification is required, or the evidence does not support a meaningful choice.
+    - Use up to two grounded `options` only when the customer needs to choose a supported next action or topic. Every option must be an object with a concise visible `label` (2-6 words) and a complete, unambiguous `message` that will be sent when clicked. Options are supplementary interaction, not a replacement for the selected presentation type. Leave options empty when the answer is complete, clarification is required, or the evidence does not support a meaningful choice.
 
     CRITICAL OUTPUT CONTRACT:
     - The JSON key MUST be `presentation_type`. Never output `journey`.
@@ -942,7 +977,7 @@ def node_04a_resolution_planner(state: AgentState):
         "presentation_tasks": presentations,
         "steps": steps,
         "list_title": plan.get("list_title", "") if presentation_type == "LIST" else "",
-        "options": [option for option in plan.get("options", []) if isinstance(option, str)][:2],
+        "options": _normalize_ui_options(plan.get("options", [])),
         "reason": plan.get("reason", ""),
     }
     print(f"   🧭 [PRESENTATION PLANNED]: {presentation_type} | Tasks shown: {len(presentations)}")
@@ -1091,12 +1126,13 @@ def node_04b_response_generator(state: AgentState):
     - Do not request specific details such as an amount, term, purpose, eligibility, or application information unless they are explicitly supported by Unapproved Retrieved Knowledge for Clarification Suggestions.
     - Treat all clarification guidance as uncertain internal guidance: do not quote internal reason text, turn it into a customer-facing product label, or treat it as a fact.
     - Do not offer UI options when any unresolved task requires clarification. Answer UI options are allowed only when every component is supported.
+    - If you provide `options`, each must be an object with a concise visible `label` (2-6 words) and a complete, unambiguous `message` that will be sent when clicked. The message must be grounded in the same approved knowledge as the answer.
     - Never expose internal metadata to the customer, including task IDs, parent IDs such as `faq_abc12345`, retrieval labels, model names, audit results, or internal feedback. Parent-ID headers are evidence metadata only, not citations.
     - ZERO HALLUCINATION: Rely EXCLUSIVELY on Selected Approved Knowledge for the answer. Intent clarification may rely only on the user's stated unresolved_request; terminal retrieval suggestions may additionally rely on Unapproved Retrieved Knowledge for Clarification Suggestions.
     - If quoting exact numerical rates or fees, you MUST ONLY use the exact {{placeholders}} provided in the 'Retrieved Knowledge'. Do NOT invent, alter, or hallucinate placeholders.
     
     Output JSON ONLY:
-    {{"answer": "Grounded answer text only, or an empty string", "step_details": ["Grounded detail for Current Plan step 1"], "list_items": ["Grounded independent list item"], "supporting_text": "Grounded text for non-primary LIST tasks, or empty", "clarification": "Natural clarification question only, or an empty string", "options": ["Grounded answer-related next action"], "advance_step": true}}
+    {{"answer": "Grounded answer text only, or an empty string", "step_details": ["Grounded detail for Current Plan step 1"], "list_items": ["Grounded independent list item"], "supporting_text": "Grounded text for non-primary LIST tasks, or empty", "clarification": "Natural clarification question only, or an empty string", "options": [{{"label": "short action", "message": "complete grounded next-action question"}}], "advance_step": true}}
     """
     
     try:
@@ -1158,9 +1194,9 @@ def node_04b_response_generator(state: AgentState):
         # Instead, set a volatile flag indicating this step *should* advance if it passes.
         pending_advance = res.get("advance_step") and steps and idx < len(steps) and routing_status != "intent_clarification_needed"
             
-        options = res.get("options", [])
+        options = _normalize_ui_options(res.get("options", []))
         if not options:
-            options = presentation_plan.get("options", [])
+            options = _normalize_ui_options(presentation_plan.get("options", []))
         ui_items = []
         use_progress_mode = is_progress_mode
         use_list_mode = presentation_type == "LIST" and len(list_items) >= 3
@@ -1252,7 +1288,7 @@ def node_05_outbound_deterministic_gate(state: AgentState):
     list_clarification = payload.get("listClarificationText", "")
     
     # 1. Combine draft text AND UI options to sweep globally
-    combined_text = " ".join([draft, *options, *step_details, *list_items, list_title, list_intro, list_supporting_text, list_clarification])
+    combined_text = " ".join([draft, *_ui_option_texts(options), *step_details, *list_items, list_title, list_intro, list_supporting_text, list_clarification])
     placeholders_in_draft = re.findall(r"\{\{(.*?)\}\}", combined_text)
     # Parent IDs identify internal FAQ records. They are allowed inside a
     # placeholder until Node 07 substitutes its exact value, but must never
@@ -1299,7 +1335,7 @@ def node_06_outbound_semantic_gate(state: AgentState):
     list_intro = payload.get("listIntro", "")
     list_supporting_text = payload.get("listSupportingText", "")
     list_clarification = payload.get("listClarificationText", "")
-    answer_with_options = f"Answer Text: {answer_text}\nAnswer UI Buttons: {options}\nAnswer Step Details: {step_details}\nAnswer List Title: {list_title}\nAnswer List Introduction: {list_intro}\nAnswer List Items: {list_items}\nAnswer List Supporting Text: {list_supporting_text}"
+    answer_with_options = f"Answer Text: {answer_text}\nAnswer UI Buttons: {json.dumps(options, ensure_ascii=False)}\nAnswer Step Details: {step_details}\nAnswer List Title: {list_title}\nAnswer List Introduction: {list_intro}\nAnswer List Items: {list_items}\nAnswer List Supporting Text: {list_supporting_text}"
     is_initial_greeting = (
         state.get("user_input") in {"__INIT__", "**INIT**"}
         or state.get("preflight_status") == "initial_greeting"
@@ -1529,7 +1565,7 @@ def node_07_precision_substitution(state: AgentState):
     list_clarification = payload.get("listClarificationText", "")
     
     # Extract unique placeholders globally
-    combined_text = " ".join([draft, *options, *step_details, *list_items, list_title, list_intro, list_supporting_text, list_clarification])
+    combined_text = " ".join([draft, *_ui_option_texts(options), *step_details, *list_items, list_title, list_intro, list_supporting_text, list_clarification])
     placeholders_in_draft = list(set(re.findall(r"\{\{(.*?)\}\}", combined_text)))
     precision_substituted = False
     
@@ -1545,10 +1581,21 @@ def node_07_precision_substitution(state: AgentState):
         # 2. Substitute in the UI options array
         updated_options = []
         for opt in options:
-            updated_opt = opt
-            for p_id, p_val in valid_map.items():
-                updated_opt = updated_opt.replace(f"{{{{{p_id}}}}}", p_val)
-            updated_options.append(updated_opt)
+            if isinstance(opt, str):
+                updated_opt = opt
+                for p_id, p_val in valid_map.items():
+                    updated_opt = updated_opt.replace(f"{{{{{p_id}}}}}", p_val)
+                updated_options.append(updated_opt)
+            elif isinstance(opt, dict):
+                updated_opt = dict(opt)
+                for field in ("label", "message"):
+                    value = updated_opt.get(field, "")
+                    if not isinstance(value, str):
+                        continue
+                    for p_id, p_val in valid_map.items():
+                        value = value.replace(f"{{{{{p_id}}}}}", p_val)
+                    updated_opt[field] = value
+                updated_options.append(updated_opt)
             
         payload["options"] = updated_options
         updated_step_details = []

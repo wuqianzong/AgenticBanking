@@ -73,13 +73,17 @@ class PresentationTask(BaseModel):
     evidence_parent_ids: List[str] = Field(description="Only approved parent IDs belonging to this task.")
     section_title: str = Field(description="Short user-facing title.")
 
+class ChipOption(BaseModel):
+    label: str = Field(description="Concise visible chip label of 2-6 words.")
+    message: str = Field(description="Complete, unambiguous customer message submitted when the chip is clicked.")
+
 class UserJourneyPlan(BaseModel):
     presentation_type: str = Field(description="Must be exactly TEXT, PROGRESS, LIST, or ESCALATION.")
     primary_task_id: str = Field(description="Task ID selected as the primary presentation, or empty string.")
     presentation_tasks: List[PresentationTask] = Field(description="One presentation decision for each task.")
     steps: List[str] = Field(description="Grounded short step titles for PROGRESS only; otherwise empty.")
     list_title: str = Field(description="Concise customer-facing title for LIST only; otherwise empty.")
-    options: List[str] = Field(description="At most two grounded answer-related next-action labels.")
+    options: List[ChipOption] = Field(description="At most two grounded answer-related chips, each with a concise label and a complete submitted message.")
     reason: str = Field(description="Brief explanation of the selected presentation type.")
 
 # 5. SUPERVISOR TOOL ROUTER (Node 03a)
@@ -90,6 +94,7 @@ class SupervisorRouting(BaseModel):
 class MemorySummaryEvaluation(BaseModel):
     is_grounded: bool = Field(description="True only when every retained claim is supported by the source text.")
     has_non_compliant_content: bool = Field(description="True if candidate contains unauthorized banking advice, transaction handling, or non-compliant claims.")
+    has_clarification_dependent_content: bool = Field(description="True if a durable last-session or baseline candidate retains an unresolved, ambiguous, incomplete, or clarification-dependent issue that would require a new-session user response before it can be answered.")
     reason: str = Field(description="Brief validation reason or correction guidance.")
 
 # =====================================================================

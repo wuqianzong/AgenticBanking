@@ -23,8 +23,8 @@ class MemorySummaryValidationError(ValueError):
     """Raised when a summary cannot be safely validated for storage."""
 
 
-def _extract_json_string(raw_response: str, field_name: str) -> str:
-    """Read a required string field from the JSON-only shared LLM client."""
+def _extract_json_string(raw_response: str, field_name: str, allow_empty: bool = False) -> str:
+    """Read a required JSON string, optionally allowing an explicit empty value."""
     cleaned = raw_response.strip()
     if cleaned.startswith("```json"):
         cleaned = cleaned[7:]
@@ -34,8 +34,12 @@ def _extract_json_string(raw_response: str, field_name: str) -> str:
         cleaned = cleaned[:-3]
 
     parsed = json.loads(cleaned.strip())
-    value = parsed.get(field_name, "")
-    if not isinstance(value, str) or not value.strip():
+    if field_name not in parsed:
+        raise ValueError(f"LLM response did not contain a '{field_name}' string.")
+    value = parsed[field_name]
+    if not isinstance(value, str):
+        raise ValueError(f"LLM response did not contain a '{field_name}' string.")
+    if not value.strip() and not allow_empty:
         raise ValueError(f"LLM response did not contain a non-empty '{field_name}' string.")
     return value.strip()
 
@@ -147,6 +151,22 @@ class LongTermMemoryManager:
             log_event("memory.validation.failed", level="WARNING", memory_type=memory_type, stage="prompt_guard", reason=reason)
             return False, reason
 
+        excludes_clarification_dependencies = memory_type in {"last-session", "five-session baseline"}
+        clarification_policy = """
+        CLARIFICATION-DEPENDENCY EXCLUSION (REQUIRED):
+        This durable memory must not retain an unresolved, ambiguous,
+        clarification-dependent, or incomplete issue. Do not retain missing
+        product identification, unanswered questions, stated bottlenecks,
+        pending next steps, requests for more information, or a record that
+        Horizon could not answer something. Set
+        `has_clarification_dependent_content` true if any such content appears.
+        """ if excludes_clarification_dependencies else """
+        Clarification-dependent content may be retained only for the active
+        session's rolling context. Set
+        `has_clarification_dependent_content` false unless the candidate itself
+        contains unsafe or unsupported content.
+        """
+
         validation_prompt = f"""
         MEMORY SUMMARY SECURITY VALIDATION
         You are an independent security, groundedness, and MAS-compliance
@@ -174,13 +194,20 @@ class LongTermMemoryManager:
         banking content. UI payload metadata, unrelated content, and unsupported
         claims must not be retained.
 
-        Output JSON only with is_grounded, has_non_compliant_content, and reason.
+        {clarification_policy}
+
+        Output JSON only with is_grounded, has_non_compliant_content,
+        has_clarification_dependent_content, and reason.
         """
         try:
             result = json.loads(call_groq_lpu(validation_prompt, model_id=MODEL_B_AUDITOR))
             passed = (
                 result.get("is_grounded") is True
                 and not result.get("has_non_compliant_content", True)
+                and (
+                    not excludes_clarification_dependencies
+                    or not result.get("has_clarification_dependent_content", True)
+                )
             )
             reason = result.get("reason", "Memory validation failed.")
             log_event(
@@ -190,6 +217,7 @@ class LongTermMemoryManager:
                 stage="gemini_semantic",
                 is_grounded=result.get("is_grounded"),
                 has_non_compliant_content=result.get("has_non_compliant_content"),
+                has_clarification_dependent_content=result.get("has_clarification_dependent_content"),
                 reason=reason,
             )
             return passed, reason
@@ -204,6 +232,7 @@ class LongTermMemoryManager:
         field_name: str,
         source: str,
         memory_type: str,
+        allow_empty: bool = False,
     ) -> str:
         """Generate and validate a summary up to three times before storage."""
         feedback = ""
@@ -218,7 +247,19 @@ class LongTermMemoryManager:
             candidate = _extract_json_string(
                 call_groq_lpu(f"{prompt}\n{retry_instruction}"),
                 field_name,
+                allow_empty=allow_empty,
             )
+            if not candidate and allow_empty:
+                # An explicit empty durable-memory result means the session
+                # contained no completed, standalone FAQ context. It is a
+                # valid outcome, not a failed summary or a reason to revive
+                # older clarification-heavy memory.
+                log_event(
+                    "memory.summary_generation.empty",
+                    memory_type=memory_type,
+                    attempt=attempt,
+                )
+                return ""
             passed, feedback = LongTermMemoryManager.node_memory_summary_validator(
                 candidate,
                 source,
@@ -279,9 +320,17 @@ class LongTermMemoryManager:
                     LIMIT ?
                 """, (customer_id, USER_BASELINE_SESSION_LIMIT)).fetchall()
 
-            # First-time users and summaries that failed to compile simply have
-            # no baseline. The session itself remains fully usable.
+            # No eligible summary means no durable baseline should survive to
+            # influence a later greeting or chip. Clear any stale record.
             if not rows:
+                with sqlite3.connect(DB_PATH) as conn:
+                    ensure_memory_schema(conn)
+                    conn.execute(
+                        "DELETE FROM Persistent_User_Baseline_Memory WHERE customer_id = ?",
+                        (customer_id,),
+                    )
+                    conn.commit()
+                log_event("memory.baseline.cleared", customer_id=customer_id, reason="no_valid_session_summaries")
                 log_event("memory.baseline.skipped", customer_id=customer_id, reason="no_valid_session_summaries")
                 return ""
 
@@ -295,9 +344,9 @@ class LongTermMemoryManager:
             completed banking-chat session summaries. Keep it under
             {USER_BASELINE_TARGET_TOKENS} tokens.
 
-            Preserve only stable, useful context: recurring banking topics,
-            explicit communication preferences, explicitly stated facts, and
-            unresolved themes. Prefer newer explicit information if sessions
+            Preserve only stable, useful context: recurring banking topics that
+            were answered, explicit communication preferences, and explicitly
+            stated facts. Prefer newer explicit information if sessions
             conflict. Do not infer financial preferences or make decisions for
             the customer.
 
@@ -308,6 +357,11 @@ class LongTermMemoryManager:
             - Never infer, embellish, combine assumptions, or fill gaps. If a
               fact is not explicitly supported by the session summaries, omit
               it rather than guessing.
+            - EXCLUDE clarification-dependent material: unresolved themes,
+              ambiguous product names, unanswered questions, failed retrievals,
+              missing details, pending next steps, and any request for customer
+              clarification. Do not turn these into a user preference or a
+              future suggested action.
 
             STRICT UI EXCLUSION: Never include chips, buttons, checkbox labels,
             stepper items, suggested replies, or UI payloads. They are not user
@@ -323,9 +377,18 @@ class LongTermMemoryManager:
                 "baseline",
                 session_summaries,
                 "five-session baseline",
+                allow_empty=True,
             )
             with sqlite3.connect(DB_PATH) as conn:
                 ensure_memory_schema(conn)
+                if not baseline:
+                    conn.execute(
+                        "DELETE FROM Persistent_User_Baseline_Memory WHERE customer_id = ?",
+                        (customer_id,),
+                    )
+                    conn.commit()
+                    log_event("memory.baseline.cleared", customer_id=customer_id, reason="no_stable_context")
+                    return ""
                 conn.execute("""
                     INSERT INTO Persistent_User_Baseline_Memory
                     (customer_id, baseline_summary, source_session_ids, updated_at, schema_version)
@@ -417,7 +480,6 @@ class LongTermMemoryManager:
             FROM Persistent_Customer_Dialogue_Registry 
             WHERE customer_id = ?
               AND compact_summary_footprint IS NOT NULL
-              AND TRIM(compact_summary_footprint) != ''
               AND compact_summary_footprint NOT LIKE 'Error packing%'
             ORDER BY session_end_timestamp DESC LIMIT 1
         """
@@ -429,9 +491,13 @@ class LongTermMemoryManager:
                 
                 cursor.execute(query, (customer_id,))
                 row = cursor.fetchone()
-                if row and row[0]:
-                    print(f"💾 [MEMORY SERVICE] Hydrated long-term summary for {customer_id}: '{row[0]}'")
-                    return row[0]
+                if row:
+                    summary = row[0].strip() if isinstance(row[0], str) else ""
+                    if summary:
+                        print(f"💾 [MEMORY SERVICE] Hydrated long-term summary for {customer_id}: '{summary}'")
+                    else:
+                        print(f"💾 [MEMORY SERVICE] Latest session for {customer_id} has no recallable summary.")
+                    return summary
         except Exception as e:
             print(f"⚠️ [MEMORY SERVICE Warning] SQLite read failed: {e}")
             
@@ -681,15 +747,21 @@ class LongTermMemoryManager:
         Target scale: exactly under {TARGET_SUMMARY_TOKENS} tokens.
         
         CRITICAL FOCUS FIELDS:
-        - What specific banking product was the customer exploring?
-        - What precise bottleneck did they hit (missing papers, policy validation, etc.)?
-        - What was the unresolved next step?
+        - What specific banking product or FAQ topic was substantively discussed?
+        - What factual information or completed guidance was established?
 
         BANKING-ONLY AND ANTI-HALLUCINATION RULES:
         Retain only information relevant to banking FAQ assistance. Omit small
         talk, unrelated topics, model speculation, and unsupported claims.
         Never infer, embellish, combine assumptions, or fill gaps. If a detail
         is not explicitly present in the raw log, omit it rather than guessing.
+        EXCLUDE CLARIFICATION-DEPENDENT MATERIAL:
+        Do not retain an unresolved or ambiguous request, a missing product or
+        detail, a failed retrieval, an unanswered question, a stated bottleneck,
+        a pending next step, or a request for customer clarification. The next
+        login begins a fresh graph session, so this material must not become a
+        recalled instruction, greeting claim, or suggested action. Retain only
+        completed, factual FAQ discussion that can stand alone.
 
         STRICT UI EXCLUSION:
         Do not include chips, buttons, checkbox labels, stepper entries,
@@ -715,6 +787,7 @@ class LongTermMemoryManager:
                 "summary",
                 serialized_transcript,
                 "last-session",
+                allow_empty=True,
             )
             
             with sqlite3.connect(DB_PATH) as conn:

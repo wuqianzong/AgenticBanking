@@ -491,16 +491,20 @@ export default function BankingBotUI() {
 
   const renderChips = (options) => (
     <div className="flex flex-wrap gap-2 mt-2">
-      {options?.map((opt, idx) => (
-        <button
-          key={idx}
-          onClick={() => handleSend(opt)}
-          disabled={isTyping || isCompactingMemory}
-          className="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {opt}
-        </button>
-      ))}
+      {options?.map((opt, idx) => {
+        const label = typeof opt === 'string' ? opt : (opt?.label || opt?.message || 'Continue');
+        const message = typeof opt === 'string' ? opt : (opt?.message || opt?.label || '');
+        return (
+          <button
+            key={idx}
+            onClick={() => message && handleSend(message)}
+            disabled={!message || isTyping || isCompactingMemory}
+            className="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 

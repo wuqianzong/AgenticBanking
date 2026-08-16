@@ -1787,29 +1787,65 @@ def _outbound_response_content(state: AgentState) -> tuple[str, str, str]:
     return answer_text, clarification, json.dumps(rendered_payload, ensure_ascii=False)
 
 
-def _outbound_grounding_sources(state: AgentState) -> tuple[str, str, str]:
-    """Build source-specific evidence for the focused groundedness auditor."""
-    selected_knowledge = state.get("raw_retrieved_text", "")
-    terminal_feedback = state.get("task_resolution_instructions", [])
-    unapproved_blocks = []
-    for instruction in terminal_feedback:
-        for parent in instruction.get("unapproved_parents", []):
-            content = parent.get("content", "")
-            if content:
-                unapproved_blocks.append(
-                    f"[Task {instruction.get('task_id')} | Unapproved Parent {parent.get('parent_id', '')}]\n{content}"
-                )
+def _is_initial_greeting(state: AgentState) -> bool:
+    """Identify greeting events without asking an LLM to infer the event type."""
+    return (
+        state.get("user_input") in {"__INIT__", "**INIT**"}
+        or state.get("preflight_status") == "initial_greeting"
+    )
+
+
+def _normal_outbound_grounding_context(state: AgentState) -> dict:
+    """Return only evidence sources permitted for a non-greeting audit.
+
+    Conversation, rolling memory, last-session memory, and baseline memory are
+    deliberately excluded. They may assist upstream interpretation but are
+    never factual grounding sources for a normal customer response.
+    """
+    tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", [])}
+    approved_by_task = []
+    for result in state.get("task_results", []):
+        if result.get("status") != "SUFFICIENT":
+            continue
+        task_id = result.get("task_id")
+        task = tasks_by_id.get(task_id, {})
+        approved_by_task.append({
+            "task_id": task_id,
+            "resolved_subquery": task.get("customer_component", ""),
+            "approved_parents": [
+                {"parent_id": parent.get("parent_id"), "content": parent.get("content", "")}
+                for parent in result.get("parents", [])
+            ],
+        })
+
+    response_block_map = [
+        {"block_id": block.get("blockId"), "task_id": block.get("taskId")}
+        for block in state.get("ui_action_payload", {}).get("responseBlocks", [])
+        if isinstance(block, dict) and block.get("taskId")
+    ]
+
+    terminal_context = []
+    for instruction in state.get("task_resolution_instructions", []):
+        task_id = instruction.get("task_id")
+        terminal_context.append({
+            "task_id": task_id,
+            "resolved_subquery": tasks_by_id.get(task_id, {}).get("customer_component", ""),
+            "unapproved_parents": [
+                {"parent_id": parent.get("parent_id"), "content": parent.get("content", "")}
+                for parent in instruction.get("unapproved_parents", [])
+            ],
+        })
+
     intent_context = [
         {"unresolved_request": task.get("unresolved_request", "")}
         for task in state.get("intent_clarification_tasks", [])
     ]
-    greeting_context = _build_greeting_memory_context(
-        state.get("last_session_summary", state.get("working_context", "")),
-        state.get("user_baseline_summary", ""),
-    )
-    return selected_knowledge, "\n\n---\n\n".join(unapproved_blocks), json.dumps(
-        {"intent_tasks": intent_context, "greeting_memory": greeting_context}, ensure_ascii=False
-    )
+    return {
+        "approved_by_task": approved_by_task,
+        "response_block_map": response_block_map,
+        "terminal_clarifications": terminal_context,
+        "intent_clarifications": intent_context,
+    }
 
 
 def node_06_outbound_compliance_gate(state: AgentState):
@@ -1858,7 +1894,7 @@ def node_06_outbound_compliance_gate(state: AgentState):
     return {"outbound_compliance_result": audit}
 
 
-def node_06_outbound_groundedness_gate(state: AgentState):
+def _legacy_node_06_outbound_groundedness_gate(state: AgentState):
     """Focused evidence-entailment audit of the complete customer-facing response."""
     print("🟢 [NODE 06b] Executing Outbound Groundedness Audit")
     answer, clarification, rendered_payload = _outbound_response_content(state)
@@ -1936,6 +1972,127 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         "rewrite_instruction": result.get("rewrite_instruction", "Use only the permitted evidence sources."),
     }
     log_event("outbound.groundedness.completed", passed=passed, reason=audit["reason"])
+    return {"outbound_groundedness_result": audit}
+
+
+def node_06_outbound_groundedness_gate(state: AgentState):
+    """Audit only the evidence sources permitted for this response event."""
+    print("🟢 [NODE 06b] Executing Outbound Groundedness Audit")
+    answer, clarification, rendered_payload = _outbound_response_content(state)
+    is_initial_greeting = _is_initial_greeting(state)
+
+    if is_initial_greeting:
+        greeting_memory = _build_greeting_memory_context(
+            state.get("last_session_summary", state.get("working_context", "")),
+            state.get("user_baseline_summary", ""),
+        )
+        prompt = f"""
+        GREETING GROUNDEDNESS AUDIT
+        You are an evidence-groundedness auditor for a read-only Horizon Bank FAQ assistant.
+
+        Greeting Memory:
+        "{greeting_memory}"
+
+        Customer-Facing Greeting:
+        "{answer}"
+
+        Complete Customer-Facing UI Payload:
+        "{rendered_payload}"
+
+        TASK: Assess GROUNDEDNESS ONLY for this initialization greeting.
+        - Every recalled statement and suggested chip must be supported by Greeting Memory.
+        - A generic first-time greeting with no recalled facts or chips is grounded.
+        - Do not assess banking-answer factuality, compliance, helpfulness, or a normal-turn clarification.
+        - Every visible field in the greeting payload is in scope.
+
+        Output JSON only:
+        {{"passed": true/false, "answer_grounded": true/false, "clarification_grounded": true, "clarification_connected": true, "reason": "...", "rewrite_instruction": "..."}}
+        """
+        audit_scope = "greeting"
+    else:
+        grounding_context = _normal_outbound_grounding_context(state)
+        prompt = f"""
+        NORMAL RESPONSE GROUNDEDNESS AUDIT
+        You are an evidence-groundedness auditor for a read-only Horizon Bank FAQ assistant.
+
+        Task-Level Approved Evidence (the only factual source for answers and answer UI):
+        {json.dumps(grounding_context["approved_by_task"], ensure_ascii=False)}
+
+        Internal Response-Block-to-Task Map (not customer-facing):
+        {json.dumps(grounding_context["response_block_map"], ensure_ascii=False)}
+
+        Intent Clarification Inputs (the only source for intent clarification):
+        {json.dumps(grounding_context["intent_clarifications"], ensure_ascii=False)}
+
+        Terminal Retrieval Clarification Evidence (permitted only for factual related-topic suggestions in terminal clarification):
+        {json.dumps(grounding_context["terminal_clarifications"], ensure_ascii=False)}
+
+        Customer-Facing Answer:
+        "{answer}"
+
+        Customer-Facing Clarification:
+        "{clarification}"
+
+        Complete Customer-Facing UI Payload:
+        "{rendered_payload}"
+
+        TASK: Assess GROUNDEDNESS ONLY. Do not assess MAS compliance, safety,
+        advice, helpfulness, completeness, or whether the response used every
+        available source.
+
+        Answer and Answer UI Rules:
+        - Every factual claim, instruction, option, progress step, list item,
+          extended-text statement, and answer response-block field must be
+          explicitly supported by Task-Level Approved Evidence.
+        - When a response block is mapped to a task, its visible factual
+          content must use only that task's approved parents and resolved sub-query.
+        - Exact {{placeholders}} appearing in approved parents are valid facts.
+
+        Clarification Rules:
+        - For an intent clarification, every named unresolved term must come
+          only from Intent Clarification Inputs. Do not infer a product, policy,
+          or banking fact.
+        - For a terminal retrieval clarification, a factual related-topic
+          suggestion must be supported by the matching task's Terminal Retrieval
+          Clarification Evidence. Those records must never support an answer,
+          instruction, UI action, or answer block.
+        - A generic apology and a general request for clarification are grounded.
+        - A clarification following an answer must identify its unresolved term
+          instead of using an ambiguous reference such as "that" or "it".
+
+        Source-Boundary Rules:
+        - Session memory, user baseline memory, chat history, rolling summaries,
+          and the literal latest user message are intentionally absent and are
+          not grounding sources for this audit.
+        - Do not fail a response because it omits information from any available
+          source. Assess whether visible claims use a permitted source only.
+        - Every visible field in the payload is in scope.
+
+        Output JSON only:
+        {{"passed": true/false, "answer_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false, "reason": "...", "rewrite_instruction": "..."}}
+        """
+        audit_scope = "normal_response"
+
+    try:
+        result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
+        answer_grounded = bool(result.get("answer_grounded", False))
+        clarification_grounded = bool(result.get("clarification_grounded", False))
+        clarification_connected = bool(result.get("clarification_connected", False))
+        passed = bool(result.get("passed", False)) and answer_grounded and clarification_grounded and clarification_connected
+    except Exception as error:
+        print(f"🚨 [GROUNDEDNESS AUDIT ERROR]: {error}")
+        result = {"reason": "Groundedness audit failed.", "rewrite_instruction": "Use only the permitted evidence sources."}
+        passed = answer_grounded = clarification_grounded = clarification_connected = False
+
+    audit = {
+        "passed": passed,
+        "answer_grounded": answer_grounded,
+        "clarification_grounded": clarification_grounded,
+        "clarification_connected": clarification_connected,
+        "reason": result.get("reason", "Groundedness audit failed."),
+        "rewrite_instruction": result.get("rewrite_instruction", "Use only the permitted evidence sources."),
+    }
+    log_event("outbound.groundedness.completed", scope=audit_scope, passed=passed, reason=audit["reason"])
     return {"outbound_groundedness_result": audit}
 
 

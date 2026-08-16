@@ -306,7 +306,7 @@ async def process_chat(payload: ChatPayload):
                 "clarificationText": execution_result.get("ui_action_payload", {}).get("clarificationText", ""),
                 "listTitle": execution_result.get("ui_action_payload", {}).get("listTitle", ""),
                 "listIntro": execution_result.get("ui_action_payload", {}).get("listIntro", ""),
-                "listSupportingText": execution_result.get("ui_action_payload", {}).get("listSupportingText", ""),
+                "extendedText": execution_result.get("ui_action_payload", {}).get("extendedText", ""),
                 "listClarificationText": execution_result.get("ui_action_payload", {}).get("listClarificationText", ""),
                 "precisionSubstituted": execution_result.get("ui_action_payload", {}).get("precisionSubstituted", False),
                 "currentStep": execution_result.get("ui_action_payload", {}).get("currentStep"),

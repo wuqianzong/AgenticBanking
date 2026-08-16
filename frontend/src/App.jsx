@@ -88,7 +88,9 @@ export default function BankingBotUI() {
       clarificationText: payload.clarificationText || '',
       listTitle: payload.listTitle || '',
       listIntro: payload.listIntro || '',
-      listSupportingText: payload.listSupportingText || '',
+      // `listSupportingText` is retained as a read-only fallback for messages
+      // stored before the presentation-neutral extended-text contract.
+      extendedText: payload.extendedText || payload.listSupportingText || '',
       listClarificationText: payload.listClarificationText || '',
       precisionSubstituted: payload.precisionSubstituted || false,
       currentStep: payload.currentStep,
@@ -417,7 +419,7 @@ export default function BankingBotUI() {
             clarificationText: finalBotData.clarificationText || '',
             listTitle: finalBotData.listTitle || '',
             listIntro: finalBotData.listIntro || '',
-            listSupportingText: finalBotData.listSupportingText || '',
+            extendedText: finalBotData.extendedText || finalBotData.listSupportingText || '',
             listClarificationText: finalBotData.listClarificationText || '',
             precisionSubstituted: finalBotData.precisionSubstituted || false,
             currentStep: finalBotData.currentStep,
@@ -752,6 +754,11 @@ export default function BankingBotUI() {
                         [msg.id]: stepNumber
                       }))
                     )}
+                    {msg.type === 'stepper' && msg.extendedText && (
+                      <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+                        {msg.extendedText}
+                      </div>
+                    )}
                     {msg.type === 'stepper' && msg.clarificationText && (
                       renderClarificationCard(msg.clarificationText)
                     )}
@@ -761,9 +768,9 @@ export default function BankingBotUI() {
                       </div>
                     )}
                     {msg.type === 'checklist' && renderChecklist(msg.items, msg.listTitle, msg.options)}
-                    {msg.type === 'checklist' && msg.listSupportingText && (
+                    {msg.type === 'checklist' && msg.extendedText && (
                       <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
-                        {msg.listSupportingText}
+                        {msg.extendedText}
                       </div>
                     )}
                     {msg.type === 'checklist' && msg.listClarificationText && renderClarificationCard(msg.listClarificationText)}

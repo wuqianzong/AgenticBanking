@@ -8,22 +8,24 @@ import {
 
 // 1. THE NODE CAPTION DICTIONARY
 const NODE_CAPTIONS = {
-  "memory_compaction": "Organizing your conversation context...",
-  "memory_validation": "Validating saved conversation context...",
-  "n00": "Securing your connection...",
-  "n3": "Reviewing our chat history...",
-  "n16": "Reviewing bank guidelines...",
-  "n2d": "Triaging your request...",
-  "n2e": "Breaking your request into topics...",
-  "n14": "Preparing to search...",
-  "n17_rag": "Searching Horizon Bank guides...",
-  "n18": "Selecting the relevant FAQ evidence...",
-  "n19": "Designing the best response experience...",
-  "n8": "Double-checking the requirements...",
-  "n20": "Planning the next steps...",
-  "n21": "Drafting my response...",
-  "n22": "Polishing the details...",
-  "n24": "Running a quick final safety check..."
+  "memory_compaction": "Preparing your conversation context...",
+  "memory_validation": "Checking saved conversation context...",
+  "n00": "Preparing your Horizon experience...",
+  "n3": "Preparing this conversation...",
+  "n16": "Checking your request is safe...",
+  "n2d": "Understanding what you need...",
+  "n2e": "Identifying the topics to look up...",
+  "n14": "Preparing the information search...",
+  "n17_rag": "Looking up relevant Horizon information...",
+  "n18": "Checking the information found...",
+  "n19": "Organizing the best way to present the answer...",
+  "n8": "Preparing your response...",
+  "n20": "Checking response details...",
+  "n21_compliance": "Checking banking guidelines...",
+  "n21_groundedness": "Verifying the information is accurate...",
+  "n21": "Finalizing your response...",
+  "n22": "Confirming the latest figures...",
+  "n24": "Almost ready..."
 };
 
 const MOCK_PROFILE = {
@@ -305,7 +307,7 @@ export default function BankingBotUI() {
       setInputValue('');
     }
     setIsTyping(true);
-    setLoadingCaption('Initializing agentic workflow...'); // Reset caption
+    setLoadingCaption('Understanding your question...');
 
     try {
       const response = await fetch("http://localhost:8000/api/chat", {
@@ -369,8 +371,8 @@ export default function BankingBotUI() {
               setIsCompactingMemory(isStarting);
               setLoadingCaption(
                 isStarting
-                  ? 'Organizing your conversation context...'
-                  : 'Conversation context organized.'
+                  ? NODE_CAPTIONS.memory_compaction
+                  : 'Conversation context is ready.'
               );
               continue;
             }
@@ -378,7 +380,7 @@ export default function BankingBotUI() {
             // Check if the payload is a node transition update
             if (parsedData.node) {
               // Use the dictionary if it exists, otherwise show a generic processing message
-              const caption = NODE_CAPTIONS[parsedData.node] || `Processing step: ${parsedData.node}...`;
+              const caption = NODE_CAPTIONS[parsedData.node] || 'Continuing to prepare your response...';
               console.log("🔄 [UPDATING UI STATE TO]:", caption);
               setLoadingCaption(caption);
             }

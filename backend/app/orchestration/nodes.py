@@ -39,6 +39,8 @@ VOLATILE_STATE_RESET = {
     "selected_ux_journey": "TEXT",
     "presentation_plan": {},
     "pending_evidence_cache_updates": {},
+    "outbound_compliance_result": {},
+    "outbound_groundedness_result": {},
     "active_tool_routes": [],
     "pending_advance": False,
 }
@@ -1102,6 +1104,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
     terminal_feedback = state.get("task_resolution_instructions", [])
     conversation_context = _build_conversation_context(state)
     user_baseline = _build_user_baseline_context(state)
+    audit_feedback = state.get("draft_feedback_history", [])[-4:]
     prompt = f"""
     RESPONSE GENERATION V2.0
     You are Horizon, a read-only Horizon Bank FAQ assistant. Generate ONE
@@ -1116,6 +1119,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
     {user_baseline}
     Intent clarification tasks: {json.dumps(intent_clarifications, ensure_ascii=False)}
     Terminal retrieval feedback: {json.dumps(terminal_feedback, ensure_ascii=False)}
+    Failed outbound-audit feedback from the prior generation attempt:
+    {json.dumps(audit_feedback, ensure_ascii=False)}
 
     Rules:
     - Use Current Session Trusted History as the primary continuity context for
@@ -1150,6 +1155,10 @@ def _generate_response_blocks(state: AgentState) -> dict:
       Present approved facts naturally as Horizon guidance.
     - ZERO HALLUCINATION: do not add facts, procedures, rates, requirements, or
       advice beyond the approved evidence. Preserve exact {{placeholders}}.
+    - If failed outbound-audit feedback is supplied, correct every identified
+      issue. Treat it as a rewrite constraint, never as banking evidence. Do
+      not repeat an unsupported claim merely because it appeared in an earlier
+      response, conversation context, or memory.
 
     Output JSON only:
     {{"blocks":[{{"task_id":"task_1","answer":"...","step_details":["..."],"list_items":["..."],"extended_text":"...","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"..."}}
@@ -1563,166 +1572,208 @@ def node_05_outbound_deterministic_gate(state: AgentState):
     return {"preflight_status": "pass"}
 
 
-def node_06_outbound_semantic_gate(state: AgentState):
-    print("🟢 [NODE 06] Executing Outbound Semantic Gate (MAS Compliance & Groundedness)")
-    
+def _outbound_response_content(state: AgentState) -> tuple[str, str, str]:
+    """Return answer, clarification, and the full customer-facing payload."""
     draft = state.get("final_draft", "")
     answer_text = state.get("final_answer", draft)
     clarification_text = state.get("final_clarification", "")
     payload = state.get("ui_action_payload", {})
-    options = payload.get("options", [])
-    step_details = payload.get("stepDetails", [])
-    list_items = payload.get("items", []) if payload.get("uiType") == "checklist" else []
-    list_title = payload.get("listTitle", "")
-    list_intro = payload.get("listIntro", "")
-    extended_text = payload.get("extendedText", "")
-    list_clarification = payload.get("listClarificationText", "")
-    response_blocks = payload.get("responseBlocks", [])
-    answer_with_options = f"Answer Text: {answer_text}\nAnswer UI Buttons: {json.dumps(options, ensure_ascii=False)}\nAnswer Step Details: {step_details}\nAnswer List Title: {list_title}\nAnswer List Introduction: {list_intro}\nAnswer List Items: {list_items}\nAnswer Extended Text: {extended_text}\nResponse Blocks: {json.dumps(response_blocks, ensure_ascii=False)}"
-    is_initial_greeting = (
-        state.get("user_input") in {"__INIT__", "**INIT**"}
-        or state.get("preflight_status") == "initial_greeting"
+    visible_response_blocks = [
+        {
+            key: value
+            for key, value in block.items()
+            if key not in {"blockId", "taskId"}
+        }
+        for block in payload.get("responseBlocks", [])
+        if isinstance(block, dict)
+    ]
+    rendered_payload = {
+        "uiType": payload.get("uiType", "none"),
+        "options": payload.get("options", []),
+        "stepDetails": payload.get("stepDetails", []),
+        "listTitle": payload.get("listTitle", ""),
+        "listIntro": payload.get("listIntro", ""),
+        "items": payload.get("items", []) if payload.get("uiType") == "checklist" else [],
+        "extendedText": payload.get("extendedText", ""),
+        "listClarificationText": payload.get("listClarificationText", ""),
+        # Block and task IDs are transport metadata, not customer-facing text.
+        "responseBlocks": visible_response_blocks,
+    }
+    clarification = "\n".join(
+        part for part in [clarification_text, rendered_payload["listClarificationText"]] if part
     )
-    greeting_memory_context = _build_greeting_memory_context(
+    return answer_text, clarification, json.dumps(rendered_payload, ensure_ascii=False)
+
+
+def _outbound_grounding_sources(state: AgentState) -> tuple[str, str, str]:
+    """Build source-specific evidence for the focused groundedness auditor."""
+    selected_knowledge = state.get("raw_retrieved_text", "")
+    terminal_feedback = state.get("task_resolution_instructions", [])
+    unapproved_blocks = []
+    for instruction in terminal_feedback:
+        for parent in instruction.get("unapproved_parents", []):
+            content = parent.get("content", "")
+            if content:
+                unapproved_blocks.append(
+                    f"[Task {instruction.get('task_id')} | Unapproved Parent {parent.get('parent_id', '')}]\n{content}"
+                )
+    intent_context = [
+        {"unresolved_request": task.get("unresolved_request", "")}
+        for task in state.get("intent_clarification_tasks", [])
+    ]
+    greeting_context = _build_greeting_memory_context(
         state.get("last_session_summary", state.get("working_context", "")),
         state.get("user_baseline_summary", ""),
     )
+    return selected_knowledge, "\n\n---\n\n".join(unapproved_blocks), json.dumps(
+        {"intent_tasks": intent_context, "greeting_memory": greeting_context}, ensure_ascii=False
+    )
 
-    # `raw_retrieved_text` is the planner's final evidence subset used for this
-    # response.  Independently rebuild every parent that node 03c approved, so
-    # the gate can also reject unsafe evidence before any subset is presented.
-    selected_knowledge = state.get("raw_retrieved_text", "")
-    approved_evidence_blocks = []
-    for task_result in state.get("task_results", []):
-        approved_ids = set(task_result.get("approved_parent_ids", []))
-        for parent in task_result.get("parents", []):
-            parent_id = parent.get("parent_id")
-            if parent_id in approved_ids:
-                approved_evidence_blocks.append(
-                    f"[Task {task_result.get('task_id')} | Parent {parent_id}]\n{parent.get('content', '')}"
-                )
-    approved_knowledge = "\n\n---\n\n".join(approved_evidence_blocks)
-    terminal_retrieval_feedback = state.get("task_resolution_instructions", [])
-    intent_clarification_tasks = state.get("intent_clarification_tasks", [])
-    unapproved_clarification_blocks = []
-    for instruction in terminal_retrieval_feedback:
-        for parent in instruction.get("unapproved_parents", []):
-            parent_id = parent.get("parent_id", "")
-            content = parent.get("content", "")
-            if content:
-                unapproved_clarification_blocks.append(
-                    f"[Task {instruction.get('task_id')} | Unapproved Parent {parent_id}]\n{content}"
-                )
-    unapproved_clarification_knowledge = "\n\n---\n\n".join(unapproved_clarification_blocks)
-    intent_clarification_context = [
-        {
-            "unresolved_request": task.get("unresolved_request", ""),
-            "reason": task.get("reason", ""),
-        }
-        for task in intent_clarification_tasks
-    ]
-    
-    # 1. The LLM-as-a-Judge Prompt
+
+def node_06_outbound_compliance_gate(state: AgentState):
+    """Focused MAS policy audit of the complete customer-facing response."""
+    print("🟢 [NODE 06a] Executing Outbound Compliance Audit")
+    answer, clarification, rendered_payload = _outbound_response_content(state)
     prompt = f"""
     You are an independent Compliance Auditor for a Singaporean Bank.
-    
+
     Regulatory Context:
     {MAS_REGULATIONS_CONTEXT}
 
-    User Request:
-    "{state.get('user_input', '')}"
-    
-    Task-Level Approved Knowledge (all parent IDs approved by the sufficiency checker):
-    "{approved_knowledge}"
+    Customer-Facing Answer:
+    "{answer}"
 
-    Selected Approved Knowledge Used for This Response:
+    Customer-Facing Clarification:
+    "{clarification}"
+
+    Complete Customer-Facing UI Payload:
+    "{rendered_payload}"
+
+    TASK: Assess COMPLIANCE ONLY. Do not assess whether facts are supported by
+    evidence; a separate auditor handles groundedness. Determine whether any
+    customer-facing text, UI item, option, step, list entry, or extended text
+    provides unauthorized personalized financial advice, subjective product
+    recommendation, return forecast, transaction execution, deceptive claim,
+    or assistance to bypass security, KYC, AML/CFT, or other controls.
+    Neutral factual information, safe apologies, and neutral clarification
+    requests are compliant. Every visible field in the payload is in scope.
+
+    Output JSON only:
+    {{"passed": true/false, "reason": "...", "rewrite_instruction": "..."}}
+    """
+    try:
+        result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
+        passed = bool(result.get("passed", False))
+    except Exception as error:
+        print(f"🚨 [COMPLIANCE AUDIT ERROR]: {error}")
+        result, passed = {"reason": "Compliance audit failed.", "rewrite_instruction": "Rewrite the response as neutral, factual Horizon Bank information."}, False
+    audit = {
+        "passed": passed,
+        "reason": result.get("reason", "Compliance audit failed."),
+        "rewrite_instruction": result.get("rewrite_instruction", "Rewrite the response to comply with banking regulations."),
+    }
+    log_event("outbound.compliance.completed", passed=passed, reason=audit["reason"])
+    return {"outbound_compliance_result": audit}
+
+
+def node_06_outbound_groundedness_gate(state: AgentState):
+    """Focused evidence-entailment audit of the complete customer-facing response."""
+    print("🟢 [NODE 06b] Executing Outbound Groundedness Audit")
+    answer, clarification, rendered_payload = _outbound_response_content(state)
+    selected_knowledge, unapproved_knowledge, auxiliary_sources = _outbound_grounding_sources(state)
+    is_initial_greeting = (
+        state.get("user_input") in {"__INIT__", "**INIT__"}
+        or state.get("preflight_status") == "initial_greeting"
+    )
+    prompt = f"""
+    You are an evidence-groundedness auditor for a read-only Horizon Bank FAQ assistant.
+
+    User Request: "{state.get('user_input', '')}"
+    Is Initial Greeting: {is_initial_greeting}
+
+    Selected Approved Knowledge for the Answer:
     "{selected_knowledge}"
 
-    Unapproved Retrieved Knowledge for Clarification Suggestions:
-    "{unapproved_clarification_knowledge}"
+    Unapproved Retrieved Knowledge Permitted Only for Terminal Retrieval Clarification:
+    "{unapproved_knowledge}"
 
-    Intent Clarification Tasks Derived From the User Request:
-    "{json.dumps(intent_clarification_context, ensure_ascii=False)}"
+    Intent-clarification and greeting sources:
+    "{auxiliary_sources}"
 
-    Durable Memory Context for Initial Greeting Only:
-    "{greeting_memory_context}"
-    
-    Generated Answer and Answer UI Options:
-    "{answer_with_options}"
+    Customer-Facing Answer:
+    "{answer}"
 
-    Generated Clarification Text:
-    "{clarification_text}\n{list_clarification}"
-    
-    TASK: Evaluate the selected approved knowledge, answer, answer UI options, and clarification on seven strict binary criteria:
-    1. APPROVED-KNOWLEDGE SAFETY: Is the Task-Level Approved Knowledge safe and compliant to use in a read-only banking FAQ response under the Regulatory Context? It must not contain unauthorized personalized financial advice, transaction execution instructions, deceptive claims, or instructions to bypass security, KYC, AML/CFT, or other controls. (True/False)
-       The parent-ID headers are metadata, not customer-facing content. If no knowledge is supplied because the response is a safe clarification, apology, or inability statement, evaluate this as True.
-    2. ANSWER GROUNDEDNESS: Is every claim, fact, instruction, and UI button in the Generated Answer and Answer UI Options strictly derived from the Selected Approved Knowledge? For an initial greeting (`User Request` is `__INIT__` or `**INIT**`), assess it instead against Durable Memory Context for Initial Greeting Only. A first-time greeting with no memory is grounded only if it is generic and makes no personalized factual claim; its options must be empty. An empty answer and no options are grounded. (True/False)
-    3. ANSWER COMPLIANCE: Is the Generated Answer and Answer UI Options safe, neutral, and compliant under the Regulatory Context? An empty answer and no options are compliant. (True/False)
-    4. CLARIFICATION GROUNDEDNESS: For terminal retrieval clarifications, is every banking topic, product reference, and factual suggestion directly supported by Unapproved Retrieved Knowledge for Clarification Suggestions? For intent clarifications, is every named unresolved term derived from Intent Clarification Tasks or User Request, with no guessed product, policy, or banking fact? A generic apology and general request for clarification are grounded without either source. (True/False)
-    5. CLARIFICATION CONNECTION: Does each clarification explicitly name or unambiguously identify its corresponding customer-supplied unresolved term from Intent Clarification Tasks or User Request? It must not use an ambiguous reference such as "that" or "it" after answering another task. A pure generic clarification where no term can be identified is True. (True/False)
-    6. CLARIFICATION COMPLIANCE: Is the Generated Clarification Text a safe, neutral request for more detail? It must not state unsupported banking facts, product claims, rates, requirements, or procedural instructions. If no clarification text is supplied, evaluate criteria 4-6 as True. (True/False)
-    7. RESPONSE SAFETY: Does any generated answer, clarification, or UI option contain unauthorized financial advice, subjective product recommendations, or return forecasts that violate the Regulatory Context? (True/False)
-    
-    Output JSON ONLY:
-    {{"is_approved_knowledge_compliant": true/false, "is_grounded": true/false, "is_answer_compliant": true/false, "is_clarification_grounded": true/false, "is_clarification_connected": true/false, "is_clarification_compliant": true/false, "contains_advice": true/false, "reason": "..."}}
+    Customer-Facing Clarification:
+    "{clarification}"
+
+    Complete Customer-Facing UI Payload:
+    "{rendered_payload}"
+
+    TASK: Assess GROUNDEDNESS ONLY. Do not assess MAS compliance, safety,
+    advice, or whether the answer is helpful.
+
+    - For a normal answer, every factual claim, instruction, option, step,
+      list item, extended-text statement, and response-block field must be
+      explicitly supported by Selected Approved Knowledge. Do not infer a
+      detail merely because it is plausible or related.
+    - Exact {{placeholders}} appearing in Selected Approved Knowledge are
+      approved grounded facts. They are intentionally substituted only after
+      this audit, so do not fail an answer merely because such a placeholder
+      remains visible.
+    - For an initial greeting, assess personalized statements and options only
+      against greeting_memory. A first-time generic greeting with no options
+      is grounded.
+    - For a terminal retrieval clarification, product references and factual
+      suggestions must be supported by the Unapproved Retrieved Knowledge.
+    - For an intent clarification, every named term must come from intent_tasks
+      or the User Request. It must not infer a product, policy, or banking fact.
+    - A generic apology or general request for clarification is grounded.
+    - A clarification that follows an answer must identify its unresolved term
+      rather than use an ambiguous reference such as "that" or "it".
+    - Every visible field in the payload is in scope.
+
+    Output JSON only:
+    {{"passed": true/false, "answer_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false, "reason": "...", "rewrite_instruction": "..."}}
     """
-
-    # 🐛 FIX: Pre-initialize variables so they always exist in memory even if the API crashes
-    res = {}
-    is_grounded = False
-    is_answer_compliant = False
-    contains_advice = True
-    is_clarification_grounded = False
-    is_clarification_connected = False
-    is_clarification_compliant = False
-    is_approved_knowledge_compliant = False
-    reason = "API Evaluation Failed"
-
-    
     try:
-        res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
-        is_grounded = res.get("is_grounded", False)
-        is_answer_compliant = res.get("is_answer_compliant", False)
-        contains_advice = res.get("contains_advice", True)
-        is_clarification_grounded = res.get("is_clarification_grounded", False)
-        is_clarification_connected = res.get("is_clarification_connected", False)
-        is_clarification_compliant = res.get("is_clarification_compliant", False)
-        is_approved_knowledge_compliant = res.get("is_approved_knowledge_compliant", False)
-    except Exception as e:
-        print(f"🚨 [SEMANTIC GATE ERROR]: {e}")
-        is_grounded, is_answer_compliant, contains_advice, is_clarification_grounded, is_clarification_connected, is_clarification_compliant, is_approved_knowledge_compliant = False, False, True, False, False, False, False # Fail-safe defaults
+        result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
+        answer_grounded = bool(result.get("answer_grounded", False))
+        clarification_grounded = bool(result.get("clarification_grounded", False))
+        clarification_connected = bool(result.get("clarification_connected", False))
+        passed = bool(result.get("passed", False)) and answer_grounded and clarification_grounded and clarification_connected
+    except Exception as error:
+        print(f"🚨 [GROUNDEDNESS AUDIT ERROR]: {error}")
+        result = {"reason": "Groundedness audit failed.", "rewrite_instruction": "Use only the permitted evidence sources."}
+        passed = answer_grounded = clarification_grounded = clarification_connected = False
+    audit = {
+        "passed": passed,
+        "answer_grounded": answer_grounded,
+        "clarification_grounded": clarification_grounded,
+        "clarification_connected": clarification_connected,
+        "reason": result.get("reason", "Groundedness audit failed."),
+        "rewrite_instruction": result.get("rewrite_instruction", "Use only the permitted evidence sources."),
+    }
+    log_event("outbound.groundedness.completed", passed=passed, reason=audit["reason"])
+    return {"outbound_groundedness_result": audit}
 
-    # 2. Evaluate Judge Results
 
-    # Clarification-only responses have no answer evidence. Initial greetings
-    # are deliberately excluded: their text and chips are grounded against the
-    # durable-memory context above and must receive a real semantic verdict.
-    is_exempt = (
-        state.get("triage_status") == "CLARIFICATION"
-        or (bool(intent_clarification_tasks) and not selected_knowledge.strip() and not answer_text.strip())
-        or state.get("preflight_status") == "intent_clarification_needed"
+def node_06_outbound_audit_join(state: AgentState):
+    """Join focused audits and retain the existing retry/degradation semantics."""
+    print("🟢 [NODE 06] Joining Outbound Compliance & Groundedness Audits")
+    compliance = state.get("outbound_compliance_result", {})
+    groundedness = state.get("outbound_groundedness_result", {})
+    compliance_passed = bool(compliance.get("passed", False))
+    groundedness_passed = bool(groundedness.get("passed", False))
+    answer_text = state.get("final_answer", state.get("final_draft", ""))
+    clarification_failed = not groundedness.get("clarification_grounded", False) or not groundedness.get("clarification_connected", False)
+    is_initial_greeting = (
+        state.get("user_input") in {"__INIT__", "**INIT__"}
+        or state.get("preflight_status") == "initial_greeting"
     )
 
-    if is_exempt:
-        print(f"   💡 [GUARDRAIL EXEMPTION]: {state.get('preflight_status', 'CLARIFICATION')} detected. Bypassing Groundedness requirement.")
-        is_grounded = True # Deterministically override the LLM's failure
-        is_answer_compliant = True
-        # There is no selected FAQ evidence for a greeting or clarification.
-        is_approved_knowledge_compliant = True
-    # -----------------------------------------------------
-
-    clarification_failed = not is_clarification_grounded or not is_clarification_connected or not is_clarification_compliant
-    answer_safe_for_fallback = (
-        is_grounded
-        and is_answer_compliant
-        and is_approved_knowledge_compliant
-    )
-    if not is_grounded or contains_advice or clarification_failed or not is_approved_knowledge_compliant:
+    if not (compliance_passed and groundedness_passed):
         if is_initial_greeting:
-            # A greeting cannot safely enter the normal generation retry path:
-            # there is no retrieved answer evidence to regenerate from. Degrade
-            # to a generic welcome without memory-derived claims or chips.
-            print("   🚫 [GREETING VETO]: Falling back to generic greeting without suggested actions.")
+            print("   🚫 [GREETING AUDIT VETO]: Falling back to generic greeting without suggested actions.")
             generic_greeting = "Hello! I am Horizon. How can I assist you today?"
             return {
                 "preflight_status": "pass",
@@ -1733,33 +1784,35 @@ def node_06_outbound_semantic_gate(state: AgentState):
                 "pending_advance": False,
                 "pending_evidence_cache_updates": {},
             }
-        print(f"   🚫 [SEMANTIC VETO]: Evidence compliant: {is_approved_knowledge_compliant} | Answer grounded: {is_grounded} | Answer compliant: {is_answer_compliant} | Clarification grounded: {is_clarification_grounded} | Clarification connected: {is_clarification_connected} | Clarification compliant: {is_clarification_compliant} | Contains Advice: {contains_advice}")
         count = state.get("safety_retry_count", 0) + 1
-        history = state.get("draft_feedback_history", [])
-        history.append(f"Semantic compliance failed. Approved evidence compliant: {is_approved_knowledge_compliant}. Answer grounded: {is_grounded}. Answer compliant: {is_answer_compliant}. Clarification grounded: {is_clarification_grounded}. Clarification connected: {is_clarification_connected}. Clarification compliant: {is_clarification_compliant}. Contained Advice: {contains_advice}. Reason: {res.get('reason', 'Violation')}. Rewrite with a connected, grounded answer and safe, neutral clarification.")
-
-        # Preserve an individually safe answer across clarification-only
-        # retries.  If all three clarification rewrites fail, the graph can
-        # still deliver this answer with a deterministic, neutral fallback.
-        unresolved_clarification = bool(state.get("task_resolution_instructions") or intent_clarification_tasks)
-        preserve_answer = unresolved_clarification and clarification_failed and answer_safe_for_fallback
+        failed_feedback = []
+        if not compliance_passed:
+            failed_feedback.append(f"Compliance audit failed: {compliance.get('rewrite_instruction', compliance.get('reason', 'Rewrite as neutral, compliant banking information.'))}")
+        if not groundedness_passed:
+            failed_feedback.append(f"Groundedness audit failed: {groundedness.get('rewrite_instruction', groundedness.get('reason', 'Use only the permitted evidence.'))}")
+        history = list(state.get("draft_feedback_history", []))
+        history.extend(failed_feedback)
+        unresolved_clarification = bool(state.get("task_resolution_instructions") or state.get("intent_clarification_tasks"))
+        preserve_answer = (
+            unresolved_clarification
+            and clarification_failed
+            and compliance_passed
+            and bool(groundedness.get("answer_grounded", False))
+        )
         safe_answer = answer_text if preserve_answer and answer_text.strip() else state.get("safe_answer_for_fallback", "")
-        
+        print(f"   🚫 [OUTBOUND AUDIT VETO]: Compliance={compliance_passed} | Groundedness={groundedness_passed}")
         return {
-            "safety_retry_count": count, 
-            "draft_feedback_history": history, 
+            "safety_retry_count": count,
+            "draft_feedback_history": history,
             "preflight_status": "fail",
-            "pending_advance": False, # Block ledger update
+            "pending_advance": False,
             "safe_answer_for_fallback": safe_answer,
             "clarification_fallback_required": preserve_answer,
         }
 
-    print("   ✅ [SEMANTIC PASS]: Approved evidence and response are grounded and MAS-compliant.")
-
-    # 3. ATOMIC LEDGER UPDATE: Safe to advance step progression!
+    print("   ✅ [OUTBOUND AUDIT PASS]: Response is MAS-compliant and evidence-grounded.")
     plan = state.get("active_plan", {})
     completed_steps = state.get("completed_steps", [])
-    
     if state.get("pending_advance"):
         idx = plan.get("current_step_index", 0)
         steps = plan.get("steps", [])
@@ -1768,16 +1821,12 @@ def node_06_outbound_semantic_gate(state: AgentState):
             plan["current_step_index"] = idx + 1
             print(f"   ⏩ [ATOMIC LEDGER UPDATE]: Safely advanced to step index {plan['current_step_index']}")
 
-    # Promote parent IDs only after the outbound gate has approved both the
-    # selected evidence and the response. The cache intentionally stores no
-    # parent text; every cache hit is re-read from SQLite.
     evidence_cache = dict(state.get("approved_evidence_cache", {}))
     for cache_key, entry in state.get("pending_evidence_cache_updates", {}).items():
         parent_ids = entry.get("approved_parent_ids", [])
-        if not cache_key or not parent_ids:
-            continue
-        evidence_cache.pop(cache_key, None)
-        evidence_cache[cache_key] = {"approved_parent_ids": parent_ids}
+        if cache_key and parent_ids:
+            evidence_cache.pop(cache_key, None)
+            evidence_cache[cache_key] = {"approved_parent_ids": parent_ids}
     while len(evidence_cache) > MAX_APPROVED_EVIDENCE_CACHE_ENTRIES:
         evidence_cache.pop(next(iter(evidence_cache)))
     if state.get("pending_evidence_cache_updates"):

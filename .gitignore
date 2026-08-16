@@ -1,1 +1,5 @@
 backend/logs/system.jsonl
+*.pyc
+*.pyc
+/backend/app/core/__pycache__
+/backend/app/orchestration/__pycache__

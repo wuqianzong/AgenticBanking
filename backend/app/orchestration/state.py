@@ -48,6 +48,8 @@ class AgentState(TypedDict):
     selected_ux_journey: str                     # TEXT, PROGRESS, LIST, or ESCALATION presentation type
     presentation_plan: Dict[str, Any]            # Evidence-selected UI and response plan
     pending_evidence_cache_updates: Dict[str, Dict[str, Any]]  # Promote only after outbound semantic approval
+    outbound_compliance_result: Dict[str, Any]    # Focused outbound MAS-compliance audit result
+    outbound_groundedness_result: Dict[str, Any]  # Focused outbound evidence-groundedness audit result
     pending_advance: bool                           # V4.1 Fix: Tracks if the current step should advance upon safety clearance
 
     # --- ISOLATED LOOP TRACKERS ---

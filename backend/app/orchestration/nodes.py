@@ -180,13 +180,11 @@ def _terminal_retrieval_feedback(task_id: str, feedback: str, reason: str, unapp
 
 
 def _build_conversation_context(state: AgentState) -> str:
-    """Combine durable conversation context with the current 10-turn window.
-
-    The compacted context may originate from a prior session.  It is advisory
-    conversation context only: it must never be interpreted as restored graph
-    state, a pending action, or a previously validated retrieval result.
-    """
-    summary = state.get("compacted_history_summary", "").strip()
+    """Label the distinct advisory context layers available to a turn."""
+    rolling_summary = state.get("compacted_history_summary", "").strip()
+    # `working_context` is retained as a compatibility fallback for graph
+    # sessions created before last_session_summary was introduced.
+    last_session_summary = state.get("last_session_summary", state.get("working_context", "")).strip()
     history = state.get("chat_history", [])[-20:]
     trusted_history = [
         message for message in history
@@ -197,8 +195,11 @@ def _build_conversation_context(state: AgentState) -> str:
         f"{'User' if isinstance(message, HumanMessage) else 'AI'}: {message.content}"
         for message in trusted_history
     ) or "None"
-    prior_context = summary or "None"
-    return f"Long-Term Conversation Context (advisory only):\n{prior_context}\n\nCurrent Session (latest 10 turns):\n{recent_history}"
+    return (
+        f"Last Session Recall (advisory only; not current state):\n{last_session_summary or 'None'}\n\n"
+        f"Current-Session Rolling Context (advisory only):\n{rolling_summary or 'None'}\n\n"
+        f"Current Session Trusted History (latest 10 turns):\n{recent_history}"
+    )
 
 
 def _build_user_baseline_context(state: AgentState) -> str:
@@ -306,7 +307,8 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         **VOLATILE_STATE_RESET,
         "chat_history": [],
         "history_sequence_offset": 0,
-        "compacted_history_summary": summary,
+        "compacted_history_summary": "",
+        "last_session_summary": summary,
         "user_baseline_summary": user_baseline,
         "active_product_intents": [],
         "active_plan": {},
@@ -450,7 +452,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     active_plan = state.get("active_plan", {})
     has_active_plan = bool(active_plan.get("steps"))
     has_retrieved_knowledge = bool(state.get("raw_retrieved_text", "").strip())
-    recalled_context = state.get("compacted_history_summary", "").strip()
+    recalled_context = state.get("last_session_summary", state.get("working_context", "")).strip()
     
     history_str = _build_conversation_context(state)
     user_baseline = _build_user_baseline_context(state)
@@ -892,7 +894,7 @@ def node_04a_resolution_planner(state: AgentState):
     DEEPER PRESENTATION PRINCIPLE:
     Select the presentation that visualizes the mental model the customer needs at this moment. The customer's higher-level intent selects the experience; approved FAQ evidence limits every title, item, stage, and option within that experience.
 
-    Choose exactly one presentation_type:
+    Choose one presentation type for EACH answerable task:
     - TEXT — use when the customer needs to understand an explanation, policy, factual answer, or comparison. For a comparison, organise the supported facts into clear labelled sections; there is no dedicated comparison table yet.
     - LIST — use when the customer needs to scan or remember independent items. This is optimal for three or more eligibility criteria, required documents, prerequisites, fees, limits, or security checks.
     - PROGRESS — use when the customer needs to know where they are in, or complete, a process. This is especially appropriate for an account-opening or application/onboarding request asking how to proceed, how to apply, or what steps remain.
@@ -904,24 +906,77 @@ def node_04a_resolution_planner(state: AgentState):
     - A PROGRESS presentation requires at least two grounded stages. Each item in `steps` is a short navigational title of 2-7 words, not a full instruction or sentence. The response generator will create the expandable detail later. For example: "Sign in to the Horizon App", "Select your physical card", "Choose an activation method".
     - For account-opening or application/onboarding requests, prefer PROGRESS when approved evidence supports two or more distinct actions, prerequisites, or constraints that can be presented as honest preparation stages. Do not invent app clicks or claim a complete bank workflow when the evidence only supports preparation. For example, evidence about residency, MyInfo, and local submission can support stages such as "Confirm you can apply", "Prepare MyInfo verification", and "Submit locally in Singapore".
     - A LIST presentation requires at least three independent, grounded items. Provide a concise `list_title` describing the list, such as "What you'll need" or "Eligibility requirements". Do not use LIST when order matters.
-    - Do not create more than one active progress process. When several supported topics could be presented as progress processes, choose the single most helpful primary progress process from the customer's context. Keep the remaining approved topics available for the response generator's natural continuation; never ask the customer to choose a presentation format or workflow.
+    - A single customer turn may contain multiple response blocks. Choose the best presentation independently for each answerable task. Each block may use TEXT, LIST, or PROGRESS when its approved evidence supports it.
+    - Do not force a visual payload: use TEXT when a list or progress flow would not improve the customer's understanding.
     - Mark unavailable tasks as UNAVAILABLE and use no evidence IDs for them.
     - Intent-level clarification tasks do not have FAQ evidence and must not be treated as answerable tasks or UI choices.
     - Use up to two grounded `options` only when the customer needs to choose a supported next action or topic. Every option must be an object with a concise visible `label` (2-6 words) and a complete, unambiguous `message` that will be sent when clicked. Options are supplementary interaction, not a replacement for the selected presentation type. Leave options empty when the answer is complete, clarification is required, or the evidence does not support a meaningful choice.
 
     CRITICAL OUTPUT CONTRACT:
-    - The JSON key MUST be `presentation_type`. Never output `journey`.
-    - `presentation_type` MUST be exactly one of `TEXT`, `PROGRESS`, `LIST`, or `ESCALATION`. Never output legacy labels such as INFORMATIONAL, GUIDED_PROCESS, TROUBLESHOOTING, or CLARIFICATION.
-    - For eligibility requirements with three or more independent criteria, the correct output is LIST, for example:
-      {{"presentation_type":"LIST","primary_task_id":"task_1","presentation_tasks":[{{"task_id":"task_1","display_mode":"PRIMARY","evidence_parent_ids":["approved_parent_id"],"section_title":"Loan eligibility requirements"}}],"steps":[],"list_title":"Loan eligibility requirements","options":[],"reason":"Independent eligibility criteria are best reviewed as a list."}}
+    - The JSON key MUST be `response_blocks`. Never output `journey`.
+    - Every block's `presentation_type` MUST be exactly TEXT, PROGRESS, LIST, or ESCALATION. Never output legacy labels such as INFORMATIONAL, GUIDED_PROCESS, TROUBLESHOOTING, or CLARIFICATION.
+    - Return blocks in the same order as the customer raised the corresponding task.
+    - For eligibility requirements with three or more independent criteria, use LIST.
 
-    Output JSON only with presentation_type, primary_task_id, presentation_tasks, steps, list_title, options, and reason.
+    Output JSON only:
+    {{"response_blocks":[{{"task_id":"task_1","presentation_type":"LIST","evidence_parent_ids":["approved_parent_id"],"section_title":"Credit card eligibility requirements","steps":[],"list_title":"Credit card eligibility requirements","options":[],"reason":"Independent eligibility criteria are best reviewed as a list."}}]}}
     """
     try:
         plan = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER))
     except Exception as error:
         print(f"🚨 [USER JOURNEY PLANNER ERROR]: {error}")
         plan = {"presentation_type": "TEXT", "primary_task_id": "", "presentation_tasks": [], "steps": [], "list_title": "", "options": [], "reason": "Planner unavailable."}
+
+    # Response Generation v2.0: every answerable task receives its own
+    # presentation plan, while the generator still composes one coherent turn.
+    if isinstance(plan.get("response_blocks"), list):
+        valid_task_ids = set(approved_by_task)
+        normalized_blocks = []
+        selected_blocks = []
+        for raw_block in plan["response_blocks"]:
+            task_id = raw_block.get("task_id")
+            if task_id not in valid_task_ids:
+                continue
+            result = next((value for value in task_results if value.get("task_id") == task_id), {})
+            if result.get("status") != "SUFFICIENT":
+                continue
+            allowed_ids = approved_by_task[task_id]
+            evidence_ids = [parent_id for parent_id in raw_block.get("evidence_parent_ids", []) if parent_id in allowed_ids]
+            if not evidence_ids:
+                evidence_ids = list(allowed_ids)
+            block_type = raw_block.get("presentation_type", "TEXT")
+            if block_type not in {"TEXT", "PROGRESS", "LIST", "ESCALATION"}:
+                block_type = "TEXT"
+            steps = [step.strip() for step in raw_block.get("steps", []) if isinstance(step, str) and step.strip()]
+            if block_type == "PROGRESS" and len(steps) < 2:
+                block_type, steps = "TEXT", []
+            if block_type != "PROGRESS":
+                steps = []
+            normalized_blocks.append({
+                "task_id": task_id,
+                "presentation_type": block_type,
+                "evidence_parent_ids": evidence_ids,
+                "section_title": raw_block.get("section_title", "Horizon Bank guidance"),
+                "steps": steps,
+                "list_title": raw_block.get("list_title", "") if block_type == "LIST" else "",
+                "options": _normalize_ui_options(raw_block.get("options", [])),
+                "reason": raw_block.get("reason", ""),
+            })
+            for parent in result.get("parents", []):
+                if parent.get("parent_id") in evidence_ids:
+                    selected_blocks.append(f"[Task {task_id} | {raw_block.get('section_title', 'Horizon Bank guidance')} | Parent {parent.get('parent_id')}]\\n{parent.get('content', '')}")
+        if normalized_blocks:
+            normalized_plan = {"response_blocks": normalized_blocks, "reason": "Task-level response block plan."}
+            print(f"   🧭 [RESPONSE BLOCKS PLANNED]: {len(normalized_blocks)} blocks")
+            log_event("journey.planned", presentation_type="BLOCKS", presentation_task_ids=[block["task_id"] for block in normalized_blocks])
+            return {
+                "preflight_status": "presentation_ready",
+                "selected_ux_journey": "BLOCKS",
+                "presentation_plan": normalized_plan,
+                "active_plan": {},
+                "completed_steps": [],
+                "raw_retrieved_text": "\\n\\n---\\n\\n".join(selected_blocks),
+            }
 
     # Accept the old planner labels during a rolling backend restart, but
     # normalize all persisted and newly generated plans to the UI-first model.
@@ -1008,8 +1063,165 @@ def _build_stepper_payload(steps: list, current_step_index: int) -> dict:
         "totalSteps": len(steps),
     }
 
+
+def _generate_response_blocks(state: AgentState) -> dict:
+    """Generate one coherent, ordered set of independently presented response blocks."""
+    block_plans = state.get("presentation_plan", {}).get("response_blocks", [])
+    task_results = {result.get("task_id"): result for result in state.get("task_results", [])}
+    block_inputs = []
+    for block in block_plans:
+        result = task_results.get(block.get("task_id"), {})
+        approved_ids = set(block.get("evidence_parent_ids", []))
+        parents = [
+            {"parent_id": parent.get("parent_id"), "content": parent.get("content", "")}
+            for parent in result.get("parents", [])
+            if parent.get("parent_id") in approved_ids
+        ]
+        if parents:
+            block_inputs.append({**block, "approved_parents": parents})
+
+    intent_clarifications = [
+        {"unresolved_request": task.get("unresolved_request", "")}
+        for task in state.get("intent_clarification_tasks", [])
+    ]
+    terminal_feedback = state.get("task_resolution_instructions", [])
+    conversation_context = _build_conversation_context(state)
+    user_baseline = _build_user_baseline_context(state)
+    prompt = f"""
+    RESPONSE GENERATION V2.0
+    You are Horizon, a read-only Horizon Bank FAQ assistant. Generate ONE
+    coherent customer turn as several ordered response blocks. Each block will
+    render as a separate Horizon message, but they remain one response.
+
+    Customer request: {state.get('user_input', '')}
+    Planned response blocks and their approved evidence: {json.dumps(block_inputs, ensure_ascii=False)}
+    Conversation Context (for continuity only):
+    {conversation_context}
+    User Baseline Memory (lowest-priority advisory context):
+    {user_baseline}
+    Intent clarification tasks: {json.dumps(intent_clarifications, ensure_ascii=False)}
+    Terminal retrieval feedback: {json.dumps(terminal_feedback, ensure_ascii=False)}
+
+    Rules:
+    - Use Current Session Trusted History as the primary continuity context for
+      references to an earlier answer, correction, comparison, or follow-up.
+      Use Current-Session Rolling Context only to extend older same-session
+      context. Last Session Recall and User Baseline Memory are lower-priority
+      advisory context: never revive an old topic, request, issue, or workflow
+      unless the latest customer request explicitly refers to it.
+    - Conversation context is NOT banking evidence. It may help you understand
+      what the customer means, but every factual claim, instruction,
+      comparison, UI item, extended_text item, and option must be supported by
+      the current block's approved parents. If current evidence differs from a
+      prior assistant response, follow the current approved evidence.
+    - Return exactly one generated block for every supplied planned task_id, in
+      the same order. Never omit an answerable task.
+    - Use only that block's approved parents for its answer, UI details,
+      extended_text, and options. Do not mix facts between task IDs.
+    - TEXT: put the complete answer in answer. LIST: provide 3-8 independent
+      list_items and an optional short answer introduction. PROGRESS: provide
+      one grounded step_detail for every supplied short step title, in order.
+    - Every block may include optional extended_text: natural additional
+      context, qualification, or useful answer detail that does not belong in
+      its main UI. Do not repeat the main payload or call it supporting text.
+    - Use options only when they are meaningful, grounded next actions for that
+      same block. Do not provide options if clarification is needed.
+    - Combine all unresolved components into one natural clarification field at
+      the end. Explicitly name each unresolved customer term; do not invent a
+      product or fact. Clarification is plain text, not a UI block.
+    - SOURCE-NEUTRAL CONVERSATION: FAQ records, policies, documents, database
+      entries, search results, and retrieved knowledge are internal evidence.
+      Never mention them, parent IDs, model names, or retrieval mechanics.
+      Present approved facts naturally as Horizon guidance.
+    - ZERO HALLUCINATION: do not add facts, procedures, rates, requirements, or
+      advice beyond the approved evidence. Preserve exact {{placeholders}}.
+
+    Output JSON only:
+    {{"blocks":[{{"task_id":"task_1","answer":"...","step_details":["..."],"list_items":["..."],"extended_text":"...","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"..."}}
+    """
+    try:
+        generated = _parse_json_robustly(call_groq_lpu(prompt))
+    except Exception as error:
+        print(f"🚨 [RESPONSE BLOCK GENERATOR ERROR]: {error}")
+        generated = {}
+
+    generated_by_task = {
+        item.get("task_id"): item for item in generated.get("blocks", [])
+        if isinstance(item, dict) and item.get("task_id")
+    }
+    response_blocks = []
+    record_parts = []
+    for index, plan in enumerate(block_plans, start=1):
+        item = generated_by_task.get(plan.get("task_id"), {})
+        block_type = plan.get("presentation_type", "TEXT")
+        answer = str(item.get("answer", "")).strip()
+        extended_text = str(item.get("extended_text", item.get("supporting_text", ""))).strip()
+        options = _normalize_ui_options(item.get("options", plan.get("options", [])))
+        steps = plan.get("steps", [])
+        step_details = item.get("step_details", []) if isinstance(item.get("step_details", []), list) else []
+        step_details = [detail.strip() for detail in step_details if isinstance(detail, str) and detail.strip()]
+        list_items = item.get("list_items", []) if isinstance(item.get("list_items", []), list) else []
+        list_items = [entry.strip() for entry in list_items if isinstance(entry, str) and entry.strip()][:8]
+        ui_type = "text"
+        if block_type == "PROGRESS" and len(steps) > 1:
+            if len(step_details) != len(steps):
+                step_details = list(steps)
+            ui_type = "stepper"
+        elif block_type == "LIST" and len(list_items) >= 3:
+            ui_type = "checklist"
+        elif not answer:
+            answer = "Could you please clarify your request?"
+        if ui_type == "stepper":
+            items = _build_stepper_payload(steps, 0)["items"]
+            record = "\n\n".join([*step_details, extended_text])
+        elif ui_type == "checklist":
+            items = list_items
+            record = "\n".join(part for part in [answer, *list_items, extended_text] if part)
+        else:
+            items = []
+            answer = "\n\n".join(part for part in [answer, extended_text] if part)
+            extended_text = ""
+            record = answer
+        response_blocks.append({
+            "blockId": f"block_{index}",
+            "taskId": plan.get("task_id"),
+            "type": ui_type,
+            "text": answer if ui_type == "text" else "",
+            "items": items,
+            "options": options,
+            "progressTitle": plan.get("section_title", "Horizon Bank guided process") if ui_type == "stepper" else "",
+            "stepDetails": step_details if ui_type == "stepper" else [],
+            "currentStep": 1 if ui_type == "stepper" else None,
+            "totalSteps": len(steps) if ui_type == "stepper" else None,
+            "listTitle": plan.get("list_title", plan.get("section_title", "Key information")) if ui_type == "checklist" else "",
+            "listIntro": answer if ui_type == "checklist" else "",
+            "extendedText": extended_text,
+        })
+        if record:
+            record_parts.append(record)
+    clarification = str(generated.get("clarification", "")).strip()
+    if (intent_clarifications or terminal_feedback) and not clarification:
+        unresolved = ", ".join(item.get("unresolved_request", "") for item in intent_clarifications if item.get("unresolved_request", ""))
+        clarification = f"Could you clarify what you mean by {unresolved}?" if unresolved else "Could you clarify what information you are looking for?"
+    if clarification:
+        response_blocks.append({"blockId": "clarification", "type": "clarification", "text": clarification})
+        record_parts.append(clarification)
+    draft = "\n\n".join(record_parts) or "Could you please clarify your request?"
+    print(f"   💬 [RESPONSE BLOCKS GENERATED]: {len(response_blocks)} blocks")
+    return {
+        "final_draft": draft,
+        "final_answer": "\n\n".join(record_parts[:-1] if clarification else record_parts),
+        "final_clarification": clarification,
+        "active_plan": {},
+        "completed_steps": [],
+        "ui_action_payload": {"uiType": "blocks", "responseBlocks": response_blocks, "options": []},
+        "pending_advance": False,
+    }
+
 def node_04b_response_generator(state: AgentState):
     print("🟢 [NODE 04b] Executing Response Generator")
+    if state.get("presentation_plan", {}).get("response_blocks"):
+        return _generate_response_blocks(state)
     plan = state.get("active_plan", {})
     idx = plan.get("current_step_index", 0)
     steps = plan.get("steps", [])
@@ -1300,9 +1512,10 @@ def node_05_outbound_deterministic_gate(state: AgentState):
     list_intro = payload.get("listIntro", "")
     extended_text = payload.get("extendedText", "")
     list_clarification = payload.get("listClarificationText", "")
+    response_blocks = payload.get("responseBlocks", [])
     
     # 1. Combine draft text AND UI options to sweep globally
-    combined_text = " ".join([draft, *_ui_option_texts(options), *step_details, *list_items, list_title, list_intro, extended_text, list_clarification])
+    combined_text = " ".join([draft, *_ui_option_texts(options), *step_details, *list_items, list_title, list_intro, extended_text, list_clarification, json.dumps(response_blocks, ensure_ascii=False)])
     placeholders_in_draft = re.findall(r"\{\{(.*?)\}\}", combined_text)
     # Parent IDs identify internal FAQ records. They are allowed inside a
     # placeholder until Node 07 substitutes its exact value, but must never
@@ -1349,13 +1562,14 @@ def node_06_outbound_semantic_gate(state: AgentState):
     list_intro = payload.get("listIntro", "")
     extended_text = payload.get("extendedText", "")
     list_clarification = payload.get("listClarificationText", "")
-    answer_with_options = f"Answer Text: {answer_text}\nAnswer UI Buttons: {json.dumps(options, ensure_ascii=False)}\nAnswer Step Details: {step_details}\nAnswer List Title: {list_title}\nAnswer List Introduction: {list_intro}\nAnswer List Items: {list_items}\nAnswer Extended Text: {extended_text}"
+    response_blocks = payload.get("responseBlocks", [])
+    answer_with_options = f"Answer Text: {answer_text}\nAnswer UI Buttons: {json.dumps(options, ensure_ascii=False)}\nAnswer Step Details: {step_details}\nAnswer List Title: {list_title}\nAnswer List Introduction: {list_intro}\nAnswer List Items: {list_items}\nAnswer Extended Text: {extended_text}\nResponse Blocks: {json.dumps(response_blocks, ensure_ascii=False)}"
     is_initial_greeting = (
         state.get("user_input") in {"__INIT__", "**INIT**"}
         or state.get("preflight_status") == "initial_greeting"
     )
     greeting_memory_context = _build_greeting_memory_context(
-        state.get("compacted_history_summary", ""),
+        state.get("last_session_summary", state.get("working_context", "")),
         state.get("user_baseline_summary", ""),
     )
 
@@ -1577,9 +1791,10 @@ def node_07_precision_substitution(state: AgentState):
     list_intro = payload.get("listIntro", "")
     extended_text = payload.get("extendedText", "")
     list_clarification = payload.get("listClarificationText", "")
+    response_blocks = payload.get("responseBlocks", [])
     
     # Extract unique placeholders globally
-    combined_text = " ".join([draft, *_ui_option_texts(options), *step_details, *list_items, list_title, list_intro, extended_text, list_clarification])
+    combined_text = " ".join([draft, *_ui_option_texts(options), *step_details, *list_items, list_title, list_intro, extended_text, list_clarification, json.dumps(response_blocks, ensure_ascii=False)])
     placeholders_in_draft = list(set(re.findall(r"\{\{(.*?)\}\}", combined_text)))
     precision_substituted = False
     
@@ -1637,6 +1852,17 @@ def node_07_precision_substitution(state: AgentState):
             for p_id, p_val in valid_map.items():
                 updated_value = updated_value.replace(f"{{{{{p_id}}}}}", p_val)
             payload[field] = updated_value
+        def substitute_nested(value):
+            if isinstance(value, str):
+                for p_id, p_val in valid_map.items():
+                    value = value.replace(f"{{{{{p_id}}}}}", p_val)
+                return value
+            if isinstance(value, list):
+                return [substitute_nested(item) for item in value]
+            if isinstance(value, dict):
+                return {key: substitute_nested(item) for key, item in value.items()}
+            return value
+        payload["responseBlocks"] = substitute_nested(response_blocks)
 
     payload["precisionSubstituted"] = precision_substituted
     return {"final_response": draft, "ui_action_payload": payload}

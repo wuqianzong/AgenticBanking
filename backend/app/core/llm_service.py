@@ -69,7 +69,7 @@ class QueryFormulation(BaseModel):
 # 5. USER JOURNEY PLANNER
 class PresentationTask(BaseModel):
     task_id: str = Field(description="The exact task_id supplied to the planner.")
-    display_mode: str = Field(description="PRIMARY, SUPPORTING, SECTION, CHOICE, or UNAVAILABLE.")
+    display_mode: str = Field(description="Legacy presentation metadata.")
     evidence_parent_ids: List[str] = Field(description="Only approved parent IDs belonging to this task.")
     section_title: str = Field(description="Short user-facing title.")
 
@@ -77,14 +77,18 @@ class ChipOption(BaseModel):
     label: str = Field(description="Concise visible chip label of 2-6 words.")
     message: str = Field(description="Complete, unambiguous customer message submitted when the chip is clicked.")
 
-class UserJourneyPlan(BaseModel):
+class ResponseBlockPlan(BaseModel):
+    task_id: str = Field(description="The exact task_id supplied to the planner.")
     presentation_type: str = Field(description="Must be exactly TEXT, PROGRESS, LIST, or ESCALATION.")
-    primary_task_id: str = Field(description="Task ID selected as the primary presentation, or empty string.")
-    presentation_tasks: List[PresentationTask] = Field(description="One presentation decision for each task.")
+    evidence_parent_ids: List[str] = Field(description="Only approved parent IDs belonging to this task.")
+    section_title: str = Field(description="Short user-facing title for this block.")
     steps: List[str] = Field(description="Grounded short step titles for PROGRESS only; otherwise empty.")
     list_title: str = Field(description="Concise customer-facing title for LIST only; otherwise empty.")
-    options: List[ChipOption] = Field(description="At most two grounded answer-related chips, each with a concise label and a complete submitted message.")
-    reason: str = Field(description="Brief explanation of the selected presentation type.")
+    options: List[ChipOption] = Field(description="At most two grounded answer-related chips for this block.")
+    reason: str = Field(description="Brief explanation of this presentation choice.")
+
+class UserJourneyPlan(BaseModel):
+    response_blocks: List[ResponseBlockPlan] = Field(description="Ordered presentation plans, one for every answerable task.")
 
 # 5. SUPERVISOR TOOL ROUTER (Node 03a)
 class SupervisorRouting(BaseModel):

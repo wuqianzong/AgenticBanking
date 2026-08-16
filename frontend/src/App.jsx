@@ -91,6 +91,7 @@ export default function BankingBotUI() {
       // `listSupportingText` is retained as a read-only fallback for messages
       // stored before the presentation-neutral extended-text contract.
       extendedText: payload.extendedText || payload.listSupportingText || '',
+      responseBlocks: payload.responseBlocks || [],
       listClarificationText: payload.listClarificationText || '',
       precisionSubstituted: payload.precisionSubstituted || false,
       currentStep: payload.currentStep,
@@ -420,6 +421,7 @@ export default function BankingBotUI() {
             listTitle: finalBotData.listTitle || '',
             listIntro: finalBotData.listIntro || '',
             extendedText: finalBotData.extendedText || finalBotData.listSupportingText || '',
+            responseBlocks: finalBotData.responseBlocks || [],
             listClarificationText: finalBotData.listClarificationText || '',
             precisionSubstituted: finalBotData.precisionSubstituted || false,
             currentStep: finalBotData.currentStep,
@@ -606,6 +608,43 @@ export default function BankingBotUI() {
     </div>
   );
 
+  const renderResponseBlock = (block, messageId, index) => {
+    const blockId = `${messageId}-${block.blockId || index}`;
+    const expandedStep = expandedProgressSteps[blockId] ?? 1;
+    return (
+      <div key={blockId} className={index > 0 ? 'mt-5' : ''}>
+        <div className="mb-1.5 ml-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Horizon</div>
+        {block.type === 'text' && (
+          <div className="max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white p-3.5 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+            {block.text}
+          </div>
+        )}
+        {block.type === 'clarification' && renderClarificationCard(block.text)}
+        {block.type === 'stepper' && renderStepper(
+          block.items,
+          block.progressTitle,
+          block.totalSteps,
+          block.options,
+          '',
+          block.stepDetails,
+          expandedStep,
+          (stepNumber) => setExpandedProgressSteps(prev => ({ ...prev, [blockId]: stepNumber }))
+        )}
+        {block.type === 'checklist' && block.listIntro && (
+          <div className="mt-2 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+            {block.listIntro}
+          </div>
+        )}
+        {block.type === 'checklist' && renderChecklist(block.items, block.listTitle, block.options)}
+        {block.extendedText && (
+          <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+            {block.extendedText}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderEscalation = () => (
     <div className="bg-red-50 rounded-xl border border-red-200 p-4 mt-2 shadow-sm w-full max-w-sm">
       <div className="flex items-center gap-2 mb-2 text-red-600">
@@ -715,14 +754,14 @@ export default function BankingBotUI() {
                 )}
                 <div className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className="max-w-[88%]">
-                    {msg.sender === 'bot' && (
+                    {msg.sender === 'bot' && msg.type !== 'blocks' && (
                       <div className="flex items-end gap-2 mb-1.5 ml-1">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Horizon</span>
                         {msg.precisionSubstituted && renderPrecisionBadge()}
                       </div>
                     )}
 
-                    {msg.type !== 'stepper' && msg.type !== 'checklist' && (
+                    {msg.type !== 'stepper' && msg.type !== 'checklist' && msg.type !== 'blocks' && (
                       <>
                         <div className={`p-3.5 text-[15px] leading-relaxed shadow-sm whitespace-pre-wrap
                           ${msg.sender === 'user'
@@ -741,6 +780,9 @@ export default function BankingBotUI() {
                     {/* Dynamic UI Components */}
                     {msg.type === 'carousel' && renderCarousel(msg.options)}
                     {msg.type === 'chips' && renderChips(msg.options)}
+                    {msg.type === 'blocks' && msg.responseBlocks?.map((block, blockIndex) =>
+                      renderResponseBlock(block, msg.id, blockIndex)
+                    )}
                     {msg.type === 'stepper' && renderStepper(
                       msg.items,
                       msg.progressTitle,
@@ -774,7 +816,7 @@ export default function BankingBotUI() {
                       </div>
                     )}
                     {msg.type === 'checklist' && msg.listClarificationText && renderClarificationCard(msg.listClarificationText)}
-                    {(msg.type === 'stepper' || msg.type === 'checklist') && (
+                    {(msg.type === 'stepper' || msg.type === 'checklist' || msg.type === 'blocks') && (
                       <div className="mt-1 ml-1 text-[10px] tabular-nums text-slate-400">
                         {formatMessageTime(timestamp)}
                       </div>

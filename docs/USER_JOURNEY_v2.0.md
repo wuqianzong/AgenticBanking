@@ -31,7 +31,7 @@ Inbound safety
   → deterministic product-and-intent evidence-cache comparison, per task
   → database parent-ID fetch for cache hits; tri-angle RRF only for misses
   → batched task sufficiency and parent-ID evidence selection
-  → retry only retryable tasks, up to three genuine RAG attempts per task
+  → retry only retryable tasks, up to four genuine RAG attempts per task
   → turn terminally unresolved tasks into safe clarification instructions
   → User Journey Planner
   → response generator and deterministic UI payload
@@ -42,7 +42,7 @@ Inbound safety
 Each RAG task retains the selected parent documents as `{parent_id, content}`. The task sufficiency evaluator returns only approved parent IDs that were supplied for that same task. The backend validates IDs deterministically before forwarding the matching content to the User Journey Planner or response generator.
 
 Successful task evidence is never overwritten by a retry for another task. A task
-that remains unsupported after three attempts is marked
+that remains unsupported after four attempts is marked
 `CLARIFICATION_REQUIRED`. The exact SQLite parent records returned by that
 task's final failed retrieval attempt are passed downstream only as
 suggestion-only clarification evidence. The generator may use them to offer up

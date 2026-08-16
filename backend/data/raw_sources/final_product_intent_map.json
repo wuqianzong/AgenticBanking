@@ -65,13 +65,14 @@
     "Insurance": [
         "Features And Limits",
         "General Inquiries",
-        "Rewards And Promotions",
-        "Wealth And Insurance"
+        "Insurance",
+        "Rewards And Promotions"
     ],
     "Mutual_Funds": [
         "Fees And Charges",
         "General Inquiries",
-        "Wealth And Insurance"
+        "Insurance",
+        "Wealth Management"
     ],
     "Personal_Loan": [
         "Account Management",
@@ -95,6 +96,6 @@
     "Stocks": [
         "Fees And Charges",
         "General Inquiries",
-        "Wealth And Insurance"
+        "Wealth Management"
     ]
 }

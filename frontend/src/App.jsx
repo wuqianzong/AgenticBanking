@@ -544,7 +544,7 @@ export default function BankingBotUI() {
         {items?.map((item, index) => {
           const isCompleted = item.status === 'completed';
           const isExpanded = expandedStepNumber === item.number;
-          const detail = stepDetails?.[index] || (item.number === 1 ? stepDetail : '');
+          const detail = item.detail || stepDetails?.[index] || (item.number === 1 ? stepDetail : '');
           return (
             <li key={`${item.number}-${item.label}`} className="flex gap-2 py-2">
               <div className="flex flex-col items-center">

@@ -37,19 +37,23 @@ class RAGEngine:
         """Initializes by dynamically fetching the freshest collection handle."""
         self.collection = get_chroma_collection()
 
-    def _build_metadata_filter(self, active_product_tags: list, active_intent_families: list) -> dict:
+    def _build_metadata_filter(self, active_product_tags: list, active_intent_families: list, include_all: bool = True) -> dict:
         """Constructs the deterministic 2D Matrix boundary filter."""
         if not active_product_tags:
             active_product_tags = ["ALL"]
         if not active_intent_families:
             return {"product_tag": {"$contains": "ALL"}} # Fallback
 
+        product_conditions = [
+            {"product_tag": {"$contains": tag}} for tag in active_product_tags
+        ]
+        if include_all and "ALL" not in active_product_tags:
+            product_conditions.append({"product_tag": {"$contains": "ALL"}})
+        product_filter = product_conditions[0] if len(product_conditions) == 1 else {"$or": product_conditions}
         return {
             "$and": [
                 {"intent_family": {"$in": active_intent_families}},
-                {"$or": [
-                    {"product_tag": {"$contains": tag}} for tag in active_product_tags
-                ] + [{"product_tag": {"$contains": "ALL"}}]}
+                product_filter
             ]
         }
 
@@ -118,22 +122,46 @@ class RAGEngine:
         print(f" 📐 Conceptual Angle: '{blueprint.get('conceptual', 'None')}'")
         print("─"*60)
 
-        metadata_filter = self._build_metadata_filter(product_tags, intent_families)
-        
-        # 1. Fire the 3x Fan-Out
-        tasks = [
-            self._query_single_angle(blueprint.get("procedural", ""), metadata_filter),
-            self._query_single_angle(blueprint.get("policy", ""), metadata_filter),
-            self._query_single_angle(blueprint.get("conceptual", ""), metadata_filter)
+        normalized_tags = []
+        for product_tag in product_tags or ["ALL"]:
+            tag = str(product_tag).strip()
+            if tag and tag not in normalized_tags:
+                normalized_tags.append(tag)
+
+        # A single product preserves the original 3-angle fan-out. During
+        # product expansion, fan out each angle per product before RRF so a
+        # strong result from one product cannot be crowded out by another
+        # product's top-k candidates before fusion.
+        search_scopes = [
+            (
+                product_tag,
+                self._build_metadata_filter([product_tag], intent_families, include_all=index == 0),
+            )
+            for index, product_tag in enumerate(normalized_tags)
         ]
-        
-        angle_results = await asyncio.gather(*tasks)
-        procedural_hits, policy_hits, conceptual_hits = angle_results
+        angle_specs = [
+            ("Procedural", blueprint.get("procedural", "")),
+            ("Policy", blueprint.get("policy", "")),
+            ("Conceptual", blueprint.get("conceptual", "")),
+        ]
+        query_specs = [
+            (f"{product_tag} / {angle_name}", angle_text, metadata_filter)
+            for product_tag, metadata_filter in search_scopes
+            for angle_name, angle_text in angle_specs
+        ]
+        query_results = await asyncio.gather(*[
+            self._query_single_angle(angle_text, metadata_filter)
+            for _, angle_text, metadata_filter in query_specs
+        ])
+        ranked_query_results = [
+            (query_specs[index][0], hits)
+            for index, hits in enumerate(query_results)
+        ]
 
         # Raw Hits Telemetry
         print("\n    [RAG TELEMETRY] --- Raw ChromaDB Hits per Angle ---")
-        for angle_name, hits in [("Procedural", procedural_hits), ("Policy", policy_hits), ("Conceptual", conceptual_hits)]:
-            print(f"      > {angle_name} Angle Hits:")
+        for query_name, hits in ranked_query_results:
+            print(f"      > {query_name} Hits:")
             if not hits:
                 print("        None")
             for rank, hit in enumerate(hits):
@@ -141,7 +169,7 @@ class RAGEngine:
 
         # 2. Pass 1: The Direct Hit Bypass
         direct_hits = set()
-        for hit_list in [procedural_hits, policy_hits, conceptual_hits]:
+        for _, hit_list in ranked_query_results:
             for hit in hit_list:
                 if hit["score"] >= DIRECT_HIT_THRESHOLD:
                     direct_hits.add(hit["parent_id"])
@@ -159,7 +187,7 @@ class RAGEngine:
         rrf_scores = {}
         
         # Calculate RRF per query angle
-        for angle_name, hit_list in [("Procedural", procedural_hits), ("Policy", policy_hits), ("Conceptual", conceptual_hits)]:
+        for angle_name, hit_list in ranked_query_results:
             seen_in_this_query = set()
             for rank, hit in enumerate(hit_list):
                 pid = hit["parent_id"]

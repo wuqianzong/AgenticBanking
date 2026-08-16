@@ -3,6 +3,7 @@ import re
 import sqlite3
 import os
 import asyncio
+from typing import Any
 from langchain_core.messages import HumanMessage, AIMessage
 from backend.app.orchestration.state import AgentState
 from backend.app.orchestration.rag_engine import RAGEngine
@@ -46,6 +47,78 @@ VOLATILE_STATE_RESET = {
 }
 
 MAX_APPROVED_EVIDENCE_CACHE_ENTRIES = 30
+MAX_RAG_ATTEMPTS = 4
+
+
+def _normalized_product_tags(product_value: Any) -> list[str]:
+    """Return unique, matrix-valid product tags while preserving their order."""
+    raw_tags = product_value if isinstance(product_value, list) else [product_value]
+    tags = []
+    for raw_tag in raw_tags:
+        tag = str(raw_tag).strip()
+        if tag and tag in PRODUCT_INTENT_MATRIX and tag not in tags:
+            tags.append(tag)
+    return tags
+
+
+def _normalize_search_task_scope(task: dict) -> dict | None:
+    """Validate an LLM task's product and intent filters before retrieval."""
+    normalized = dict(task)
+    product_tags = _normalized_product_tags(normalized.get("target_commercial_product"))
+    intents = normalized.get("target_intent", [])
+    if isinstance(intents, str):
+        intents = [intents]
+    intent_tags = []
+    for raw_intent in intents:
+        intent = str(raw_intent).strip()
+        if intent and intent not in intent_tags:
+            intent_tags.append(intent)
+
+    # Keep only products that support at least one requested intent, then keep
+    # only intents supported by at least one remaining product. This permits a
+    # controlled multi-product expansion without accepting an invalid matrix
+    # scope such as ALL + Application.
+    product_tags = [
+        product for product in product_tags
+        if any(intent in PRODUCT_INTENT_MATRIX[product] for intent in intent_tags)
+    ]
+    intent_tags = [
+        intent for intent in intent_tags
+        if any(intent in PRODUCT_INTENT_MATRIX[product] for product in product_tags)
+    ]
+    if not product_tags or not intent_tags:
+        return None
+
+    normalized["target_commercial_product"] = product_tags[0] if len(product_tags) == 1 else product_tags
+    normalized["target_intent"] = intent_tags
+    return normalized
+
+
+def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int]) -> list[dict]:
+    """Describe the deterministic precision-to-recall stage for each retry."""
+    stages = {
+        2: {
+            "stage": "ANGLE_EXPANSION",
+            "instruction": "Keep the exact product and intent filters. Retain every prior angle term and add missing procedural, policy, or conceptual terms from the sufficiency feedback.",
+        },
+        3: {
+            "stage": "INTENT_EXPANSION",
+            "instruction": "Keep the exact product filter. Retain every prior angle term and intent, then add one or more additional valid intents for that same product when they can improve recall of the missing detail.",
+        },
+        4: {
+            "stage": "PRODUCT_EXPANSION",
+            "instruction": "Retain every prior angle term, intent, and product. Add only a clearly plausible, matrix-valid related product as an additional product tag; never replace the original product.",
+        },
+    }
+    plan = []
+    for task in retry_tasks:
+        next_attempt = retry_counts.get(task.get("task_id"), 0) + 1
+        plan.append({
+            "task_id": task.get("task_id"),
+            "next_attempt": next_attempt,
+            **stages.get(next_attempt, stages[4]),
+        })
+    return plan
 
 def fetch_placeholders_from_db(placeholders: list) -> dict:
     """Fetches exact values for a list of placeholders from the SQLite Precision_Reference_Table."""
@@ -153,7 +226,10 @@ def _normalize_ui_options(options: list) -> list:
 
 def _task_evidence_cache_key(task: dict) -> str:
     """Return an order- and case-insensitive product/intent cache key."""
-    product = str(task.get("target_commercial_product", "")).strip().casefold()
+    products = {
+        product.casefold()
+        for product in _normalized_product_tags(task.get("target_commercial_product", ""))
+    }
     intents = task.get("target_intent", [])
     if isinstance(intents, str):
         intents = [intents]
@@ -162,9 +238,9 @@ def _task_evidence_cache_key(task: dict) -> str:
         for intent in intents
         if str(intent).strip()
     }
-    if not product or not intent_set:
+    if not products or not intent_set:
         return ""
-    return f"{product}|{','.join(sorted(intent_set))}"
+    return f"{','.join(sorted(products))}|{','.join(sorted(intent_set))}"
 
 
 def _terminal_retrieval_feedback(task_id: str, feedback: str, reason: str, unapproved_parents: list[dict]) -> dict:
@@ -474,6 +550,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         Failed tasks: {retry_tasks}
         Task-specific feedback: {retry_feedback}
         """
+    retry_expansion_plan = _retry_expansion_plan(retry_tasks, state.get("task_retry_counts", {}))
     
     prompt = f"""
     PRODUCT/INTENT MATRIX (Valid Nouns and Verbs):
@@ -496,26 +573,86 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     - Extract ONLY the core nouns, target verbs, and specific constraints.
     - Format each angle as a concise, comma-separated string of keywords.
     
-    1. CONTEXTUAL INHERITANCE: Clean & Rephrase the user input. If it is a follow-up question, you MUST inherit the Product (Noun) from the "Active Context Matrix" or recent AI response. Do not default to "ALL" if they are discussing a specific active product process.
+    1. CONTEXTUAL INHERITANCE: Read the latest user input first. A Product or Intent may be inherited only when it is unambiguously established by the current-session trusted history, Active Context Matrix, or an active graph plan. Do not use the user baseline or prior-session recall to fill a missing Product or Intent, unless the latest input explicitly continues that recalled topic (for example, "yes, continue").
     2. FIRST partition the actionable content of the LATEST USER INPUT into its distinct customer-request components. A component is one question, request, comparison dimension, or independently answerable topic. Do not split one coherent question into artificial fragments. Do not impose a numerical cap: return every distinct component needed to answer the input faithfully.
-    3. Assign EVERY component exactly once and only once:
-       - SEARCH: use when you can map the component to a valid Product/Intent retrieval task.
-       - CLARIFY: use only when you cannot map that component to a valid Product/Intent task without guessing.
+    3. BEFORE assigning SEARCH or CLARIFY, evaluate EACH component for the two mandatory retrieval foundations:
+       - PRODUCT: a specific commercial product or valid universal scope ("ALL").
+       - INTENT: a specific request type that maps to an intent in the PRODUCT/INTENT MATRIX.
+       Determine these foundations from the latest input and, only when unambiguous, the permitted current-session context in Rule 1.
+       If either PRODUCT or INTENT is missing, ambiguous, or cannot be mapped to a valid Product/Intent pair in the matrix without guessing, the component MUST be assigned to CLARIFY. Do not formulate semantic angles or a search task for that component.
+       A generic process or policy word alone—such as "application", "fee", "eligibility", "limit", "rate", "requirements", or "processing time"—is an INTENT only. It does not identify a PRODUCT and MUST be CLARIFY unless a product is explicit or unambiguously inherited from permitted context.
+       Likewise, a product name alone without a discernible request type MUST be CLARIFY.
+    4. Assign EVERY component exactly once and only once:
+       - SEARCH: use only when BOTH Product and Intent are available and form a valid pair in the Product/Intent Matrix.
+       - CLARIFY: use when either mandatory foundation is missing, ambiguous, or invalid.
        A component, its wording, a substring of its wording, or a paraphrase of it MUST NOT appear in both resolutions. If you produce a SEARCH task for a component, it is resolved for this turn and MUST NOT also generate a clarification.
-    4. For EACH SEARCH component, formulate Three Distinct Semantic Angles based strictly on the density rules above:
+    5. For EACH SEARCH component, formulate Three Distinct Semantic Angles based strictly on the density rules above:
        - "procedural": Only the action verbs and tool nouns (e.g., "Horizon App, navigation, setup MyInfo, verification process").
        - "policy": Only the rule nouns and constraints (e.g., "eligibility rules, required documents, security policy, restrictions").
        - "conceptual": Only the definition nouns (e.g., "MyInfo service, personal data sharing, Horizon Bank").
-    5. For EACH SEARCH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed. In RETRY MODE preserve the supplied task_id and use its feedback to change the search terms, product, or intent.
-    6. CONVERSATIONAL CONTINUATION: Return no components only when the user is simply providing information requested in a previous step (e.g., "I have MyInfo ready", "Next", "Proceed") AND Current Graph Context confirms that an active plan or retrieved knowledge exists. If recalled prior-session context is available but the current graph has neither an active plan nor retrieved knowledge, the user is starting a fresh graph session: for a continuation such as "yes, continue", create a SEARCH component from the recalled topic so current FAQ knowledge can be retrieved.
-    7. INTENT CLARIFICATION: For a CLARIFY component, copy only the ambiguous customer term into clarification.unresolved_request and explain internally why it cannot be searched. Do not guess a product or create a generic task merely to fill the array.
+    6. For EACH SEARCH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed. In RETRY MODE preserve the supplied task_id and use its task-specific sufficiency feedback to change the search terms, product, or intent.
+    7. CONVERSATIONAL CONTINUATION: Return no components only when the user is simply providing information requested in a previous step (e.g., "I have MyInfo ready", "Next", "Proceed") AND Current Graph Context confirms that an active plan or retrieved knowledge exists. If recalled prior-session context is available but the current graph has neither an active plan nor retrieved knowledge, the user is starting a fresh graph session: for a continuation such as "yes, continue", create a SEARCH component from the recalled topic so current FAQ knowledge can be retrieved.
+    8. INTENT CLARIFICATION: For a CLARIFY component, copy only the ambiguous customer term into clarification.unresolved_request and explain internally whether Product, Intent, or both are missing or ambiguous. Do not guess a product or create a generic task merely to fill the array.
        Recalled prior-session context and the user baseline are advisory context only: NEVER create a search task or clarification task solely because they mention an old pending issue. Use them only when the latest user input explicitly continues or refers to that topic.
-    8. If the question applies universally (e.g. app password), use "ALL". Labels are retrieval filters, not a reason to discard a valid free-form request.
+    9. Use "ALL" only when the latest request is genuinely universal and its Intent is a valid intent listed under "ALL" in the Product/Intent Matrix. "ALL" is not a fallback for an unknown product.
     
     Output JSON ONLY:
     {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","procedural":"...","policy":"...","conceptual":"...","target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"clarification_id":"intent_clarification_1","unresolved_request":"the fee","reason":"No product or service is identified."}}}}]}}
     {retry_context}
     """
+
+    # A retrieval retry is not a fresh interpretation of the whole customer
+    # request.  Isolate it in a dedicated prompt so the model cannot reorder
+    # components or overwrite a failed task ID with another successful task.
+    if retry_tasks:
+        prompt = f"""
+        PRODUCT/INTENT MATRIX (Valid Nouns and Verbs):
+        {PRODUCT_INTENT_MATRIX}
+
+        INTENT DEFINITION GUIDELINE:
+        {INTENT_GUIDELINE}
+
+        RETRIEVAL RETRY MODE
+        You are a Decoupled Database Search Architect refining failed retrieval
+        tasks. This is NOT a new decomposition of the customer's request.
+
+        Latest User Input: "{user_msg}"
+        Failed Retrieval Tasks (the only components in scope): {retry_tasks}
+        Task-Specific Sufficiency Feedback: {retry_feedback}
+        Deterministic Expansion Plan: {retry_expansion_plan}
+
+        REQUIRED CONTRACT:
+        - Return EXACTLY one SEARCH component for EACH Failed Retrieval Task,
+          and return NO other components.
+        - Preserve every supplied task_id exactly. Do not renumber, reuse, or
+          assign a failed task_id to a different topic.
+        - Do NOT re-partition the latest user input.
+        - Do NOT recreate successful tasks, intent-clarification tasks, or
+          unrelated topics from the original request.
+        - Do NOT output CLARIFY in retry mode. The retrieval pipeline will
+          decide whether the task becomes unavailable after its retry limit.
+        - Follow the Deterministic Expansion Plan for EACH task exactly. The
+          plan's stage controls which filters may expand on this attempt.
+        - ANGLE_EXPANSION: keep the exact prior product and intent filters;
+          retain all existing angle terms and add terms that target the missing
+          detail described in the feedback.
+        - INTENT_EXPANSION: keep the exact prior product filter; retain all
+          prior angle terms and intents, then add valid intent filters that can
+          improve recall of the missing detail. Do not remove prior intents.
+        - PRODUCT_EXPANSION: retain all prior angle terms, intents, and
+          product tags. Output target_commercial_product as an ordered array
+          containing the original product first plus only a clearly plausible,
+          matrix-valid related product. Never replace the original product.
+        - The revised task must remain about the same customer component as its
+          supplied failed task.
+        - Every revised Product/Intent pair must be valid in the matrix.
+        - NEVER use conversational filler or complete sentences in semantic
+          angles. Extract only core nouns, verbs, and constraints as concise,
+          comma-separated keywords.
+
+        Output JSON ONLY:
+        {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","procedural":"...","policy":"...","conceptual":"...","target_commercial_product":"valid matrix product or ordered product array during PRODUCT_EXPANSION","target_intent":["valid matrix intent"]}},"clarification":null}}]}}
+        """
     
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
@@ -529,7 +666,15 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 continue
             resolution = str(component.get("resolution", "")).strip().upper()
             if resolution == "SEARCH" and isinstance(component.get("search_task"), dict):
-                formulated_tasks.append(component["search_task"])
+                # `customer_component` is the formulator's already-resolved
+                # sub-query.  Preserve it on the retrieval task so every
+                # downstream stage evaluates this task's scope—not the whole
+                # customer turn—without requiring another LLM interpretation.
+                search_task = dict(component["search_task"])
+                customer_component = str(component.get("customer_component", "")).strip()
+                if customer_component:
+                    search_task["customer_component"] = customer_component
+                formulated_tasks.append(search_task)
             elif resolution == "CLARIFY" and isinstance(component.get("clarification"), dict):
                 formulated_clarifications.append(component["clarification"])
     except Exception as e:
@@ -537,9 +682,28 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         formulated_tasks = []
         formulated_clarifications = []
 
+    validated_tasks = []
+    for task in formulated_tasks:
+        if not isinstance(task, dict):
+            continue
+        validated_task = _normalize_search_task_scope(task)
+        if validated_task:
+            validated_tasks.append(validated_task)
+        else:
+            print(f"   ⚠️ [TASK SCOPE REJECTED]: Invalid product/intent matrix pair for task '{task.get('task_id', '')}'.")
+    formulated_tasks = validated_tasks
+
     if retry_tasks:
         replacements = {task.get("task_id"): task for task in formulated_tasks if task.get("task_id") in retry_task_ids}
-        search_tasks = [replacements.get(task.get("task_id"), task) for task in prior_tasks]
+        search_tasks = []
+        for prior_task in prior_tasks:
+            replacement = replacements.get(prior_task.get("task_id"), prior_task)
+            # Retry mode changes retrieval terms only. The original resolved
+            # sub-query remains the stable sufficiency target for its task.
+            prior_component = str(prior_task.get("customer_component", "")).strip()
+            if prior_component:
+                replacement = {**replacement, "customer_component": prior_component}
+            search_tasks.append(replacement)
     else:
         search_tasks = formulated_tasks
 
@@ -687,8 +851,7 @@ async def node_03b_rag_worker(state: AgentState):
 
     engine = RAGEngine()
     async def retrieve_task(task: dict) -> dict:
-        target_product = task.get("target_commercial_product", "ALL")
-        product_tags = [target_product] if isinstance(target_product, str) else target_product
+        product_tags = _normalized_product_tags(task.get("target_commercial_product", "ALL")) or ["ALL"]
         parents = await engine.execute_multi_angle_search(
             blueprint=task,
             product_tags=product_tags,
@@ -734,14 +897,28 @@ def node_03c_sufficiency_auditor(state: AgentState):
         You are a groundedness auditor for a read-only Horizon Bank FAQ assistant.
         Evaluate EACH supplied task independently. A parent is sufficient only if it directly supports that task.
 
-        User Request: {state.get("user_input", "")}
+        Original User Message (advisory context only; never use it as an
+        individual task's completeness target): {state.get("user_input", "")}
         Trusted Conversation Context: { _build_conversation_context(state) }
         Task Inputs: {json.dumps(evaluation_inputs, ensure_ascii=False)}
 
         Rules:
+        - Each Task Input contains `task.customer_component`: the intent
+          formulator's resolved sub-query for that task. Evaluate a task ONLY
+          against its own `customer_component` and that task's candidate
+          parents.
+        - A task is SUFFICIENT when its candidate parents directly answer its
+          own `customer_component`, even when another task from the same
+          customer turn remains unanswered.
+        - Do NOT require a task's evidence to answer the complete original
+          user message, another task's customer_component, or another
+          product/intent component.
+        - The original user message and trusted conversation context help
+          explain references or continuations only; they are never the
+          completeness benchmark for an individual task.
         - Return one result for every supplied task_id.
         - For SUFFICIENT, return only parent IDs from that exact task that are directly relevant. At least one approved ID is required.
-        - For RETRY, return no approved IDs and concise query-refinement feedback. The backend determines terminal UNAVAILABLE status after three failed attempts.
+        - For RETRY, return no approved IDs and concise query-refinement feedback. The backend determines terminal UNAVAILABLE status after four failed attempts.
         - Treat {{placeholders}} in parent content as valid approved facts.
         - Never invent a parent ID, fact, or instruction.
 
@@ -794,9 +971,9 @@ def node_03c_sufficiency_auditor(state: AgentState):
             attempt_count += 1
             retry_counts[task_id] = attempt_count
         refinement = audit.get("search_feedback") or reason
-        # An unsupported task remains retryable until its third failed
+        # An unsupported task remains retryable until its fourth failed
         # retrieval attempt; only then ask the user for targeted clarification.
-        if attempt_count >= 3:
+        if attempt_count >= MAX_RAG_ATTEMPTS:
             unapproved_ids = [parent.get("parent_id") for parent in result.get("parents", []) if parent.get("parent_id")]
             unapproved_parents = RAGEngine().hydrate_parent_ids(unapproved_ids)
             current_results[task_id] = {
@@ -842,9 +1019,14 @@ def node_03c_sufficiency_auditor(state: AgentState):
         if result.get("status") == "CLARIFICATION_REQUIRED"
     ]
     print(f"   ✅ [TASK AUDIT]: {sum(result.get('status') == 'SUFFICIENT' for result in current_results.values())} sufficient, {len(unresolved)} pending retry.")
+    retry_expansion = _retry_expansion_plan(
+        [tasks_by_id[result.get("task_id")] for result in unresolved if result.get("task_id") in tasks_by_id],
+        retry_counts,
+    )
     for result in current_results.values():
         event = "task.sufficiency.completed" if result.get("status") == "SUFFICIENT" else "task.retry" if result.get("status") == "RETRY" else "task.clarification_required"
-        log_event(event, task_id=result.get("task_id"), status=result.get("status"), approved_parent_ids=result.get("approved_parent_ids", []), reason=result.get("reason", ""))
+        next_stage = next((item for item in retry_expansion if item.get("task_id") == result.get("task_id")), {})
+        log_event(event, task_id=result.get("task_id"), status=result.get("status"), approved_parent_ids=result.get("approved_parent_ids", []), reason=result.get("reason", ""), retry_count=retry_counts.get(result.get("task_id"), 0), next_expansion_stage=next_stage.get("stage", ""))
     return {
         "preflight_status": "retry_tasks" if unresolved else "task_resolution_ready",
         "task_results": list(current_results.values()),
@@ -918,11 +1100,11 @@ def node_04a_resolution_planner(state: AgentState):
     - ESCALATION — use only when human assistance was explicitly requested or required.
 
     Rules:
-    - Never invent facts, steps, parent IDs, or a banking action.
+    - Never invent facts, parent IDs, or a banking action.
     - Select evidence_parent_ids only from approved parents of the same task.
-    - A PROGRESS presentation requires at least two grounded stages. Each item in `steps` is a short navigational title of 2-7 words, not a full instruction or sentence. The response generator will create the expandable detail later. For example: "Sign in to the Horizon App", "Select your physical card", "Choose an activation method".
-    - For account-opening or application/onboarding requests, prefer PROGRESS when approved evidence supports two or more distinct actions, prerequisites, or constraints that can be presented as honest preparation stages. Do not invent app clicks or claim a complete bank workflow when the evidence only supports preparation. For example, evidence about residency, MyInfo, and local submission can support stages such as "Confirm you can apply", "Prepare MyInfo verification", and "Submit locally in Singapore".
-    - A LIST presentation requires at least three independent, grounded items. Provide a concise `list_title` describing the list, such as "What you'll need" or "Eligibility requirements". Do not use LIST when order matters.
+    - A PROGRESS presentation is allowed only when the evidence supports at least two genuine sequential stages. Do not create those stages yourself: the response generator owns the titles and expandable details as one paired structure.
+    - For account-opening or application/onboarding requests, prefer PROGRESS when approved evidence supports two or more distinct actions, prerequisites, or constraints that can be presented as honest preparation stages. Do not invent app clicks or claim a complete bank workflow when the evidence only supports preparation.
+    - A LIST presentation requires at least three independent, grounded items. Do not use LIST when order matters.
     - A single customer turn may contain multiple response blocks. Choose the best presentation independently for each answerable task. Each block may use TEXT, LIST, or PROGRESS when its approved evidence supports it.
     - Do not force a visual payload: use TEXT when a list or progress flow would not improve the customer's understanding.
     - Mark unavailable tasks as UNAVAILABLE and use no evidence IDs for them.
@@ -936,7 +1118,7 @@ def node_04a_resolution_planner(state: AgentState):
     - For eligibility requirements with three or more independent criteria, use LIST.
 
     Output JSON only:
-    {{"response_blocks":[{{"task_id":"task_1","presentation_type":"LIST","evidence_parent_ids":["approved_parent_id"],"section_title":"Credit card eligibility requirements","steps":[],"list_title":"Credit card eligibility requirements","options":[],"reason":"Independent eligibility criteria are best reviewed as a list."}}]}}
+    {{"response_blocks":[{{"task_id":"task_1","presentation_type":"LIST","evidence_parent_ids":["approved_parent_id"],"reason":"Independent eligibility criteria are best reviewed as a list."}}]}}
     """
     try:
         plan = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER))
@@ -964,24 +1146,15 @@ def node_04a_resolution_planner(state: AgentState):
             block_type = raw_block.get("presentation_type", "TEXT")
             if block_type not in {"TEXT", "PROGRESS", "LIST", "ESCALATION"}:
                 block_type = "TEXT"
-            steps = [step.strip() for step in raw_block.get("steps", []) if isinstance(step, str) and step.strip()]
-            if block_type == "PROGRESS" and len(steps) < 2:
-                block_type, steps = "TEXT", []
-            if block_type != "PROGRESS":
-                steps = []
             normalized_blocks.append({
                 "task_id": task_id,
                 "presentation_type": block_type,
                 "evidence_parent_ids": evidence_ids,
-                "section_title": raw_block.get("section_title", "Horizon Bank guidance"),
-                "steps": steps,
-                "list_title": raw_block.get("list_title", "") if block_type == "LIST" else "",
-                "options": _normalize_ui_options(raw_block.get("options", [])),
                 "reason": raw_block.get("reason", ""),
             })
             for parent in result.get("parents", []):
                 if parent.get("parent_id") in evidence_ids:
-                    selected_blocks.append(f"[Task {task_id} | {raw_block.get('section_title', 'Horizon Bank guidance')} | Parent {parent.get('parent_id')}]\\n{parent.get('content', '')}")
+                    selected_blocks.append(f"[Task {task_id} | Parent {parent.get('parent_id')}]\\n{parent.get('content', '')}")
         if normalized_blocks:
             normalized_plan = {"response_blocks": normalized_blocks, "reason": "Task-level response block plan."}
             print(f"   🧭 [RESPONSE BLOCKS PLANNED]: {len(normalized_blocks)} blocks")
@@ -1139,8 +1312,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - Use only that block's approved parents for its answer, UI details,
       extended_text, and options. Do not mix facts between task IDs.
     - TEXT: put the complete answer in answer. LIST: provide 3-8 independent
-      list_items and an optional short answer introduction. PROGRESS: provide
-      one grounded step_detail for every supplied short step title, in order.
+      list_items and an optional short answer introduction, plus a concise
+      list_title. PROGRESS: create the complete progress payload yourself:
+      a concise progress_title and 2+ ordered progress_steps. Each
+      progress_steps entry must be exactly {{"title":"short navigation label",
+      "detail":"specific grounded instruction"}}. Title and detail must be
+      paired, in order, and the detail must add information rather than repeat
+      or lightly paraphrase its title.
     - Every block may include optional extended_text: natural additional
       context, qualification, or useful answer detail that does not belong in
       its main UI. Do not repeat the main payload or call it supporting text.
@@ -1161,7 +1339,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
       response, conversation context, or memory.
 
     Output JSON only:
-    {{"blocks":[{{"task_id":"task_1","answer":"...","step_details":["..."],"list_items":["..."],"extended_text":"...","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"..."}}
+    {{"blocks":[{{"task_id":"task_1","answer":"...","progress_title":"...","progress_steps":[{{"title":"...","detail":"..."}}],"list_title":"...","list_items":["..."],"extended_text":"...","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"..."}}
     """
     try:
         generated = _parse_json_robustly(call_groq_lpu(prompt))
@@ -1180,24 +1358,28 @@ def _generate_response_blocks(state: AgentState) -> dict:
         block_type = plan.get("presentation_type", "TEXT")
         answer = str(item.get("answer", "")).strip()
         extended_text = str(item.get("extended_text", item.get("supporting_text", ""))).strip()
-        options = _normalize_ui_options(item.get("options", plan.get("options", [])))
-        steps = plan.get("steps", [])
-        step_details = item.get("step_details", []) if isinstance(item.get("step_details", []), list) else []
-        step_details = [detail.strip() for detail in step_details if isinstance(detail, str) and detail.strip()]
+        options = _normalize_ui_options(item.get("options", []))
+        progress_steps = item.get("progress_steps", []) if isinstance(item.get("progress_steps", []), list) else []
+        progress_steps = [
+            {"title": str(step.get("title", "")).strip(), "detail": str(step.get("detail", "")).strip()}
+            for step in progress_steps
+            if isinstance(step, dict) and str(step.get("title", "")).strip() and str(step.get("detail", "")).strip()
+        ]
         list_items = item.get("list_items", []) if isinstance(item.get("list_items", []), list) else []
         list_items = [entry.strip() for entry in list_items if isinstance(entry, str) and entry.strip()][:8]
         ui_type = "text"
-        if block_type == "PROGRESS" and len(steps) > 1:
-            if len(step_details) != len(steps):
-                step_details = list(steps)
+        if block_type == "PROGRESS" and len(progress_steps) >= 2:
             ui_type = "stepper"
         elif block_type == "LIST" and len(list_items) >= 3:
             ui_type = "checklist"
         elif not answer:
             answer = "Could you please clarify your request?"
         if ui_type == "stepper":
-            items = _build_stepper_payload(steps, 0)["items"]
-            record = "\n\n".join([*step_details, extended_text])
+            items = [
+                {"number": position, "label": step["title"], "detail": step["detail"], "status": "current" if position == 1 else "upcoming"}
+                for position, step in enumerate(progress_steps, start=1)
+            ]
+            record = "\n\n".join([*(step["detail"] for step in progress_steps), extended_text])
         elif ui_type == "checklist":
             items = list_items
             record = "\n".join(part for part in [answer, *list_items, extended_text] if part)
@@ -1213,11 +1395,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
             "text": answer if ui_type == "text" else "",
             "items": items,
             "options": options,
-            "progressTitle": plan.get("section_title", "Horizon Bank guided process") if ui_type == "stepper" else "",
-            "stepDetails": step_details if ui_type == "stepper" else [],
+            "progressTitle": str(item.get("progress_title", "")).strip() if ui_type == "stepper" else "",
+            "stepDetails": [],
             "currentStep": 1 if ui_type == "stepper" else None,
-            "totalSteps": len(steps) if ui_type == "stepper" else None,
-            "listTitle": plan.get("list_title", plan.get("section_title", "Key information")) if ui_type == "checklist" else "",
+            "totalSteps": len(progress_steps) if ui_type == "stepper" else None,
+            "listTitle": str(item.get("list_title", "")).strip() if ui_type == "checklist" else "",
             "listIntro": answer if ui_type == "checklist" else "",
             "extendedText": extended_text,
         })

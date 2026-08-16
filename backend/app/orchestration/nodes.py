@@ -1275,8 +1275,6 @@ def _generate_response_blocks(state: AgentState) -> dict:
         for task in state.get("intent_clarification_tasks", [])
     ]
     terminal_feedback = state.get("task_resolution_instructions", [])
-    conversation_context = _build_conversation_context(state)
-    user_baseline = _build_user_baseline_context(state)
     audit_feedback = state.get("draft_feedback_history", [])[-4:]
     prompt = f"""
     RESPONSE GENERATION V2.0
@@ -1286,27 +1284,19 @@ def _generate_response_blocks(state: AgentState) -> dict:
 
     Customer request: {state.get('user_input', '')}
     Planned response blocks and their approved evidence: {json.dumps(block_inputs, ensure_ascii=False)}
-    Conversation Context (for continuity only):
-    {conversation_context}
-    User Baseline Memory (lowest-priority advisory context):
-    {user_baseline}
     Intent clarification tasks: {json.dumps(intent_clarifications, ensure_ascii=False)}
     Terminal retrieval feedback: {json.dumps(terminal_feedback, ensure_ascii=False)}
     Failed outbound-audit feedback from the prior generation attempt:
     {json.dumps(audit_feedback, ensure_ascii=False)}
 
     Rules:
-    - Use Current Session Trusted History as the primary continuity context for
-      references to an earlier answer, correction, comparison, or follow-up.
-      Use Current-Session Rolling Context only to extend older same-session
-      context. Last Session Recall and User Baseline Memory are lower-priority
-      advisory context: never revive an old topic, request, issue, or workflow
-      unless the latest customer request explicitly refers to it.
-    - Conversation context is NOT banking evidence. It may help you understand
-      what the customer means, but every factual claim, instruction,
-      comparison, UI item, extended_text item, and option must be supported by
-      the current block's approved parents. If current evidence differs from a
-      prior assistant response, follow the current approved evidence.
+    - Upstream routing has already resolved any conversational follow-up into
+      task-level approved evidence. Chat history, rolling memory, last-session
+      memory, and baseline memory are deliberately not supplied here and must
+      never be reconstructed, repeated, or used as answer content.
+    - Every factual claim, instruction, comparison, UI item, extended_text
+      item, and option must be supported by the current block's approved
+      parents. If a fact is not present in that block's evidence, omit it.
     - Return exactly one generated block for every supplied planned task_id, in
       the same order. Never omit an answerable task.
     - Use only that block's approved parents for its answer, UI details,
@@ -1509,8 +1499,6 @@ def node_04b_response_generator(state: AgentState):
         
     print(f"   📍 [CURRENT TARGET STEP]: {current_step} (Index {idx})")
     
-    history_str = _build_conversation_context(state)
-    user_baseline = _build_user_baseline_context(state)
     feedback = state.get("draft_feedback_history", [])
     feedback_str = f"CRITICAL CORRECTION NEEDED: {feedback[-1]}" if feedback else ""
 
@@ -1529,11 +1517,12 @@ def node_04b_response_generator(state: AgentState):
     Intent Clarification Tasks (user-derived internal guidance only; do not quote reason text): {json.dumps(intent_clarification_context, ensure_ascii=False)}
     Terminal Retrieval Feedback (internal guidance only; do not quote it or treat it as FAQ knowledge): {json.dumps(terminal_feedback_context, ensure_ascii=False)}
     Unapproved Retrieved Knowledge for Clarification Suggestions (not approved answer evidence): "{unapproved_suggestion_knowledge}"
-    Recent Conversation: {history_str}
-    User Baseline (advisory only; adapt communication only when relevant): {user_baseline}
     {feedback_str}
 
     Rules for Text Generation:
+    - Conversation history, rolling memory, last-session memory, and user
+      baseline memory are intentionally unavailable in this node. Do not
+      reconstruct, repeat, or infer facts from an earlier message or memory.
     - Answer every independently answerable component of the customer's latest request. The selected UI visualizes the main mental model; it does not limit the rest of the response.
     - `extended_text` is optional, natural conversational continuation shown below a visual payload. Use it for relevant approved information that does not belong inside the selected UI, including other answerable components of a multi-part request, useful qualifications, or context. Do not repeat the UI payload or label this text as "supporting" or as a separate internal section.
     - For PROGRESS with multiple steps, write one concise, grounded detail for EVERY item in Current Plan, in the same order. A detail must provide the concrete instruction behind its short step title; do not merely repeat or lightly paraphrase the title. These details will appear in an expandable progress payload, so each one must explain only its matching step and may not rely on an earlier or later detail being visible. Put approved information that is outside this single process in `extended_text`.
@@ -1554,6 +1543,10 @@ def node_04b_response_generator(state: AgentState):
     - Present approved facts directly and naturally as Horizon's banking guidance. When several records support one answer, synthesize them into one coherent answer instead of describing separate sources. `extended_text` is normal conversational continuation, not a source note: it may add relevant approved context but must not describe where the information came from.
     - Discuss provenance only when the customer explicitly asks about sources. In that case, refer only at a high level to "Horizon Bank's published information" and never reveal internal retrieval mechanics, FAQ records, parent IDs, model names, or database details.
     - ZERO HALLUCINATION: Rely EXCLUSIVELY on Selected Approved Knowledge for the answer. Intent clarification may rely only on the user's stated unresolved_request; terminal retrieval suggestions may additionally rely on Unapproved Retrieved Knowledge for Clarification Suggestions.
+    - If Selected Approved Knowledge is empty, do not state any specific
+      product, service, policy, feature, fee, account, or historical fact.
+      Produce only a concise, neutral clarification or refusal based on the
+      current user wording, with empty extended_text and options.
     - If quoting exact numerical rates or fees, you MUST ONLY use the exact {{placeholders}} provided in the 'Retrieved Knowledge'. Do NOT invent, alter, or hallucinate placeholders.
     
     Output JSON ONLY:

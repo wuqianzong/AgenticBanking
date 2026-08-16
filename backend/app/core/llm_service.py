@@ -9,10 +9,10 @@ from backend.app.core.system_logger import log_event
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 MODEL_A_GENERATOR = "openai/gpt-oss-120b"       # Groq: Conversational Engine
-MODEL_B_AUDITOR = "gemini-3.5-flash-lite"            # Google: Safety & Sufficiency Judge
-MODEL_C_PLANNER = "gemini-3.5-flash-lite"            # Google: Resolution Planner & Tool Calling Generator
+MODEL_B_AUDITOR = "gemini-3.1-flash-lite"            # Google: Safety & Sufficiency Judge
+MODEL_C_PLANNER = "gemini-3.1-flash-lite"            # Google: Resolution Planner & Tool Calling Generator
 MODEL_D_PROMPT_GUARD = "meta-llama/llama-prompt-guard-2-86m"  # Groq: Cyber Security Pre-check
-MODEL_E_TRIAGE = "gemini-3.5-flash-lite"             # Google: Journey Classifier
+MODEL_E_TRIAGE = "gemini-3.1-flash-lite"             # Google: Journey Classifier
 # --------------------------------------------
 
 groq_api_key = os.environ.get("GROQ_API_KEY")
@@ -62,9 +62,15 @@ class IntentClarificationTask(BaseModel):
     unresolved_request: str = Field(description="The exact ambiguous product, service, or request component from the user's wording.")
     reason: str = Field(description="A concise internal explanation of why a valid search task cannot be formed without clarification.")
 
+class RequestComponentResolution(BaseModel):
+    component_id: str = Field(description="Stable identifier for one distinct component of the latest user input, e.g. component_1.")
+    customer_component: str = Field(description="A concise faithful restatement of only that user-request component.")
+    resolution: str = Field(description="Must be exactly SEARCH or CLARIFY. Every component has exactly one resolution.")
+    search_task: SearchTask | None = Field(default=None, description="Present only when resolution is SEARCH; otherwise null.")
+    clarification: IntentClarificationTask | None = Field(default=None, description="Present only when resolution is CLARIFY; otherwise null.")
+
 class QueryFormulation(BaseModel):
-    search_tasks: List[SearchTask] = Field(description="Array of semantic search tasks generated from the prompt.")
-    clarification_tasks: List[IntentClarificationTask] = Field(description="User-derived unresolved components that cannot be safely formulated as search tasks.")
+    components: List[RequestComponentResolution] = Field(description="An exhaustive, mutually exclusive partition of the actionable components in the latest user input.")
 
 # 5. USER JOURNEY PLANNER
 class PresentationTask(BaseModel):

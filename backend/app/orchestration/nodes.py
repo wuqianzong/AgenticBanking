@@ -445,7 +445,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     }
 
 def node_02e_intent_classifier_and_query_formulator(state: AgentState):
-    """n2e: create or selectively refine up to three independent RAG tasks."""
+    """n2e: partition a request into independent retrieval or clarification components."""
     print("🟢 [NODE 02e] Executing Multi-Task Query Formulator")
     user_msg = state.get("user_input", "")
     active_matrix = state.get("active_product_intents", [])
@@ -495,26 +495,41 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     - Format each angle as a concise, comma-separated string of keywords.
     
     1. CONTEXTUAL INHERITANCE: Clean & Rephrase the user input. If it is a follow-up question, you MUST inherit the Product (Noun) from the "Active Context Matrix" or recent AI response. Do not default to "ALL" if they are discussing a specific active product process.
-    2. Decompose multi-part questions into at most THREE distinct tasks. For EACH task, formulate Three Distinct Semantic Angles based strictly on the density rules above:
+    2. FIRST partition the actionable content of the LATEST USER INPUT into its distinct customer-request components. A component is one question, request, comparison dimension, or independently answerable topic. Do not split one coherent question into artificial fragments. Do not impose a numerical cap: return every distinct component needed to answer the input faithfully.
+    3. Assign EVERY component exactly once and only once:
+       - SEARCH: use when you can map the component to a valid Product/Intent retrieval task.
+       - CLARIFY: use only when you cannot map that component to a valid Product/Intent task without guessing.
+       A component, its wording, a substring of its wording, or a paraphrase of it MUST NOT appear in both resolutions. If you produce a SEARCH task for a component, it is resolved for this turn and MUST NOT also generate a clarification.
+    4. For EACH SEARCH component, formulate Three Distinct Semantic Angles based strictly on the density rules above:
        - "procedural": Only the action verbs and tool nouns (e.g., "Horizon App, navigation, setup MyInfo, verification process").
        - "policy": Only the rule nouns and constraints (e.g., "eligibility rules, required documents, security policy, restrictions").
        - "conceptual": Only the definition nouns (e.g., "MyInfo service, personal data sharing, Horizon Bank").
-    3. For EACH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above.
-    4. Each task MUST contain task_id. On a new request use task_1, task_2, task_3 in order. In RETRY MODE preserve the supplied task_id and use its feedback to change the search terms, product, or intent.
-    5. CONVERSATIONAL CONTINUATION: Output an empty array for "search_tasks": [] only when the user is simply providing information requested in a previous step (e.g., "I have MyInfo ready", "Next", "Proceed") AND Current Graph Context confirms that an active plan or retrieved knowledge exists. If recalled prior-session context is available but the current graph has neither an active plan nor retrieved knowledge, the user is starting a fresh graph session: for a continuation such as "yes, continue", generate a search task from the recalled topic so current FAQ knowledge can be retrieved.
-    6. INTENT CLARIFICATION: If a component of the LATEST USER INPUT is too ambiguous to map to a valid Product/Intent search task, do NOT guess a product or create a generic task merely to fill the array. Put that component in "clarification_tasks". Copy the ambiguous customer term into "unresolved_request" and explain internally why it cannot be searched. You may return both search_tasks and clarification_tasks for a multi-part request. Do not put a searchable component into clarification_tasks.
+    5. For EACH SEARCH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed. In RETRY MODE preserve the supplied task_id and use its feedback to change the search terms, product, or intent.
+    6. CONVERSATIONAL CONTINUATION: Return no components only when the user is simply providing information requested in a previous step (e.g., "I have MyInfo ready", "Next", "Proceed") AND Current Graph Context confirms that an active plan or retrieved knowledge exists. If recalled prior-session context is available but the current graph has neither an active plan nor retrieved knowledge, the user is starting a fresh graph session: for a continuation such as "yes, continue", create a SEARCH component from the recalled topic so current FAQ knowledge can be retrieved.
+    7. INTENT CLARIFICATION: For a CLARIFY component, copy only the ambiguous customer term into clarification.unresolved_request and explain internally why it cannot be searched. Do not guess a product or create a generic task merely to fill the array.
        Recalled prior-session context and the user baseline are advisory context only: NEVER create a search task or clarification task solely because they mention an old pending issue. Use them only when the latest user input explicitly continues or refers to that topic.
-    7. If the question applies universally (e.g. app password), use "ALL". Labels are retrieval filters, not a reason to discard a valid free-form request.
+    8. If the question applies universally (e.g. app password), use "ALL". Labels are retrieval filters, not a reason to discard a valid free-form request.
     
     Output JSON ONLY:
-    {{"search_tasks": [{{"task_id": "task_1", "procedural": "...", "policy": "...", "conceptual": "...", "target_commercial_product": "Credit_Card", "target_intent": ["Transaction Disputes"]}}], "clarification_tasks": [{{"clarification_id": "intent_clarification_1", "unresolved_request": "exact customer term", "reason": "The product or service is ambiguous."}}]}}
+    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","procedural":"...","policy":"...","conceptual":"...","target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"clarification_id":"intent_clarification_1","unresolved_request":"the fee","reason":"No product or service is identified."}}}}]}}
     {retry_context}
     """
     
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
-        formulated_tasks = res.get("search_tasks", []) or []
-        formulated_clarifications = res.get("clarification_tasks", []) or []
+        # The model returns a mutually exclusive component partition. Derive
+        # the existing downstream task lists from it so retrieval, caching,
+        # retries, and clarification handling retain their current contracts.
+        formulated_tasks = []
+        formulated_clarifications = []
+        for component in res.get("components", []) or []:
+            if not isinstance(component, dict):
+                continue
+            resolution = str(component.get("resolution", "")).strip().upper()
+            if resolution == "SEARCH" and isinstance(component.get("search_task"), dict):
+                formulated_tasks.append(component["search_task"])
+            elif resolution == "CLARIFY" and isinstance(component.get("clarification"), dict):
+                formulated_clarifications.append(component["clarification"])
     except Exception as e:
         print(f"🚨 [NODE 02e EXCEPTION]: {e}")
         formulated_tasks = []
@@ -524,12 +539,12 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         replacements = {task.get("task_id"): task for task in formulated_tasks if task.get("task_id") in retry_task_ids}
         search_tasks = [replacements.get(task.get("task_id"), task) for task in prior_tasks]
     else:
-        search_tasks = formulated_tasks[:3]
+        search_tasks = formulated_tasks
 
     # Retries refine only failed retrieval tasks. Intent-level ambiguity was
     # already identified from the original request and remains in state while
     # the searchable components complete their independent RAG loop.
-    intent_clarification_tasks = state.get("intent_clarification_tasks", []) if retry_tasks else formulated_clarifications[:3]
+    intent_clarification_tasks = state.get("intent_clarification_tasks", []) if retry_tasks else formulated_clarifications
     if not retry_tasks:
         normalized_clarifications = []
         for index, task in enumerate(intent_clarification_tasks, start=1):

@@ -23,7 +23,6 @@ class AgentState(TypedDict):
     preflight_status: str                        # Maps edge routing conditions
     knowledge_blueprint: Dict[str, Any] 
     target_path: str
-    raw_retrieved_text: str
     working_context: str
     final_draft: str
     final_answer: str
@@ -38,7 +37,7 @@ class AgentState(TypedDict):
     
     # V2.5 Tri-Angle RRF Search Tasks
     search_tasks: List[Dict[str, Any]]           # Immutable task definitions with stable task_id values
-    task_results: List[Dict[str, Any]]           # RAG parents and sufficiency result per task
+    task_results: List[Dict[str, Any]]           # Parent-ID evidence selections and sufficiency result per task
     task_retry_counts: Dict[str, int]            # Retry count keyed by task_id
     task_feedback: Dict[str, str]                # Task-specific RAG refinement feedback
     intent_clarification_tasks: List[Dict[str, Any]]  # Unresolved user-derived components that cannot form a valid retrieval task

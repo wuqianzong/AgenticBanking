@@ -243,18 +243,55 @@ def _task_evidence_cache_key(task: dict) -> str:
     return f"{','.join(sorted(products))}|{','.join(sorted(intent_set))}"
 
 
-def _terminal_retrieval_feedback(task_id: str, feedback: str, reason: str, unapproved_parents: list[dict]) -> dict:
+def _terminal_retrieval_feedback(task_id: str, feedback: str, reason: str, unapproved_parent_ids: list[str]) -> dict:
     """Keep terminal retrieval context internal until clarification generation."""
     return {
         "task_id": task_id,
         "type": "TERMINAL_RETRIEVAL_FEEDBACK",
         "feedback": feedback,
         "reason": reason,
-        # These are exact database records retrieved for the task but not
-        # approved as an answer.  They may be offered only as grounded topic
-        # suggestions, never as an answer to the original request.
-        "unapproved_parents": unapproved_parents,
+        # IDs are retained rather than model-visible parent text. They may be
+        # hydrated only for grounded terminal clarification suggestions.
+        "unapproved_parent_ids": unapproved_parent_ids,
     }
+
+
+def _hydrate_parent_ids(parent_ids: list[str]) -> list[dict]:
+    """Read exact allow-listed parent records from the authoritative FAQ DB."""
+    ordered_ids = [parent_id for parent_id in parent_ids if isinstance(parent_id, str) and parent_id]
+    return RAGEngine().hydrate_parent_ids(ordered_ids) if ordered_ids else []
+
+
+def _response_evidence_manifest(state: AgentState) -> list[dict]:
+    """Return the exact parent-ID selections permitted for outbound answers.
+
+    The manifest is the single evidence contract shared by response generation
+    and normal-response groundedness. It deliberately contains identifiers,
+    not hydrated text or stale turn state.
+    """
+    approved_by_task = {
+        result.get("task_id"): set(result.get("approved_parent_ids", []))
+        for result in state.get("task_results", [])
+        if result.get("status") == "SUFFICIENT"
+    }
+    plan = state.get("presentation_plan", {})
+    raw_blocks = plan.get("response_blocks") or plan.get("presentation_tasks") or []
+    manifest = []
+    for block in raw_blocks:
+        task_id = block.get("task_id")
+        allowed_ids = approved_by_task.get(task_id, set())
+        selected_ids = [parent_id for parent_id in block.get("evidence_parent_ids", []) if parent_id in allowed_ids]
+        if task_id and selected_ids:
+            manifest.append({"task_id": task_id, "approved_parent_ids": selected_ids})
+    return manifest
+
+
+def _hydrate_response_evidence(state: AgentState) -> list[dict]:
+    """Hydrate the shared outbound evidence manifest for a single consumer."""
+    return [
+        {**entry, "approved_parents": _hydrate_parent_ids(entry["approved_parent_ids"])}
+        for entry in _response_evidence_manifest(state)
+    ]
 
 
 def _build_conversation_context(state: AgentState) -> str:
@@ -393,7 +430,6 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         "completed_steps": [],
         "process_slots": {},
         "approved_evidence_cache": {},
-        "raw_retrieved_text": "",
         "final_draft": greeting,
         "final_answer": greeting,
         "final_clarification": "",
@@ -529,7 +565,10 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     active_matrix = state.get("active_product_intents", [])
     active_plan = state.get("active_plan", {})
     has_active_plan = bool(active_plan.get("steps"))
-    has_retrieved_knowledge = bool(state.get("raw_retrieved_text", "").strip())
+    has_retrieved_knowledge = any(
+        result.get("status") == "SUFFICIENT" and result.get("approved_parent_ids")
+        for result in state.get("task_results", [])
+    )
     recalled_context = state.get("last_session_summary", state.get("working_context", "")).strip()
     
     history_str = _build_conversation_context(state)
@@ -765,7 +804,6 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 "search_tasks": [],
                 "intent_clarification_tasks": intent_clarification_tasks,
                 "task_results": [],
-                "raw_retrieved_text": "",
             }
         if active_plan.get("steps") or has_retrieved_knowledge:
             return {"preflight_status": "continue_plan", "search_tasks": []}
@@ -821,7 +859,6 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         "active_product_intents": new_matrix,
         "active_plan": {} if not retry_tasks else active_plan,
         "completed_steps": [] if not retry_tasks else state.get("completed_steps", []),
-        "raw_retrieved_text": "" if not retry_tasks else state.get("raw_retrieved_text", ""),
     }
 
 # --- PHASE 2: BOUNDED RAG ARCHITECTURE ---
@@ -956,7 +993,6 @@ def node_03c_sufficiency_auditor(state: AgentState):
                     "origin": result.get("origin", "RAG"),
                     "cache_key": result.get("cache_key", _task_evidence_cache_key(tasks_by_id.get(task_id, {}))),
                     "approved_parent_ids": approved_ids,
-                    "parents": approved_parents,
                     "reason": reason,
                 }
                 feedback.pop(task_id, None)
@@ -979,26 +1015,18 @@ def node_03c_sufficiency_auditor(state: AgentState):
             current_results[task_id] = {
                 "task_id": task_id,
                 "status": "CLARIFICATION_REQUIRED",
-                "parents": [],
                 "approved_parent_ids": [],
                 "reason": reason,
                 "terminal_feedback": refinement,
-                "unapproved_parents": unapproved_parents,
+                "unapproved_parent_ids": [parent.get("parent_id") for parent in unapproved_parents if parent.get("parent_id")],
             }
             feedback.pop(task_id, None)
         else:
-            current_results[task_id] = {"task_id": task_id, "status": "RETRY", "parents": [], "approved_parent_ids": [], "reason": reason}
+            current_results[task_id] = {"task_id": task_id, "status": "RETRY", "approved_parent_ids": [], "reason": reason}
             feedback[task_id] = refinement
             if cache_fallback:
                 log_event("evidence_cache.insufficient", task_id=task_id, cache_key=result.get("cache_key", ""), reason=reason)
 
-    approved_blocks = []
-    for result in current_results.values():
-        if result.get("status") != "SUFFICIENT":
-            continue
-        for parent in result.get("parents", []):
-            approved_blocks.append(f"[Task {result.get('task_id')} | Parent {parent.get('parent_id')}]\n{parent.get('content', '')}")
-    approved_knowledge = "\n\n---\n\n".join(approved_blocks)
     unresolved = [result for result in current_results.values() if result.get("status") == "RETRY"]
     pending_cache_updates = {}
     for result in current_results.values():
@@ -1013,7 +1041,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             result.get("task_id"),
             result.get("terminal_feedback", result.get("reason", "")),
             result.get("reason", ""),
-            result.get("unapproved_parents", []),
+            result.get("unapproved_parent_ids", []),
         )
         for result in current_results.values()
         if result.get("status") == "CLARIFICATION_REQUIRED"
@@ -1034,7 +1062,6 @@ def node_03c_sufficiency_auditor(state: AgentState):
         "task_feedback": feedback,
         "task_resolution_instructions": task_resolution_instructions,
         "pending_evidence_cache_updates": pending_cache_updates,
-        "raw_retrieved_text": approved_knowledge,
     }
 
 
@@ -1063,7 +1090,6 @@ def node_04a_resolution_planner(state: AgentState):
             "presentation_plan": {"presentation_type": "TEXT", "steps": [], "options": [], "reason": "Intent clarification required before retrieval."},
             "active_plan": {},
             "completed_steps": [],
-            "raw_retrieved_text": "",
         }
 
     task_results = state.get("task_results", [])
@@ -1071,7 +1097,7 @@ def node_04a_resolution_planner(state: AgentState):
     approved_by_task = {}
     for result in task_results:
         task_id = result.get("task_id")
-        parents = result.get("parents", []) if result.get("status") == "SUFFICIENT" else []
+        parents = _hydrate_parent_ids(result.get("approved_parent_ids", [])) if result.get("status") == "SUFFICIENT" else []
         approved_ids = {parent.get("parent_id") for parent in parents}
         approved_by_task[task_id] = approved_ids
         planner_tasks.append({
@@ -1152,7 +1178,7 @@ def node_04a_resolution_planner(state: AgentState):
                 "evidence_parent_ids": evidence_ids,
                 "reason": raw_block.get("reason", ""),
             })
-            for parent in result.get("parents", []):
+            for parent in _hydrate_parent_ids(result.get("approved_parent_ids", [])):
                 if parent.get("parent_id") in evidence_ids:
                     selected_blocks.append(f"[Task {task_id} | Parent {parent.get('parent_id')}]\\n{parent.get('content', '')}")
         if normalized_blocks:
@@ -1165,7 +1191,6 @@ def node_04a_resolution_planner(state: AgentState):
                 "presentation_plan": normalized_plan,
                 "active_plan": {},
                 "completed_steps": [],
-                "raw_retrieved_text": "\\n\\n---\\n\\n".join(selected_blocks),
             }
 
     # Accept the old planner labels during a rolling backend restart, but
@@ -1197,16 +1222,15 @@ def node_04a_resolution_planner(state: AgentState):
             "evidence_parent_ids": valid_ids,
             "section_title": item.get("section_title", "Horizon Bank guidance"),
         })
-        for parent in result.get("parents", []):
+        for parent in _hydrate_parent_ids(result.get("approved_parent_ids", [])):
             if parent.get("parent_id") in valid_ids:
                 selected_blocks.append(f"[Task {task_id} | {item.get('section_title', 'Horizon Bank guidance')} | Parent {parent.get('parent_id')}]\n{parent.get('content', '')}")
 
     if not presentations:
         for result in task_results:
             if result.get("status") == "SUFFICIENT":
-                parent_ids = [parent.get("parent_id") for parent in result.get("parents", [])]
+                parent_ids = list(result.get("approved_parent_ids", []))
                 presentations.append({"task_id": result.get("task_id"), "display_mode": "SECTION", "evidence_parent_ids": parent_ids, "section_title": "Horizon Bank guidance"})
-                selected_blocks.extend(f"[Task {result.get('task_id')} | Parent {parent.get('parent_id')}]\n{parent.get('content', '')}" for parent in result.get("parents", []))
 
     steps = [step for step in plan.get("steps", []) if isinstance(step, str) and step.strip()]
     primary_task_id = plan.get("primary_task_id", "")
@@ -1233,7 +1257,6 @@ def node_04a_resolution_planner(state: AgentState):
         "presentation_plan": normalized_plan,
         "active_plan": {"steps": steps, "current_step_index": 0} if presentation_type == "PROGRESS" else {},
         "completed_steps": [] if presentation_type != "PROGRESS" else state.get("completed_steps", []),
-        "raw_retrieved_text": "\n\n---\n\n".join(selected_blocks),
     }
 
 
@@ -1257,16 +1280,13 @@ def _build_stepper_payload(steps: list, current_step_index: int) -> dict:
 def _generate_response_blocks(state: AgentState) -> dict:
     """Generate one coherent, ordered set of independently presented response blocks."""
     block_plans = state.get("presentation_plan", {}).get("response_blocks", [])
-    task_results = {result.get("task_id"): result for result in state.get("task_results", [])}
+    hydrated_by_task = {
+        entry.get("task_id"): entry.get("approved_parents", [])
+        for entry in _hydrate_response_evidence(state)
+    }
     block_inputs = []
     for block in block_plans:
-        result = task_results.get(block.get("task_id"), {})
-        approved_ids = set(block.get("evidence_parent_ids", []))
-        parents = [
-            {"parent_id": parent.get("parent_id"), "content": parent.get("content", "")}
-            for parent in result.get("parents", [])
-            if parent.get("parent_id") in approved_ids
-        ]
+        parents = hydrated_by_task.get(block.get("task_id"), [])
         if parents:
             block_inputs.append({**block, "approved_parents": parents})
 
@@ -1437,25 +1457,31 @@ def node_04b_response_generator(state: AgentState):
         item.get("task_id"): set(item.get("evidence_parent_ids", []))
         for item in presentation_plan.get("presentation_tasks", [])
     }
-    for result in state.get("task_results", []):
-        task_id = result.get("task_id")
+    hydrated_by_task = {
+        entry.get("task_id"): entry.get("approved_parents", [])
+        for entry in _hydrate_response_evidence(state)
+    }
+    selected_approved_knowledge = []
+    for task_id, parents in hydrated_by_task.items():
         selected_ids = presentation_by_task.get(task_id, set())
-        for parent in result.get("parents", []):
+        for parent in parents:
             if parent.get("parent_id") not in selected_ids:
                 continue
             block = f"[Task {task_id} | Parent {parent.get('parent_id')}]\n{parent.get('content', '')}"
+            selected_approved_knowledge.append(block)
             if presentation_type == "LIST" and task_id == primary_task_id:
                 primary_list_evidence.append(block)
             elif task_id != primary_task_id:
                 extended_evidence.append(block)
     primary_list_knowledge = "\n\n---\n\n".join(primary_list_evidence)
     extended_knowledge = "\n\n---\n\n".join(extended_evidence)
+    selected_approved_knowledge_text = "\n\n---\n\n".join(selected_approved_knowledge)
     has_terminal_retrieval_feedback = bool(task_resolution_instructions)
     has_intent_clarification = bool(intent_clarification_tasks)
     has_any_clarification = has_terminal_retrieval_feedback or has_intent_clarification
     unapproved_suggestion_blocks = []
     for instruction in task_resolution_instructions:
-        for parent in instruction.get("unapproved_parents", []):
+        for parent in _hydrate_parent_ids(instruction.get("unapproved_parent_ids", [])):
             parent_id = parent.get("parent_id", "")
             content = parent.get("content", "")
             if content:
@@ -1511,7 +1537,7 @@ def node_04b_response_generator(state: AgentState):
     Selected Presentation Type: {presentation_type}
     Comparison Request: {comparison_request}
     Presentation Plan: {presentation_plan}
-    Selected Approved Knowledge: "{state.get("raw_retrieved_text", "")}"
+    Selected Approved Knowledge: "{selected_approved_knowledge_text}"
     Primary LIST Evidence (use ONLY this evidence for list_items): "{primary_list_knowledge}"
     Additional Selected Evidence (available for extended_text, never for primary list_items): "{extended_knowledge}"
     Intent Clarification Tasks (user-derived internal guidance only; do not quote reason text): {json.dumps(intent_clarification_context, ensure_ascii=False)}
@@ -1600,7 +1626,7 @@ def node_04b_response_generator(state: AgentState):
                 if named_terms
                 else "Sorry, I couldn't find relevant FAQ details to answer that. Could you clarify what information you are looking for?"
             )
-        if has_terminal_retrieval_feedback and not state.get("raw_retrieved_text", "").strip():
+        if has_terminal_retrieval_feedback and not selected_approved_knowledge:
             answer = ""
         if list_items:
             answer_for_record = "\n".join(part for part in [list_intro, *list_items, extended_text] if part)
@@ -1797,18 +1823,13 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
     """
     tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", [])}
     approved_by_task = []
-    for result in state.get("task_results", []):
-        if result.get("status") != "SUFFICIENT":
-            continue
-        task_id = result.get("task_id")
+    for evidence in _hydrate_response_evidence(state):
+        task_id = evidence.get("task_id")
         task = tasks_by_id.get(task_id, {})
         approved_by_task.append({
             "task_id": task_id,
             "resolved_subquery": task.get("customer_component", ""),
-            "approved_parents": [
-                {"parent_id": parent.get("parent_id"), "content": parent.get("content", "")}
-                for parent in result.get("parents", [])
-            ],
+            "approved_parents": evidence.get("approved_parents", []),
         })
 
     response_block_map = [
@@ -1823,10 +1844,7 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
         terminal_context.append({
             "task_id": task_id,
             "resolved_subquery": tasks_by_id.get(task_id, {}).get("customer_component", ""),
-            "unapproved_parents": [
-                {"parent_id": parent.get("parent_id"), "content": parent.get("content", "")}
-                for parent in instruction.get("unapproved_parents", [])
-            ],
+            "unapproved_parents": _hydrate_parent_ids(instruction.get("unapproved_parent_ids", [])),
         })
 
     intent_context = [

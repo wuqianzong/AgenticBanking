@@ -24,9 +24,12 @@ def get_chroma_collection():
 sqlite_conn = sqlite3.connect("backend/data/knowledge_base.db", check_same_thread=False)
 
 # RRF Configuration Variables
-DIRECT_HIT_THRESHOLD = 0.85
 RRF_K_CONSTANT = 60
 MAX_PARENTS = 4
+# Each semantic angle contributes this many candidates before task-level RRF.
+# A deeper pool gives expanded metadata scopes enough candidates to compete
+# without increasing the number of vector queries.
+RRF_CANDIDATES_PER_ANGLE = int(os.getenv("RRF_CANDIDATES_PER_ANGLE", "8"))
 
 
 # ==========================================
@@ -37,27 +40,38 @@ class RAGEngine:
         """Initializes by dynamically fetching the freshest collection handle."""
         self.collection = get_chroma_collection()
 
-    def _build_metadata_filter(self, active_product_tags: list, active_intent_families: list, include_all: bool = True) -> dict:
-        """Constructs the deterministic 2D Matrix boundary filter."""
-        if not active_product_tags:
-            active_product_tags = ["ALL"]
-        if not active_intent_families:
-            return {"product_tag": {"$contains": "ALL"}} # Fallback
+    def _build_metadata_filter(self, scope_pairs: list[dict]) -> dict:
+        """Build one shared filter from valid product/intent pairs.
 
-        product_conditions = [
-            {"product_tag": {"$contains": tag}} for tag in active_product_tags
-        ]
-        if include_all and "ALL" not in active_product_tags:
-            product_conditions.append({"product_tag": {"$contains": "ALL"}})
-        product_filter = product_conditions[0] if len(product_conditions) == 1 else {"$or": product_conditions}
-        return {
-            "$and": [
-                {"intent_family": {"$in": active_intent_families}},
-                product_filter
+        Product and intent are metadata constraints, not independently fused
+        retrieval branches.  The caller supplies only matrix-valid pairs so
+        multi-product expansion cannot create invalid cross-pairings.
+        """
+        pair_conditions = []
+        for pair in scope_pairs:
+            product = str(pair.get("product", "")).strip()
+            intents = [
+                str(intent).strip()
+                for intent in pair.get("intents", [])
+                if str(intent).strip()
             ]
-        }
+            if not product or not intents:
+                continue
+            pair_conditions.append({
+                "$and": [
+                    {"product_tag": {"$contains": product}},
+                    {"intent_family": {"$in": intents}},
+                ]
+            })
 
-    async def _query_single_angle(self, angle_text: str, metadata_filter: dict, top_k: int = 5) -> list:
+        if not pair_conditions:
+            # This should be unreachable because n2e rejects invalid tasks.
+            # Return a deliberately empty boundary rather than widening to all
+            # knowledge if a malformed task reaches the worker.
+            return {"product_tag": {"$contains": "__NO_VALID_SCOPE__"}}
+        return pair_conditions[0] if len(pair_conditions) == 1 else {"$or": pair_conditions}
+
+    async def _query_single_angle(self, angle_text: str, metadata_filter: dict, top_k: int = RRF_CANDIDATES_PER_ANGLE) -> list:
         """Executes a single ChromaDB query asynchronously."""
         if not angle_text:
             return []
@@ -108,98 +122,113 @@ class RAGEngine:
         """Re-read a vetted parent-ID set from the authoritative knowledge DB."""
         return self._hydrate_parents_from_sqlite(parent_ids)
 
-    async def execute_multi_angle_search(self, blueprint: dict, product_tags: list, intent_families: list) -> List[Dict[str, str]]:
-        """The Main Entrypoint for Tri-Angle RRF Search."""
+    @staticmethod
+    def _normalize_angle_groups(blueprint: dict) -> list[dict]:
+        """Accept V2.5 angle groups and legacy flat three-angle tasks."""
+        groups = []
+        for index, raw_group in enumerate(blueprint.get("angle_groups", []) or [], start=1):
+            if not isinstance(raw_group, dict):
+                continue
+            group = {
+                "group_id": str(raw_group.get("group_id", "")).strip() or f"group_{index}",
+                "procedural": str(raw_group.get("procedural", "")).strip(),
+                "policy": str(raw_group.get("policy", "")).strip(),
+                "conceptual": str(raw_group.get("conceptual", "")).strip(),
+            }
+            if any(group[name] for name in ("procedural", "policy", "conceptual")):
+                groups.append(group)
+
+        if groups:
+            return groups
+        legacy_group = {
+            "group_id": "base",
+            "procedural": str(blueprint.get("procedural", "")).strip(),
+            "policy": str(blueprint.get("policy", "")).strip(),
+            "conceptual": str(blueprint.get("conceptual", "")).strip(),
+        }
+        return [legacy_group] if any(legacy_group[name] for name in ("procedural", "policy", "conceptual")) else []
+
+    async def execute_multi_angle_search(self, blueprint: dict, scope_pairs: list[dict]) -> List[Dict[str, str]]:
+        """Retrieve one task through angle-group RRF under one shared scope.
+
+        Every angle group is an alternative semantic representation.  Each
+        group runs its procedural, policy, and conceptual searches against the
+        same valid product/intent filter.  RRF is first calculated inside each
+        group, then equal-normalised across groups at task level.
+        """
         
         start_time = time.time() # Start Telemetry Timer
         
         # 📡 --- TELEMETRY: START SEARCH ---
         print("\n" + "═"*60)
-        print(" 🔍 [RAG ENGINE v2.5] INITIALIZING TRI-ANGLE RRF SEARCH")
-        print(f" 📦 Product Boundary: {product_tags} | Intent Boundary: {intent_families}")
-        print(f" 📐 Procedural Angle: '{blueprint.get('procedural', 'None')}'")
-        print(f" 📐 Policy Angle    : '{blueprint.get('policy', 'None')}'")
-        print(f" 📐 Conceptual Angle: '{blueprint.get('conceptual', 'None')}'")
+        print(" 🔍 [RAG ENGINE v2.5] INITIALIZING ANGLE-GROUP RRF SEARCH")
+        print(f" 📦 Valid Product/Intent Scope: {scope_pairs}")
         print("─"*60)
 
-        normalized_tags = []
-        for product_tag in product_tags or ["ALL"]:
-            tag = str(product_tag).strip()
-            if tag and tag not in normalized_tags:
-                normalized_tags.append(tag)
-
-        # A single product preserves the original 3-angle fan-out. During
-        # product expansion, fan out each angle per product before RRF so a
-        # strong result from one product cannot be crowded out by another
-        # product's top-k candidates before fusion.
-        search_scopes = [
-            (
-                product_tag,
-                self._build_metadata_filter([product_tag], intent_families, include_all=index == 0),
-            )
-            for index, product_tag in enumerate(normalized_tags)
-        ]
-        angle_specs = [
-            ("Procedural", blueprint.get("procedural", "")),
-            ("Policy", blueprint.get("policy", "")),
-            ("Conceptual", blueprint.get("conceptual", "")),
-        ]
+        angle_groups = self._normalize_angle_groups(blueprint)
+        metadata_filter = self._build_metadata_filter(scope_pairs)
         query_specs = [
-            (f"{product_tag} / {angle_name}", angle_text, metadata_filter)
-            for product_tag, metadata_filter in search_scopes
-            for angle_name, angle_text in angle_specs
+            (group["group_id"], angle_name, angle_text, metadata_filter)
+            for group in angle_groups
+            for angle_name, angle_text in (
+                ("Procedural", group["procedural"]),
+                ("Policy", group["policy"]),
+                ("Conceptual", group["conceptual"]),
+            )
+            if angle_text
         ]
+        print(f" 📐 Angle groups: {len(angle_groups)} | Vector searches: {len(query_specs)}")
+        for group in angle_groups:
+            print(f"    • {group['group_id']}: procedural='{group['procedural']}', policy='{group['policy']}', conceptual='{group['conceptual']}'")
+
+        if not query_specs:
+            print("    ⚠️ No valid semantic angles supplied for this task.")
+            return []
         query_results = await asyncio.gather(*[
             self._query_single_angle(angle_text, metadata_filter)
-            for _, angle_text, metadata_filter in query_specs
+            for _, _, angle_text, metadata_filter in query_specs
         ])
         ranked_query_results = [
-            (query_specs[index][0], hits)
+            (query_specs[index][0], query_specs[index][1], hits)
             for index, hits in enumerate(query_results)
         ]
 
         # Raw Hits Telemetry
         print("\n    [RAG TELEMETRY] --- Raw ChromaDB Hits per Angle ---")
-        for query_name, hits in ranked_query_results:
-            print(f"      > {query_name} Hits:")
+        for group_id, angle_name, hits in ranked_query_results:
+            print(f"      > {group_id} / {angle_name} Hits:")
             if not hits:
                 print("        None")
             for rank, hit in enumerate(hits):
                 print(f"        Rank {rank+1}: Parent '{hit['parent_id']}' | Cosine Sim: {hit['score']:.4f}")
 
-        # 2. Pass 1: The Direct Hit Bypass
-        direct_hits = set()
-        for _, hit_list in ranked_query_results:
-            for hit in hit_list:
-                if hit["score"] >= DIRECT_HIT_THRESHOLD:
-                    direct_hits.add(hit["parent_id"])
-        
-        if direct_hits:
-            print(f"\n    🎯 Direct Hit Bypass Activated! Found {len(direct_hits)} exact matches (> {DIRECT_HIT_THRESHOLD}).")
-            execution_time = (time.time() - start_time) * 1000
-            payload = self._hydrate_parents_from_sqlite(list(direct_hits)[:MAX_PARENTS])
-            print(f" ⏱️  [RAG ENGINE] Total Execution Time: {execution_time:.2f} ms")
-            print("═"*60 + "\n")
-            return payload
-
-        # 3. Pass 2 & 3: Parent-Centric Reciprocal Rank Fusion
-        print("\n    [RAG TELEMETRY] --- Reciprocal Rank Fusion (RRF) Point Accumulation ---")
-        rrf_scores = {}
-        
-        # Calculate RRF per query angle
-        for angle_name, hit_list in ranked_query_results:
+        # 2. Group RRF: fuse the three angle rankings within each group.
+        print("\n    [RAG TELEMETRY] --- Group-Level RRF Point Accumulation ---")
+        group_rrf_scores: Dict[str, Dict[str, float]] = {}
+        for group_id, angle_name, hit_list in ranked_query_results:
+            group_scores = group_rrf_scores.setdefault(group_id, {})
             seen_in_this_query = set()
             for rank, hit in enumerate(hit_list):
                 pid = hit["parent_id"]
                 if pid not in seen_in_this_query:
                     seen_in_this_query.add(pid)
-                    # Standard RRF Formula
                     rrf_points = 1.0 / (RRF_K_CONSTANT + (rank + 1))
-                    rrf_scores[pid] = rrf_scores.get(pid, 0.0) + rrf_points
-                    print(f"      + {rrf_points:.4f} pts to '{pid}' (from {angle_name} Rank {rank+1})")
+                    group_scores[pid] = group_scores.get(pid, 0.0) + rrf_points
+                    print(f"      + {rrf_points:.4f} pts to '{pid}' (from {group_id} / {angle_name} Rank {rank+1})")
 
-        # Sort by total score
-        sorted_parents = sorted(rrf_scores.items(), key=lambda item: item[1], reverse=True)
+        # 3. Task RRF: angle groups have equal normalised influence.  This
+        # prevents score inflation when feedback adds more semantic groups.
+        print("\n    [RAG TELEMETRY] --- Equal-Normalised Task RRF ---")
+        task_rrf_scores: Dict[str, float] = {}
+        group_count = len(angle_groups)
+        group_weight = 1.0 / group_count if group_count else 0.0
+        for group_id, group_scores in group_rrf_scores.items():
+            for pid, group_score in group_scores.items():
+                contribution = group_score * group_weight
+                task_rrf_scores[pid] = task_rrf_scores.get(pid, 0.0) + contribution
+                print(f"      + {contribution:.4f} task pts to '{pid}' ({group_id} group score {group_score:.4f} × {group_weight:.3f})")
+
+        sorted_parents = sorted(task_rrf_scores.items(), key=lambda item: item[1], reverse=True)
         
         if not sorted_parents:
             print("    ⚠️ No results returned from ChromaDB.")
@@ -208,10 +237,10 @@ class RAGEngine:
             print("═"*60 + "\n")
             return []
 
-        # The 50% Drop-Off Rule Calculation
+        # 4. The task-level 50% Drop-Off Rule Calculation
         print("\n    [RAG TELEMETRY] --- Final RRF Standings & Drop-Off Selection ---")
-        print(f"      Formula: Score = sum(1 / ({RRF_K_CONSTANT} + Rank))")
-        print(f"      Rule: Drop candidates if Score drops by >= 50% compared to previous rank.")
+        print(f"      Formula: Score = average(group sum(1 / ({RRF_K_CONSTANT} + Rank)))")
+        print("      Rule: stop when a score is less than 50% of the prior selected score.")
         print(f"      Limit: Max {MAX_PARENTS} parents.")
         print("      " + "-" * 50)
         
@@ -247,7 +276,7 @@ class RAGEngine:
                 selected_parent_ids.append(current_id)
                 previous_score = current_score
 
-        # 4. Hydrate & Return
+        # 5. Hydrate & Return
         print(f"\n    📊 RRF Engine finalized {len(selected_parent_ids)} Parent(s) for LLM Hydration: {selected_parent_ids}")
         payload = self._hydrate_parents_from_sqlite(selected_parent_ids)
         

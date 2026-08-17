@@ -63,9 +63,72 @@ def _normalized_product_tags(product_value: Any) -> list[str]:
     return tags
 
 
+_ANGLE_FIELDS = ("procedural", "policy", "conceptual")
+
+
+def _normalize_angle_groups(task: dict) -> list[dict]:
+    """Return V2.5 angle groups, accepting legacy flat task fields.
+
+    Every group is a complete alternative semantic representation.  Terms are
+    never concatenated into an existing angle because that would dilute vector
+    similarity and blur the evidence represented by an RRF rank list.
+    """
+    groups = []
+    seen_ids = set()
+    for index, raw_group in enumerate(task.get("angle_groups", []) or [], start=1):
+        if not isinstance(raw_group, dict):
+            continue
+        group_id = str(raw_group.get("group_id", "")).strip() or f"group_{index}"
+        if group_id in seen_ids:
+            continue
+        group = {
+            "group_id": group_id,
+            **{field: str(raw_group.get(field, "")).strip() for field in _ANGLE_FIELDS},
+        }
+        if any(group[field] for field in _ANGLE_FIELDS):
+            groups.append(group)
+            seen_ids.add(group_id)
+
+    if groups:
+        return groups
+    legacy = {
+        "group_id": "base",
+        **{field: str(task.get(field, "")).strip() for field in _ANGLE_FIELDS},
+    }
+    return [legacy] if any(legacy[field] for field in _ANGLE_FIELDS) else []
+
+
+def _valid_product_intent_scope_pairs(task: dict) -> list[dict]:
+    """Build valid metadata pair scopes without creating a cross-product.
+
+    The RAG engine uses these pairs as one shared Chroma filter for every
+    angle group.  They are constraints, not independent retrieval branches.
+    """
+    products = _normalized_product_tags(task.get("target_commercial_product"))
+    raw_intents = task.get("target_intent", [])
+    raw_intents = [raw_intents] if isinstance(raw_intents, str) else raw_intents
+    intents = []
+    for raw_intent in raw_intents:
+        intent = str(raw_intent).strip()
+        if intent and intent not in intents:
+            intents.append(intent)
+
+    return [
+        {
+            "product": product,
+            "intents": [intent for intent in intents if intent in PRODUCT_INTENT_MATRIX[product]],
+        }
+        for product in products
+        if any(intent in PRODUCT_INTENT_MATRIX[product] for intent in intents)
+    ]
+
+
 def _normalize_search_task_scope(task: dict) -> dict | None:
     """Validate an LLM task's product and intent filters before retrieval."""
     normalized = dict(task)
+    angle_groups = _normalize_angle_groups(normalized)
+    if not angle_groups:
+        return None
     product_tags = _normalized_product_tags(normalized.get("target_commercial_product"))
     intents = normalized.get("target_intent", [])
     if isinstance(intents, str):
@@ -93,6 +156,12 @@ def _normalize_search_task_scope(task: dict) -> dict | None:
 
     normalized["target_commercial_product"] = product_tags[0] if len(product_tags) == 1 else product_tags
     normalized["target_intent"] = intent_tags
+    normalized["angle_groups"] = angle_groups
+    # Keep the base flat fields during the migration for log readers and any
+    # historical code paths, but retrieval reads angle_groups exclusively.
+    base_group = angle_groups[0]
+    for field in _ANGLE_FIELDS:
+        normalized[field] = base_group[field]
     return normalized
 
 
@@ -101,7 +170,7 @@ def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int])
     stages = {
         2: {
             "stage": "ANGLE_EXPANSION",
-            "instruction": "Keep the exact product and intent filters. Retain every prior angle term and add missing procedural, policy, or conceptual terms from the sufficiency feedback.",
+            "instruction": "Keep the exact product and intent filters. Preserve every existing angle group unchanged and append one complete new angle group that targets the missing detail in the sufficiency feedback.",
         },
         3: {
             "stage": "INTENT_EXPANSION",
@@ -121,6 +190,62 @@ def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int])
             **stages.get(next_attempt, stages[4]),
         })
     return plan
+
+
+def _merge_retry_task(prior_task: dict, revision: dict, expansion: dict) -> dict:
+    """Deterministically preserve cumulative V2.5 retry state.
+
+    The LLM proposes a refinement, but it must never be able to erase prior
+    angle groups, products, intents, task identity, or the resolved subquery.
+    """
+    stage = expansion.get("stage", "")
+    prior_groups = _normalize_angle_groups(prior_task)
+    revision_groups = _normalize_angle_groups(revision)
+    merged = dict(prior_task)
+    merged["task_id"] = prior_task.get("task_id")
+    merged["customer_component"] = prior_task.get("customer_component", "")
+
+    if stage == "ANGLE_EXPANSION":
+        prior_ids = {group["group_id"] for group in prior_groups}
+        expected_id = f"retry_{expansion.get('next_attempt', 2)}"
+        new_group = next((group for group in revision_groups if group["group_id"] == expected_id), None)
+        if new_group is None:
+            new_group = next((group for group in revision_groups if group["group_id"] not in prior_ids), None)
+        if new_group is not None:
+            new_group = {**new_group, "group_id": expected_id}
+            merged["angle_groups"] = [*prior_groups, new_group]
+        else:
+            # Do not silently replace an established semantic representation
+            # with a malformed retry response. The following retry can still
+            # refine this task safely and the telemetry makes the omission
+            # visible.
+            merged["angle_groups"] = prior_groups
+            print(f"   ⚠️ [ANGLE EXPANSION OMITTED]: Task '{merged['task_id']}' returned no distinct retry group.")
+        merged["target_commercial_product"] = prior_task.get("target_commercial_product")
+        merged["target_intent"] = prior_task.get("target_intent", [])
+    elif stage == "INTENT_EXPANSION":
+        prior_intents = prior_task.get("target_intent", [])
+        prior_intents = [prior_intents] if isinstance(prior_intents, str) else prior_intents
+        proposed_intents = revision.get("target_intent", [])
+        proposed_intents = [proposed_intents] if isinstance(proposed_intents, str) else proposed_intents
+        merged["angle_groups"] = prior_groups
+        merged["target_commercial_product"] = prior_task.get("target_commercial_product")
+        merged["target_intent"] = list(dict.fromkeys([*prior_intents, *proposed_intents]))
+    elif stage == "PRODUCT_EXPANSION":
+        prior_products = _normalized_product_tags(prior_task.get("target_commercial_product"))
+        proposed_products = _normalized_product_tags(revision.get("target_commercial_product"))
+        prior_intents = prior_task.get("target_intent", [])
+        prior_intents = [prior_intents] if isinstance(prior_intents, str) else prior_intents
+        products = list(dict.fromkeys([*prior_products, *proposed_products]))
+        merged["angle_groups"] = prior_groups
+        merged["target_commercial_product"] = products[0] if len(products) == 1 else products
+        # Product expansion widens only the product boundary. Intent widening
+        # belongs exclusively to the preceding INTENT_EXPANSION stage.
+        merged["target_intent"] = prior_intents
+    else:
+        merged["angle_groups"] = prior_groups
+
+    return _normalize_search_task_scope(merged) or prior_task
 
 _DECLINE_CATEGORY_REASONS = {
     "non_compliant": "it requires guidance a licensed advisor should give",
@@ -724,7 +849,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        - CLARIFY: use when either mandatory foundation is missing or ambiguous, but the component could plausibly become searchable with more detail from the user. A generic process or policy word alone—such as "application", "fee", "eligibility", "limit", "rate", "requirements", or "processing time"—is an INTENT only. It does not identify a PRODUCT and MUST be CLARIFY unless a product is explicit or unambiguously inherited from permitted context. Likewise, a product name alone without a discernible request type MUST be CLARIFY.
        - DECLINE: use only when the component clearly and confidently names a specific product, account type, or service that does NOT exist anywhere in the PRODUCT/INTENT MATRIX (e.g., margin trading, cryptocurrency trading, or any product with no matrix entry at all). Never use DECLINE merely because wording is vague or underspecified — that is CLARIFY. DECLINE means no amount of user clarification would ever produce a valid matrix pair.
        A component, its wording, a substring of its wording, or a paraphrase of it MUST NOT appear under more than one resolution.
-    4. For EACH SEARCH component, formulate Three Distinct Semantic Angles based strictly on the density rules above:
+    4. For EACH SEARCH component, formulate exactly one base Angle Group with three distinct semantic angles based strictly on the density rules below. An angle group is a complete alternative semantic description; never concatenate unrelated wording into one angle:
        - "procedural": Only the action verbs and tool nouns (e.g., "Horizon App, navigation, setup MyInfo, verification process").
        - "policy": Only the rule nouns and constraints (e.g., "eligibility rules, required documents, security policy, restrictions").
        - "conceptual": Only the definition nouns (e.g., "MyInfo service, personal data sharing, Horizon Bank").
@@ -734,7 +859,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     8. Use "ALL" only when a component is genuinely universal and its Intent is a valid intent listed under "ALL" in the Product/Intent Matrix. "ALL" is not a fallback for an unknown product.
 
     Output JSON ONLY:
-    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","procedural":"...","policy":"...","conceptual":"...","target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"clarification_id":"intent_clarification_1","unresolved_request":"the fee","reason":"No product or service is identified."}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts."}}}}]}}
+    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"clarification_id":"intent_clarification_1","unresolved_request":"the fee","reason":"No product or service is identified."}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts."}}}}]}}
     {retry_context}
     """
 
@@ -770,16 +895,20 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           decide whether the task becomes unavailable after its retry limit.
         - Follow the Deterministic Expansion Plan for EACH task exactly. The
           plan's stage controls which filters may expand on this attempt.
-        - ANGLE_EXPANSION: keep the exact prior product and intent filters;
-          retain all existing angle terms and add terms that target the missing
-          detail described in the feedback.
+        - ANGLE_EXPANSION: keep the exact prior product and intent filters.
+          Return every prior angle group unchanged and append exactly one new,
+          complete angle group with group_id "retry_<next_attempt>". The new
+          group's three concise angles must target the missing detail described
+          in the feedback. Do not append terms into an existing angle.
         - INTENT_EXPANSION: keep the exact prior product filter; retain all
-          prior angle terms and intents, then add valid intent filters that can
-          improve recall of the missing detail. Do not remove prior intents.
+          prior angle groups and intents, then add valid intent filters that
+          can improve recall of the missing detail. Do not remove prior
+          intents or alter any angle group.
         - PRODUCT_EXPANSION: retain all prior angle terms, intents, and
-          product tags. Output target_commercial_product as an ordered array
-          containing the original product first plus only a clearly plausible,
-          matrix-valid related product. Never replace the original product.
+          product tags. Keep angle groups unchanged. Output
+          target_commercial_product as an ordered array containing the
+          original product first plus only a clearly plausible, matrix-valid
+          related product. Never replace the original product.
         - The revised task must remain about the same customer component as its
           supplied failed task.
         - Every revised Product/Intent pair must be valid in the matrix.
@@ -788,7 +917,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           comma-separated keywords.
 
         Output JSON ONLY:
-        {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","procedural":"...","policy":"...","conceptual":"...","target_commercial_product":"valid matrix product or ordered product array during PRODUCT_EXPANSION","target_intent":["valid matrix intent"]}},"clarification":null}}]}}
+        {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","angle_groups":[{{"group_id":"base","procedural":"unchanged","policy":"unchanged","conceptual":"unchanged"}},{{"group_id":"retry_2","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"valid matrix product or ordered product array during PRODUCT_EXPANSION","target_intent":["valid matrix intent"]}},"clarification":null}}]}}
         """
     
     try:
@@ -845,15 +974,24 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
 
     if retry_tasks:
         replacements = {task.get("task_id"): task for task in formulated_tasks if task.get("task_id") in retry_task_ids}
+        expansion_by_task_id = {
+            expansion.get("task_id"): expansion
+            for expansion in retry_expansion_plan
+        }
         search_tasks = []
         for prior_task in prior_tasks:
-            replacement = replacements.get(prior_task.get("task_id"), prior_task)
-            # Retry mode changes retrieval terms only. The original resolved
-            # sub-query remains the stable sufficiency target for its task.
-            prior_component = str(prior_task.get("customer_component", "")).strip()
-            if prior_component:
-                replacement = {**replacement, "customer_component": prior_component}
-            search_tasks.append(replacement)
+            task_id = prior_task.get("task_id")
+            replacement = replacements.get(task_id)
+            if replacement and task_id in retry_task_ids:
+                search_tasks.append(_merge_retry_task(
+                    prior_task,
+                    replacement,
+                    expansion_by_task_id.get(task_id, {}),
+                ))
+            else:
+                # Successful sibling tasks are immutable while only failed
+                # task IDs re-enter retrieval.
+                search_tasks.append(prior_task)
     else:
         search_tasks = formulated_tasks
 
@@ -999,7 +1137,7 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
     return {"active_tool_routes": routes, "rag_payload": "", "api_payload": "", "deeplink_payload": ""}
 
 async def node_03b_rag_worker(state: AgentState):
-    print("🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Tri-Angle RRF)")
+    print("🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Angle-Group RRF)")
     tasks = state.get("search_tasks", [])
     prior_results = {result.get("task_id"): result for result in state.get("task_results", [])}
     tasks_to_retrieve = [
@@ -1011,11 +1149,10 @@ async def node_03b_rag_worker(state: AgentState):
 
     engine = RAGEngine()
     async def retrieve_task(task: dict) -> dict:
-        product_tags = _normalized_product_tags(task.get("target_commercial_product", "ALL")) or ["ALL"]
+        scope_pairs = _valid_product_intent_scope_pairs(task)
         parents = await engine.execute_multi_angle_search(
             blueprint=task,
-            product_tags=product_tags,
-            intent_families=task.get("target_intent", [])
+            scope_pairs=scope_pairs,
         )
         return {"task_id": task.get("task_id"), "status": "RETRIEVED", "origin": "RAG", "parents": parents}
 

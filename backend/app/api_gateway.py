@@ -136,6 +136,13 @@ async def close_and_compact_session(payload: CloseSessionPayload):
         log_event("session.checkout", reason=payload.reason)
         result = await archive_session_history(payload, payload.reason, compact=True)
         result["session_id"] = payload.session_id
+        # Checkout is the lifecycle boundary for ephemeral LangGraph state.
+        # Durable transcript and memory summaries have already been archived
+        # above, so deleting this thread safely releases the session-scoped
+        # evidence cache and avoids unbounded in-memory checkpoint growth.
+        await app_graph.checkpointer.adelete_thread(payload.session_id)
+        result["graph_state_cleared"] = True
+        log_event("session.checkout.graph_state_cleared", session_id=payload.session_id)
         log_event("session.checkout.completed", status=result["status"])
         return result
     except Exception as error:

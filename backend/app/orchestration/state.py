@@ -39,7 +39,7 @@ class AgentState(TypedDict):
     triaged_subqueries: List[Dict[str, Any]]     # n2d-resolved components (compliance/financial-relevance screened) awaiting n2e formulation
     decline_tasks: List[Dict[str, Any]]          # Components declined for non-compliance, non-financial relevance, or unsupported product scope
 
-    # V2.5 Tri-Angle RRF Search Tasks
+    # Search Expansion v2.5 tasks: one or more complete angle groups per task
     search_tasks: List[Dict[str, Any]]           # Immutable task definitions with stable task_id values
     task_results: List[Dict[str, Any]]           # Parent-ID evidence selections and sufficiency result per task
     task_retry_counts: Dict[str, int]            # Retry count keyed by task_id

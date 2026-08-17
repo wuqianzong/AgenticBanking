@@ -13,7 +13,7 @@ The RAG architecture implements a **Hybrid Processing Paradigm** combined with a
 * **LLM compute** is provided by Groq-hosted generation models and Gemini 3.5 Flash Lite for task-level sufficiency and outbound semantic evaluation.  
 * **Vector Math & Privacy:** Localized to the M1 Mac using a local ChromaDB instance and the lightweight sentence-transformers/all-MiniLM-L6-v2 embedding model.
 
-Retrieval Metadata and Presentation Separation: Product and intent families deterministically restrict the eligible Chroma records for each task’s RAG search. RRF and direct-hit selection then rank eligible parent records. User Journey v2.0 is selected only after task-level evidence passes sufficiency evaluation and controls response presentation rather than retrieval eligibility.
+Retrieval Metadata and Presentation Separation: Product and intent families deterministically restrict the eligible Chroma records for each task’s RAG search. Angle-group RRF then ranks eligible parent records. User Journey v2.0 is selected only after task-level evidence passes sufficiency evaluation and controls response presentation rather than retrieval eligibility.
 
 ## 
 
@@ -40,7 +40,7 @@ To ensure architectural stability, a Rectification Engine (1c\_consolidate\_inte
 
 ### **2.4 Dynamic Product-Intent Map Extraction**
 
-An automated utility (4\_generate\_intent\_map.py) scans the synthesized corpus to generate a relational mapping of Products and Intents. The generated product/intent mapping informs corpus quality and the application product/intent taxonomy. At runtime, Node 02e produces up to three task-level retrieval definitions containing target\_commercial\_product and target\_intent values; these values are used as deterministic Chroma metadata filters.
+An automated utility (4\_generate\_intent\_map.py) scans the synthesized corpus to generate a relational mapping of Products and Intents. The generated product/intent mapping informs corpus quality and the application product/intent taxonomy. At runtime, Node 02e produces task-level retrieval definitions containing target\_commercial\_product and target\_intent values; these values are used as deterministic Chroma metadata filters.
 
   {
 
@@ -93,7 +93,7 @@ The RAG pipeline operates as an isolated sequence within the main conversational
 
 ### **5.1 Runtime State**
 
-search\_tasks (List\[Dict\]): Up to three independently formulated retrieval tasks. Each task contains a stable task\_id, procedural/policy/conceptual query angles, target\_commercial\_product, and target\_intent.
+search\_tasks (List\[Dict\]): Independently formulated retrieval tasks. Each task contains a stable task\_id, one or more complete procedural/policy/conceptual angle groups, target\_commercial\_product, and target\_intent.
 
 * task\_results (List\[Dict\]): Per-task retrieval and evaluation state, including CACHED, RETRIEVED, SUFFICIENT, RETRY, or CLARIFICATION\_REQUIRED status, candidate parents, approved parent IDs, and source origin.  
 * task\_retry\_counts (Dict\[str, int\]): Live-RAG insufficiency count per task ID. Cache insufficiency does not consume this count.  
@@ -102,16 +102,16 @@ search\_tasks (List\[Dict\]): Up to three independently formulated retrieval tas
 * pending\_evidence\_cache\_updates (Dict): Candidate cache promotions held until the outbound semantic gate approves the evidence and generated response.  
 * task\_resolution\_instructions (List\[Dict\]): Terminal retrieval context for unresolved tasks, including exact rejected SQLite parent records that may be used only as clarification-topic suggestions.  
 * intent\_clarification\_tasks (List\[Dict\]): User-derived request components that Node 02e cannot safely map to a valid Product/Intent retrieval task. They bypass RAG and may only support a neutral clarification.
-* raw\_retrieved\_text (str): The selected approved evidence subset used by the presentation planner, response generator, and outbound answer-groundedness check.
+* Approved evidence remains parent-ID based. The presentation planner, response generator, and outbound answer-groundedness check rehydrate only task-scoped parent IDs that Node 03c approved from the authoritative SQLite knowledge database.
 
 ### **5.2 Node 02e: Intent Formulator and Task Router**
 
 * **Function:** Task-level semantic query formulation.  
-* **Logic:** \- Decomposes a valid request into stable tasks. \- Produces procedural, policy, and conceptual angles for each task. \- When a valid request component cannot be safely mapped to a Product/Intent task, records it as an intent clarification task instead of guessing a product. \- May return searchable and intent-clarification tasks together. \- Preserves task IDs and reformulates only failed tasks during retry mode. \- Applies a four-attempt, additive recall-expansion ladder: initial precise retrieval; angle expansion; intent expansion; then multi-product expansion. Each retry retains earlier valid terms and filters rather than replacing them. \- A product-expansion task may carry an ordered product-tag array, preserving the original product first and adding only a plausible matrix-valid related product. \- Independently formulates current tasks before deterministic cache comparison. \- Compares each task by normalized product-tag set plus unordered intent-family set. Routing: \- All cache hits route directly to Node 03c for fresh sufficiency validation. \- Any cache miss routes to Node 03a. \- Intent clarification tasks bypass RAG and join the response layer with approved evidence. \- A retry always performs live RAG for the failed task; it does not reuse previously insufficient cache evidence.
+* **Logic:** \- Decomposes a valid request into stable tasks. \- Produces one complete base procedural/policy/conceptual angle group for each task. \- When a valid request component cannot be safely mapped to a Product/Intent task, records it as an intent clarification task instead of guessing a product. \- May return searchable and intent-clarification tasks together. \- Preserves task IDs and reformulates only failed tasks during retry mode. \- Applies a four-attempt, additive recall-expansion ladder: initial precise retrieval; append one complete angle group; add valid intent filters; then add valid product tags. Earlier angle groups and filters are retained rather than replaced. \- A product-expansion task may carry an ordered product-tag array, preserving the original product first and adding only a plausible matrix-valid related product. \- Independently formulates current tasks before deterministic cache comparison. \- Compares each task by normalized product-tag set plus unordered intent-family set. Routing: \- All cache hits route directly to Node 03c for fresh sufficiency validation. \- Any cache miss routes to Node 03a. \- Intent clarification tasks bypass RAG and join the response layer with approved evidence. \- A retry always performs live RAG for the failed task; it does not reuse previously insufficient cache evidence.
 
 ### **5.3 Node 03a and Node 03b: Retrieval Dispatch and Task-Level RAG**
 
-* Node 03a is deterministic. It identifies only cache-miss and retry tasks and dispatches RAG only when live retrieval is needed. Node 03b retrieves eligible tasks concurrently. For each task, it: 1\. applies the product/intent metadata filter, including the universal ALL product bucket; 2\. executes concurrent procedural, policy, and conceptual Chroma searches; when a task has multiple product tags, it fans out each angle per product before RRF so one product's top-k results cannot suppress another's candidates before fusion; 3\. applies direct-hit selection, parent-centric RRF, the 50% drop-off rule, and MAX\_PARENTS \= 4; 4\. hydrates the selected parent IDs from SQLite; 5\. returns parent records grouped by task\_id. Cached tasks bypass Node 03a and Node 03b, but their parent IDs are rehydrated from SQLite before Node 03c evaluates them again.
+* Node 03a is deterministic. It identifies only cache-miss and retry tasks and dispatches RAG only when live retrieval is needed. Node 03b retrieves eligible tasks concurrently. For each task, it: 1\. builds one shared metadata filter from matrix-valid product/intent pairs, so product and intent remain constraints rather than independent RRF branches; 2\. executes concurrent procedural, policy, and conceptual Chroma searches for every complete angle group; 3\. applies RRF inside each angle group, then combines group scores with equal normalisation at task level; 4\. applies the 50% drop-off rule and MAX\_PARENTS \= 4; 5\. hydrates the selected parent IDs from SQLite; 6\. returns parent records grouped by task\_id. There is no direct-hit bypass. Cached tasks bypass Node 03a and Node 03b, but their parent IDs are rehydrated from SQLite before Node 03c evaluates them again.
 
 ### **5.4 Node 03c: Task-Level Sufficiency Auditor and Evidence Selector**
 

@@ -27,9 +27,9 @@ The customer’s higher-level intent selects the presentation, while approved FA
 ```text
 Inbound safety
   → request triage
-  → formulate up to three task-id-labelled retrieval tasks
+  → formulate task-id-labelled retrieval tasks
   → deterministic product-and-intent evidence-cache comparison, per task
-  → database parent-ID fetch for cache hits; tri-angle RRF only for misses
+  → database parent-ID fetch for cache hits; angle-group RRF only for misses
   → batched task sufficiency and parent-ID evidence selection
   → retry only retryable tasks, up to four genuine RAG attempts per task
   → turn terminally unresolved tasks into safe clarification instructions
@@ -95,6 +95,27 @@ the sufficiency checker. An insufficient cache hit falls back to RAG without
 consuming a RAG retry. Cache entries are promoted only after the outbound
 semantic gate has approved both the evidence and the response. Cache content is
 not restored across login sessions.
+
+At logout or timeout, the gateway archives the durable transcript and memory
+summaries first, then deletes the LangGraph checkpoint thread. This releases
+ephemeral graph state, including the evidence cache, while refreshes and normal
+turns retain the active session state.
+
+### Search Expansion v2.5
+
+A task has one or more complete `angle_groups`. Each group contains procedural,
+policy, and conceptual query text; a retry adds a new group rather than
+concatenating terms into an existing vector query. Product and intent remain one
+shared, matrix-valid metadata filter across every angle group. Thus a task with
+one group runs three searches, two groups run six, and three groups run nine.
+
+RRF first fuses the three ranked lists inside each angle group. Its task score
+is the equal-normalised average of the group RRF scores, so adding a group
+improves coverage without mechanically inflating ranking scores. The engine
+then keeps the existing parent-ID selection contract: rank one is selected,
+later candidates stop at a greater-than-50% score drop from the preceding
+selected candidate, and no more than four parents are hydrated. There is no
+cosine-score direct-hit bypass.
 
 ## Presentation policy
 

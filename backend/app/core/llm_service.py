@@ -8,12 +8,12 @@ from pydantic import BaseModel, Field
 from backend.app.core.system_logger import log_event
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
-#MODEL_A_GENERATOR = "openai/gpt-oss-120b"       # Groq: Conversational Engine
-MODEL_A_GENERATOR = "gemini-3.1-flash-lite"
-MODEL_B_AUDITOR = "gemini-3.1-flash-lite"            # Google: Safety & Sufficiency Judge
-MODEL_C_PLANNER = "gemini-3.1-flash-lite"            # Google: Resolution Planner & Tool Calling Generator
+MODEL_A_GENERATOR = "openai/gpt-oss-120b"       # Groq: Conversational Engine
+#MODEL_A_GENERATOR = "gemini-3.1-flash-lite"
+MODEL_B_AUDITOR = "gemini-3.5-flash-lite"            # Google: Safety & Sufficiency Judge
+MODEL_C_PLANNER = "gemini-3.5-flash-lite"            # Google: Resolution Planner & Tool Calling Generator
 MODEL_D_PROMPT_GUARD = "meta-llama/llama-prompt-guard-2-86m"  # Groq: Cyber Security Pre-check
-MODEL_E_TRIAGE = "gemini-3.1-flash-lite"             # Google: Journey Classifier
+MODEL_E_TRIAGE = "gemini-3.5-flash-lite"             # Google: Journey Classifier
 # --------------------------------------------
 
 groq_api_key = os.environ.get("GROQ_API_KEY")
@@ -45,9 +45,17 @@ class TaskSufficiencyItem(BaseModel):
 class TaskSufficiencyEvaluation(BaseModel):
     task_results: List[TaskSufficiencyItem] = Field(description="One sufficiency result for every supplied task.")
 
-# 3. USER JOURNEY CLASSIFIER / TRIAGE (Node 02d)
+# 3. USER JOURNEY CLASSIFIER / TRIAGE (Node 02d) -> DECOMPOSITION + COMPLIANCE/RELEVANCE SCREEN
+class TriageComponentResolution(BaseModel):
+    component_id: str = Field(description="Stable identifier for one distinct component of the latest user input, e.g. component_1.")
+    customer_component: str = Field(description="A standalone, self-contained restatement of only that component, with pronouns/ellipsis resolved using conversation context.")
+    resolution: str = Field(description="Must be exactly VALID or DECLINE.")
+    decline_reason_category: str = Field(default="", description="Present only when resolution is DECLINE. Must be exactly non_compliant or non_financial, otherwise an empty string.")
+    decline_detail: str = Field(default="", description="Present only when resolution is DECLINE. A brief factual reason, otherwise an empty string.")
+
 class TriageEvaluation(BaseModel):
     triage_status: str = Field(description="Must be ESCALATION, CLARIFICATION, or VALID_REQUEST.")
+    components: List[TriageComponentResolution] = Field(default_factory=list, description="Populated only when triage_status is VALID_REQUEST: an exhaustive decomposition of the latest user input into VALID or DECLINE components.")
 
 # 4. 2D MATRIX QUERY FORMULATOR (Node 02e) -> NESTED SCHEMA
 class SearchTask(BaseModel):
@@ -63,15 +71,19 @@ class IntentClarificationTask(BaseModel):
     unresolved_request: str = Field(description="The exact ambiguous product, service, or request component from the user's wording.")
     reason: str = Field(description="A concise internal explanation of why a valid search task cannot be formed without clarification.")
 
+class DeclineTask(BaseModel):
+    reason: str = Field(description="A short, factual statement naming the product or service Horizon does not offer.")
+
 class RequestComponentResolution(BaseModel):
     component_id: str = Field(description="Stable identifier for one distinct component of the latest user input, e.g. component_1.")
     customer_component: str = Field(description="A concise faithful restatement of only that user-request component.")
-    resolution: str = Field(description="Must be exactly SEARCH or CLARIFY. Every component has exactly one resolution.")
+    resolution: str = Field(description="Must be exactly SEARCH, CLARIFY, or DECLINE. Every component has exactly one resolution.")
     search_task: SearchTask | None = Field(default=None, description="Present only when resolution is SEARCH; otherwise null.")
     clarification: IntentClarificationTask | None = Field(default=None, description="Present only when resolution is CLARIFY; otherwise null.")
+    decline: DeclineTask | None = Field(default=None, description="Present only when resolution is DECLINE; otherwise null.")
 
 class QueryFormulation(BaseModel):
-    components: List[RequestComponentResolution] = Field(description="An exhaustive, mutually exclusive partition of the actionable components in the latest user input.")
+    components: List[RequestComponentResolution] = Field(description="An exhaustive, mutually exclusive partition of the pre-decomposed components supplied by triage.")
 
 # 5. USER JOURNEY PLANNER
 class PresentationTask(BaseModel):

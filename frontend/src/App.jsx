@@ -16,7 +16,7 @@ const NODE_CAPTIONS = {
   "n2d": "Understanding what you need...",
   "n2e": "Identifying the topics to look up...",
   "n14": "Preparing the information search...",
-  "n17_rag": "Looking up relevant Horizon information...",
+  "n17_rag": "Looking up relevant information...",
   "n18": "Checking the information found...",
   "n19": "Organizing the best way to present the answer...",
   "n8": "Preparing your response...",
@@ -610,12 +610,15 @@ export default function BankingBotUI() {
     </div>
   );
 
-  const renderResponseBlock = (block, messageId, index) => {
+  const renderResponseBlock = (block, messageId, index, precisionSubstituted = false) => {
     const blockId = `${messageId}-${block.blockId || index}`;
     const expandedStep = expandedProgressSteps[blockId] ?? 1;
     return (
       <div key={blockId} className={index > 0 ? 'mt-5' : ''}>
-        <div className="mb-1.5 ml-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Horizon</div>
+        <div className="mb-1.5 ml-1 flex items-end gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <span>Horizon</span>
+          {index === 0 && precisionSubstituted && renderPrecisionBadge()}
+        </div>
         {block.type === 'text' && (
           <div className="max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white p-3.5 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
             {block.text}
@@ -783,7 +786,7 @@ export default function BankingBotUI() {
                     {msg.type === 'carousel' && renderCarousel(msg.options)}
                     {msg.type === 'chips' && renderChips(msg.options)}
                     {msg.type === 'blocks' && msg.responseBlocks?.map((block, blockIndex) =>
-                      renderResponseBlock(block, msg.id, blockIndex)
+                      renderResponseBlock(block, msg.id, blockIndex, msg.precisionSubstituted)
                     )}
                     {msg.type === 'stepper' && renderStepper(
                       msg.items,

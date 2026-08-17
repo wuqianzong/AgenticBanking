@@ -27,6 +27,8 @@ VOLATILE_STATE_RESET = {
     "safety_retry_count": 0,
     "search_feedback_history": [],
     "draft_feedback_history": [],
+    "triaged_subqueries": [],
+    "decline_tasks": [],
     "search_tasks": [],
     "task_results": [],
     "task_retry_counts": {},
@@ -119,6 +121,38 @@ def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int])
             **stages.get(next_attempt, stages[4]),
         })
     return plan
+
+_DECLINE_CATEGORY_REASONS = {
+    "non_compliant": "it requires guidance a licensed advisor should give",
+    "non_financial": "it's outside what a banking assistant can help with",
+    "out_of_scope_product": "it's not a product or service Horizon currently offers",
+}
+
+
+def _decline_message(decline_tasks: list, scope: str) -> str:
+    """Deterministic, category-aware decline sentence. No LLM involved, so
+    it cannot itself fail an audit. `scope` is "your request" for an
+    all-declined turn (node_10) or "the rest of your request" for a mixed
+    turn falling back after repeated audit failure (node_11). Falls back to
+    a generic reason when a turn mixes more than one decline category."""
+    categories = {task.get("reason_category") for task in decline_tasks if task.get("reason_category")}
+    if len(categories) == 1:
+        reason = _DECLINE_CATEGORY_REASONS.get(next(iter(categories)))
+        if reason:
+            return f"Sorry, for {scope}, I can't provide an answer — {reason}."
+    return f"Sorry, for {scope}, I can't provide an answer due to policy."
+
+
+def _append_decline_suffix(response: str, decline_tasks: list) -> str:
+    """Terminal safety net (node_11) when an LLM-drafted decline explanation
+    fails outbound audit repeatedly. The normal path lets node_04b draft the
+    decline explanation directly, so this only ever fires after that
+    attempt has already been discarded."""
+    if not decline_tasks:
+        return response
+    suffix = _decline_message(decline_tasks, "the rest of your request")
+    return f"{response}\n\n{suffix}" if response else suffix
+
 
 def fetch_placeholders_from_db(placeholders: list) -> dict:
     """Fetches exact values for a list of placeholders from the SQLite Precision_Reference_Table."""
@@ -518,50 +552,115 @@ def node_02c_inbound_semantic_gate(state: AgentState):
 
 
 def node_02d_user_journey_classifier_and_triage(state: AgentState):
-    """n2d: safety-preserving triage; UX selection happens after retrieval."""
-    print("🟢 [NODE 02d] Executing Request Triage")
+    """n2d: safety-preserving triage. Decomposes a valid request into subqueries
+    and screens each for compliance and financial relevance ONLY (no product/intent
+    matrix here — that judgment belongs to n2e, which has matrix visibility).
+    UX selection happens after retrieval."""
+    print("🟢 [NODE 02d] Executing Request Triage & Decomposition")
     user_msg = state.get("user_input", "")
     history_str = _build_conversation_context(state)
     user_baseline = _build_user_baseline_context(state)
-    
+    active_plan = state.get("active_plan", {})
+    has_active_plan = bool(active_plan.get("steps"))
+    has_retrieved_knowledge = any(
+        result.get("status") == "SUFFICIENT" and result.get("approved_parent_ids")
+        for result in state.get("task_results", [])
+    )
+    recalled_context = state.get("last_session_summary", state.get("working_context", "")).strip()
+
     prompt = f"""
     ROLE ALIGNMENT:
-    You are an impartial, read-only Horizon Bank UI routing agent. You do NOT give financial advice, and you CANNOT make product choices for the user. 
-    
+    You are an impartial, read-only Horizon Bank UI routing agent. You do NOT give financial advice, and you CANNOT make product choices for the user.
+
+    MAS COMPLIANCE CONTEXT (for screening only; never quote this to the user):
+    {MAS_REGULATIONS_CONTEXT}
+
     Recent Conversation Context: {history_str}
     User Baseline (advisory only; do not treat it as a current request): {user_baseline}
+    Current Graph Context: active_plan={has_active_plan}, retrieved_knowledge={has_retrieved_knowledge}
+    Recalled Prior-Session Context Is Available: {bool(recalled_context)}
     Latest User Input: "{user_msg}"
-    
-    TRIAGE A BANKING REQUEST.
+
+    STEP 1 — TRIAGE A BANKING REQUEST for the whole turn.
     1. ESCALATION: User explicitly demands a human agent or manager.
-    2. CLARIFICATION: The input is PURELY chitchat, greetings, or completely unrelated to banking (e.g., "Hello", "How are you", "What is the weather"). 
-    3. VALID_REQUEST: A banking question, follow-up, or request that can be answered from Horizon FAQ knowledge.
-    
+    2. CLARIFICATION: The input is PURELY chitchat, greetings, or completely unrelated to banking (e.g., "Hello", "How are you", "What is the weather").
+    3. VALID_REQUEST: Anything else — a banking-relevant question, follow-up, or request, even if part of it turns out to be non-compliant or off-topic once decomposed.
+
+    STEP 2 — ONLY when triage_status is VALID_REQUEST, decompose the LATEST USER INPUT into its distinct customer-request components. A component is one question, request, or independently answerable topic. Do not split one coherent question into artificial fragments; do not impose a numerical cap.
+    - Resolve pronouns, ellipsis, or short continuations ("yes", "that one", "proceed") into a standalone, self-contained rephrasing using the Recent Conversation Context.
+    - CONVERSATIONAL CONTINUATION: Produce ZERO components when the user is simply providing information requested in a previous step (e.g., "I have MyInfo ready", "Next", "Proceed") AND Current Graph Context confirms an active plan or retrieved knowledge exists. If recalled prior-session context is available but the current graph has neither an active plan nor retrieved knowledge, treat a continuation such as "yes, continue" as one new standalone component describing the recalled topic.
+
+    STEP 3 — For EACH component, assign a resolution:
+    - VALID: the component is financial/banking in nature AND does not, on its face, require Horizon to violate the MAS Compliance Context above.
+    - DECLINE: the component either (a) is NOT a financial/banking request at all — decline_reason_category="non_financial" — or (b) would require Horizon to violate the MAS Compliance Context, e.g. personalized investment/trading advice, helping bypass KYC/AML checks, or other prohibited conduct — decline_reason_category="non_compliant".
+
+    Do NOT judge whether Horizon offers the specific product or service — that is a separate, later step with its own matrix access. Only judge compliance and financial relevance here. When genuinely unsure whether a component is financial, prefer VALID and let the later step decide.
+
     Output JSON ONLY:
-    {{"triage_status": "ESCALATION" | "CLARIFICATION" | "VALID_REQUEST"}}
+    {{"triage_status": "ESCALATION" | "CLARIFICATION" | "VALID_REQUEST", "components": [{{"component_id":"component_1","customer_component":"increase my credit card limit","resolution":"VALID"}},{{"component_id":"component_2","customer_component":"which stock should I buy this month","resolution":"DECLINE","decline_reason_category":"non_compliant","decline_detail":"Requests personalized investment advice, prohibited under the Financial Advisers Act without a CMS license."}}]}}
     """
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
         triage_status = res.get("triage_status", "CLARIFICATION")
+        components = res.get("components", []) if isinstance(res.get("components"), list) else []
     except Exception as e:
         print(f"🚨 [NODE 02d EXCEPTION]: {e}")
         triage_status = "CLARIFICATION"
+        components = []
     if triage_status not in {"ESCALATION", "CLARIFICATION", "VALID_REQUEST"}:
         triage_status = "CLARIFICATION"
 
     print(f"   🧠 [TRIAGE STATUS]: {triage_status}")
 
-    mapped_preflight = "intent_clarification_needed" if triage_status == "CLARIFICATION" else triage_status
+    valid_subqueries = []
+    decline_tasks = []
+    if triage_status == "VALID_REQUEST":
+        for index, component in enumerate(components, start=1):
+            if not isinstance(component, dict):
+                continue
+            customer_component = str(component.get("customer_component", "")).strip()
+            if not customer_component:
+                continue
+            resolution = str(component.get("resolution", "")).strip().upper()
+            if resolution == "DECLINE":
+                reason_category = component.get("decline_reason_category", "non_compliant")
+                if reason_category not in {"non_compliant", "non_financial"}:
+                    reason_category = "non_compliant"
+                decline_tasks.append({
+                    "task_id": f"decline_triage_{index}",
+                    "subquery": customer_component,
+                    "reason_category": reason_category,
+                    "detail": str(component.get("decline_detail", "")).strip(),
+                    "source": "triage",
+                })
+            else:
+                valid_subqueries.append({
+                    "component_id": str(component.get("component_id", "")).strip() or f"component_{index}",
+                    "customer_component": customer_component,
+                })
+
+    if triage_status == "VALID_REQUEST" and components and not valid_subqueries:
+        # Every decomposed component was declined; nothing reaches the formulator.
+        mapped_preflight = "declined"
+    else:
+        mapped_preflight = "intent_clarification_needed" if triage_status == "CLARIFICATION" else triage_status
+
+    print(f"   🔎 [TRIAGE DECOMPOSITION]: {len(valid_subqueries)} valid subquery(ies) | {len(decline_tasks)} declined")
 
     return {
         "triage_status": triage_status,
-        "preflight_status": mapped_preflight, 
+        "preflight_status": mapped_preflight,
+        "triaged_subqueries": valid_subqueries,
+        "decline_tasks": decline_tasks,
     }
 
 def node_02e_intent_classifier_and_query_formulator(state: AgentState):
-    """n2e: partition a request into independent retrieval or clarification components."""
+    """n2e: formulate retrieval, clarification, or scope-decline resolutions for
+    the components n2d already decomposed and compliance/relevance-screened.
+    Owns matrix-dependent judgment only; never re-decomposes raw input."""
     print("🟢 [NODE 02e] Executing Multi-Task Query Formulator")
     user_msg = state.get("user_input", "")
+    triaged_subqueries = state.get("triaged_subqueries", [])
     active_matrix = state.get("active_product_intents", [])
     active_plan = state.get("active_plan", {})
     has_active_plan = bool(active_plan.get("steps"))
@@ -592,51 +691,50 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     retry_expansion_plan = _retry_expansion_plan(retry_tasks, state.get("task_retry_counts", {}))
     
     prompt = f"""
+    PRE-DECOMPOSED CUSTOMER COMPONENTS (from Triage; already screened for financial relevance and compliance): {triaged_subqueries}
+    This list is the complete, final partition of the customer's request. Do NOT merge, split, drop, or invent components — process every one exactly as given.
+
     PRODUCT/INTENT MATRIX (Valid Nouns and Verbs):
     {PRODUCT_INTENT_MATRIX}
-    
+
     INTENT DEFINITION GUIDELINE:
     {INTENT_GUIDELINE}
-    
+
     Active Context Matrix: {active_matrix}
     Current Graph Context: active_plan={has_active_plan}, retrieved_knowledge={has_retrieved_knowledge}
     Recalled Prior-Session Context Is Available: {bool(recalled_context)}
     Recent Conversation: {history_str}
     User Baseline (advisory only; do not treat it as a current request): {user_baseline}
-    Latest User Input: "{user_msg}"
+    Latest User Input (context only; the components above are authoritative): "{user_msg}"
     TASK: Act as a Decoupled Database Search Architect.
-    
+
     CRITICAL RULES FOR VECTOR DENSITY:
     - NEVER use conversational filler (e.g., "Provide a guide", "Explain how to", "What is").
     - NEVER use complete sentences.
     - Extract ONLY the core nouns, target verbs, and specific constraints.
     - Format each angle as a concise, comma-separated string of keywords.
-    
-    1. CONTEXTUAL INHERITANCE: Read the latest user input first. A Product or Intent may be inherited only when it is unambiguously established by the current-session trusted history, Active Context Matrix, or an active graph plan. Do not use the user baseline or prior-session recall to fill a missing Product or Intent, unless the latest input explicitly continues that recalled topic (for example, "yes, continue").
-    2. FIRST partition the actionable content of the LATEST USER INPUT into its distinct customer-request components. A component is one question, request, comparison dimension, or independently answerable topic. Do not split one coherent question into artificial fragments. Do not impose a numerical cap: return every distinct component needed to answer the input faithfully.
-    3. BEFORE assigning SEARCH or CLARIFY, evaluate EACH component for the two mandatory retrieval foundations:
+
+    1. CONTEXTUAL INHERITANCE: Read each component's customer_component text first. A Product or Intent may be inherited only when it is unambiguously established by the current-session trusted history, Active Context Matrix, or an active graph plan. Do not use the user baseline or prior-session recall to fill a missing Product or Intent, unless the component explicitly continues that recalled topic (for example, "yes, continue").
+    2. FOR EACH supplied component, evaluate the two mandatory retrieval foundations:
        - PRODUCT: a specific commercial product or valid universal scope ("ALL").
        - INTENT: a specific request type that maps to an intent in the PRODUCT/INTENT MATRIX.
-       Determine these foundations from the latest input and, only when unambiguous, the permitted current-session context in Rule 1.
-       If either PRODUCT or INTENT is missing, ambiguous, or cannot be mapped to a valid Product/Intent pair in the matrix without guessing, the component MUST be assigned to CLARIFY. Do not formulate semantic angles or a search task for that component.
-       A generic process or policy word alone—such as "application", "fee", "eligibility", "limit", "rate", "requirements", or "processing time"—is an INTENT only. It does not identify a PRODUCT and MUST be CLARIFY unless a product is explicit or unambiguously inherited from permitted context.
-       Likewise, a product name alone without a discernible request type MUST be CLARIFY.
-    4. Assign EVERY component exactly once and only once:
+       Determine these foundations from the component and, only when unambiguous, the permitted current-session context in Rule 1.
+    3. Assign EVERY component exactly one resolution:
        - SEARCH: use only when BOTH Product and Intent are available and form a valid pair in the Product/Intent Matrix.
-       - CLARIFY: use when either mandatory foundation is missing, ambiguous, or invalid.
-       A component, its wording, a substring of its wording, or a paraphrase of it MUST NOT appear in both resolutions. If you produce a SEARCH task for a component, it is resolved for this turn and MUST NOT also generate a clarification.
-    5. For EACH SEARCH component, formulate Three Distinct Semantic Angles based strictly on the density rules above:
+       - CLARIFY: use when either mandatory foundation is missing or ambiguous, but the component could plausibly become searchable with more detail from the user. A generic process or policy word alone—such as "application", "fee", "eligibility", "limit", "rate", "requirements", or "processing time"—is an INTENT only. It does not identify a PRODUCT and MUST be CLARIFY unless a product is explicit or unambiguously inherited from permitted context. Likewise, a product name alone without a discernible request type MUST be CLARIFY.
+       - DECLINE: use only when the component clearly and confidently names a specific product, account type, or service that does NOT exist anywhere in the PRODUCT/INTENT MATRIX (e.g., margin trading, cryptocurrency trading, or any product with no matrix entry at all). Never use DECLINE merely because wording is vague or underspecified — that is CLARIFY. DECLINE means no amount of user clarification would ever produce a valid matrix pair.
+       A component, its wording, a substring of its wording, or a paraphrase of it MUST NOT appear under more than one resolution.
+    4. For EACH SEARCH component, formulate Three Distinct Semantic Angles based strictly on the density rules above:
        - "procedural": Only the action verbs and tool nouns (e.g., "Horizon App, navigation, setup MyInfo, verification process").
        - "policy": Only the rule nouns and constraints (e.g., "eligibility rules, required documents, security policy, restrictions").
        - "conceptual": Only the definition nouns (e.g., "MyInfo service, personal data sharing, Horizon Bank").
-    6. For EACH SEARCH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed. In RETRY MODE preserve the supplied task_id and use its task-specific sufficiency feedback to change the search terms, product, or intent.
-    7. CONVERSATIONAL CONTINUATION: Return no components only when the user is simply providing information requested in a previous step (e.g., "I have MyInfo ready", "Next", "Proceed") AND Current Graph Context confirms that an active plan or retrieved knowledge exists. If recalled prior-session context is available but the current graph has neither an active plan nor retrieved knowledge, the user is starting a fresh graph session: for a continuation such as "yes, continue", create a SEARCH component from the recalled topic so current FAQ knowledge can be retrieved.
-    8. INTENT CLARIFICATION: For a CLARIFY component, copy only the ambiguous customer term into clarification.unresolved_request and explain internally whether Product, Intent, or both are missing or ambiguous. Do not guess a product or create a generic task merely to fill the array.
-       Recalled prior-session context and the user baseline are advisory context only: NEVER create a search task or clarification task solely because they mention an old pending issue. Use them only when the latest user input explicitly continues or refers to that topic.
-    9. Use "ALL" only when the latest request is genuinely universal and its Intent is a valid intent listed under "ALL" in the Product/Intent Matrix. "ALL" is not a fallback for an unknown product.
-    
+    5. For EACH SEARCH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed. In RETRY MODE preserve the supplied task_id and use its task-specific sufficiency feedback to change the search terms, product, or intent.
+    6. INTENT CLARIFICATION: For a CLARIFY component, copy only the ambiguous customer term into clarification.unresolved_request and explain internally whether Product, Intent, or both are missing or ambiguous. Do not guess a product or create a generic task merely to fill the array.
+    7. SCOPE DECLINE: For a DECLINE component, set decline.reason to a short, factual statement naming the product/service Horizon does not offer. Only decline when the matrix confirms no such product exists — never guess.
+    8. Use "ALL" only when a component is genuinely universal and its Intent is a valid intent listed under "ALL" in the Product/Intent Matrix. "ALL" is not a fallback for an unknown product.
+
     Output JSON ONLY:
-    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","procedural":"...","policy":"...","conceptual":"...","target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"clarification_id":"intent_clarification_1","unresolved_request":"the fee","reason":"No product or service is identified."}}}}]}}
+    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","procedural":"...","policy":"...","conceptual":"...","target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"clarification_id":"intent_clarification_1","unresolved_request":"the fee","reason":"No product or service is identified."}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts."}}}}]}}
     {retry_context}
     """
 
@@ -700,26 +798,39 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         # retries, and clarification handling retain their current contracts.
         formulated_tasks = []
         formulated_clarifications = []
-        for component in res.get("components", []) or []:
+        formulated_declines = []
+        for index, component in enumerate(res.get("components", []) or [], start=1):
             if not isinstance(component, dict):
                 continue
             resolution = str(component.get("resolution", "")).strip().upper()
+            customer_component = str(component.get("customer_component", "")).strip()
             if resolution == "SEARCH" and isinstance(component.get("search_task"), dict):
                 # `customer_component` is the formulator's already-resolved
                 # sub-query.  Preserve it on the retrieval task so every
                 # downstream stage evaluates this task's scope—not the whole
                 # customer turn—without requiring another LLM interpretation.
                 search_task = dict(component["search_task"])
-                customer_component = str(component.get("customer_component", "")).strip()
                 if customer_component:
                     search_task["customer_component"] = customer_component
                 formulated_tasks.append(search_task)
             elif resolution == "CLARIFY" and isinstance(component.get("clarification"), dict):
                 formulated_clarifications.append(component["clarification"])
+            elif resolution == "DECLINE":
+                decline = component.get("decline") if isinstance(component.get("decline"), dict) else {}
+                formulated_declines.append({
+                    "task_id": f"decline_formulator_{index}",
+                    "subquery": customer_component,
+                    "reason_category": "out_of_scope_product",
+                    "detail": str(decline.get("reason", "")).strip(),
+                    "source": "formulator",
+                })
     except Exception as e:
         print(f"🚨 [NODE 02e EXCEPTION]: {e}")
         formulated_tasks = []
         formulated_clarifications = []
+        formulated_declines = []
+
+    decline_tasks = list(state.get("decline_tasks", [])) + formulated_declines
 
     validated_tasks = []
     for task in formulated_tasks:
@@ -788,6 +899,16 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     log_event("task.formulated", task_ids=[task.get("task_id") for task in search_tasks], task_count=len(search_tasks), intent_clarification_count=len(intent_clarification_tasks), retry_mode=bool(retry_tasks))
 
     if not search_tasks:
+        if not intent_clarification_tasks and decline_tasks:
+            # Every component the formulator received resolved to DECLINE
+            # (out-of-scope product). Nothing valid remains for this turn.
+            return {
+                "preflight_status": "declined",
+                "search_tasks": [],
+                "intent_clarification_tasks": [],
+                "task_results": [],
+                "decline_tasks": decline_tasks,
+            }
         if not intent_clarification_tasks and not (active_plan.get("steps") or has_retrieved_knowledge):
             # A valid request reached the formulator but no usable structured
             # output was produced. Abstain safely instead of allowing a later
@@ -804,10 +925,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 "search_tasks": [],
                 "intent_clarification_tasks": intent_clarification_tasks,
                 "task_results": [],
+                "decline_tasks": decline_tasks,
             }
         if active_plan.get("steps") or has_retrieved_knowledge:
-            return {"preflight_status": "continue_plan", "search_tasks": []}
-        return {"preflight_status": "intent_clarification_needed", "search_tasks": []}
+            return {"preflight_status": "continue_plan", "search_tasks": [], "decline_tasks": decline_tasks}
+        return {"preflight_status": "intent_clarification_needed", "search_tasks": [], "decline_tasks": decline_tasks}
 
     # Cache routing is deliberately deterministic and happens only after the
     # formulator has independently created the current task set.  A retry must
@@ -859,6 +981,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         "active_product_intents": new_matrix,
         "active_plan": {} if not retry_tasks else active_plan,
         "completed_steps": [] if not retry_tasks else state.get("completed_steps", []),
+        "decline_tasks": decline_tasks,
     }
 
 # --- PHASE 2: BOUNDED RAG ARCHITECTURE ---
@@ -1107,6 +1230,7 @@ def node_04a_resolution_planner(state: AgentState):
             "approved_parents": parents,
         })
 
+    decline_tasks = state.get("decline_tasks", [])
     prompt = f"""
     USER JOURNEY V2.0 PRESENTATION PLANNER
     You are designing the presentation for a read-only Horizon Bank FAQ response.
@@ -1115,6 +1239,7 @@ def node_04a_resolution_planner(state: AgentState):
     User request: {state.get("user_input", "")}
     Task results: {json.dumps(planner_tasks, ensure_ascii=False)}
     Intent-level clarification tasks (unresolved user-derived components; no FAQ evidence): {json.dumps(intent_clarification_tasks, ensure_ascii=False)}
+    Declined components (out of scope for this planner; do not plan a presentation or UI slot for them — their explanation is added separately, outside any presentation type you choose here): {json.dumps(decline_tasks, ensure_ascii=False)}
 
     DEEPER PRESENTATION PRINCIPLE:
     Select the presentation that visualizes the mental model the customer needs at this moment. The customer's higher-level intent selects the experience; approved FAQ evidence limits every title, item, stage, and option within that experience.
@@ -1135,6 +1260,7 @@ def node_04a_resolution_planner(state: AgentState):
     - Do not force a visual payload: use TEXT when a list or progress flow would not improve the customer's understanding.
     - Mark unavailable tasks as UNAVAILABLE and use no evidence IDs for them.
     - Intent-level clarification tasks do not have FAQ evidence and must not be treated as answerable tasks or UI choices.
+    - Declined components do not have FAQ evidence and must not be treated as answerable tasks or UI choices; preserve the ordering of the remaining answerable tasks as if the declined components were never present.
     - Use up to two grounded `options` only when the customer needs to choose a supported next action or topic. Every option must be an object with a concise visible `label` (2-6 words) and a complete, unambiguous `message` that will be sent when clicked. Options are supplementary interaction, not a replacement for the selected presentation type. Leave options empty when the answer is complete, clarification is required, or the evidence does not support a meaningful choice.
 
     CRITICAL OUTPUT CONTRACT:
@@ -1295,6 +1421,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
         for task in state.get("intent_clarification_tasks", [])
     ]
     terminal_feedback = state.get("task_resolution_instructions", [])
+    decline_context = [
+        {"subquery": task.get("subquery", ""), "category": task.get("reason_category", "")}
+        for task in state.get("decline_tasks", [])
+        if task.get("subquery", "")
+    ]
     audit_feedback = state.get("draft_feedback_history", [])[-4:]
     prompt = f"""
     RESPONSE GENERATION V2.0
@@ -1302,11 +1433,12 @@ def _generate_response_blocks(state: AgentState) -> dict:
     coherent customer turn as several ordered response blocks. Each block will
     render as a separate Horizon message, but they remain one response.
 
-    Customer request: {state.get('user_input', '')}
     Planned response blocks and their approved evidence: {json.dumps(block_inputs, ensure_ascii=False)}
     Intent clarification tasks: {json.dumps(intent_clarifications, ensure_ascii=False)}
     Terminal retrieval feedback: {json.dumps(terminal_feedback, ensure_ascii=False)}
-    Failed outbound-audit feedback from the prior generation attempt:
+    Decline Inputs (the ONLY source for a declined-topic explanation): {json.dumps(decline_context, ensure_ascii=False)}
+    Failed outbound-audit feedback from the prior generation attempt
+    (internal constraints only; never an evidence source):
     {json.dumps(audit_feedback, ensure_ascii=False)}
 
     Rules:
@@ -1317,12 +1449,29 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - Every factual claim, instruction, comparison, UI item, extended_text
       item, and option must be supported by the current block's approved
       parents. If a fact is not present in that block's evidence, omit it.
+    - Approved knowledge may contain information that is only partially related
+      to the customer's resolved subquery. Use only the part that directly
+      answers or materially helps answer that subquery. Do not include related
+      background information merely because it appears in approved knowledge.
+      State the direct answer to the resolved subquery first, before any
+      additional detail, list, qualification, or extended text.
+      If the evidence answers only part of the subquery, state that supported
+      part clearly without implying the remaining part is confirmed.
     - Return exactly one generated block for every supplied planned task_id, in
-      the same order. Never omit an answerable task.
+      the same order. Never omit an answerable task, including when Failed
+      outbound-audit feedback flags that task's prior content: rewrite its
+      answer using only the safe, grounded portion of its approved parents
+      that avoids the flagged issue, rather than dropping the block. If no
+      safe factual content remains for that task, state briefly and plainly
+      only what its approved parents establish. Never infer that a service is
+      unavailable, and never add a support channel, escalation path, or other
+      next action unless it is explicitly in those approved parents — never
+      leave a planned task_id out of the returned blocks.
     - Use only that block's approved parents for its answer, UI details,
       extended_text, and options. Do not mix facts between task IDs.
-    - TEXT: put the complete answer in answer. LIST: provide 3-8 independent
-      list_items and an optional short answer introduction, plus a concise
+    - TEXT: put the complete answer in answer. LIST: provide only the number
+      of independent list_items needed to answer the subquery, plus an
+      optional short answer introduction and a concise
       list_title. PROGRESS: create the complete progress payload yourself:
       a concise progress_title and 2+ ordered progress_steps. Each
       progress_steps entry must be exactly {{"title":"short navigation label",
@@ -1335,8 +1484,30 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - Use options only when they are meaningful, grounded next actions for that
       same block. Do not provide options if clarification is needed.
     - Combine all unresolved components into one natural clarification field at
-      the end. Explicitly name each unresolved customer term; do not invent a
-      product or fact. Clarification is plain text, not a UI block.
+      the end, sourced ONLY from Intent clarification tasks, Terminal
+      retrieval feedback, and Decline Inputs above. Explicitly name each
+      unresolved customer term; do not invent a product or fact. Never
+      introduce, reference, or apologize for any topic, product, or request
+      component that is not listed in those three inputs — routing has
+      already handled it separately. If all three inputs are empty, leave
+      clarification as an empty string. Clarification is plain text, not a
+      UI block.
+    - EVERY entry across Intent clarification tasks, Terminal retrieval
+      feedback, and Decline Inputs MUST appear in the clarification — never
+      silently drop one to resolve a different entry's audit feedback. If
+      Failed outbound-audit feedback flags one entry, correct only that
+      entry (falling back to a brief, unembellished mention grounded only in
+      its own listed fields if nothing more specific can be safely stated);
+      every other entry must still be included exactly as before.
+    - For EVERY entry in Decline Inputs, add one brief, polite sentence naming
+      only that entry's subquery — never omit one, never invent a reason
+      beyond its category. For category "non_compliant", state plainly that
+      you are unable to help with that specific request and, if natural,
+      suggest speaking with an advisor for that kind of need; never explain
+      the specific regulation, never provide the advice or action being
+      declined. For category "non_financial", state plainly that the topic
+      is outside what a banking assistant can help with. Never ask a
+      clarification question about a declined entry.
     - SOURCE-NEUTRAL CONVERSATION: FAQ records, policies, documents, database
       entries, search results, and retrieved knowledge are internal evidence.
       Never mention them, parent IDs, model names, or retrieval mechanics.
@@ -1344,9 +1515,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - ZERO HALLUCINATION: do not add facts, procedures, rates, requirements, or
       advice beyond the approved evidence. Preserve exact {{placeholders}}.
     - If failed outbound-audit feedback is supplied, correct every identified
-      issue. Treat it as a rewrite constraint, never as banking evidence. Do
-      not repeat an unsupported claim merely because it appeared in an earlier
-      response, conversation context, or memory.
+      issue. Grounding-violation records identify content to remove and a
+      missing-evidence boundary only: neither unsupported_content nor
+      evidence_gap is banking evidence or permission to add a remedy. Do not
+      invent a support channel, product, service capability, escalation path,
+      or next action from audit feedback. Do not repeat an unsupported claim
+      merely because it appeared in an earlier response, conversation context,
+      or memory.
 
     Output JSON only:
     {{"blocks":[{{"task_id":"task_1","answer":"...","progress_title":"...","progress_steps":[{{"title":"...","detail":"..."}}],"list_title":"...","list_items":["..."],"extended_text":"...","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"..."}}
@@ -1383,7 +1558,12 @@ def _generate_response_blocks(state: AgentState) -> dict:
         elif block_type == "LIST" and len(list_items) >= 3:
             ui_type = "checklist"
         elif not answer:
-            answer = "Could you please clarify your request?"
+            # A generic apology is grounded by definition; a clarification-
+            # shaped placeholder would instead be judged against the
+            # "must identify its unresolved term" rule and fail, even though
+            # nothing is actually ambiguous here — the model just omitted an
+            # answerable task's content.
+            answer = "Sorry, I don't have a complete answer for this part of your request right now."
         if ui_type == "stepper":
             items = [
                 {"number": position, "label": step["title"], "detail": step["detail"], "status": "current" if position == 1 else "upcoming"}
@@ -1416,13 +1596,19 @@ def _generate_response_blocks(state: AgentState) -> dict:
         if record:
             record_parts.append(record)
     clarification = str(generated.get("clarification", "")).strip()
-    if (intent_clarifications or terminal_feedback) and not clarification:
+    if (intent_clarifications or terminal_feedback or decline_context) and not clarification:
         unresolved = ", ".join(item.get("unresolved_request", "") for item in intent_clarifications if item.get("unresolved_request", ""))
-        clarification = f"Could you clarify what you mean by {unresolved}?" if unresolved else "Could you clarify what information you are looking for?"
+        if unresolved:
+            clarification = f"Could you clarify what you mean by {unresolved}?"
+        elif intent_clarifications or terminal_feedback:
+            clarification = "Could you clarify what information you are looking for?"
+        else:
+            clarification = ""
+        clarification = _append_decline_suffix(clarification, state.get("decline_tasks", [])).strip()
     if clarification:
         response_blocks.append({"blockId": "clarification", "type": "clarification", "text": clarification})
         record_parts.append(clarification)
-    draft = "\n\n".join(record_parts) or "Could you please clarify your request?"
+    draft = "\n\n".join(record_parts) or "Sorry, I don't have an answer for that right now."
     print(f"   💬 [RESPONSE BLOCKS GENERATED]: {len(response_blocks)} blocks")
     return {
         "final_draft": draft,
@@ -1431,6 +1617,69 @@ def _generate_response_blocks(state: AgentState) -> dict:
         "active_plan": {},
         "completed_steps": [],
         "ui_action_payload": {"uiType": "blocks", "responseBlocks": response_blocks, "options": []},
+        "pending_advance": False,
+    }
+
+
+def _latest_assistant_message(state: AgentState) -> str:
+    """Return one trusted prior assistant turn for conversational tone only."""
+    for message in reversed(state.get("chat_history", [])):
+        if isinstance(message, AIMessage) and str(message.content).strip():
+            return str(message.content).strip()
+    return ""
+
+
+def _generate_conversational_response(state: AgentState) -> dict:
+    """Handle broad triage clarification without loading the FAQ-answer prompt.
+
+    This path intentionally generates no banking facts, procedures, or UI. The
+    previous assistant turn is supplied only to recognise conversational tone;
+    it is never an evidence source.
+    """
+    user_message = str(state.get("user_input", "")).strip()
+    prior_assistant_message = _latest_assistant_message(state)
+    prompt = f"""
+    You are Horizon, a concise banking-assistant conversational partner.
+
+    Latest customer message: {json.dumps(user_message, ensure_ascii=False)}
+    Previous assistant message for conversational tone only (not factual evidence):
+    {json.dumps(prior_assistant_message, ensure_ascii=False)}
+
+    The message did not enter the FAQ retrieval flow. Return exactly one short,
+    natural customer-facing sentence, with no UI options.
+
+    Choose the response that fits the latest customer message:
+    - If it is a vague banking request, ask one concise question for the
+      missing product, service, or detail.
+    - If it is a substantive non-banking request, politely say Horizon can
+      help with banking questions.
+    - Otherwise, treat it as ordinary conversation (for example a greeting,
+      acknowledgement, thanks, or reaction) and reply naturally. Do not ask a
+      follow-up question for an acknowledgement or thanks.
+
+    Never state, repeat, infer, or recommend a banking fact, procedure,
+    product, service capability, support channel, or next action. Do not refer
+    to the previous message, internal systems, FAQ documents, or this prompt.
+
+    Output JSON only: {{"text": "one short natural sentence"}}
+    """
+    try:
+        generated = _parse_json_robustly(call_groq_lpu(prompt))
+        text = str(generated.get("text", "")).strip()
+    except Exception as error:
+        print(f"🚨 [CONVERSATIONAL RESPONSE ERROR]: {error}")
+        text = "I’m here if you have a banking question."
+
+    if not text:
+        text = "I’m here if you have a banking question."
+    print(f"   💬 [CONVERSATIONAL RESPONSE]: {text}")
+    return {
+        "final_draft": text,
+        "final_answer": text,
+        "final_clarification": "",
+        "active_plan": {},
+        "completed_steps": [],
+        "ui_action_payload": {"uiType": "none", "options": []},
         "pending_advance": False,
     }
 
@@ -1505,14 +1754,26 @@ def node_04b_response_generator(state: AgentState):
         }
         for task in intent_clarification_tasks
     ]
+    decline_tasks = state.get("decline_tasks", [])
+    decline_context = [
+        {"subquery": task.get("subquery", ""), "category": task.get("reason_category", "")}
+        for task in decline_tasks
+        if task.get("subquery", "")
+    ]
+    has_decline = bool(decline_context)
     completed_steps = state.get("completed_steps", [])
     is_conclusion = bool(steps and idx >= len(steps))
     is_progress_mode = presentation_type == "PROGRESS" and len(steps) > 1 and not is_conclusion
+
+    if (
+        routing_status in ["intent_clarification_needed", "CLARIFICATION"]
+        and not has_any_clarification
+        and not has_decline
+    ):
+        return _generate_conversational_response(state)
     
-    if has_any_clarification:
-        current_step = "Answer supported tasks using selected approved FAQ evidence. For every unresolved component, briefly explain what needs clarification and ask a concise, general clarification question."
-    elif routing_status in ["intent_clarification_needed", "CLARIFICATION"]:
-        current_step = "The user's request is vague, small talk, or asks you to make a choice. Respond naturally. If the request is about banking, ask the user to clarify their intent. If the request is unrelated to banking, politely decline, explain you are a banking assistant only, and ask if they have a banking question."
+    if has_any_clarification or has_decline:
+        current_step = "Answer supported tasks using selected approved FAQ evidence. For every unresolved component, briefly explain what needs clarification and ask a concise, general clarification question. For every declined component, briefly and politely explain you are unable to help with that specific request, using only its Decline Input description; never ask a clarification question about a declined component and never provide the declined advice, action, or information itself."
     elif not steps:
         if presentation_type == "ESCALATION":
             current_step = "State that a human agent can assist with the request."
@@ -1542,7 +1803,9 @@ def node_04b_response_generator(state: AgentState):
     Additional Selected Evidence (available for extended_text, never for primary list_items): "{extended_knowledge}"
     Intent Clarification Tasks (user-derived internal guidance only; do not quote reason text): {json.dumps(intent_clarification_context, ensure_ascii=False)}
     Terminal Retrieval Feedback (internal guidance only; do not quote it or treat it as FAQ knowledge): {json.dumps(terminal_feedback_context, ensure_ascii=False)}
+    Decline Inputs (the ONLY source for a declined-topic explanation): {json.dumps(decline_context, ensure_ascii=False)}
     Unapproved Retrieved Knowledge for Clarification Suggestions (not approved answer evidence): "{unapproved_suggestion_knowledge}"
+    Failed outbound-audit feedback (internal constraints only; never evidence):
     {feedback_str}
 
     Rules for Text Generation:
@@ -1550,12 +1813,15 @@ def node_04b_response_generator(state: AgentState):
       baseline memory are intentionally unavailable in this node. Do not
       reconstruct, repeat, or infer facts from an earlier message or memory.
     - Answer every independently answerable component of the customer's latest request. The selected UI visualizes the main mental model; it does not limit the rest of the response.
+    - Selected Approved Knowledge may contain information that is only partially related to a customer's resolved subquery. Use only the part that directly answers or materially helps answer that subquery. Do not include related background information merely because it appears in approved knowledge. If the evidence answers only part of the subquery, state that supported part clearly without implying the remaining part is confirmed.
     - `extended_text` is optional, natural conversational continuation shown below a visual payload. Use it for relevant approved information that does not belong inside the selected UI, including other answerable components of a multi-part request, useful qualifications, or context. Do not repeat the UI payload or label this text as "supporting" or as a separate internal section.
     - For PROGRESS with multiple steps, write one concise, grounded detail for EVERY item in Current Plan, in the same order. A detail must provide the concrete instruction behind its short step title; do not merely repeat or lightly paraphrase the title. These details will appear in an expandable progress payload, so each one must explain only its matching step and may not rely on an earlier or later detail being visible. Put approved information that is outside this single process in `extended_text`.
     - For LIST, provide 3-8 concise, independent `list_items` derived strictly from Primary LIST Evidence only. Each item must belong to the primary task named by the list title. Do not use a list for ordered instructions. Put other relevant approved material in `extended_text`; never mix it into `list_items`. Supply a brief `answer` introduction only when it improves comprehension.
     - For TEXT, group answers by presentation-plan section title when more than one task is present. Use `extended_text` only when a separate natural continuation improves readability.
     - If Comparison Request is true, begin with a direct, concise comparison conclusion that answers whether the products are the same or different using only the approved evidence. Then explain the relevant similarities and differences under clearly named product headings. Do not merely place two unrelated product summaries next to each other. Put the complete comparison in `answer`.
+    - EVERY entry across Intent Clarification Tasks, Terminal Retrieval Feedback, and Decline Inputs MUST appear in the clarification — never silently drop one to resolve a different entry's audit feedback. If CRITICAL CORRECTION NEEDED below flags one entry, correct only that entry (falling back to a brief, unembellished mention grounded only in its own listed fields if nothing more specific can be safely stated); every other entry must still be included exactly as before.
     - For every Intent Clarification Task, state what exactly needs clarification by explicitly naming its unresolved_request. Never replace it with an ambiguous reference such as "that", "it", "the request", or "the remaining part". Do not guess a product, policy, or banking fact beyond the customer's wording.
+    - For EVERY entry in Decline Inputs, add one brief, polite sentence to the clarification naming only that entry's subquery — never omit one, never invent a reason beyond its category. For category "non_compliant", state plainly that you are unable to help with that specific request and, if natural, suggest speaking with an advisor for that kind of need; never explain the specific regulation, never provide the advice or action being declined. For category "non_financial", state plainly that the topic is outside what a banking assistant can help with. Never ask a clarification question about a declined entry.
     - For a terminal retrieval feedback item, the clarification MUST begin with a brief apology/inability statement (for example, "Sorry, I couldn't find relevant FAQ details to answer that.").
     - When the user has multiple requests, explicitly name the unresolved term exactly as the user wrote it in the apology (for example, "Sorry, I couldn't find relevant FAQ details about ABGX loan."). Never use an ambiguous reference such as "that", "it", or "the remaining part" in its place.
     - You may then offer up to two potentially related FAQ topics, but ONLY when each topic is explicitly present in Unapproved Retrieved Knowledge for Clarification Suggestions. Make clear these are possible related topics, not an answer to the customer's request.
@@ -1569,6 +1835,11 @@ def node_04b_response_generator(state: AgentState):
     - Present approved facts directly and naturally as Horizon's banking guidance. When several records support one answer, synthesize them into one coherent answer instead of describing separate sources. `extended_text` is normal conversational continuation, not a source note: it may add relevant approved context but must not describe where the information came from.
     - Discuss provenance only when the customer explicitly asks about sources. In that case, refer only at a high level to "Horizon Bank's published information" and never reveal internal retrieval mechanics, FAQ records, parent IDs, model names, or database details.
     - ZERO HALLUCINATION: Rely EXCLUSIVELY on Selected Approved Knowledge for the answer. Intent clarification may rely only on the user's stated unresolved_request; terminal retrieval suggestions may additionally rely on Unapproved Retrieved Knowledge for Clarification Suggestions.
+    - If failed outbound feedback contains Grounding violations, use
+      unsupported_content only to identify text that must be removed, and use
+      evidence_gap only to understand what the approved evidence does not
+      establish. Neither field permits a new customer-facing fact, support
+      channel, escalation path, service capability, or next action.
     - If Selected Approved Knowledge is empty, do not state any specific
       product, service, policy, feature, fee, account, or historical fact.
       Produce only a concise, neutral clarification or refusal based on the
@@ -1618,14 +1889,17 @@ def node_04b_response_generator(state: AgentState):
             answer = "\n\n".join(step_details)
         elif presentation_type == "LIST" and isinstance(generated_list_items, list):
             list_items = [item.strip() for item in generated_list_items if isinstance(item, str) and item.strip()][:8]
-        if has_any_clarification and not clarification:
+        if (has_any_clarification or has_decline) and not clarification:
             unresolved_terms = [task.get("unresolved_request", "").strip() for task in intent_clarification_tasks if task.get("unresolved_request", "").strip()]
             named_terms = ", ".join(unresolved_terms)
-            clarification = (
-                f"Sorry, I need a little more detail about {named_terms}. Could you clarify what information you are looking for?"
-                if named_terms
-                else "Sorry, I couldn't find relevant FAQ details to answer that. Could you clarify what information you are looking for?"
-            )
+            fallback_parts = []
+            if named_terms:
+                fallback_parts.append(f"Sorry, I need a little more detail about {named_terms}. Could you clarify what information you are looking for?")
+            elif has_any_clarification:
+                fallback_parts.append("Sorry, I couldn't find relevant FAQ details to answer that. Could you clarify what information you are looking for?")
+            if has_decline:
+                fallback_parts.append(_append_decline_suffix("", decline_tasks).strip())
+            clarification = " ".join(fallback_parts)
         if has_terminal_retrieval_feedback and not selected_approved_knowledge:
             answer = ""
         if list_items:
@@ -1636,7 +1910,7 @@ def node_04b_response_generator(state: AgentState):
             answer_for_record = answer
         draft = "\n\n".join(part for part in [answer_for_record, clarification] if part)
         if not draft:
-            draft = "Could you please clarify your request?"
+            draft = "Sorry, I don't have an answer for that right now."
             answer = draft
             answer_for_record = draft
         print(f"   💬 [DRAFT RESPONSE]: {draft}")
@@ -1659,7 +1933,7 @@ def node_04b_response_generator(state: AgentState):
             plan = {}
             completed_steps = []
             print(f"   🧹 [STATE CLEANUP]: Wiped active plan and completed steps.")
-        elif has_any_clarification:
+        elif has_any_clarification or has_decline:
             ui_type = "none"
             options = []
         elif presentation_type == "ESCALATION":
@@ -1851,12 +2125,56 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
         {"unresolved_request": task.get("unresolved_request", "")}
         for task in state.get("intent_clarification_tasks", [])
     ]
+    decline_context = [
+        {"subquery": task.get("subquery", ""), "category": task.get("reason_category", "")}
+        for task in state.get("decline_tasks", [])
+        if task.get("subquery", "")
+    ]
     return {
         "approved_by_task": approved_by_task,
         "response_block_map": response_block_map,
         "terminal_clarifications": terminal_context,
         "intent_clarifications": intent_context,
+        "decline_inputs": decline_context,
     }
+
+
+def _normalize_grounding_violations(raw_violations: Any) -> list[dict]:
+    """Keep grounding-audit feedback structured and explicitly non-evidential.
+
+    The response generator consumes these records only as removal constraints;
+    none of their text is permitted to become a customer-facing fact or action.
+    """
+    if not isinstance(raw_violations, list):
+        return []
+
+    allowed_types = {
+        "unsupported_claim",
+        "unsupported_instruction",
+        "wrong_task_evidence",
+        "unsupported_clarification_suggestion",
+        "missing_decline_reference",
+        "task_not_answered",
+        "other",
+    }
+    normalized = []
+    for item in raw_violations:
+        if not isinstance(item, dict):
+            continue
+        unsupported_content = item.get("unsupported_content", [])
+        if isinstance(unsupported_content, str):
+            unsupported_content = [unsupported_content]
+        if not isinstance(unsupported_content, list):
+            unsupported_content = []
+        violation_type = str(item.get("violation_type", "other")).strip()
+        normalized.append({
+            "task_id": str(item.get("task_id", "")).strip(),
+            "scope": str(item.get("scope", "answer")).strip() or "answer",
+            "violation_type": violation_type if violation_type in allowed_types else "other",
+            "unsupported_content": [str(value).strip() for value in unsupported_content if str(value).strip()],
+            "evidence_gap": str(item.get("evidence_gap", "")).strip(),
+        })
+    return normalized
 
 
 def node_06_outbound_compliance_gate(state: AgentState):
@@ -1885,19 +2203,32 @@ def node_06_outbound_compliance_gate(state: AgentState):
     recommendation, return forecast, transaction execution, deceptive claim,
     or assistance to bypass security, KYC, AML/CFT, or other controls.
     Neutral factual information, safe apologies, and neutral clarification
-    requests are compliant. Every visible field in the payload is in scope.
+    requests are compliant. A polite decline of a non-compliant request is
+    compliant ONLY if it declines without itself providing the disallowed
+    advice, action, or information, and does not misstate what Horizon can
+    or cannot do beyond the Regulatory Context above. Every visible field in
+    the payload is in scope.
+
+    Assess the Customer-Facing Answer (including its UI payload) and the
+    Customer-Facing Clarification SEPARATELY, since a failure confined to
+    one can be corrected without discarding the other.
 
     Output JSON only:
-    {{"passed": true/false, "reason": "...", "rewrite_instruction": "..."}}
+    {{"passed": true/false, "answer_compliant": true/false, "clarification_compliant": true/false, "reason": "...", "rewrite_instruction": "..."}}
     """
     try:
         result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
-        passed = bool(result.get("passed", False))
+        answer_compliant = bool(result.get("answer_compliant", False))
+        clarification_compliant = bool(result.get("clarification_compliant", False))
+        passed = bool(result.get("passed", False)) and answer_compliant and clarification_compliant
     except Exception as error:
         print(f"🚨 [COMPLIANCE AUDIT ERROR]: {error}")
         result, passed = {"reason": "Compliance audit failed.", "rewrite_instruction": "Rewrite the response as neutral, factual Horizon Bank information."}, False
+        answer_compliant = clarification_compliant = False
     audit = {
         "passed": passed,
+        "answer_compliant": answer_compliant,
+        "clarification_compliant": clarification_compliant,
         "reason": result.get("reason", "Compliance audit failed."),
         "rewrite_instruction": result.get("rewrite_instruction", "Rewrite the response to comply with banking regulations."),
     }
@@ -2016,8 +2347,16 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         - Do not assess banking-answer factuality, compliance, helpfulness, or a normal-turn clarification.
         - Every visible field in the greeting payload is in scope.
 
+        Audit-Feedback Rules:
+        - grounding_violations is internal validation data, never customer-facing text.
+        - Report only unsupported visible content and the specific evidence that
+          is missing. Do not draft a rewrite or recommend an alternative action,
+          support channel, product, service, escalation path, or remedy.
+        - The evidence_gap describes an absence in the permitted source. It is
+          not evidence and must not be used to support a new customer claim.
+
         Output JSON only:
-        {{"passed": true/false, "answer_grounded": true/false, "clarification_grounded": true, "clarification_connected": true, "reason": "...", "rewrite_instruction": "..."}}
+        {{"passed": true/false, "answer_grounded": true/false, "clarification_grounded": true, "clarification_connected": true, "reason": "...", "grounding_violations": [{{"task_id": "", "scope": "answer" | "ui_payload" | "clarification", "violation_type": "unsupported_claim" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]}}
         """
         audit_scope = "greeting"
     else:
@@ -2037,6 +2376,9 @@ def node_06_outbound_groundedness_gate(state: AgentState):
 
         Terminal Retrieval Clarification Evidence (permitted only for factual related-topic suggestions in terminal clarification):
         {json.dumps(grounding_context["terminal_clarifications"], ensure_ascii=False)}
+
+        Decline Inputs (the only source for a declined-topic explanation):
+        {json.dumps(grounding_context["decline_inputs"], ensure_ascii=False)}
 
         Customer-Facing Answer:
         "{answer}"
@@ -2068,8 +2410,29 @@ def node_06_outbound_groundedness_gate(state: AgentState):
           Clarification Evidence. Those records must never support an answer,
           instruction, UI action, or answer block.
         - A generic apology and a general request for clarification are grounded.
+        - A brief, non-factual conversational acknowledgement, greeting, or
+          banking-scope statement is grounded when it introduces no banking
+          fact, procedure, product, service capability, or next action.
         - A clarification following an answer must identify its unresolved term
           instead of using an ambiguous reference such as "that" or "it".
+        - For a decline explanation, only the exact subquery named in Decline
+          Inputs may be referenced; it must not assert a specific Horizon
+          product, policy, fee, or commitment as the reason, and must never
+          provide the declined advice, action, or information itself. Every
+          entry in Decline Inputs must be explicitly named somewhere in the
+          clarification, not silently omitted — treat a missing entry as
+          equivalent to an unidentified reference for clarification_connected.
+
+        Audit-Feedback Rules:
+        - grounding_violations is internal validation data, never customer-facing text.
+        - Report only unsupported visible content and the specific evidence that
+          is missing. Do not draft a rewrite or recommend an alternative action,
+          support channel, product, service, escalation path, or remedy.
+        - The evidence_gap describes an absence in the permitted source. It is
+          not evidence and must not be used to support a new customer claim.
+        - If the approved evidence does not answer a task, record a
+          task_not_answered violation. Do not suggest how Horizon should handle
+          the task or where the customer should go next.
 
         Source-Boundary Rules:
         - Session memory, user baseline memory, chat history, rolling summaries,
@@ -2080,7 +2443,7 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         - Every visible field in the payload is in scope.
 
         Output JSON only:
-        {{"passed": true/false, "answer_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false, "reason": "...", "rewrite_instruction": "..."}}
+        {{"passed": true/false, "answer_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false, "reason": "...", "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "violation_type": "unsupported_claim" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]}}
         """
         audit_scope = "normal_response"
 
@@ -2092,8 +2455,19 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         passed = bool(result.get("passed", False)) and answer_grounded and clarification_grounded and clarification_connected
     except Exception as error:
         print(f"🚨 [GROUNDEDNESS AUDIT ERROR]: {error}")
-        result = {"reason": "Groundedness audit failed.", "rewrite_instruction": "Use only the permitted evidence sources."}
+        result = {
+            "reason": "Groundedness audit failed.",
+            "grounding_violations": [{
+                "task_id": "",
+                "scope": "answer",
+                "violation_type": "other",
+                "unsupported_content": [],
+                "evidence_gap": "The groundedness audit was unavailable; no additional customer-facing facts or actions may be added.",
+            }],
+        }
         passed = answer_grounded = clarification_grounded = clarification_connected = False
+
+    grounding_violations = _normalize_grounding_violations(result.get("grounding_violations", []))
 
     audit = {
         "passed": passed,
@@ -2101,9 +2475,15 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         "clarification_grounded": clarification_grounded,
         "clarification_connected": clarification_connected,
         "reason": result.get("reason", "Groundedness audit failed."),
-        "rewrite_instruction": result.get("rewrite_instruction", "Use only the permitted evidence sources."),
+        "grounding_violations": grounding_violations,
     }
-    log_event("outbound.groundedness.completed", scope=audit_scope, passed=passed, reason=audit["reason"])
+    log_event(
+        "outbound.groundedness.completed",
+        scope=audit_scope,
+        passed=passed,
+        reason=audit["reason"],
+        grounding_violation_count=len(grounding_violations),
+    )
     return {"outbound_groundedness_result": audit}
 
 
@@ -2115,7 +2495,13 @@ def node_06_outbound_audit_join(state: AgentState):
     compliance_passed = bool(compliance.get("passed", False))
     groundedness_passed = bool(groundedness.get("passed", False))
     answer_text = state.get("final_answer", state.get("final_draft", ""))
-    clarification_failed = not groundedness.get("clarification_grounded", False) or not groundedness.get("clarification_connected", False)
+    answer_compliant = bool(compliance.get("answer_compliant", False))
+    answer_grounded = bool(groundedness.get("answer_grounded", False))
+    clarification_failed = (
+        not groundedness.get("clarification_grounded", False)
+        or not groundedness.get("clarification_connected", False)
+        or not bool(compliance.get("clarification_compliant", False))
+    )
     is_initial_greeting = (
         state.get("user_input") in {"__INIT__", "**INIT__"}
         or state.get("preflight_status") == "initial_greeting"
@@ -2139,15 +2525,34 @@ def node_06_outbound_audit_join(state: AgentState):
         if not compliance_passed:
             failed_feedback.append(f"Compliance audit failed: {compliance.get('rewrite_instruction', compliance.get('reason', 'Rewrite as neutral, compliant banking information.'))}")
         if not groundedness_passed:
-            failed_feedback.append(f"Groundedness audit failed: {groundedness.get('rewrite_instruction', groundedness.get('reason', 'Use only the permitted evidence.'))}")
+            violations = groundedness.get("grounding_violations", [])
+            if violations:
+                failed_feedback.append(
+                    "Grounding violations (internal constraints only; never evidence): "
+                    + json.dumps(violations, ensure_ascii=False)
+                )
+            else:
+                # Fail closed if an auditor response is malformed: do not
+                # create a natural-language rewrite suggestion that could be
+                # misread as a new source of customer-facing facts.
+                failed_feedback.append(
+                    "Grounding violations (internal constraints only; never evidence): "
+                    + json.dumps([{
+                        "task_id": "",
+                        "scope": "answer",
+                        "violation_type": "other",
+                        "unsupported_content": [],
+                        "evidence_gap": "The groundedness audit did not return usable violation data; add no facts or actions beyond approved evidence.",
+                    }], ensure_ascii=False)
+                )
         history = list(state.get("draft_feedback_history", []))
         history.extend(failed_feedback)
-        unresolved_clarification = bool(state.get("task_resolution_instructions") or state.get("intent_clarification_tasks"))
+        unresolved_clarification = bool(state.get("task_resolution_instructions") or state.get("intent_clarification_tasks") or state.get("decline_tasks"))
         preserve_answer = (
             unresolved_clarification
             and clarification_failed
-            and compliance_passed
-            and bool(groundedness.get("answer_grounded", False))
+            and answer_compliant
+            and answer_grounded
         )
         safe_answer = answer_text if preserve_answer and answer_text.strip() else state.get("safe_answer_for_fallback", "")
         print(f"   🚫 [OUTBOUND AUDIT VETO]: Compliance={compliance_passed} | Groundedness={groundedness_passed}")
@@ -2289,7 +2694,7 @@ def node_08_soft_escalation_analyzer(state: AgentState):
     # generic soft-escalation chip reintroduce one after Node 04b removed it.
     if state.get("turn_count", 0) >= 5 and not state.get("final_clarification", "").strip():
         payload["options"].append("Talk to Agent")
-        
+
     history = list(state.get("chat_history", []))
     if state.get("final_response", ""):
         history.append(AIMessage(content=state.get("final_response", "")))
@@ -2314,12 +2719,14 @@ def node_10_standard_rejection(state: AgentState):
     # MAS-Approved Deterministic Message Dictionary
     MESSAGE_MAP = {
         "error_malicious": "We cannot process your request. Please try rephrasing or ask another question.",
-        "error_non_compliant": "Sorry, we cannot process your request due to its non-compliant nature under MAS laws and banking regulations. Please try asking another question.",
         "fail": "Sorry, I’m unable to respond to that right now. Please try again or rephrase your question."
     }
-    
+
     # Fetch the mapped message, default to "fail" if the code isn't explicitly defined
-    draft = MESSAGE_MAP.get(status, MESSAGE_MAP["fail"])
+    if status == "declined":
+        draft = _decline_message(state.get("decline_tasks", []), "your request")
+    else:
+        draft = MESSAGE_MAP.get(status, MESSAGE_MAP["fail"])
     
     # Append to Chat History
     history = list(state.get("chat_history", []))
@@ -2363,6 +2770,8 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
     else:
         clarification = "Sorry, I couldn't find relevant FAQ details to answer that. Could you clarify what information you are looking for?"
     response = "\n\n".join(part for part in [answer, clarification] if part)
+    response = _append_decline_suffix(response, state.get("decline_tasks", []))
+    payload = {"uiType": "none", "options": []}
     history = list(state.get("chat_history", []))
     history.append(AIMessage(content=response))
     log_event(
@@ -2376,7 +2785,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
         "final_response": response,
         "final_answer": answer,
         "final_clarification": clarification,
-        "ui_action_payload": {"uiType": "none", "options": []},
+        "ui_action_payload": payload,
         "chat_history": history,
         "pending_advance": False,
     }

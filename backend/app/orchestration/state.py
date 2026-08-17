@@ -34,7 +34,11 @@ class AgentState(TypedDict):
     api_payload: str                             # Buffer for API agent
     deeplink_payload: str                        # Buffer for Deeplink agent
     triage_status: str                           # 'ESCALATION', 'CLARIFICATION', or 'VALID_REQUEST'
-    
+
+    # Decline v2.0: Triage-Level Decomposition and Compliance/Scope Screening
+    triaged_subqueries: List[Dict[str, Any]]     # n2d-resolved components (compliance/financial-relevance screened) awaiting n2e formulation
+    decline_tasks: List[Dict[str, Any]]          # Components declined for non-compliance, non-financial relevance, or unsupported product scope
+
     # V2.5 Tri-Angle RRF Search Tasks
     search_tasks: List[Dict[str, Any]]           # Immutable task definitions with stable task_id values
     task_results: List[Dict[str, Any]]           # Parent-ID evidence selections and sufficiency result per task
@@ -48,7 +52,7 @@ class AgentState(TypedDict):
     presentation_plan: Dict[str, Any]            # Evidence-selected UI and response plan
     pending_evidence_cache_updates: Dict[str, Dict[str, Any]]  # Promote only after outbound semantic approval
     outbound_compliance_result: Dict[str, Any]    # Focused outbound MAS-compliance audit result
-    outbound_groundedness_result: Dict[str, Any]  # Focused outbound evidence-groundedness audit result
+    outbound_groundedness_result: Dict[str, Any]  # Audit result plus structured, non-evidential grounding_violations for retries
     pending_advance: bool                           # V4.1 Fix: Tracks if the current step should advance upon safety clearance
 
     # --- ISOLATED LOOP TRACKERS ---

@@ -621,6 +621,9 @@ export default function BankingBotUI() {
         </div>
         {block.type === 'text' && (
           <div className="max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white p-3.5 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+            {block.contextText && (
+              <div className="mb-2 text-slate-600">{block.contextText}</div>
+            )}
             {block.text}
           </div>
         )}

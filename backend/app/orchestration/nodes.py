@@ -1543,6 +1543,14 @@ def _build_stepper_payload(steps: list, current_step_index: int) -> dict:
 def _generate_response_blocks(state: AgentState) -> dict:
     """Generate one coherent, ordered set of independently presented response blocks."""
     block_plans = state.get("presentation_plan", {}).get("response_blocks", [])
+    task_metadata_by_id = {
+        task.get("task_id"): {
+            "resolved_subquery": task.get("subquery", task.get("customer_component", "")),
+            "customer_component": task.get("customer_component", task.get("subquery", "")),
+        }
+        for task in state.get("search_tasks", [])
+        if task.get("task_id")
+    }
     hydrated_by_task = {
         entry.get("task_id"): entry.get("approved_parents", [])
         for entry in _hydrate_response_evidence(state)
@@ -1551,7 +1559,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
     for block in block_plans:
         parents = hydrated_by_task.get(block.get("task_id"), [])
         if parents:
-            block_inputs.append({**block, "approved_parents": parents})
+            block_inputs.append({
+                **block,
+                **task_metadata_by_id.get(block.get("task_id"), {}),
+                "approved_parents": parents,
+            })
 
     intent_clarifications = [
         {"unresolved_request": task.get("unresolved_request", "")}
@@ -1566,10 +1578,15 @@ def _generate_response_blocks(state: AgentState) -> dict:
     audit_feedback = state.get("draft_feedback_history", [])[-4:]
     prompt = f"""
     RESPONSE GENERATION V2.0
-    You are Horizon, a read-only Horizon Bank FAQ assistant. Generate ONE
-    coherent customer turn as several ordered response blocks. Each block will
-    render as a separate Horizon message, but they remain one response.
+    You are Horizon, a digital customer service representative for Horizon
+    Bank. Provide helpful, natural, read-only FAQ guidance: do not perform
+    banking actions, imply account access, or introduce facts beyond approved
+    evidence. Generate ONE coherent customer turn as several ordered response
+    blocks. Each block renders separately, but together they must read as one
+    considered response to the customer's complete request — never as
+    disconnected mini-answers.
 
+    Customer's complete request: {state.get("user_input", "")}
     Planned response blocks and their approved evidence: {json.dumps(block_inputs, ensure_ascii=False)}
     Intent clarification tasks: {json.dumps(intent_clarifications, ensure_ascii=False)}
     Terminal retrieval feedback: {json.dumps(terminal_feedback, ensure_ascii=False)}
@@ -1594,6 +1611,21 @@ def _generate_response_blocks(state: AgentState) -> dict:
       additional detail, list, qualification, or extended text.
       If the evidence answers only part of the subquery, state that supported
       part clearly without implying the remaining part is confirmed.
+    - First understand the complete customer request and the ordered resolved
+      subqueries. Use that shared structure to make the response easy to
+      follow: answer related components in a logical order, use concise
+      references such as "For the card issue" only when they clarify the
+      connection, and do not repeat a greeting, apology, summary, or generic
+      conclusion inside every task block.
+    - Every block must make clear which resolved subquery it addresses. Use
+      only the customer's wording or a close, neutral paraphrase as the topic
+      anchor; never introduce another product, request, fact, or procedure.
+      For PROGRESS and LIST, make the progress_title or list_title do this
+      work. For TEXT, provide a short `context_text` that naturally connects
+      the answer to its resolved subquery, then put the direct factual answer
+      in `answer`. Vary the wording naturally instead of mechanically starting
+      every block with the same phrase.
+    - `intro_text` and `closing_text` are response-level connective text to make the turn read as one coherent answer addressing the customer's request.
     - Return exactly one generated block for every supplied planned task_id, in
       the same order. Never omit an answerable task, including when Failed
       outbound-audit feedback flags that task's prior content: rewrite its
@@ -1661,7 +1693,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
       or memory.
 
     Output JSON only:
-    {{"blocks":[{{"task_id":"task_1","answer":"...","progress_title":"...","progress_steps":[{{"title":"...","detail":"..."}}],"list_title":"...","list_items":["..."],"extended_text":"...","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"..."}}
+    {{"intro_text":"...","blocks":[{{"task_id":"task_1","context_text":"...","answer":"...","progress_title":"...","progress_steps":[{{"title":"...","detail":"..."}}],"list_title":"...","list_items":["..."],"extended_text":"...","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"closing_text":"...","clarification":"..."}}
     """
     try:
         generated = _parse_json_robustly(call_groq_lpu(prompt))
@@ -1675,9 +1707,23 @@ def _generate_response_blocks(state: AgentState) -> dict:
     }
     response_blocks = []
     record_parts = []
+    intro_text = str(generated.get("intro_text", "")).strip()
+    closing_text = str(generated.get("closing_text", "")).strip()
+    # A response-level bridge is useful only when there is more than one
+    # answerable component. This deterministic guard keeps a model from adding
+    # filler around straightforward one-topic answers.
+    if len(block_plans) > 1 and not intro_text:
+        # The response-level bridge carries no banking fact; it simply makes
+        # independently grounded blocks read as one answer when a model omits
+        # the required opening.
+        intro_text = "Here’s how to handle each part of your request."
+    if intro_text and len(block_plans) > 1:
+        response_blocks.append({"blockId": "turn_intro", "type": "text", "text": intro_text})
+        record_parts.append(intro_text)
     for index, plan in enumerate(block_plans, start=1):
         item = generated_by_task.get(plan.get("task_id"), {})
         block_type = plan.get("presentation_type", "TEXT")
+        context_text = str(item.get("context_text", "")).strip()
         answer = str(item.get("answer", "")).strip()
         extended_text = str(item.get("extended_text", item.get("supporting_text", ""))).strip()
         options = _normalize_ui_options(item.get("options", []))
@@ -1692,7 +1738,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
         ui_type = "text"
         if block_type == "PROGRESS" and len(progress_steps) >= 2:
             ui_type = "stepper"
-        elif block_type == "LIST" and len(list_items) >= 3:
+        # Preserve a grounded list even when a model returns fewer items than
+        # the planner's ideal list threshold. Converting a one- or two-item
+        # list to empty text would hide a valid answer and trigger the generic
+        # fallback apology.
+        elif block_type == "LIST" and list_items:
             ui_type = "checklist"
         elif not answer:
             # A generic apology is grounded by definition; a clarification-
@@ -1719,6 +1769,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
             "blockId": f"block_{index}",
             "taskId": plan.get("task_id"),
             "type": ui_type,
+            "contextText": context_text if ui_type == "text" else "",
             "text": answer if ui_type == "text" else "",
             "items": items,
             "options": options,
@@ -1732,6 +1783,9 @@ def _generate_response_blocks(state: AgentState) -> dict:
         })
         if record:
             record_parts.append(record)
+    if closing_text and len(block_plans) > 1:
+        response_blocks.append({"blockId": "turn_closing", "type": "text", "text": closing_text})
+        record_parts.append(closing_text)
     clarification = str(generated.get("clarification", "")).strip()
     if (intent_clarifications or terminal_feedback or decline_context) and not clarification:
         unresolved = ", ".join(item.get("unresolved_request", "") for item in intent_clarifications if item.get("unresolved_request", ""))

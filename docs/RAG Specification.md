@@ -19,11 +19,13 @@ Retrieval Metadata and Presentation Separation: Product and intent families dete
 
 ## **2\. Data Extraction & Pre-Processing Pipeline**
 
+This section distinguishes the **active runtime evidence path** from a historical tri-angle artifact. The full lineage and file ownership are maintained in [ETL History and Artifact Guide](ETL_HISTORY_AND_ARTIFACT_GUIDE.md).
+
 Raw banking data is sourced from publicly available FAQ structures (modeled on SG Trust Bank) but not exact copy for proprietary reason. The extraction process now utilizes a "Decoupled ETL approach", strictly separating raw data retrieval from the Capstone taxonomy mapping.
 
 ### **2.1 Extraction Methodology (Synchronous Scraper)**
 
-* **Tooling:** Python requests and BeautifulSoup4. Heavy headless browsers (e.g., Selenium) are strictly banned to conserve local M1 RAM.  
+* **Tooling:** `FAQ_prep_tools/extract_raw_faqs.py` uses Playwright with BeautifulSoup to crawl the Trust Bank FAQ structure.
 * **Logic:** The script parses static HTML DOM trees, isolating accordion containers (div.faq-accordion-block) to extract Question and Answer text pairs natively. The script now dynamically crawls the root FAQ homepage first to discover all available taxonomy branches before extracting the Q\&A pairs.  
 * **Sanitization:** The parser strips erratic newline characters and converts HTML list tags (\<li\>) into logical string bullet points.
 
@@ -38,9 +40,11 @@ The raw extraction output is passed through an LLM-powered Synthetic Pre-Process
 
 To ensure architectural stability, a Rectification Engine (1c\_consolidate\_intents.py) maps thousands of dynamic raw intents into 16 standardized Master Intents. This prevents vector drift and ensures that Node 03b operates on a finite, high-confidence semantic search space.
 
-### **2.4 Dynamic Product-Intent Map Extraction**
+### **2.4 Product-Intent metadata status**
 
-An automated utility (4\_generate\_intent\_map.py) scans the synthesized corpus to generate a relational mapping of Products and Intents. The generated product/intent mapping informs corpus quality and the application product/intent taxonomy. At runtime, Node 02e produces task-level retrieval definitions containing target\_commercial\_product and target\_intent values; these values are used as deterministic Chroma metadata filters.
+The numbered pipeline establishes retrieval taxonomy through `1_tag_products_clean.py`, `1b_rectify_tags.py`, and `1c_consolidate_intents.py`. At runtime, Node 02e produces task-level retrieval definitions containing target\_commercial\_product and target\_intent values; these values are used as deterministic Chroma metadata filters.
+
+`4_generate_intent_map.py` is currently stale: its expected list-of-FAQ input does not match the Product→Intent dictionary written by `1c_consolidate_intents.py`. It is not part of a valid rebuild.
 
   {
 
@@ -58,13 +62,17 @@ An automated utility (4\_generate\_intent\_map.py) scans the synthesized corpus 
 
   }
 
-## **3\. The Data Staging Layer (prepare\_chunks.py)**
+## **3\. Current data staging contract**
 
-To enforce Separation of Concerns, all complex string manipulation and LangChain splitting math is decoupled from database insertion. This script ingests the tokenized dataset and outputs a highly structured ready\_for\_ingestion.json containing two distinct, pre-computed arrays: parent\_data and child\_data. Note: The detailed logic regarding LangChain Recursive Text Splitting, Overlap Windows, Pre-Compression Context Prepending, and Multi-Intent Duplication, previously in the Ingestion section, has been migrated to this staging layer.
+The active runtime staging script is `backend/data/raw_sources/2_chunk_and_stage.py`. It reads `consolidated_horizon_faqs.json` and writes `backend/data/raw_sources/ready_for_ingestion.json` with `parent_data` and `child_data` arrays.
 
-## **4\. The Database Ingestion Engine (ingest.py)**
+Its active child records are generic parent-child retrieval hooks: a question anchor plus an intact answer or split answer fragments. Each child carries canonical Product×Intent metadata. This is the staging artifact consumed by the active database writer.
 
-The Ingestion Engine is now a strictly dedicated database writer. It reads the pre-computed arrays from ready\_for\_ingestion.json and blindly routes them to their respective local storage environments. This monolithic decoupling ensures that database connection drops do not require re-running complex chunking algorithms.
+There is also a historical tri-angle staging artifact at `backend/data/ready_for_ingestion.json`. Its `search_text` entries are precomputed procedural, policy, and conceptual phrases, but they carry stale pre-rectification metadata and are stored in a disconnected Chroma collection. It is not currently used by runtime and must be normalized before activation.
+
+## **4\. Current database ingestion engine**
+
+`backend/data/raw_sources/3_db_ingestion.py` is the current dedicated database writer. It reads `backend/data/raw_sources/ready_for_ingestion.json` and writes SQLite parents plus the active Chroma collection `backend/data/vector_store/faq_child_chunks`.
 
 ### **4.1 Parent Chunk Storage (SQLite)**
 
@@ -73,17 +81,15 @@ The Ingestion Engine is now a strictly dedicated database writer. It reads the p
 * **Schema Columns:** parent\_id (PK), product\_tags (TEXT), intent\_families (TEXT), content (TEXT).  
 * The system employs an Asymmetric Tokenization Strategy. The content column in SQLite stores the tokenized\_answer (where all financial figures, rates, and thresholds have been replaced with opaque deterministic placeholders like {{faq\_xyz\_001}}). This enables deterministic validation and substitution of approved numerical placeholders, substantially reducing numeric-hallucination risk.
 
-### **4.2 Child Chunk Generation (Faceted Indexing) & Vector Storage (ChromaDB)**
+### **4.2 Active child-vector retrieval**
 
-* ingest.py iterates over the pre-staged parent\_data array to execute bulk INSERT statements into SQLite, and iterates over the pre-staged child\_data array to execute batch embeddings into the persistent ChromaDB collection using the all-MiniLM-L6-v2 transformer.  
-* **Embedding & Storage (Data Loss Prevention):** The system utilizes 'Document-Side Optimization' via a strict 'Split First, Compress Second' order of operations. To prevent LLM 'Lost in the Middle' syndrome, massive Q+A blobs are mechanically evaluated for size before LLM processing. If the raw text is small, it proceeds to compression. If it is massive, it is split first to help preserve granular data (fees, rates) during the compression phase.  
-* **The Tri-Angle Lock and Key Mechanism:** The three concise child chunks generated during ETL strictly correspond to the Procedural, Policy, and Conceptual lenses. This strips out conversational filler, maximizes the Signal-to-Noise Ratio (SNR) in the dense vector space, and mathematically aligns with the 3-angle queries generated at runtime.  
-* **Pre-Compression Context Prepending:** For large FAQs that require LangChain recursive splitting, the system combats Semantic Orphan Fragmentation by programmatically prepending the raw FAQ Question string to the absolute front of every splintered raw Answer fragment. Crucially, this happens prior to LLM compression. The LLM is then fed this 'Question \+ Fragment' pair to generate the dense Tri-Angle chunks. This sequence helps preserve question context for split answer fragments without vector dilution.  
-* **Two-Tier Metadata Tagging:** Every Child Chunk is injected with strict tracking pointers:  
-  {"parent\_id": "acc\_open\_elig\_001", "product\_tag": \["Deposit\_Account"\], "intent\_family": \["ELIGIBILITY"\]}  
-* **Multi-Intent Duplication Protocol:** To support One-to-Many Intent Classification (e.g., an FAQ covering both 'Fees' and 'Statement queries'), the ingestion loop iterates over the intent\_families array generated by the Semantic LLM Mapper. The exact same Child Chunk is duplicated and embedded multiple times into ChromaDB—once for each intent string. This supports deterministic metadata eligibility filtering for each intent lane, regardless of which specific intent lane the Orchestrator has locked the user into.  
-* **Asymmetric Vectorization:** While SQLite stores the tokenized text, ChromaDB stores the unmasked synth\_answer (containing the actual numbers). This ensures that if a user queries a specific numerical value (e.g., "S$50"), the dense vector index retains the exact mathematical and semantic relationships necessary to achieve a high cosine similarity score. The orchestrator links the unmasked vector back to the masked SQLite payload using the parent\_id.  
-* **Token Economy / Universal 'ALL' Bucket Strategy:** FAQs that are universally applicable across the bank (e.g., "How to update contact details") are tagged with product\_tag: \["ALL"\]. This makes these chunks eligible across product filters when their intent-family metadata also matches the task.
+* The active writer embeds the staged generic `child_data` into `faq_child_chunks`; each child points to a parent through `parent_id` and carries canonical `product_tag` and `intent_family` metadata.
+* Generic children are question anchors, intact answers, or question-prepended answer fragments. Long answers are split at approximately 800 characters with 150-character overlap.
+* Children are duplicated per canonical intent lane. Product metadata is held as a list on each child and matched through the retrieval filter; the active generic writer does not create a separate vector for every product.
+* SQLite holds the tokenized parent evidence. Chroma holds unmasked retrieval text. Parent IDs bind the two stores.
+* Runtime queries are formulated in procedural, policy, and conceptual angles, but today those three queries search the same eligible generic-child collection and are fused with RRF. They do not yet search separate document-side angle metadata lanes.
+
+The historical tri-angle artifact follows a different contract: it has precomputed angle `search_text`, stale taxonomy, no explicit angle metadata, and a disconnected `horizon_faqs` collection. It is intentionally excluded from the active contract until normalized.
 
 ## 
 
@@ -111,7 +117,7 @@ search\_tasks (List\[Dict\]): Independently formulated retrieval tasks. Each tas
 
 ### **5.3 Node 03a and Node 03b: Retrieval Dispatch and Task-Level RAG**
 
-* Node 03a is deterministic. It identifies only cache-miss and retry tasks and dispatches RAG only when live retrieval is needed. Node 03b retrieves eligible tasks concurrently. For each task, it: 1\. builds one shared metadata filter from matrix-valid product/intent pairs, so product and intent remain constraints rather than independent RRF branches; 2\. executes concurrent procedural, policy, and conceptual Chroma searches for every complete angle group; 3\. applies RRF inside each angle group, then combines group scores with equal normalisation at task level; 4\. applies the 50% drop-off rule and MAX\_PARENTS \= 4; 5\. hydrates the selected parent IDs from SQLite; 6\. returns parent records grouped by task\_id. There is no direct-hit bypass. Cached tasks bypass Node 03a and Node 03b, but their parent IDs are rehydrated from SQLite before Node 03c evaluates them again.
+* Node 03a is deterministic. It identifies only cache-miss and retry tasks and dispatches RAG only when live retrieval is needed. Node 03b retrieves eligible tasks concurrently. For each task, it: 1\. builds one shared metadata filter from matrix-valid product/intent pairs, so product and intent remain constraints rather than independent RRF branches; 2\. executes concurrent procedural, policy, and conceptual **query** searches against the same eligible generic-child collection for every complete angle group; 3\. applies RRF inside each angle group, then combines group scores with equal normalisation at task level; 4\. applies the 50% drop-off rule and MAX\_PARENTS \= 4; 5\. hydrates the selected parent IDs from SQLite; 6\. returns parent records grouped by task\_id. There is no direct-hit bypass. Cached tasks bypass Node 03a and Node 03b, but their parent IDs are rehydrated from SQLite before Node 03c evaluates them again.
 
 ### **5.4 Node 03c: Task-Level Sufficiency Auditor and Evidence Selector**
 

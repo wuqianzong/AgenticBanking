@@ -6,7 +6,9 @@
 
 ## 1. Purpose and boundaries
 
-This document specifies the currently supported ETL pipeline that turns the Horizon Bank synthetic FAQ corpus into the two local stores used by RAG:
+This document specifies the **currently active generic-chunk pipeline** that turns the Horizon Bank synthetic FAQ corpus into the two local stores used by RAG. It is an operational snapshot, not the complete historical record.
+
+For the three-generation history, the historical tri-angle branch, and artifact ownership, see [ETL History and Artifact Guide](ETL_HISTORY_AND_ARTIFACT_GUIDE.md).
 
 - **SQLite** holds complete, tokenized parent FAQ records for factual generation and numerical substitution.
 - **ChromaDB** holds child retrieval vectors and their product/intent metadata for filtered semantic search.
@@ -32,8 +34,6 @@ raw_trustbank_faqs.json
                           └─ 1c_consolidate_intents.py
                              ├─ consolidated_horizon_faqs.json
                              └─ final_product_intent_map.json
-                                └─ 4_generate_intent_map.py
-                                   └─ product_intent_map.json
 
 consolidated_horizon_faqs.json
   └─ 2_chunk_and_stage.py
@@ -43,7 +43,7 @@ consolidated_horizon_faqs.json
            └─ vector_store / faq_child_chunks
 ```
 
-`ready_for_ingestion.json` is the final staged JSON file. It is the only JSON consumed by the current database writer.
+`backend/data/raw_sources/ready_for_ingestion.json` is the final staged JSON consumed by the active numbered database writer. Do not confuse it with the historical tri-angle artifact at `backend/data/ready_for_ingestion.json`.
 
 ## 3. Source and transformation stages
 
@@ -129,9 +129,9 @@ Repayment Issue     → Loan And Credit Management
 
 This step preserves multi-intent records. An FAQ may have more than one master intent.
 
-### 3.7 Runtime product-intent map
+### 3.7 Product-intent map status
 
-`4_generate_intent_map.py` reads `final_product_intent_map.json` and writes `product_intent_map.json`, a sorted product-to-intent map for reference and taxonomy inspection. It does not write either database.
+`1c_consolidate_intents.py` writes `final_product_intent_map.json` as a Product→Intent dictionary. `4_generate_intent_map.py` is stale: it expects a list of FAQ records and cannot consume that dictionary correctly. Do not run it as part of a rebuild.
 
 ### 3.8 Parent-child staging
 
@@ -214,7 +214,7 @@ Chroma:  backend/data/vector_store/ → faq_child_chunks
 For each search task it:
 
 1. builds metadata eligibility filters from valid product/intent pairs;
-2. searches all procedural, policy, and conceptual angle groups in Chroma;
+2. searches all procedural, policy, and conceptual *query* angle groups against the same eligible generic child collection in Chroma;
 3. applies group-level and task-level reciprocal-rank fusion;
 4. selects no more than four parent IDs using the 50% drop-off rule;
 5. hydrates the exact parent records from SQLite.
@@ -234,7 +234,6 @@ tokenize_precision_data.py
 1b_rectify_tags.py
 1c_consolidate_intents.py
 2_chunk_and_stage.py
-4_generate_intent_map.py
 3_db_ingestion.py
 ```
 
@@ -248,7 +247,6 @@ For a correction that starts at an already rectified record and does not change 
 rectified_horizon_faqs.json
   → 1c_consolidate_intents.py
   → 2_chunk_and_stage.py
-  → 4_generate_intent_map.py
   → 3_db_ingestion.py
 ```
 
@@ -280,7 +278,7 @@ backend/data/raw_sources/fix_taxonomy_mapping.py
 backend/data/raw_sources/extract_expanded_taxonomy.py
 ```
 
-They reference one or more retired concepts, including `domain`, `horizon_faqs`, `vector_store/chroma_db`, alternate `ready_for_ingestion.json` locations, or a tri-angle ETL layout no longer used by the live RAG engine.
+They reference historical concepts including `domain`, `horizon_faqs`, `vector_store/chroma_db`, alternate `ready_for_ingestion.json` locations, and the disconnected tri-angle staging branch. The tri-angle artifact is historical rather than absent; it must be normalized into the active schema before it can be used by runtime.
 
 They are retained for historical reference only. Do not run them against the current database.
 
@@ -292,7 +290,8 @@ They are retained for historical reference only. Do not run them against the cur
 | `mapped_trustbank_faqs.json` | curated synthetic source | synthesis/mapping stage |
 | `tokenized_horizon_faqs.json` | precision-protected source | tokenisation stage |
 | `tagged_*`, `rectified_*`, `consolidated_*` | generated taxonomy artifacts | numbered transformation stages |
-| `ready_for_ingestion.json` | final ingestion contract | `2_chunk_and_stage.py` |
+| `raw_sources/ready_for_ingestion.json` | active generic ingestion contract | `2_chunk_and_stage.py` |
+| `backend/data/ready_for_ingestion.json` | historical tri-angle staging artifact with stale taxonomy | `app/services/prepare_chunks.py` |
 | `knowledge_base.db` | generated live evidence store | `3_db_ingestion.py` plus tokenisation table creation |
 | `vector_store/` | generated live vector index | `3_db_ingestion.py` |
 

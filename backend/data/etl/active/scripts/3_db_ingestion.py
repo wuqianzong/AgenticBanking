@@ -2,35 +2,40 @@ import json
 import sqlite3
 import chromadb
 from chromadb.utils import embedding_functions
-import os
+import argparse
+from pathlib import Path
 
 # ==========================================
 # 1. DYNAMIC ABSOLUTE PATHING
 # ==========================================
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__)) 
-APP_DIR = os.path.dirname(CURRENT_DIR)                   
-BACKEND_DIR = os.path.dirname(APP_DIR)                   
+SCRIPT_DIR = Path(__file__).resolve().parent
+ACTIVE_ETL_DIR = SCRIPT_DIR.parent
+DATA_DIR = ACTIVE_ETL_DIR.parents[1]
+VECTOR_STORE_DIR = DATA_DIR / "vector_store"
 
-DATA_DIR = os.path.join(BACKEND_DIR, "data")
-RAW_SOURCES_DIR = os.path.join(DATA_DIR, "raw_sources")
-VECTOR_STORE_DIR = os.path.join(DATA_DIR, "vector_store")
-
-INPUT_FILE = os.path.join(RAW_SOURCES_DIR, "ready_for_ingestion.json")
-SQLITE_DB = os.path.join(DATA_DIR, "knowledge_base.db")
+INPUT_FILE = ACTIVE_ETL_DIR / "staging" / "active_generic_ready_for_ingestion.json"
+SQLITE_DB = DATA_DIR / "knowledge_base.db"
 CHROMA_PATH = VECTOR_STORE_DIR
 CHROMA_COLLECTION = "faq_child_chunks"
 
-def run_ingestion():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    os.makedirs(RAW_SOURCES_DIR, exist_ok=True)
-    os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
+def run_ingestion(input_file: str | Path = INPUT_FILE):
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    VECTOR_STORE_DIR.mkdir(parents=True, exist_ok=True)
 
-    print(f"[*] Loading staged data from {INPUT_FILE}...")
-    with open(INPUT_FILE, "r", encoding="utf-8") as f:
+    print(f"[*] Loading staged data from {input_file}...")
+    with Path(input_file).open("r", encoding="utf-8") as f:
         data = json.load(f)
 
     parent_data = data.get("parent_data", [])
     child_data = data.get("child_data", [])
+    if not parent_data or not child_data:
+        raise ValueError("Staged input must contain non-empty parent_data and child_data arrays.")
+    tri_angle_schema = all(
+        isinstance(child, dict)
+        and isinstance(child.get("metadata"), dict)
+        and child["metadata"].get("angle") in {"procedural", "policy", "conceptual"}
+        for child in child_data
+    )
 
     # ==========================================
     # 2. SQLITE: SURGICAL SCHEMA UPDATE & INGEST
@@ -72,7 +77,7 @@ def run_ingestion():
     # 3. CHROMADB: DROP AND INGEST
     # ==========================================
     print(f"[*] Connecting to ChromaDB -> {CHROMA_PATH}")
-    chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
+    chroma_client = chromadb.PersistentClient(path=str(CHROMA_PATH))
     emb_fn = embedding_functions.DefaultEmbeddingFunction()
     
     try:
@@ -84,7 +89,10 @@ def run_ingestion():
     collection = chroma_client.create_collection(
         name=CHROMA_COLLECTION,
         embedding_function=emb_fn,
-        metadata={"hnsw:space": "cosine"} 
+        metadata={
+            "hnsw:space": "cosine",
+            "schema_version": "tri_angle_v1" if tri_angle_schema else "generic_v1",
+        }
     )
 
     print("[*] Vectorizing and embedding Child Chunks into ChromaDB...")
@@ -107,9 +115,19 @@ def run_ingestion():
         )
 
     print("\n================================================================")
-    print("✅ RAG v2.1 DEPLOYMENT SUCCESSFUL")
+    print("✅ RAG DEPLOYMENT SUCCESSFUL")
     print("================================================================")
-    print("Databases updated. 'Domain' is formally eradicated from retrieval.")
+    print(
+        "Databases updated. Active schema: "
+        + ("tri_angle_v1" if tri_angle_schema else "generic_v1")
+    )
 
 if __name__ == "__main__":
-    run_ingestion()
+    parser = argparse.ArgumentParser(description="Ingest a validated RAG staging artifact.")
+    parser.add_argument(
+        "--input",
+        default=INPUT_FILE,
+        help="Path to a staging JSON file (defaults to the active reconciled tri-angle artifact).",
+    )
+    args = parser.parse_args()
+    run_ingestion(args.input)

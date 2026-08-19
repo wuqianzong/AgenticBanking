@@ -19,7 +19,7 @@ Retrieval Metadata and Presentation Separation: Product and intent families dete
 
 ## **2\. Data Extraction & Pre-Processing Pipeline**
 
-This section distinguishes the **active runtime evidence path** from a historical tri-angle artifact. The full lineage and file ownership are maintained in [ETL History and Artifact Guide](ETL_HISTORY_AND_ARTIFACT_GUIDE.md).
+This section distinguishes the **active runtime evidence path** from a historical tri-angle artifact. The full lineage and file ownership are maintained in [ETL History and Artifact Guide](etl/ETL_HISTORY_AND_ARTIFACT_GUIDE.md).
 
 Raw banking data is sourced from publicly available FAQ structures (modeled on SG Trust Bank) but not exact copy for proprietary reason. The extraction process now utilizes a "Decoupled ETL approach", strictly separating raw data retrieval from the Capstone taxonomy mapping.
 
@@ -64,15 +64,15 @@ The numbered pipeline establishes retrieval taxonomy through `1_tag_products_cle
 
 ## **3\. Current data staging contract**
 
-The active runtime staging script is `backend/data/raw_sources/2_chunk_and_stage.py`. It reads `consolidated_horizon_faqs.json` and writes `backend/data/raw_sources/ready_for_ingestion.json` with `parent_data` and `child_data` arrays.
+The active runtime reconciliation script is `backend/data/etl/active/scripts/6_reconcile_generic_stage.py`. It preserves historical question and question-plus-answer child text, derives canonical metadata from rectified records plus the existing intent map, and writes `backend/data/etl/active/staging/active_generic_ready_for_ingestion.json` with `parent_data` and `child_data` arrays.
 
-Its active child records are generic parent-child retrieval hooks: a question anchor plus an intact answer or split answer fragments. Each child carries canonical Product×Intent metadata. This is the staging artifact consumed by the active database writer.
+Its active child records are generic retrieval hooks: question anchors, intact question-and-answer chunks, and answer fragments for long answers. Each child carries canonical Product×Intent metadata and a `chunk_type`. This is the staging artifact consumed by the active database writer.
 
-There is also a historical tri-angle staging artifact at `backend/data/ready_for_ingestion.json`. Its `search_text` entries are precomputed procedural, policy, and conceptual phrases, but they carry stale pre-rectification metadata and are stored in a disconnected Chroma collection. It is not currently used by runtime and must be normalized before activation.
+The preserved historical generic staging artifact remains at `backend/data/etl/history/generic_chunking/artifacts/ready_for_ingestion.json`. Its child text is not modified; the active reconciliation stage normalizes its metadata into a separate output before ingestion. The tri-angle collection is retained separately as `faq_child_chunks_tri_angle_v1` for analysis.
 
 ## **4\. Current database ingestion engine**
 
-`backend/data/raw_sources/3_db_ingestion.py` is the current dedicated database writer. It reads `backend/data/raw_sources/ready_for_ingestion.json` and writes SQLite parents plus the active Chroma collection `backend/data/vector_store/faq_child_chunks`.
+`backend/data/etl/active/scripts/3_db_ingestion.py` is the current dedicated database writer. Its active invocation reads `backend/data/etl/active/staging/active_generic_ready_for_ingestion.json` and writes SQLite parents plus the active Chroma collection `backend/data/vector_store/faq_child_chunks`.
 
 ### **4.1 Parent Chunk Storage (SQLite)**
 
@@ -83,13 +83,13 @@ There is also a historical tri-angle staging artifact at `backend/data/ready_for
 
 ### **4.2 Active child-vector retrieval**
 
-* The active writer embeds the staged generic `child_data` into `faq_child_chunks`; each child points to a parent through `parent_id` and carries canonical `product_tag` and `intent_family` metadata.
-* Generic children are question anchors, intact answers, or question-prepended answer fragments. Long answers are split at approximately 800 characters with 150-character overlap.
-* Children are duplicated per canonical intent lane. Product metadata is held as a list on each child and matched through the retrieval filter; the active generic writer does not create a separate vector for every product.
+* The active writer embeds reconciled generic `child_data` into `faq_child_chunks`; each child points to a parent through `parent_id` and carries canonical `product_tag`, `intent_family`, and `chunk_type` metadata.
+* Each FAQ has a question anchor plus intact answer or answer-fragment children as required by answer length.
+* Children are duplicated per canonical intent lane. Product metadata is held as a list on each child and matched through the retrieval filter.
 * SQLite holds the tokenized parent evidence. Chroma holds unmasked retrieval text. Parent IDs bind the two stores.
-* Runtime queries are formulated in procedural, policy, and conceptual angles, but today those three queries search the same eligible generic-child collection and are fused with RRF. They do not yet search separate document-side angle metadata lanes.
+* Runtime query views are evaluated against the generic child collection. `rag_engine.py` detects the `generic_v1` schema and uses generic compatibility mode without a document-angle filter before reciprocal-rank fusion.
 
-The historical tri-angle artifact follows a different contract: it has precomputed angle `search_text`, stale taxonomy, no explicit angle metadata, and a disconnected `horizon_faqs` collection. It is intentionally excluded from the active contract until normalized.
+The preserved tri-angle collection `faq_child_chunks_tri_angle_v1` and the older disconnected `horizon_faqs` collection remain available for analysis; neither is the runtime default.
 
 ## 
 

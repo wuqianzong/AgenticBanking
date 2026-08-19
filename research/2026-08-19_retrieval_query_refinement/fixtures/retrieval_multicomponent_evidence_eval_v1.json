@@ -1,0 +1,125 @@
+[
+  {
+    "id": "loan_apply_and_qualify",
+    "customer_query": "I am considering an Instant Loan. How would I request it and what decides whether I qualify?",
+    "direct_query": "Instant Loan request process and qualification requirements including age income residency and available credit",
+    "expected_parent_id": "faq_1946c44f",
+    "scope_pairs": [{"product": "Personal_Loan", "intents": ["Features And Limits", "Eligibility"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "request an Instant Loan and check whether I qualify", "policy": "Instant Loan qualification age income residency available credit", "conceptual": "Horizon Instant Loan application and eligibility"}],
+    "expected_components": [
+      {"name": "loan request process", "acceptable_parent_ids": ["faq_1946c44f"]},
+      {"name": "loan eligibility", "acceptable_parent_ids": ["faq_0ae0bb51"]}
+    ]
+  },
+  {
+    "id": "savings_funding_and_interest", 
+    "customer_query": "How can I put money into my savings account, and when is the interest normally credited?",
+    "direct_query": "Horizon savings account funding methods and schedule for interest credits",
+    "expected_parent_id": "faq_7d49c937",
+    "scope_pairs": [{"product": "Deposit_Account", "intents": ["Payments And Transfers", "Interest And Rates"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "fund a Horizon savings account and check its interest credit date", "policy": "savings funding methods and interest crediting schedule", "conceptual": "Horizon savings account deposits and monthly interest"}],
+    "expected_components": [
+      {"name": "funding methods", "acceptable_parent_ids": ["faq_7d49c937"]},
+      {"name": "interest credit schedule", "acceptable_parent_ids": ["faq_fc5a7921"]}
+    ]
+  },
+  {
+    "id": "stock_autoinvest_setup_and_fees",
+    "customer_query": "I want to start recurring stock investments. How do I set it up and what investment charges should I expect?",
+    "direct_query": "set up recurring stock AutoInvest and understand investment transaction fees and charges",
+    "expected_parent_id": "faq_2f201863",
+    "scope_pairs": [{"product": "Stocks", "intents": ["Wealth And Insurance", "Fees And Charges"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "activate recurring stock investments and review the fees", "policy": "AutoInvest setup requirements and stock investment fee rules", "conceptual": "Horizon automated stock investing and transaction costs"}],
+    "expected_components": [
+      {"name": "AutoInvest setup", "acceptable_parent_ids": ["faq_2f201863"]},
+      {"name": "stock investment fees", "acceptable_parent_ids": ["faq_b8e22edc"]}
+    ]
+  },
+  {
+    "id": "insurance_products_and_policy_access",
+    "customer_query": "What life insurance choices are available, and where can I check the details of a policy online?",
+    "direct_query": "available Horizon life insurance products and digital access to life insurance policy details",
+    "expected_parent_id": "faq_88e75264",
+    "scope_pairs": [{"product": "Insurance", "intents": ["Wealth And Insurance"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "view life insurance product choices and access policy details online", "policy": "life insurance availability and digital policy information access", "conceptual": "Horizon life insurance products and policy portal"}],
+    "expected_components": [
+      {"name": "life insurance products", "acceptable_parent_ids": ["faq_88e75264"]},
+      {"name": "digital policy access", "acceptable_parent_ids": ["faq_598df143"]}
+    ]
+  },
+  {
+    "id": "app_download_and_horizon_key",
+    "customer_query": "Where do I get the Horizon App, and how do I configure Horizon Key after installing it?",
+    "direct_query": "obtain the Horizon App and configure Horizon Key for secure access",
+    "expected_parent_id": "faq_ec3376a6",
+    "scope_pairs": [{"product": "Horizon_APP", "intents": ["General Inquiries", "Authentication And Security"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "download Horizon App then set up Horizon Key", "policy": "Horizon App availability and Horizon Key security setup", "conceptual": "Horizon mobile banking app access and authentication"}],
+    "expected_components": [
+      {"name": "obtain application", "acceptable_parent_ids": ["faq_ec3376a6"]},
+      {"name": "Horizon Key setup", "acceptable_parent_ids": ["faq_b074c2e1"]}
+    ]
+  },
+  {
+    "id": "debit_card_activation_and_pin",
+    "customer_query": "My new debit card arrived. How do I activate it and can I change the PIN as well?",
+    "direct_query": "activate a new Horizon debit card and update its personal identification number PIN",
+    "expected_parent_id": "faq_74abafeb",
+    "scope_pairs": [{"product": "Debit_Card", "intents": ["Card Logistics"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "activate new debit card and change its PIN", "policy": "debit card activation and PIN security requirements", "conceptual": "Horizon debit card setup and PIN management"}],
+    "expected_components": [
+      {"name": "card activation", "acceptable_parent_ids": ["faq_74abafeb"]},
+      {"name": "PIN update", "acceptable_parent_ids": ["faq_6dae126c"]}
+    ]
+  },
+  {
+    "id": "credit_card_documents_and_balance_transfer_cost",
+    "customer_query": "What documents are needed for a credit card application, and what would a balance transfer cost?",
+    "direct_query": "credit card application documentation requirements and balance transfer fees and charges",
+    "expected_parent_id": "faq_85dbaadf",
+    "scope_pairs": [{"product": "Credit_Card", "intents": ["Application", "Fees And Charges", "Loan And Credit Management"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "prepare credit card application documents and review balance transfer costs", "policy": "credit card documentation requirements and balance transfer fee rules", "conceptual": "Horizon credit card application and balance transfer pricing"}],
+    "expected_components": [
+      {"name": "application documentation", "acceptable_parent_ids": ["faq_85dbaadf"]},
+      {"name": "balance transfer charges", "acceptable_parent_ids": ["faq_f7412d3a"]}
+    ]
+  },
+  {
+    "id": "rewards_link_and_email_security",
+    "customer_query": "Will my rewards membership connect to my card, and how can I tell whether a bank email is real?",
+    "direct_query": "link an existing rewards membership to Horizon card and verify whether a Horizon Bank email is authentic",
+    "expected_parent_id": "faq_da866599",
+    "scope_pairs": [
+      {"product": "Rewards_Program", "intents": ["Rewards And Promotions"]},
+      {"product": "ALL", "intents": ["Authentication And Security"]}
+    ],
+    "angle_groups": [{"group_id": "base", "procedural": "connect rewards membership and verify an email claiming to be from the bank", "policy": "rewards card linking rules and genuine bank email verification", "conceptual": "Horizon rewards membership and scam email safety"}],
+    "expected_components": [
+      {"name": "rewards membership connection", "acceptable_parent_ids": ["faq_da866599"]},
+      {"name": "email authenticity", "acceptable_parent_ids": ["faq_ed92e41d"]}
+    ]
+  },
+  {
+    "id": "life_insurance_purchase_and_age",
+    "customer_query": "How would I buy a life insurance policy, and are there age requirements before I apply?",
+    "direct_query": "purchase Horizon life insurance and understand age eligibility requirements",
+    "expected_parent_id": "faq_1d97d3a0",
+    "scope_pairs": [{"product": "Insurance", "intents": ["Wealth And Insurance"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "purchase life insurance and check age requirements", "policy": "life insurance purchase process and age eligibility rules", "conceptual": "Horizon life insurance application eligibility"}],
+    "expected_components": [
+      {"name": "policy purchase", "acceptable_parent_ids": ["faq_1d97d3a0"]},
+      {"name": "age requirement", "acceptable_parent_ids": ["faq_cd9c2a05"]}
+    ]
+  },
+  {
+    "id": "stock_multiple_plans_and_low_balance",
+    "customer_query": "Can I have more than one automatic stock plan, and what happens if my savings balance is too low on the investment date?",
+    "direct_query": "multiple automatic stock investment plans and what happens when AutoInvest savings balance is too low",
+    "expected_parent_id": "faq_9a88fadb",
+    "scope_pairs": [{"product": "Stocks", "intents": ["Wealth And Insurance", "Fees And Charges"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "create multiple AutoInvest plans and handle a low funding balance", "policy": "AutoInvest multiple plan limits and insufficient savings balance rules", "conceptual": "Horizon automatic stock investment plan management"}],
+    "expected_components": [
+      {"name": "multiple investment plans", "acceptable_parent_ids": ["faq_9a88fadb"]},
+      {"name": "low-balance AutoInvest handling", "acceptable_parent_ids": ["faq_0193ee46", "faq_d22a7a8c"]}
+    ]
+  }
+]

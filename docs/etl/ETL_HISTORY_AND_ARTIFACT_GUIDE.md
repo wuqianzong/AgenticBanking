@@ -4,6 +4,32 @@
 **Purpose:** Prevent future ETL work from mixing historical data branches, staging contracts, and vector stores.  
 **Status:** Historical reconstruction verified from source code, JSON schemas, live collection layouts, and Git history.
 
+## Repository layout after the ETL reorganisation
+
+The historical names and relationships in this guide are preserved, but their
+files now live under `backend/data/etl/` so that the active rebuild path cannot
+be mistaken for a legacy script.
+
+```text
+backend/data/etl/
+├── active/
+│   ├── scripts/                 # only supported reconciliation and ingestion scripts
+│   └── staging/                 # generated active input; never hand-edit
+├── canonical_taxonomy/
+│   ├── scripts/                 # 1, 1b, 1c Product×Intent stages
+│   └── artifacts/               # tagged, rectified, consolidated, maps
+└── history/
+    ├── source_preparation/      # raw extraction, synthesis, tokenisation
+    ├── generic_chunking/        # retired generic-child branch and backups
+    ├── tri_angle/               # original stale-taxonomy tri-angle branch
+    └── diagnostics/             # one-off and stale helpers
+```
+
+The live runtime outputs remain deliberately outside this workspace:
+`backend/data/knowledge_base.db` and `backend/data/vector_store/`.
+
+For a runnable entry point, see [`backend/data/etl/README.md`](../../backend/data/etl/README.md).
+
 ## 1. Read this before changing RAG data
 
 This repository contains multiple generations of data preparation and chunking. File proximity does **not** establish a valid pipeline relationship.
@@ -12,8 +38,8 @@ The current repository has:
 
 1. one common raw/synthetic FAQ lineage;
 2. an early generic parent-child chunking generation;
-3. a later Product×Intent rectification plus generic-chunk generation, used by the active runtime; and
-4. a later tri-angle generation branch that contains useful vector text but stale taxonomy and is stored in a disconnected collection.
+3. a later Product×Intent rectification plus generic-chunk generation; and
+4. a later tri-angle generation branch, now reconciled into the active runtime without modifying its historical source artifacts.
 
 Do not run a chunker or ingestion writer until its input schema, output schema, and target collection have been checked together.
 
@@ -33,23 +59,23 @@ Do not run a chunker or ingestion writer until its input schema, output schema, 
 The common ancestor is the Trust Bank raw corpus.
 
 ```text
-backend/data/raw_sources/raw_trustbank_faqs.json
-  → FAQ_prep_tools/map_and_synthesize.py
+backend/data/etl/history/source_preparation/artifacts/raw_trustbank_faqs.json
+  → history/source_preparation/scripts/map_and_synthesize.py
   → mapped_trustbank_faqs.json
-  → FAQ_prep_tools/tokenize_precision_data.py
+  → history/source_preparation/scripts/tokenize_precision_data.py
   → tokenized_horizon_faqs.json
 ```
 
 ### 3.1 Raw corpus
 
-**File:** `backend/data/raw_sources/raw_trustbank_faqs.json`  
-**Producer:** `backend/data/raw_sources/FAQ_prep_tools/extract_raw_faqs.py`
+**File:** `backend/data/etl/history/source_preparation/artifacts/raw_trustbank_faqs.json`  
+**Producer:** `backend/data/etl/history/source_preparation/scripts/extract_raw_faqs.py`
 
 This is the 708-record scraped Trust Bank FAQ corpus. It carries original source text, category, historical domain, and an early singular `intent_family` field.
 
 ### 3.2 Synthetic Horizon mapping
 
-**Script:** `backend/data/raw_sources/FAQ_prep_tools/map_and_synthesize.py`  
+**Script:** `backend/data/etl/history/source_preparation/scripts/map_and_synthesize.py`  
 **Input:** `raw_trustbank_faqs.json`  
 **Output:** `mapped_trustbank_faqs.json`
 
@@ -57,17 +83,17 @@ This LLM stage rewrites/rebrands FAQ text for Horizon Bank and creates the early
 
 ### 3.3 Precision tokenisation
 
-**Script:** `backend/data/raw_sources/FAQ_prep_tools/tokenize_precision_data.py`  
+**Script:** `backend/data/etl/history/source_preparation/scripts/tokenize_precision_data.py`  
 **Input:** `mapped_trustbank_faqs.json`  
 **Output:** `tokenized_horizon_faqs.json`
 
 This stage replaces numerical values in the synthesized answer with placeholders and writes `tokenized_answer`. The corresponding exact values are stored in `Precision_Reference_Table` in SQLite.
 
-Two current copies of this 708-record artifact are byte-identical:
+Two preserved copies of this 708-record artifact are byte-identical:
 
 ```text
-backend/data/tokenized_horizon_faqs.json
-backend/data/raw_sources/tokenized_horizon_faqs.json
+backend/data/etl/history/source_preparation/artifacts/tokenized_horizon_faqs.json
+backend/data/etl/history/tri_angle/artifacts/tokenized_horizon_faqs.json
 ```
 
 They are source-level FAQ records. They contain no child chunks, no angle phrases, and no canonical product tags.
@@ -78,13 +104,13 @@ This was the first parent-child RAG design, introduced around the v0.5 chunking 
 
 ```text
 tokenized_horizon_faqs.json
-  → FAQ_prep_tools/prepare_chunks.py
-  → raw_sources/ready_for_ingestion.json
-  → early app/services/db_ingestion.py
+  → history/generic_chunking/scripts/prepare_chunks_legacy.py
+  → history/generic_chunking/artifacts/ready_for_ingestion.json
+  → early generic database writer
   → faq_child_chunks
 ```
 
-**Chunker:** `backend/data/raw_sources/FAQ_prep_tools/prepare_chunks.py`
+**Chunker:** `backend/data/etl/history/generic_chunking/scripts/prepare_chunks_legacy.py`
 
 It creates generic child records:
 
@@ -97,10 +123,10 @@ Long answers are split with an approximately 800-character chunk size and 150-ch
 This generation uses the historical `domain` and free-form intent taxonomy. The following are historical artifacts from it:
 
 ```text
-backend/data/raw_sources/Backup/raw_trustbank_faqs.json
-backend/data/raw_sources/Backup/mapped_trustbank_faqs.json
-backend/data/raw_sources/Backup/tokenized_horizon_faqs.json
-backend/data/raw_sources/Backup/ready_for_ingestion.json
+backend/data/etl/history/generic_chunking/artifacts/backup/raw_trustbank_faqs.json
+backend/data/etl/history/generic_chunking/artifacts/backup/mapped_trustbank_faqs.json
+backend/data/etl/history/generic_chunking/artifacts/backup/tokenized_horizon_faqs.json
+backend/data/etl/history/generic_chunking/artifacts/backup/ready_for_ingestion.json
 ```
 
 Do not use these backup files as an input to a current rebuild.
@@ -110,16 +136,16 @@ Do not use these backup files as an input to a current rebuild.
 This is the numbered rectification pipeline. It was introduced after Generation A and is the source of the current runtime taxonomy.
 
 ```text
-raw_sources/tokenized_horizon_faqs.json
-  → 1_tag_products_clean.py
+history/source_preparation/artifacts/tokenized_horizon_faqs.json
+  → canonical_taxonomy/scripts/1_tag_products_clean.py
   → tagged_horizon_faqs.json
-  → 1b_rectify_tags.py
+  → canonical_taxonomy/scripts/1b_rectify_tags.py
   → rectified_horizon_faqs.json
-  → 1c_consolidate_intents.py
+  → canonical_taxonomy/scripts/1c_consolidate_intents.py
   → consolidated_horizon_faqs.json
-  → 2_chunk_and_stage.py
-  → raw_sources/ready_for_ingestion.json
-  → 3_db_ingestion.py
+  → history/generic_chunking/scripts/2_chunk_and_stage.py
+  → history/generic_chunking/artifacts/ready_for_ingestion.json
+  → former generic database writer
   → vector_store / faq_child_chunks
 ```
 
@@ -130,8 +156,8 @@ raw_sources/tokenized_horizon_faqs.json
 | `1_tag_products_clean.py` | `tokenized_horizon_faqs.json` | `tagged_horizon_faqs.json` | Adds singular `product_tag`. |
 | `1b_rectify_tags.py` | `tagged_horizon_faqs.json` | `rectified_horizon_faqs.json` | Normalizes product labels. |
 | `1c_consolidate_intents.py` | `rectified_horizon_faqs.json` | `consolidated_horizon_faqs.json`, `final_product_intent_map.json` | Converts early/free-form labels to the runtime master intent vocabulary. |
-| `2_chunk_and_stage.py` | `consolidated_horizon_faqs.json` | `raw_sources/ready_for_ingestion.json` | Creates generic parent-child staging data. |
-| `3_db_ingestion.py` | `raw_sources/ready_for_ingestion.json` | SQLite plus `faq_child_chunks` | Rebuilds the active runtime evidence stores. |
+| `history/generic_chunking/scripts/2_chunk_and_stage.py` | `consolidated_horizon_faqs.json` | `history/generic_chunking/artifacts/ready_for_ingestion.json` | Creates generic parent-child staging data. |
+| former generic database writer | generic historical staging | SQLite plus `faq_child_chunks` | Retired generic runtime rebuild path. |
 
 ### 5.2 Important schema convention
 
@@ -151,16 +177,16 @@ The master intent example for the Instant Loan FAQ is:
 
 ### 5.3 Current active runtime collection
 
-**Writer:** `backend/data/raw_sources/3_db_ingestion.py`  
+**Writer:** `backend/data/etl/active/scripts/3_db_ingestion.py`  
 **SQLite:** `backend/data/knowledge_base.db`, table `knowledge_parents`  
 **Chroma path:** `backend/data/vector_store/`  
 **Chroma collection:** `faq_child_chunks`
 
-`backend/app/orchestration/rag_engine.py` currently reads this collection. The child vectors in it are generic question/answer chunks, not tri-angle vectors.
+This was the active runtime contract before the reconciliation stage described in section 8. The generic staging artifact is retained as a historical rebuild input, but it is no longer the active vector schema.
 
 ### 5.4 Stale numbered utility
 
-`backend/data/raw_sources/4_generate_intent_map.py` is not a valid final pipeline stage in its present form. `1c_consolidate_intents.py` writes `final_product_intent_map.json` as a Product→Intent dictionary, but `4_generate_intent_map.py` treats it as a list of FAQ objects and calls `.get()` on each item.
+`backend/data/etl/history/diagnostics/scripts/4_generate_intent_map.py` is not a valid final pipeline stage in its present form. `1c_consolidate_intents.py` writes `final_product_intent_map.json` as a Product→Intent dictionary, but the utility treats it as a list of FAQ objects and calls `.get()` on each item.
 
 Do not run it without repairing its contract.
 
@@ -169,16 +195,16 @@ Do not run it without repairing its contract.
 This branch was added after Generation B, but it branched from the earlier tokenized source instead of the canonical numbered output.
 
 ```text
-raw_sources/tokenized_horizon_faqs.json
-  → app/services/prepare_chunks.py
-  → backend/data/ready_for_ingestion.json
-  → app/services/db_ingestion.py
+history/tri_angle/artifacts/tokenized_horizon_faqs.json
+  → history/tri_angle/scripts/prepare_chunks.py
+  → history/tri_angle/artifacts/ready_for_ingestion_with_parent_content.json
+  → history/tri_angle/scripts/db_ingestion.py
   → vector_store/chroma_db / horizon_faqs
 ```
 
 ### 6.1 Tri-angle generation
 
-**Script:** `backend/app/services/prepare_chunks.py`
+**Script:** `backend/data/etl/history/tri_angle/scripts/prepare_chunks.py`
 
 For each FAQ:
 
@@ -195,7 +221,7 @@ The angle text is generated once per fragment before the per-intent duplication.
 
 ### 6.2 Tri-angle artifact
 
-**Primary file:** `backend/data/ready_for_ingestion.json`
+**Primary file:** `backend/data/etl/history/tri_angle/artifacts/ready_for_ingestion_with_parent_content.json`
 
 Its child records use this schema:
 
@@ -231,7 +257,7 @@ The tri-angle phrases themselves remain useful because they were created from th
 
 ### 6.4 Disconnected vector store
 
-**Writer:** `backend/app/services/db_ingestion.py`  
+**Writer:** `backend/data/etl/history/tri_angle/scripts/db_ingestion.py`  
 **Chroma path:** `backend/data/vector_store/chroma_db/`  
 **Chroma collection:** `horizon_faqs`
 
@@ -241,10 +267,10 @@ This is not the active collection read by `rag_engine.py`.
 
 | File | Meaning |
 | --- | --- |
-| `backend/data/ready_for_ingestion 2.json` | Preserved original tri-angle artifact. |
-| `backend/data/ready_for_ingestion.json` | Same child array plus parent `content` repaired to include question + tokenized answer. |
+| `backend/data/etl/history/tri_angle/artifacts/ready_for_ingestion_original.json` | Preserved original tri-angle artifact. |
+| `backend/data/etl/history/tri_angle/artifacts/ready_for_ingestion_with_parent_content.json` | Same child array plus parent `content` repaired to include question + tokenized answer. |
 
-**Repair utility:** `backend/app/services/patch_ingestion_json.py`
+**Repair utility:** `backend/data/etl/history/tri_angle/scripts/patch_ingestion_json.py`
 
 It changes only parent `content`; it deliberately retains the existing tri-angle children unchanged.
 
@@ -261,42 +287,59 @@ Tri-angle child text + stale taxonomy + disconnected Chroma collection
 
 This is a branch-alignment problem, not an absence of tri-angle vector data.
 
-## 8. Future implementation rule
+## 8. Reconciled tri-angle analysis contract and active generic runtime
 
 Do not regenerate the tri-angle phrases unless the underlying FAQ question/answer text changes.
 
-The intended unification direction is:
+The tri-angle reconciliation path is retained for controlled analysis:
 
 ```text
 preserved tri-angle search_text
-  + canonical `product_tag`
-  + canonical master `intent_families`
+  + preserved `rectified_horizon_faqs.json` product tags
+  + preserved `1c_consolidate_intents.py` master-intent rules
   + parent content built from question + tokenized answer
-  → one staging contract
-  → backend/data/vector_store / faq_child_chunks
+  → `active_tri_angle_ready_for_ingestion.json`
+  → `faq_child_chunks_tri_angle_v1` (preserved analysis collection)
 ```
 
-The normalization must:
+**Reconciliation script:** `backend/data/etl/active/scripts/5_reconcile_tri_angle_stage.py`
+**Derived output:** `backend/data/etl/active/staging/active_tri_angle_ready_for_ingestion.json`
+
+The active runtime has returned to canonical generic children: question anchors,
+intact question-and-answer chunks, and answer fragments when necessary.
+`backend/data/etl/active/scripts/6_reconcile_generic_stage.py` preserves those
+historical child texts, applies canonical metadata, and creates
+`active/staging/active_generic_ready_for_ingestion.json`. The default
+`3_db_ingestion.py` invocation writes it to runtime collection
+`faq_child_chunks`.
+
+The reconciliation:
 
 1. retain the existing `search_text` unchanged;
 2. derive an explicit `angle` metadata field from each `child_id`;
-3. replace stale child Product/Intent metadata with the canonical record’s values;
+3. derive canonical master intents in memory from the rectified records and the existing `1c` mapping, without overwriting `consolidated_horizon_faqs.json`;
 4. duplicate each distinct fragment+angle phrase only for canonical intent lanes;
 5. write the same parent IDs to SQLite;
 6. rebuild only the active `faq_child_chunks` collection after validation.
 
-Do not ingest the tri-angle artifact through `app/services/db_ingestion.py` unless that writer is deliberately realigned to the active runtime path and schema.
+The preserved analysis collection is `schema_version: tri_angle_v1` and is named
+`faq_child_chunks_tri_angle_v1`. The active runtime collection is
+`faq_child_chunks` with `schema_version: generic_v1`; `rag_engine.py` therefore
+uses generic compatibility mode and does not add an angle metadata filter. Do
+not ingest the historical artifact through `history/tri_angle/scripts/db_ingestion.py`; it still writes the disconnected legacy collection.
 
 ## 9. File classification reference
 
 | Category | Files |
 | --- | --- |
-| Raw/synthetic preparation | `FAQ_prep_tools/extract_raw_faqs.py`, `map_and_synthesize.py`, `tokenize_precision_data.py` |
-| Historical generic chunker | `FAQ_prep_tools/prepare_chunks.py` |
-| Canonical taxonomy | `1_tag_products_clean.py`, `1b_rectify_tags.py`, `1c_consolidate_intents.py` |
-| Active generic staging/ingestion | `2_chunk_and_stage.py`, `3_db_ingestion.py` |
-| Historical tri-angle staging/ingestion | `app/services/prepare_chunks.py`, `app/services/db_ingestion.py`, `app/services/patch_ingestion_json.py` |
-| Diagnostic/one-off/stale helpers | `audit_faqs.py`, `list_categories.py`, `extract_expanded_taxonomy.py`, `fix_taxonomy_mapping.py`, `verify_ingestion.py`, `4_generate_intent_map.py` |
+| Raw/synthetic preparation | `history/source_preparation/scripts/` |
+| Historical generic chunker | `history/generic_chunking/scripts/prepare_chunks_legacy.py` |
+| Canonical taxonomy | `canonical_taxonomy/scripts/` |
+| Historical generic staging | `history/generic_chunking/scripts/2_chunk_and_stage.py` |
+| Active generic reconciliation/ingestion | `active/scripts/6_reconcile_generic_stage.py`, `active/scripts/3_db_ingestion.py` |
+| Preserved tri-angle analysis path | `active/scripts/5_reconcile_tri_angle_stage.py`, `active/staging/active_tri_angle_ready_for_ingestion.json` |
+| Historical tri-angle staging/ingestion | `history/tri_angle/scripts/` |
+| Diagnostic/one-off/stale helpers | `history/diagnostics/scripts/` |
 
 ## 10. Validation checklist for any future rebuild
 
@@ -312,4 +355,3 @@ Before publishing a rebuilt index, verify:
 8. Chroma `faq_child_chunks` count equals staged child count.
 9. The collection used by `rag_engine.py` is the one rebuilt.
 10. Representative target FAQs can be retrieved and hydrated through the runtime code path.
-

@@ -36,9 +36,12 @@ RRF_CANDIDATES_PER_ANGLE = int(os.getenv("RRF_CANDIDATES_PER_ANGLE", "8"))
 # 2. CORE RETRIEVAL ENGINE (V2.5 RRF Matrix)
 # ==========================================
 class RAGEngine:
-    def __init__(self):
-        """Initializes by dynamically fetching the freshest collection handle."""
-        self.collection = get_chroma_collection()
+    def __init__(self, collection=None):
+        """Use the active collection, or an explicitly supplied read-only benchmark collection."""
+        self.collection = collection if collection is not None else get_chroma_collection()
+        self.has_tri_angle_schema = (
+            (self.collection.metadata or {}).get("schema_version") == "tri_angle_v1"
+        )
 
     def _build_metadata_filter(self, scope_pairs: list[dict]) -> dict:
         """Build one shared filter from valid product/intent pairs.
@@ -168,7 +171,16 @@ class RAGEngine:
         angle_groups = self._normalize_angle_groups(blueprint)
         metadata_filter = self._build_metadata_filter(scope_pairs)
         query_specs = [
-            (group["group_id"], angle_name, angle_text, metadata_filter)
+            (
+                group["group_id"],
+                angle_name,
+                angle_text,
+                (
+                    {"$and": [metadata_filter, {"angle": angle_name.lower()}]}
+                    if self.has_tri_angle_schema
+                    else metadata_filter
+                ),
+            )
             for group in angle_groups
             for angle_name, angle_text in (
                 ("Procedural", group["procedural"]),
@@ -178,6 +190,14 @@ class RAGEngine:
             if angle_text
         ]
         print(f" 📐 Angle groups: {len(angle_groups)} | Vector searches: {len(query_specs)}")
+        print(
+            " 🧭 Child-vector schema: "
+            + (
+                "tri-angle (matching-angle filters enabled)"
+                if self.has_tri_angle_schema
+                else "generic (compatibility mode)"
+            )
+        )
         for group in angle_groups:
             print(f"    • {group['group_id']}: procedural='{group['procedural']}', policy='{group['policy']}', conceptual='{group['conceptual']}'")
 

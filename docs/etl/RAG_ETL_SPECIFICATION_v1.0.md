@@ -6,9 +6,9 @@
 
 ## 1. Purpose and boundaries
 
-This document specifies the **currently active generic-chunk pipeline** that turns the Horizon Bank synthetic FAQ corpus into the two local stores used by RAG. It is an operational snapshot, not the complete historical record.
+This document specifies the **currently active reconciled generic-child pipeline** that turns the Horizon Bank synthetic FAQ corpus into the two local stores used by RAG. It is an operational snapshot, not the complete historical record.
 
-For the three-generation history, the historical tri-angle branch, and artifact ownership, see [ETL History and Artifact Guide](ETL_HISTORY_AND_ARTIFACT_GUIDE.md).
+For the three-generation history, the historical tri-angle branch, and artifact ownership, see [ETL History and Artifact Guide](ETL_HISTORY_AND_ARTIFACT_GUIDE.md). The current file layout is indexed in [`backend/data/etl/README.md`](../../backend/data/etl/README.md).
 
 - **SQLite** holds complete, tokenized parent FAQ records for factual generation and numerical substitution.
 - **ChromaDB** holds child retrieval vectors and their product/intent metadata for filtered semantic search.
@@ -19,31 +19,32 @@ This is intentionally a parent-child design: Chroma selects a `parent_id`; SQLit
 
 ## 2. Authoritative active pipeline
 
-The supported scripts are in `backend/data/raw_sources/` and must be run from that directory so their relative file paths resolve correctly.
+The supported production scripts are `backend/data/etl/active/scripts/6_reconcile_generic_stage.py` and `backend/data/etl/active/scripts/3_db_ingestion.py`. They resolve their paths internally and can be run from the repository root.
 
 ```text
-raw_trustbank_faqs.json
-  └─ FAQ_prep_tools/map_and_synthesize.py
+history/source_preparation/artifacts/raw_trustbank_faqs.json
+  └─ history/source_preparation/scripts/map_and_synthesize.py
      └─ mapped_trustbank_faqs.json
-        └─ FAQ_prep_tools/tokenize_precision_data.py
+        └─ history/source_preparation/scripts/tokenize_precision_data.py
            └─ tokenized_horizon_faqs.json
-              └─ 1_tag_products_clean.py
+              └─ canonical_taxonomy/scripts/1_tag_products_clean.py
                  └─ tagged_horizon_faqs.json
-                    └─ 1b_rectify_tags.py
-                       └─ rectified_horizon_faqs.json
-                          └─ 1c_consolidate_intents.py
+                    └─ canonical_taxonomy/scripts/1b_rectify_tags.py
+                       └─ canonical_taxonomy/artifacts/rectified_horizon_faqs.json
+                          └─ canonical_taxonomy/scripts/1c_consolidate_intents.py
                              ├─ consolidated_horizon_faqs.json
                              └─ final_product_intent_map.json
 
-consolidated_horizon_faqs.json
-  └─ 2_chunk_and_stage.py
-     └─ ready_for_ingestion.json
-        └─ 3_db_ingestion.py
+backend/data/etl/history/generic_chunking/artifacts/ready_for_ingestion.json
+canonical_taxonomy/artifacts/rectified_horizon_faqs.json + canonical_taxonomy/scripts/1c_consolidate_intents.py
+  └─ active/scripts/6_reconcile_generic_stage.py
+     └─ active/staging/active_generic_ready_for_ingestion.json
+        └─ active/scripts/3_db_ingestion.py
            ├─ knowledge_base.db / knowledge_parents
            └─ vector_store / faq_child_chunks
 ```
 
-`backend/data/raw_sources/ready_for_ingestion.json` is the final staged JSON consumed by the active numbered database writer. Do not confuse it with the historical tri-angle artifact at `backend/data/ready_for_ingestion.json`.
+`backend/data/etl/active/staging/active_generic_ready_for_ingestion.json` is the final active staging JSON. The generic historical staging artifact and the historical tri-angle source are retained under `backend/data/etl/history/` and must not be overwritten.
 
 ## 3. Source and transformation stages
 
@@ -133,9 +134,9 @@ This step preserves multi-intent records. An FAQ may have more than one master i
 
 `1c_consolidate_intents.py` writes `final_product_intent_map.json` as a Product→Intent dictionary. `4_generate_intent_map.py` is stale: it expects a list of FAQ records and cannot consume that dictionary correctly. Do not run it as part of a rebuild.
 
-### 3.8 Parent-child staging
+### 3.8 Active generic-child reconciliation staging
 
-`2_chunk_and_stage.py` reads `consolidated_horizon_faqs.json` and writes `ready_for_ingestion.json` with exactly two arrays:
+`active/scripts/6_reconcile_generic_stage.py` preserves historical question anchors and intact or splintered question-and-answer chunks from `history/generic_chunking/artifacts/ready_for_ingestion.json`, derives canonical Product×Intent metadata from `canonical_taxonomy/artifacts/rectified_horizon_faqs.json` and the `1c_consolidate_intents.py` mapping in memory, and writes `active/staging/active_generic_ready_for_ingestion.json` with exactly two arrays:
 
 ```json
 {
@@ -158,11 +159,11 @@ This step preserves multi-intent records. An FAQ may have more than one master i
 - `product_tags` and `intent_families` are comma-separated strings for SQLite.
 - `content` combines `synth_question` with the tokenized answer.
 
-#### Child vector staging schema
+#### Active child-vector staging schema
 
 ```json
 {
-  "text": "Q: ...\nA: unmasked answer text",
+  "text": "question anchor, intact question-and-answer chunk, or answer fragment",
   "metadata": {
     "parent_id": "faq_example",
     "intent_family": "Application",
@@ -172,21 +173,14 @@ This step preserves multi-intent records. An FAQ may have more than one master i
 }
 ```
 
-For every intent on an FAQ, the staging script creates:
-
-1. a `question_anchor` child vector; and
-2. an `intact_answer` child vector when the answer is short, or one or more `splintered_answer_part_N` vectors when it is long.
-
-Long answers are split with `RecursiveCharacterTextSplitter` (`chunk_size=800`, `chunk_overlap=150`). Each split fragment is prepended with the question to avoid semantic orphaning.
-
-Multi-intent duplication is intentional: an FAQ tagged both `Application` and `Features And Limits` produces vector records for each metadata lane, while retaining one SQLite parent record and one `parent_id`.
+Every distinct historical child text is retained once per canonical intent lane. Multi-intent duplication remains intentional; SQLite retains one parent row per FAQ.
 
 ### 3.9 Database ingestion
 
-`3_db_ingestion.py` is the sole current database writer. It reads:
+`active/scripts/3_db_ingestion.py` is the sole current database writer. The active command reads:
 
 ```text
-backend/data/raw_sources/ready_for_ingestion.json
+backend/data/etl/active/staging/active_generic_ready_for_ingestion.json
 ```
 
 It writes:
@@ -214,7 +208,7 @@ Chroma:  backend/data/vector_store/ → faq_child_chunks
 For each search task it:
 
 1. builds metadata eligibility filters from valid product/intent pairs;
-2. searches all procedural, policy, and conceptual *query* angle groups against the same eligible generic child collection in Chroma;
+2. searches the task's semantic query views against eligible generic question-and-answer children in Chroma;
 3. applies group-level and task-level reciprocal-rank fusion;
 4. selects no more than four parent IDs using the 50% drop-off rule;
 5. hydrates the exact parent records from SQLite.
@@ -233,7 +227,7 @@ tokenize_precision_data.py
 1_tag_products_clean.py
 1b_rectify_tags.py
 1c_consolidate_intents.py
-2_chunk_and_stage.py
+6_reconcile_generic_stage.py
 3_db_ingestion.py
 ```
 
@@ -256,26 +250,26 @@ This is safer and faster than rerunning upstream LLM synthesis or tagging. If th
 
 Verify all of the following before using the refreshed index:
 
-- `knowledge_parents` record count equals `parent_data` count in `raw_sources/ready_for_ingestion.json`.
+- `knowledge_parents` record count equals `parent_data` count in `active_generic_ready_for_ingestion.json`.
 - Chroma `faq_child_chunks` count equals `child_data` count.
 - A selected `parent_id` can be retrieved from SQLite.
 - Placeholder-bearing parent content remains tokenized and `Precision_Reference_Table` still resolves those placeholders.
 - A representative task retrieves expected parent IDs through the current `rag_engine.py` path.
 
-`backend/app/services/verify_ingestion.py` is historical and references the retired `domain` column during one check. Do not rely on it as the authoritative validation script without updating it.
+`backend/data/etl/history/tri_angle/scripts/verify_ingestion.py` is historical and references the retired `domain` column during one check. Do not rely on it as the authoritative validation script without updating it.
 
 ## 6. Legacy utilities: do not use for the current runtime
 
 The following files implement older layouts and must not be mixed with the active numbered ingestion pipeline:
 
 ```text
-backend/app/services/prepare_chunks.py
-backend/app/services/db_ingestion.py
-backend/app/services/patch_ingestion_json.py
-backend/app/services/verify_ingestion.py
-backend/data/raw_sources/FAQ_prep_tools/prepare_chunks.py
-backend/data/raw_sources/fix_taxonomy_mapping.py
-backend/data/raw_sources/extract_expanded_taxonomy.py
+backend/data/etl/history/tri_angle/scripts/prepare_chunks.py
+backend/data/etl/history/tri_angle/scripts/db_ingestion.py
+backend/data/etl/history/tri_angle/scripts/patch_ingestion_json.py
+backend/data/etl/history/tri_angle/scripts/verify_ingestion.py
+backend/data/etl/history/generic_chunking/scripts/prepare_chunks_legacy.py
+backend/data/etl/history/diagnostics/scripts/fix_taxonomy_mapping.py
+backend/data/etl/history/diagnostics/scripts/extract_expanded_taxonomy.py
 ```
 
 They reference historical concepts including `domain`, `horizon_faqs`, `vector_store/chroma_db`, alternate `ready_for_ingestion.json` locations, and the disconnected tri-angle staging branch. The tri-angle artifact is historical rather than absent; it must be normalized into the active schema before it can be used by runtime.
@@ -290,9 +284,11 @@ They are retained for historical reference only. Do not run them against the cur
 | `mapped_trustbank_faqs.json` | curated synthetic source | synthesis/mapping stage |
 | `tokenized_horizon_faqs.json` | precision-protected source | tokenisation stage |
 | `tagged_*`, `rectified_*`, `consolidated_*` | generated taxonomy artifacts | numbered transformation stages |
-| `raw_sources/ready_for_ingestion.json` | active generic ingestion contract | `2_chunk_and_stage.py` |
-| `backend/data/ready_for_ingestion.json` | historical tri-angle staging artifact with stale taxonomy | `app/services/prepare_chunks.py` |
+| `etl/history/generic_chunking/artifacts/ready_for_ingestion.json` | historical generic staging artifact | `history/generic_chunking/scripts/2_chunk_and_stage.py` |
+| `etl/history/tri_angle/artifacts/ready_for_ingestion_with_parent_content.json` | historical tri-angle staging artifact with stale taxonomy | `history/tri_angle/scripts/prepare_chunks.py` |
+| `etl/active/staging/active_generic_ready_for_ingestion.json` | active reconciled generic staging contract | `active/scripts/6_reconcile_generic_stage.py` |
+| `vector_store/faq_child_chunks_tri_angle_v1` | preserved tri-angle analysis collection | renamed live collection; not runtime default |
 | `knowledge_base.db` | generated live evidence store | `3_db_ingestion.py` plus tokenisation table creation |
 | `vector_store/` | generated live vector index | `3_db_ingestion.py` |
 
-Do not hand-edit the SQLite `knowledge_parents` table or Chroma metadata for a content correction. Modify the appropriate source or transformation artifact, regenerate `ready_for_ingestion.json`, and re-ingest.
+Do not hand-edit the SQLite `knowledge_parents` table or Chroma metadata for a content correction. Modify the appropriate source or transformation artifact, regenerate the active tri-angle staging file, and re-ingest.

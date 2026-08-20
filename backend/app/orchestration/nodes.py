@@ -157,6 +157,14 @@ def _normalize_search_task_scope(task: dict) -> dict | None:
     normalized["target_commercial_product"] = product_tags[0] if len(product_tags) == 1 else product_tags
     normalized["target_intent"] = intent_tags
     normalized["angle_groups"] = angle_groups
+    direct_query = str(
+        normalized.get("direct_query")
+        or normalized.get("customer_component")
+        or normalized.get("subquery")
+        or ""
+    ).strip()
+    if direct_query:
+        normalized["direct_query"] = direct_query
     # Keep the base flat fields during the migration for log readers and any
     # historical code paths, but retrieval reads angle_groups exclusively.
     base_group = angle_groups[0]
@@ -169,16 +177,16 @@ def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int])
     """Describe the deterministic precision-to-recall stage for each retry."""
     stages = {
         2: {
-            "stage": "ANGLE_EXPANSION",
-            "instruction": "Keep the exact product and intent filters. Preserve every existing angle group unchanged and append one complete new angle group that targets the missing detail in the sufficiency feedback.",
-        },
-        3: {
             "stage": "INTENT_EXPANSION",
             "instruction": "Keep the exact product filter. Retain every prior angle term and intent, then add one or more additional valid intents for that same product when they can improve recall of the missing detail.",
         },
-        4: {
+        3: {
             "stage": "PRODUCT_EXPANSION",
             "instruction": "Retain every prior angle term, intent, and product. Add only a clearly plausible, matrix-valid related product as an additional product tag; never replace the original product.",
+        },
+        4: {
+            "stage": "ANGLE_EXPANSION",
+            "instruction": "Keep the exact product and intent filters. Preserve every existing angle group unchanged and append one complete new angle group that targets the missing detail in the sufficiency feedback.",
         },
     }
     plan = []
@@ -190,6 +198,17 @@ def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int])
             **stages.get(next_attempt, stages[4]),
         })
     return plan
+
+
+def _retrieval_mode_for_task(task: dict, retry_counts: dict[str, int]) -> str:
+    """Choose retrieval representation independently of the LLM.
+
+    A task keeps its resolved customer subquery as the default retrieval
+    anchor through filter widening.  Multi-angle RRF is reserved for the
+    final, feedback-guided angle-expansion attempt.
+    """
+    retry_count = retry_counts.get(task.get("task_id"), 0)
+    return "ANGLE_GROUP_RRF" if retry_count >= 3 else "DIRECT"
 
 
 def _merge_retry_task(prior_task: dict, revision: dict, expansion: dict) -> dict:
@@ -204,6 +223,10 @@ def _merge_retry_task(prior_task: dict, revision: dict, expansion: dict) -> dict
     merged = dict(prior_task)
     merged["task_id"] = prior_task.get("task_id")
     merged["customer_component"] = prior_task.get("customer_component", "")
+    # The direct query is a stable, task-isolated subquery. Retry feedback may
+    # alter filters or add angle groups, but it must not overwrite the
+    # customer's original task wording.
+    merged["direct_query"] = prior_task.get("direct_query", prior_task.get("customer_component", ""))
 
     if stage == "ANGLE_EXPANSION":
         prior_ids = {group["group_id"] for group in prior_groups}
@@ -880,7 +903,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
 
         Latest User Input: "{user_msg}"
         Failed Retrieval Tasks (the only components in scope): {retry_tasks}
-        Task-Specific Sufficiency Feedback: {retry_feedback}
+        Task-Specific Candidate Evidence Delta: {retry_feedback}
         Deterministic Expansion Plan: {retry_expansion_plan}
 
         REQUIRED CONTRACT:
@@ -891,6 +914,10 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         - Do NOT re-partition the latest user input.
         - Do NOT recreate successful tasks, intent-clarification tasks, or
           unrelated topics from the original request.
+        - Candidate Evidence Delta contains only internally observed facts from
+          unapproved parents. Use it only as an optional clue when refining
+          within the deterministic stage; never quote parent IDs or treat it
+          as a customer request or approved answer evidence.
         - Do NOT output CLARIFY in retry mode. The retrieval pipeline will
           decide whether the task becomes unavailable after its retry limit.
         - Follow the Deterministic Expansion Plan for EACH task exactly. The
@@ -941,6 +968,9 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 search_task = dict(component["search_task"])
                 if customer_component:
                     search_task["customer_component"] = customer_component
+                    # Preserve the resolved task-level subquery as the direct
+                    # retrieval anchor. It remains immutable across retries.
+                    search_task["direct_query"] = customer_component
                 formulated_tasks.append(search_task)
             elif resolution == "CLARIFY" and isinstance(component.get("clarification"), dict):
                 formulated_clarifications.append(component["clarification"])
@@ -1137,7 +1167,7 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
     return {"active_tool_routes": routes, "rag_payload": "", "api_payload": "", "deeplink_payload": ""}
 
 async def node_03b_rag_worker(state: AgentState):
-    print("🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Angle-Group RRF)")
+    print("🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Direct-First Retrieval)")
     tasks = state.get("search_tasks", [])
     prior_results = {result.get("task_id"): result for result in state.get("task_results", [])}
     tasks_to_retrieve = [
@@ -1150,16 +1180,37 @@ async def node_03b_rag_worker(state: AgentState):
     engine = RAGEngine()
     async def retrieve_task(task: dict) -> dict:
         scope_pairs = _valid_product_intent_scope_pairs(task)
-        parents = await engine.execute_multi_angle_search(
-            blueprint=task,
-            scope_pairs=scope_pairs,
-        )
-        return {"task_id": task.get("task_id"), "status": "RETRIEVED", "origin": "RAG", "parents": parents}
+        retrieval_mode = _retrieval_mode_for_task(task, state.get("task_retry_counts", {}))
+        if retrieval_mode == "DIRECT":
+            parents = await engine.execute_direct_search(
+                query_text=task.get("direct_query", task.get("customer_component", "")),
+                scope_pairs=scope_pairs,
+            )
+        else:
+            parents = await engine.execute_multi_angle_search(
+                blueprint=task,
+                scope_pairs=scope_pairs,
+            )
+        return {
+            "task_id": task.get("task_id"),
+            "status": "RETRIEVED",
+            "origin": "RAG",
+            "retrieval_mode": retrieval_mode,
+            "parents": parents,
+        }
 
     retrieved_results = await asyncio.gather(*(retrieve_task(task) for task in tasks_to_retrieve))
     merged_results = {**prior_results, **{result["task_id"]: result for result in retrieved_results}}
     print(f"   🔎 [TASK RAG]: Retrieved {len(retrieved_results)} task result set(s) in parallel.")
-    log_event("task.rag.completed", task_ids=[result.get("task_id") for result in retrieved_results])
+    log_event(
+        "task.rag.completed",
+        task_ids=[result.get("task_id") for result in retrieved_results],
+        retrieval_modes={result.get("task_id"): result.get("retrieval_mode") for result in retrieved_results},
+        selected_parent_ids={
+            result.get("task_id"): [parent.get("parent_id") for parent in result.get("parents", [])]
+            for result in retrieved_results
+        },
+    )
     return {"rag_payload": "", "task_results": list(merged_results.values())}
 
 def node_03b_api_worker(state: AgentState):
@@ -1215,11 +1266,30 @@ def node_03c_sufficiency_auditor(state: AgentState):
           completeness benchmark for an individual task.
         - Return one result for every supplied task_id.
         - For SUFFICIENT, return only parent IDs from that exact task that are directly relevant. At least one approved ID is required.
-        - For RETRY, return no approved IDs and concise query-refinement feedback. The backend determines terminal UNAVAILABLE status after four failed attempts.
+        - For RETRY, return no approved IDs and an `evidence_delta` list. This
+          is internal evidence-only retrieval context for the intent
+          formulator, not a query, diagnosis, or rewrite instruction. The
+          backend determines terminal UNAVAILABLE status after four failed
+          attempts.
+        - Include an evidence_delta item only when a supplied candidate parent
+          contains a materially task-relevant factual proposition that is NOT
+          already explicit in that task's customer_component. Each item must
+          be exactly {{"parent_id": "a supplied candidate parent ID", "fact":
+          "one concise proposition faithfully supported by that parent"}}.
+        - Never include a restatement, synonym, or reformulation of the
+          customer_component; what candidate parents do not contain; proposed
+          metadata filters, retry stages, angles, query terms, sources,
+          services, or next actions; or any fact outside the supplied parent.
+        - Never use "search", "find", "look up", "list", or other imperative
+          wording in evidence_delta facts.
+        - If no new materially relevant candidate fact exists, return an empty
+          evidence_delta list. Do not substitute a generic sentence.
+        - evidence_delta is internal diagnostic context only. It is never
+          approved answer evidence.
         - Treat {{placeholders}} in parent content as valid approved facts.
         - Never invent a parent ID, fact, or instruction.
 
-        Output JSON only: {{"task_results": [{{"task_id": "...", "status": "SUFFICIENT" | "RETRY" | "UNAVAILABLE", "approved_parent_ids": ["..."], "reason": "...", "search_feedback": "..."}}]}}
+        Output JSON only: {{"task_results": [{{"task_id": "...", "status": "SUFFICIENT" | "RETRY" | "UNAVAILABLE", "approved_parent_ids": ["..."], "reason": "...", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}]}}]}}
         """
         try:
             auditor_results = {
@@ -1266,7 +1336,25 @@ def node_03c_sufficiency_auditor(state: AgentState):
         if not cache_fallback:
             attempt_count += 1
             retry_counts[task_id] = attempt_count
-        refinement = audit.get("search_feedback") or reason
+        # Preserve an intentionally empty evidence delta. It means the
+        # sufficiency auditor found no novel, material clue in the candidate
+        # parents; replacing it with the failure reason would reintroduce a
+        # task restatement into the next retry prompt.
+        if "evidence_delta" in audit:
+            refinement = [
+                {
+                    "parent_id": str(item.get("parent_id", "")).strip(),
+                    "fact": str(item.get("fact", "")).strip(),
+                }
+                for item in audit.get("evidence_delta", [])
+                if isinstance(item, dict)
+                and str(item.get("parent_id", "")).strip() in available_ids
+                and str(item.get("fact", "")).strip()
+            ]
+        else:
+            # Backward-compatible handling for an in-flight / legacy model
+            # response that still uses the former string field.
+            refinement = audit.get("search_feedback") or reason
         # An unsupported task remains retryable until its fourth failed
         # retrieval attempt; only then ask the user for targeted clarification.
         if attempt_count >= MAX_RAG_ATTEMPTS:

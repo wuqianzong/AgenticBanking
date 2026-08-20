@@ -102,6 +102,73 @@ class RAGEngine:
                 })
         return formatted_hits
 
+    async def execute_direct_search(self, query_text: str, scope_pairs: list[dict]) -> List[Dict[str, str]]:
+        """Retrieve a task through its resolved customer subquery only.
+
+        Direct retrieval is the default path: it retains the customer's most
+        discriminative wording and uses Product × Intent solely as a metadata
+        boundary.  It does not manufacture multiple rank lists, so Chroma's
+        cosine ranking is used directly before parent-level de-duplication.
+        """
+        clean_query = str(query_text or "").strip()
+        if not clean_query:
+            print("    ⚠️ [DIRECT RAG] No resolved task subquery was supplied.")
+            return []
+
+        start_time = time.time()
+        metadata_filter = self._build_metadata_filter(scope_pairs)
+        print("\n" + "═" * 60)
+        print(" 🔍 [RAG ENGINE] INITIALIZING DIRECT TASK SEARCH")
+        print(f" 📦 Valid Product/Intent Scope: {scope_pairs}")
+        print(f" 🗣️  Resolved task subquery: '{clean_query}'")
+
+        hits = await self._query_single_angle(clean_query, metadata_filter)
+        if not hits:
+            print("    ⚠️ No results returned from ChromaDB.")
+            print("═" * 60 + "\n")
+            return []
+
+        # A parent may own multiple child chunks.  Chroma returns them in
+        # descending cosine similarity, so retain the first (strongest) child
+        # score for each parent before applying the shared hydration boundary.
+        parent_scores: Dict[str, float] = {}
+        for child_rank, hit in enumerate(hits, start=1):
+            parent_id = hit["parent_id"]
+            if parent_id in parent_scores:
+                continue
+            parent_scores[parent_id] = hit["score"]
+            print(
+                f"      [Child Rank {child_rank}] Parent: '{parent_id}' "
+                f"| Cosine Sim: {hit['score']:.4f}"
+            )
+
+        ranked_parents = sorted(parent_scores.items(), key=lambda item: item[1], reverse=True)
+        selected_parent_ids = []
+        previous_score = None
+        print("    [DIRECT RAG] --- Parent Selection ---")
+        for rank, (parent_id, score) in enumerate(ranked_parents, start=1):
+            if not selected_parent_ids:
+                selected_parent_ids.append(parent_id)
+                previous_score = score
+                print(f"      [Rank 1] Parent: '{parent_id}' | Score: {score:.4f} -> ✅ AUTO-SELECTED")
+                continue
+            if len(selected_parent_ids) >= MAX_PARENTS:
+                print(f"      [Rank {rank}] Parent: '{parent_id}' | Score: {score:.4f} -> ❌ DROPPED (Max Limit {MAX_PARENTS} Reached)")
+                continue
+            ratio = score / previous_score if previous_score else 0.0
+            if ratio < 0.50:
+                print(f"      [Rank {rank}] Parent: '{parent_id}' | Score: {score:.4f} | Ratio: {ratio * 100:.1f}% -> ❌ DROPPED (Ratio < 50%)")
+                break
+            selected_parent_ids.append(parent_id)
+            previous_score = score
+            print(f"      [Rank {rank}] Parent: '{parent_id}' | Score: {score:.4f} | Ratio: {ratio * 100:.1f}% -> ✅ SELECTED")
+
+        print(f"    📊 Direct search finalized {len(selected_parent_ids)} Parent(s) for LLM Hydration: {selected_parent_ids}")
+        payload = self._hydrate_parents_from_sqlite(selected_parent_ids)
+        print(f" ⏱️  [DIRECT RAG] Total Execution Time: {(time.time() - start_time) * 1000:.2f} ms")
+        print("═" * 60 + "\n")
+        return payload
+
     def _hydrate_parents_from_sqlite(self, parent_ids: list) -> List[Dict[str, str]]:
         """Fetch full parent text while preserving the evidence identifier."""
         if not parent_ids:

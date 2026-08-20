@@ -35,12 +35,29 @@ class SemanticEvaluation(BaseModel):
     reason: str = Field(description="A brief sentence explaining the reasoning.")
 
 # 2. SUFFICIENCY AUDITOR (Node 03c)
+class RetryEvidenceDeltaItem(BaseModel):
+    """One newly observed, task-relevant fact from an unapproved candidate."""
+
+    parent_id: str = Field(
+        description="An exact parent ID supplied in the corresponding task's candidate parents."
+    )
+    fact: str = Field(
+        description="One concise, materially relevant factual proposition supported by that parent."
+    )
+
+
 class TaskSufficiencyItem(BaseModel):
     task_id: str = Field(description="The exact task_id supplied in the task input.")
     status: str = Field(description="Must be SUFFICIENT, RETRY, or UNAVAILABLE.")
     approved_parent_ids: List[str] = Field(description="Only parent IDs supplied for this exact task and directly relevant to it.")
     reason: str = Field(description="Brief evidence or insufficiency reason.")
-    search_feedback: str = Field(description="Concise search refinement for RETRY, otherwise an empty string.")
+    evidence_delta: List[RetryEvidenceDeltaItem] = Field(
+        default_factory=list,
+        description=(
+            "For RETRY only: newly observed, materially task-relevant facts from "
+            "supplied candidate parents. Empty when no such fact exists."
+        ),
+    )
 
 class TaskSufficiencyEvaluation(BaseModel):
     task_results: List[TaskSufficiencyItem] = Field(description="One sufficiency result for every supplied task.")

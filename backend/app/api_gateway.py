@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage, AIMessage  # FIXED: Added miss
 import redis
 import json
 import asyncio
+from uuid import uuid4
 
 # IMPORT THE NEW COMPILED TRI-TIER ENGINE
 from backend.app.orchestration.graph import app_graph
@@ -36,6 +37,9 @@ class ChatPayload(BaseModel):
     session_id: str
     message: str
     user_id: str
+    # Reserved for controlled, offline-style evaluation traffic.  Normal
+    # frontend requests omit this and retain the production model policy.
+    evaluation_tag: str | None = None
 
 class CloseSessionPayload(BaseModel):
     session_id: str
@@ -198,7 +202,23 @@ async def process_chat(payload: ChatPayload):
     Yields node execution progress in real-time before returning the final payload.
     """
     config = {"configurable": {"thread_id": payload.session_id}}
-    log_event("chat.request", session_id=payload.session_id, user_id=payload.user_id, message=payload.message)
+    # A session spans many customer messages.  Retrieval analysis must be able
+    # to join one request's formulation, retrieval attempts, and judgement
+    # without relying on timestamps or assuming requests never overlap.
+    turn_id = f"turn_{uuid4()}"
+    evaluation_tag = (
+        payload.evaluation_tag
+        if payload.evaluation_tag == "retrieval_cosine_eval"
+        else None
+    )
+    log_event(
+        "chat.request",
+        session_id=payload.session_id,
+        user_id=payload.user_id,
+        turn_id=turn_id,
+        evaluation_tag=evaluation_tag,
+        message=payload.message,
+    )
 
     # --- FRONTEND INITIALIZATION ---
     # Restore an existing thread, or run Turn 0 to generate and persist a greeting.
@@ -209,7 +229,12 @@ async def process_chat(payload: ChatPayload):
 
         if history:
             async def history_stream():
-                context_token = set_request_context(session_id=payload.session_id, user_id=payload.user_id)
+                context_token = set_request_context(
+                    session_id=payload.session_id,
+                    user_id=payload.user_id,
+                    turn_id=turn_id,
+                    evaluation_tag=evaluation_tag,
+                )
                 try:
                     serialized_history = [
                         {
@@ -231,7 +256,12 @@ async def process_chat(payload: ChatPayload):
 
     # --- STANDARD INVOCATION (STREAMING) ---
     async def chat_stream():
-        context_token = set_request_context(session_id=payload.session_id, user_id=payload.user_id)
+        context_token = set_request_context(
+            session_id=payload.session_id,
+            user_id=payload.user_id,
+            turn_id=turn_id,
+            evaluation_tag=evaluation_tag,
+        )
         previous_snapshot = app_graph.get_state(config)
         previous_turn_count = previous_snapshot.values.get("turn_count", 0) if previous_snapshot.values else 0
         initial_turn_state = {
@@ -321,6 +351,40 @@ async def process_chat(payload: ChatPayload):
                 "totalSteps": execution_result.get("ui_action_payload", {}).get("totalSteps"),
             }
             yield json.dumps(final_payload) + "\n"
+            final_task_results = execution_result.get("task_results", [])
+            sufficient_count = sum(item.get("status") == "SUFFICIENT" for item in final_task_results)
+            terminal_failure_count = sum(item.get("status") == "CLARIFICATION_REQUIRED" for item in final_task_results)
+            if final_task_results:
+                if sufficient_count and terminal_failure_count:
+                    retrieval_outcome = "PARTIAL_SUCCESS"
+                elif sufficient_count:
+                    retrieval_outcome = "SUCCESS"
+                elif terminal_failure_count:
+                    retrieval_outcome = "FAILURE"
+                else:
+                    # A completed graph should not normally retain RETRY, but
+                    # preserve an explicit label if a future route changes.
+                    retrieval_outcome = "INCOMPLETE"
+            else:
+                retrieval_outcome = "NO_SEARCH_TASK"
+            log_event(
+                "retrieval.turn.completed",
+                overall_outcome=retrieval_outcome,
+                preflight_status=execution_result.get("preflight_status", ""),
+                task_count=len(final_task_results),
+                sufficient_task_count=sufficient_count,
+                terminal_failure_task_count=terminal_failure_count,
+                tasks=[
+                    {
+                        "task_id": item.get("task_id"),
+                        "status": item.get("status"),
+                        "origin": item.get("origin", ""),
+                        "approved_parent_ids": item.get("approved_parent_ids", []),
+                        "retry_count": execution_result.get("task_retry_counts", {}).get(item.get("task_id"), 0),
+                    }
+                    for item in final_task_results
+                ],
+            )
             log_event("chat.response", ui_type=final_payload["uiType"], response_length=len(final_payload["text"]))
 
         except Exception as e:

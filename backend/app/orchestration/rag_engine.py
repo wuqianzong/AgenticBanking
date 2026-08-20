@@ -3,7 +3,10 @@ import sqlite3
 import asyncio
 import time  
 import chromadb
+import hashlib
 from typing import List, Dict, Any
+from pathlib import Path
+from backend.app.core.system_logger import request_context
 
 # ==========================================
 # 1. GLOBAL CONNECTION MANAGEMENT
@@ -30,6 +33,18 @@ MAX_PARENTS = 4
 # A deeper pool gives expanded metadata scopes enough candidates to compete
 # without increasing the number of vector queries.
 RRF_CANDIDATES_PER_ANGLE = int(os.getenv("RRF_CANDIDATES_PER_ANGLE", "8"))
+# Shadow retrieval is automatic only for the explicitly tagged evaluation.
+# Production can opt in to diagnostic shadows without changing its evidence
+# path by setting either variable to a truthy value.
+LOG_SHADOW_DIRECT_QUERY = os.getenv("RETRIEVAL_LOG_SHADOW_DIRECT", "0").strip().lower() in {"1", "true", "yes"}
+LOG_SHADOW_ORIGINAL_QUERY = os.getenv("RETRIEVAL_LOG_SHADOW_ORIGINAL_QUERY", "0").strip().lower() in {"1", "true", "yes"}
+EVALUATION_TAG = "retrieval_cosine_eval"
+_INDEX_FINGERPRINT_CACHE: dict[tuple[str, int, int], str] = {}
+_EMPTY_RETRIEVAL_FOCUS_VALUES = {"none", "n/a", "na", "not applicable", "unknown", "no focus"}
+
+
+def _shadow_queries_enabled(configured: bool) -> bool:
+    return configured or request_context.get().get("evaluation_tag") == EVALUATION_TAG
 
 
 # ==========================================
@@ -151,7 +166,91 @@ class RAGEngine:
         }
         return [legacy_group] if any(legacy_group[name] for name in ("procedural", "policy", "conceptual")) else []
 
-    async def execute_multi_angle_search(self, blueprint: dict, scope_pairs: list[dict]) -> List[Dict[str, str]]:
+    def _index_identity(self) -> Dict[str, Any]:
+        """Return a cheap, log-safe identifier for the index snapshot used.
+
+        The collection metadata alone is not enough to distinguish two
+        ingestion runs with the same schema.  SQLite size and mtime are not a
+        content hash, but together with collection name/schema let replay jobs
+        reject obviously mismatched snapshots without opening the store.
+        """
+        index_file = Path(CHROMA_PATH) / "chroma.sqlite3"
+        try:
+            stat = index_file.stat()
+            cache_key = (str(index_file.resolve()), stat.st_size, stat.st_mtime_ns)
+            fingerprint = _INDEX_FINGERPRINT_CACHE.get(cache_key)
+            if fingerprint is None:
+                digest = hashlib.sha256()
+                with index_file.open("rb") as handle:
+                    for block in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(block)
+                fingerprint = digest.hexdigest()
+                _INDEX_FINGERPRINT_CACHE.clear()
+                _INDEX_FINGERPRINT_CACHE[cache_key] = fingerprint
+            storage = {
+                "sqlite_size_bytes": stat.st_size,
+                "sqlite_mtime_ns": stat.st_mtime_ns,
+                "sqlite_sha256": fingerprint,
+            }
+        except OSError:
+            storage = {"sqlite_size_bytes": None, "sqlite_mtime_ns": None, "sqlite_sha256": None}
+        metadata = self.collection.metadata or {}
+        return {
+            "collection_name": self.collection.name,
+            "schema_version": metadata.get("schema_version", "unknown"),
+            "distance_space": metadata.get("hnsw:space", "unknown"),
+            **storage,
+        }
+
+    @staticmethod
+    def _single_view_parent_result(hits: list[dict]) -> tuple[list[dict], list[str]]:
+        """Apply the production parent RRF and drop-off rules to one query view."""
+        rrf_scores: Dict[str, float] = {}
+        max_child_cosines: Dict[str, float] = {}
+        seen_parents = set()
+        for rank, hit in enumerate(hits, start=1):
+            parent_id = hit["parent_id"]
+            max_child_cosines[parent_id] = max(max_child_cosines.get(parent_id, float("-inf")), hit["score"])
+            if parent_id in seen_parents:
+                continue
+            seen_parents.add(parent_id)
+            rrf_scores[parent_id] = rrf_scores.get(parent_id, 0.0) + 1.0 / (RRF_K_CONSTANT + rank)
+        ranking = [
+            {
+                "parent_id": parent_id,
+                "rrf_score": rrf_score,
+                "max_child_cosine": max_child_cosines[parent_id],
+            }
+            for parent_id, rrf_score in sorted(rrf_scores.items(), key=lambda item: item[1], reverse=True)
+        ]
+        selected, previous_score = [], None
+        for entry in ranking:
+            if len(selected) >= MAX_PARENTS:
+                break
+            if previous_score is not None and entry["rrf_score"] / previous_score < 0.5:
+                break
+            selected.append(entry["parent_id"])
+            previous_score = entry["rrf_score"]
+        return ranking, selected
+
+    @staticmethod
+    def _compose_anchored_angle_query(subquery: str, retrieval_focus: str) -> str:
+        """Keep the resolved request intact and append a narrow search lens.
+
+        The three existing angle fields remain the model contract.  Their
+        values are focus text, never stand-alone rewrites of the request. The
+        human-readable field label belongs in telemetry, not in the embedding
+        input where it would add irrelevant semantic weight.
+        """
+        return f"{subquery}\n{retrieval_focus}" if retrieval_focus else subquery
+
+    async def execute_multi_angle_search(
+        self,
+        blueprint: dict,
+        scope_pairs: list[dict],
+        *,
+        include_telemetry: bool = False,
+    ) -> List[Dict[str, str]] | tuple[List[Dict[str, str]], Dict[str, Any]]:
         """Retrieve one task through angle-group RRF under one shared scope.
 
         Every angle group is an alternative semantic representation.  Each
@@ -170,25 +269,116 @@ class RAGEngine:
 
         angle_groups = self._normalize_angle_groups(blueprint)
         metadata_filter = self._build_metadata_filter(scope_pairs)
-        query_specs = [
-            (
-                group["group_id"],
-                angle_name,
-                angle_text,
-                (
-                    {"$and": [metadata_filter, {"angle": angle_name.lower()}]}
-                    if self.has_tri_angle_schema
-                    else metadata_filter
-                ),
+        telemetry = {
+            "telemetry_version": 2,
+            "index": self._index_identity(),
+            "scope_pairs": scope_pairs,
+            # The resolved subquery is the fair task-level direct baseline.
+            # Keep the legacy `direct_*` names for existing log readers.
+            "original_query": str(blueprint.get("original_user_query", "")).strip(),
+            "subquery": str(blueprint.get("customer_component", "")).strip(),
+            "direct_query": str(blueprint.get("customer_component", "")).strip(),
+            "original_query_executed": False,
+            "original_query_reused_subquery_result": False,
+            "original_query_hits": [],
+            "original_retrieved_parent_ids": [],
+            "original_parent_ranking": [],
+            "original_ranked_parent_ids": [],
+            "original_selected_parent_ids": [],
+            "direct_query_executed": False,
+            "direct_query_hits": [],
+            "direct_retrieved_parent_ids": [],
+            "direct_parent_ranking": [],
+            "direct_ranked_parent_ids": [],
+            "direct_selected_parent_ids": [],
+            "angle_groups": angle_groups,
+            "per_angle_hits": [],
+            "skipped_angle_views": [],
+            "all_angle_retrieved_parent_ids": [],
+            "rrf_parent_ranking": [],
+            "all_rrf_ranked_parent_ids": [],
+            "selected_parent_ids": [],
+            "rrf_k": RRF_K_CONSTANT,
+            "candidates_per_angle": RRF_CANDIDATES_PER_ANGLE,
+            "max_parents": MAX_PARENTS,
+            "dropoff_ratio": 0.5,
+        }
+
+        # The untouched customer message is a diagnostic-only shadow. For a
+        # multi-part turn it is deliberately broader than this task's subquery,
+        # so it must never enter the production RRF or evidence path.
+        if _shadow_queries_enabled(LOG_SHADOW_ORIGINAL_QUERY) and telemetry["original_query"]:
+            if telemetry["original_query"] == telemetry["subquery"]:
+                telemetry["original_query_reused_subquery_result"] = True
+            else:
+                original_hits = await self._query_single_angle(
+                    telemetry["original_query"], metadata_filter
+                )
+                original_ranking, original_selected = self._single_view_parent_result(original_hits)
+                telemetry.update({
+                    "original_query_executed": True,
+                    "original_query_hits": original_hits,
+                    "original_retrieved_parent_ids": list(dict.fromkeys(hit["parent_id"] for hit in original_hits)),
+                    "original_parent_ranking": original_ranking,
+                    "original_ranked_parent_ids": [entry["parent_id"] for entry in original_ranking],
+                    "original_selected_parent_ids": original_selected,
+                })
+        if _shadow_queries_enabled(LOG_SHADOW_DIRECT_QUERY) and telemetry["direct_query"]:
+            direct_hits = await self._query_single_angle(
+                telemetry["direct_query"], metadata_filter
             )
-            for group in angle_groups
-            for angle_name, angle_text in (
+            direct_ranking, direct_selected = self._single_view_parent_result(direct_hits)
+            telemetry.update({
+                "direct_query_executed": True,
+                "direct_query_hits": direct_hits,
+                "direct_retrieved_parent_ids": list(dict.fromkeys(hit["parent_id"] for hit in direct_hits)),
+                "direct_parent_ranking": direct_ranking,
+                "direct_ranked_parent_ids": [entry["parent_id"] for entry in direct_ranking],
+                "direct_selected_parent_ids": direct_selected,
+            })
+            if telemetry["original_query_reused_subquery_result"]:
+                telemetry.update({
+                    "original_query_executed": True,
+                    "original_query_hits": direct_hits,
+                    "original_retrieved_parent_ids": list(dict.fromkeys(hit["parent_id"] for hit in direct_hits)),
+                    "original_parent_ranking": direct_ranking,
+                    "original_ranked_parent_ids": [entry["parent_id"] for entry in direct_ranking],
+                    "original_selected_parent_ids": direct_selected,
+                })
+        query_specs = []
+        for group in angle_groups:
+            for angle_name, model_focus in (
                 ("Procedural", group["procedural"]),
                 ("Policy", group["policy"]),
                 ("Conceptual", group["conceptual"]),
-            )
-            if angle_text
-        ]
+            ):
+                # A non-distinct or sentinel focus should not become a fake
+                # duplicate angle. Keep the view out of RRF and make the
+                # decision explicit for later analysis.
+                normalized_model_focus = model_focus.strip() if isinstance(model_focus, str) else ""
+                has_safe_model_focus = bool(normalized_model_focus) and normalized_model_focus.casefold() not in _EMPTY_RETRIEVAL_FOCUS_VALUES
+                if not has_safe_model_focus:
+                    telemetry["skipped_angle_views"].append({
+                        "group_id": group["group_id"],
+                        "angle": angle_name.lower(),
+                        "model_retrieval_focus": normalized_model_focus,
+                        "reason": "empty_or_sentinel_focus",
+                    })
+                    continue
+                retrieval_focus = normalized_model_focus
+                query_specs.append((
+                    group["group_id"],
+                    angle_name,
+                    normalized_model_focus,
+                    retrieval_focus,
+                    "model",
+                    self._compose_anchored_angle_query(telemetry["subquery"], retrieval_focus),
+                    (
+                        {"$and": [metadata_filter, {"angle": angle_name.lower()}]}
+                        if self.has_tri_angle_schema
+                        else metadata_filter
+                    ),
+                ))
         print(f" 📐 Angle groups: {len(angle_groups)} | Vector searches: {len(query_specs)}")
         print(
             " 🧭 Child-vector schema: "
@@ -203,15 +393,32 @@ class RAGEngine:
 
         if not query_specs:
             print("    ⚠️ No valid semantic angles supplied for this task.")
-            return []
+            return ([], telemetry) if include_telemetry else []
         query_results = await asyncio.gather(*[
-            self._query_single_angle(angle_text, metadata_filter)
-            for _, _, angle_text, metadata_filter in query_specs
+            self._query_single_angle(executed_query, metadata_filter)
+            for _, _, _, _, _, executed_query, metadata_filter in query_specs
         ])
         ranked_query_results = [
             (query_specs[index][0], query_specs[index][1], hits)
             for index, hits in enumerate(query_results)
         ]
+        telemetry["per_angle_hits"] = [
+            {
+                "group_id": group_id,
+                "angle": angle_name.lower(),
+                "model_retrieval_focus": model_focus,
+                "retrieval_focus": retrieval_focus,
+                "retrieval_focus_source": focus_source,
+                "query": executed_query,
+                "hits": hits,
+            }
+            for (group_id, angle_name, model_focus, retrieval_focus, focus_source, executed_query, _), (_, _, hits) in zip(query_specs, ranked_query_results)
+        ]
+        telemetry["all_angle_retrieved_parent_ids"] = list(dict.fromkeys(
+            hit["parent_id"]
+            for _, _, hits in ranked_query_results
+            for hit in hits
+        ))
 
         # Raw Hits Telemetry
         print("\n    [RAG TELEMETRY] --- Raw ChromaDB Hits per Angle ---")
@@ -255,7 +462,13 @@ class RAGEngine:
             execution_time = (time.time() - start_time) * 1000
             print(f" ⏱️  [RAG ENGINE] Total Execution Time: {execution_time:.2f} ms")
             print("═"*60 + "\n")
-            return []
+            return ([], telemetry) if include_telemetry else []
+
+        telemetry["rrf_parent_ranking"] = [
+            {"parent_id": parent_id, "rrf_score": score}
+            for parent_id, score in sorted_parents
+        ]
+        telemetry["all_rrf_ranked_parent_ids"] = [parent_id for parent_id, _ in sorted_parents]
 
         # 4. The task-level 50% Drop-Off Rule Calculation
         print("\n    [RAG TELEMETRY] --- Final RRF Standings & Drop-Off Selection ---")
@@ -298,10 +511,11 @@ class RAGEngine:
 
         # 5. Hydrate & Return
         print(f"\n    📊 RRF Engine finalized {len(selected_parent_ids)} Parent(s) for LLM Hydration: {selected_parent_ids}")
+        telemetry["selected_parent_ids"] = selected_parent_ids
         payload = self._hydrate_parents_from_sqlite(selected_parent_ids)
         
         execution_time = (time.time() - start_time) * 1000
         print(f" ⏱️  [RAG ENGINE] Total Execution Time: {execution_time:.2f} ms")
         print("═"*60 + "\n")
         
-        return payload
+        return (payload, telemetry) if include_telemetry else payload

@@ -1,0 +1,2352 @@
+{
+  "metadata": {
+    "purpose": "Unused BANKING77 language confirmation for the parent-dispersion bridge trigger",
+    "sample_seed": 20260822,
+    "sample_per_category": 15,
+    "excluded_prior_banking77_messages": 200,
+    "dispersion_threshold": 0.038,
+    "bridge_router": "fixed deterministic semantic proxy documented in run_parent_dispersion_confirmation.py"
+  },
+  "cases": [
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_01",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "Please, activate my card",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_02",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "What do I need to do to activate my new card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_03",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "How long will it take to activate my new card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_04",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "I need help with activating my card",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_05",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "I got my new card but I am not sure if it need s activated and how?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_06",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "When will my card be activated?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_07",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "I need to activate my card can you do that now?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_08",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "Is there a way my new card can be renewed?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_09",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "How do I use my new card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_10",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "WHAT CAN I DO AFTER THE CARD MISSING",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_11",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "I would like to activate my card to use now, can you help me?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_12",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "I got my new card. How do I activate it?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_13",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "how to activate card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_14",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "What's the right way to activate my card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_activate_my_card_15",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "activate_my_card",
+      "customer_query": "I need help activating my new card.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to activate a newly received Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_01",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "How do I update the PIN on my account?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_02",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "I am in Austria right now. I need to change my PIN ASAP, so can I still do this from here?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_03",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "I'd like to make a new PIN selection.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_04",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "How do I change my PIN?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_05",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "What kind of cash machines would allow me to change my PIN?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_06",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "I need to change my PIN. Can I do that at a cash machine?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_07",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "Can i change my PIN at the ATM?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_08",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "Is there a location near me that i can change my PIN?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_09",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "I need to change my PIN.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_10",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "I want to choose a different PIN.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_11",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "I desperately need to change my PIN, but I'm overseas on vacation right now. How can I do this?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_12",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "What do I need to do to change my PIN?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_13",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "If I am overseas, how do I change my pin?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_14",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "I would like to change my PIN but I am not currently in the country.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_change_pin_15",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "change_pin",
+      "customer_query": "How do I set a new pin?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "How to change the PIN for a Horizon debit card"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_01",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "What is the tracking number for my card that was mailed?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_02",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "I still have not received my new card, I ordered over a week ago.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_03",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "still waiting on that card",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_04",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "I'm still waiting for delivery of my new card, why is it taking so long?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_05",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "Is it normal to have to wait over a week for my new card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_06",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "How long does a card delivery take?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_07",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "I ordered my card 2 weeks ago and it still isn't here? What do I do?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_08",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "How do I track my card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_09",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "Do you know if there is a tracking number for the new card you sent me?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_10",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "I ordered a card and I still haven't received it. It's been two weeks. What can I do?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_11",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "I have been waiting longer than expected for my bank card, could you provide information on when it will arrive?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_12",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "I'm starting to think my card is lost because it still hasn't arrived, can you help?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_13",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "Where is the tracking number for the card you sent me?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_14",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "Does the card you sent have a way to track to it?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_card_arrival_15",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "card_arrival",
+      "customer_query": "I am still waiting for my card after 1 week.  Is this ok?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "What to do when a newly applied Horizon debit card has not arrived"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_01",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "Somehow I am missing my card.  What should I do?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_02",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "Are you able to locate my card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_03",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "I need help with a lost card",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_04",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "Somebody has stolen my card, I need help please.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_05",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "I think my card was stolen.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_06",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "I think I lost my card . I dont know how long it has been missing. Can you see if maybe someone else has been using it?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_07",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "I lost my wallet today with all my credit cards. Will you please block the card and send a replacement?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_08",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "card is lost, please help",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_09",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "I'm in Spain and my stuff has been stolen. My card was with it and I need a new one shipped and the old one frozen.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_10",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "My card was taken from me",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_11",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "My card got lost.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_12",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "How do I report a stolen card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_13",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "How do I report my card lost or stolen?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_14",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "I cannot find my credit card.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_lost_or_stolen_card_15",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "Oh no!  I lost my card!  Help!",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "What to do when a Horizon debit card is lost or stolen"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_01",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "When does the money get transferred to my account",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_02",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "If I started the Bank transfer from Europe, how long will the process take to complete?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_03",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "how soon will I see the transfer in my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_04",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "How long until the money is in my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_05",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "When should I expect to see my transfer hit my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_06",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "Will my transfer immediately show up in my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_07",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "When will a transfer reach my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_08",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "How long does a transfer take from the point it's sent, to the point it arrives in my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_09",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "How long is my Europe transfer wait?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_10",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "What is the wait time for a transfer from the US?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_11",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "What is the time frame for a transfer from the US?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_12",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "How long does a transfer take from china?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_13",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "Do transfers from Europe take longer?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_14",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "How long to I have to wait for a transfer to reach my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_timing_15",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_timing",
+      "customer_query": "How many days does it take until funds are in my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "When a transfer sent from a Horizon savings account is received"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_01",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I submitted a transaction to the incorrect account.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_02",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I need help cancelling a transaction.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_03",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I want to cancel a transfer right away! Can you help?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_04",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "Is there a way to revert my transaction from this morning?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_05",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "How can I cancel a transfer?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_06",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I need to cancel my recent transfer immediately, I made a mistake there, please help quickly before it goes through",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_07",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "Can I cancel my transaction?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_08",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "Can I cancel a transfer if is already processed?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_09",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I need to make an immediate cancellation related to a transfer. This was a mistake. Please assist quickly so this does not actually go through.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_10",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I would like to revert a transaction I did this morning",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_11",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "Tell me how to cancel a transfer.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_12",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I need you to cancel a transfer that I made.  It is the wrong account number and the app won't let me stop the transaction.  Please stop it!",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_13",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "Can I cancel a transfer",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_14",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "This is URGENT, I typed the wrong payment information for a payment I needed to make and have clicked send, I need to reverse the transaction immediately.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_cancel_transfer_15",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I made an error in payment yesterday and I need it fixed asap because it's for my rent tomorrow.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "bridge_angle": "policy",
+      "bridge_query": "Revoke or cancel a transfer after it has been approved"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_01",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "How do I send my account money through transfer?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_02",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "How can I transfer money to my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_03",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I need to transfer funds into my account. How can I do this?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_04",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I need to bank account transfer from another account into this one, what is the easiest way that can be done, and what information do i need?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_05",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "What are the steps I follow to transfer money into my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_06",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I NEED TO KNOW HOW TO TRANSFER MONEY INTO MY BANK ACCOUNT. PLEASE HELP",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_07",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I would like to transfer funds from one account to another.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_08",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "What do I need to do to transfer money into my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_09",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I checked my account today and it said I was out of money. How do I transfer money into my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_10",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I want to use bank transfer for topping up my account. How is it handled?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_11",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "How can I transfer funds from my bank to my top up account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_12",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "Can I do a bank transfer to put additional money in my account because I am out of money?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_13",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I'm out of money, can I add money with my bank?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_14",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I would like to transfer money from my other bank account into this one.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_transfer_into_account_15",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "transfer_into_account",
+      "customer_query": "Can I add funds to the card directly from my bank account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Ways to add money to a Horizon savings account"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_01",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I have forgotten my passcode to access my app",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_02",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "What is the code I need to get into the app?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_03",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I forgot the code to access the app.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_04",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "My password isn't being accepted and I need to reset it.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_05",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I need to reset my passcode. How do I do it?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_06",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I forgot my password",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_07",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "How do I reset the passcode?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_08",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "Show me please how to reset my passcode.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_09",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I need a new passcode.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_10",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "Can I reset my password?  I don't know what it is.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_11",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I do not know my passcode.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_12",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "How do I retrieve my passcode?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_13",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I forgot my code to get into the app.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_14",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I lost my password",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    },
+    {
+      "id": "parent_dispersion_banking77_passcode_forgotten_15",
+      "source": "PolyAI BANKING77 test split (CC BY 4.0)",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I don't have my access code for the app.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "bridge_angle": "procedural",
+      "bridge_query": "Regain access after forgetting a Horizon App passcode"
+    }
+  ]
+}

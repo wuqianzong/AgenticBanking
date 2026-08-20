@@ -190,25 +190,47 @@ crosses zero. It is a research hypothesis, not a production adoption result.
 
 ## Current Conclusion
 
-The design to evaluate next is:
+The current evaluation baseline is:
 
 ```text
 Resolved task
-  → LLM selects whether an extra angle is useful
-  → LLM selects one appropriate perspective
-     - procedural for actions and processes
-     - policy/requirements for conditions and restrictions
-     - conceptual for product mechanics
-  → LLM generates one complete equivalent narrative view
-  → direct query + selected view use the same RRF selection contract
+  → direct task-query shadow retrieval (diagnostic only)
+  → anchored procedural / policy / conceptual retrieval views
+  → RRF candidate selection and normal retry expansion
+  → independent sufficiency judgment
 ```
 
-The generator must pass a semantic-equivalence validation before retrieval:
+Each angle focus must remain semantically equivalent to the task:
 
 - same task and requested outcome;
 - no omitted material constraint;
 - no changed product, money direction, or user role; and
 - no invented procedure, feature, or policy.
+
+### Corrected result: no validated bridge trigger yet
+
+The original apparent benefit of narrative views and low direct-parent cosine
+dispersion depended on a static BANKING77 category-to-parent proxy. That proxy
+was not a valid relevance label and the conclusion must not be used as a
+production rule.
+
+After reconstructing acceptable parents from the existing blinded evidence
+judgments, direct retrieval was already best in the judged subset: no fixed
+angle improved its aggregate result, and direct-parent dispersion was not a
+statistically reliable predictor of an oracle angle gain. A separate
+target-anchored synthetic diagnostic likewise found no target-level
+dispersion-to-bridge association.
+
+The retained hypothesis is therefore narrower: a safe narrative variation may
+occasionally surface a different candidate neighbourhood, but current data
+does not identify when to invoke it or which angle to use. Collect the next
+cohort in the isolated evaluation environment with direct, angle, RRF, retry,
+and independent sufficiency-judgment telemetry before fitting any trigger.
+
+See [Judged-Target Dispersion Rerun](reports/JUDGED_TARGET_DISPERSION_RERUN_v1.md),
+[Judged-Target Narrative Gain Rerun](reports/JUDGED_TARGET_NARRATIVE_GAIN_RERUN_v1.md),
+and [Target-Anchored Dispersion Diagnostic](reports/TARGET_ANCHORED_DISPERSION_DIAGNOSTIC_v1.md)
+for the corrected results and limitations.
 
 ## What Is Retired, Retained, and Open
 
@@ -219,8 +241,8 @@ The generator must pass a semantic-equivalence validation before retrieval:
 | Not selected as current baseline | Three-angle child-vector representation |
 | Retained | Original Q&A child-vector research baseline |
 | Retained | One complete, noise-reduced direct task query |
-| Open research hypothesis | Direct query plus one selected, complete narrative angle |
-| Open research need | Larger stratified evaluation with product-knowledge, pricing, wealth, and multi-component tasks |
+| Open research hypothesis | A safe anchored narrative view may add recall for a subset of direct retrieval failures; no selector is validated |
+| Open research need | Isolated, tagged live retrieval cohort with independent candidate judgments and sufficient failure coverage |
 
 ## Study Layout
 

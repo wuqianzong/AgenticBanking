@@ -1,0 +1,2978 @@
+{
+  "metadata": {
+    "purpose": "Target-anchored synthetic diagnostic of direct parent-score dispersion and fixed narrative gains",
+    "fixture": "/Users/bensonwu/Projects/AgenticBanking/research/2026-08-19_retrieval_query_refinement/fixtures/retrieval_query_strategy_eval_v1.json",
+    "isolation": "in-memory exact cosine ranking; no production writes",
+    "important_limit": "Synthetic variants share 20 reviewed targets and likely inflate direct retrieval; do not interpret as independent or production evidence."
+  },
+  "cases": [
+    {
+      "id": "debit_card_activation_indirect_conceptual",
+      "expected_parent_id": "faq_74abafeb",
+      "direct_parent_dispersion": 0.044752282037019475,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_26561f81",
+          "faq_74abafeb",
+          "faq_66004845",
+          "faq_7883a8c2"
+        ],
+        "parent_dispersion": 0.044752282037019475,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_26561f81",
+            "faq_ff1c2b9c"
+          ],
+          "parent_dispersion": 0.019870389753051457,
+          "expected_rank": 1,
+          "mrr_delta": 0.5
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_74abafeb"
+          ],
+          "parent_dispersion": 0.0026985051324036613,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_74abafeb",
+            "faq_66004845"
+          ],
+          "parent_dispersion": 0.019870389753051457,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "debit_card_activation_policy_dominant",
+      "expected_parent_id": "faq_74abafeb",
+      "direct_parent_dispersion": 0.042314149470286874,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_74abafeb",
+          "faq_26561f81",
+          "faq_66004845",
+          "faq_6dae126c"
+        ],
+        "parent_dispersion": 0.042314149470286874,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_66004845",
+            "faq_ff1c2b9c"
+          ],
+          "parent_dispersion": 0.04863109513538743,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_5ad80c63"
+          ],
+          "parent_dispersion": 0.04710301254293262,
+          "expected_rank": 2,
+          "mrr_delta": -0.5
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_6dae126c"
+          ],
+          "parent_dispersion": 0.042314149470286874,
+          "expected_rank": 2,
+          "mrr_delta": -0.5
+        }
+      }
+    },
+    {
+      "id": "debit_card_activation_procedural_dominant",
+      "expected_parent_id": "faq_74abafeb",
+      "direct_parent_dispersion": 0.04025402842466136,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_74abafeb",
+          "faq_7883a8c2",
+          "faq_74392fe2",
+          "faq_ff1c2b9c"
+        ],
+        "parent_dispersion": 0.04025402842466136,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_ff1c2b9c",
+            "faq_7883a8c2",
+            "faq_6dae126c"
+          ],
+          "parent_dispersion": 0.043620902652869546,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_26561f81",
+            "faq_7883a8c2",
+            "faq_9d7a4b83"
+          ],
+          "parent_dispersion": 0.03772414000689317,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_ff1c2b9c",
+            "faq_26561f81",
+            "faq_7883a8c2"
+          ],
+          "parent_dispersion": 0.043620902652869546,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "deposit_interest_crediting_indirect_conceptual",
+      "expected_parent_id": "faq_fc5a7921",
+      "direct_parent_dispersion": 0.01475348490248729,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_fc5a7921",
+          "faq_01a85fa7",
+          "faq_871bd177",
+          "faq_cb9d3330"
+        ],
+        "parent_dispersion": 0.01475348490248729,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_fc5a7921",
+            "faq_01a85fa7",
+            "faq_cb9d3330",
+            "faq_871bd177"
+          ],
+          "parent_dispersion": 0.01475348490248729,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_fc5a7921",
+            "faq_01a85fa7",
+            "faq_871bd177",
+            "faq_cb9d3330"
+          ],
+          "parent_dispersion": 0.01475348490248729,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_fc5a7921",
+            "faq_01a85fa7",
+            "faq_871bd177",
+            "faq_cb9d3330"
+          ],
+          "parent_dispersion": 0.01475348490248729,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "deposit_interest_crediting_policy_dominant",
+      "expected_parent_id": "faq_fc5a7921",
+      "direct_parent_dispersion": 0.023141387596813,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_fc5a7921",
+          "faq_01a85fa7",
+          "faq_871bd177",
+          "faq_cb9d3330"
+        ],
+        "parent_dispersion": 0.023141387596813,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_fc5a7921",
+            "faq_01a85fa7",
+            "faq_cb9d3330",
+            "faq_871bd177"
+          ],
+          "parent_dispersion": 0.023141387596813,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_fc5a7921",
+            "faq_01a85fa7",
+            "faq_871bd177",
+            "faq_cb9d3330"
+          ],
+          "parent_dispersion": 0.023141387596813,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_fc5a7921",
+            "faq_01a85fa7",
+            "faq_871bd177",
+            "faq_cb9d3330"
+          ],
+          "parent_dispersion": 0.023141387596813,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "deposit_interest_crediting_procedural_dominant",
+      "expected_parent_id": "faq_fc5a7921",
+      "direct_parent_dispersion": 0.056187909470329464,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_fc5a7921",
+          "faq_01a85fa7",
+          "faq_871bd177",
+          "faq_cb9d3330"
+        ],
+        "parent_dispersion": 0.056187909470329464,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_fc5a7921",
+            "faq_01a85fa7",
+            "faq_cb9d3330",
+            "faq_871bd177"
+          ],
+          "parent_dispersion": 0.056187909470329464,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_fc5a7921",
+            "faq_01a85fa7",
+            "faq_0b62be43",
+            "faq_871bd177"
+          ],
+          "parent_dispersion": 0.056824038539411405,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_fc5a7921",
+            "faq_01a85fa7",
+            "faq_871bd177",
+            "faq_cb9d3330"
+          ],
+          "parent_dispersion": 0.056187909470329464,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "instant_loan_eligibility_indirect_conceptual",
+      "expected_parent_id": "faq_0ae0bb51",
+      "direct_parent_dispersion": 0.06598345710838882,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_0ae0bb51",
+          "faq_f9cce3c1"
+        ],
+        "parent_dispersion": 0.06598345710838882,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_0ae0bb51",
+            "faq_f9cce3c1"
+          ],
+          "parent_dispersion": 0.06598345710838882,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_0ae0bb51",
+            "faq_f9cce3c1"
+          ],
+          "parent_dispersion": 0.06598345710838882,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_0ae0bb51",
+            "faq_f9cce3c1"
+          ],
+          "parent_dispersion": 0.06598345710838882,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "instant_loan_eligibility_policy_dominant",
+      "expected_parent_id": "faq_0ae0bb51",
+      "direct_parent_dispersion": 0.025109567850256365,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_0ae0bb51",
+          "faq_f9cce3c1"
+        ],
+        "parent_dispersion": 0.025109567850256365,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_0ae0bb51",
+            "faq_f9cce3c1"
+          ],
+          "parent_dispersion": 0.025109567850256365,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_0ae0bb51",
+            "faq_f9cce3c1"
+          ],
+          "parent_dispersion": 0.025109567850256365,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_0ae0bb51",
+            "faq_f9cce3c1"
+          ],
+          "parent_dispersion": 0.025109567850256365,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "instant_loan_eligibility_procedural_dominant",
+      "expected_parent_id": "faq_0ae0bb51",
+      "direct_parent_dispersion": 0.06894293641298355,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_0ae0bb51",
+          "faq_f9cce3c1"
+        ],
+        "parent_dispersion": 0.06894293641298355,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_0ae0bb51",
+            "faq_f9cce3c1"
+          ],
+          "parent_dispersion": 0.06894293641298355,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_0ae0bb51",
+            "faq_f9cce3c1"
+          ],
+          "parent_dispersion": 0.06894293641298355,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_0ae0bb51",
+            "faq_f9cce3c1"
+          ],
+          "parent_dispersion": 0.06894293641298355,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "stock_autoinvest_multiple_plans_indirect_conceptual",
+      "expected_parent_id": "faq_9a88fadb",
+      "direct_parent_dispersion": 0.08919797180456894,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_9a88fadb",
+          "faq_3fb1caf7",
+          "faq_2f201863",
+          "faq_da8c52ca"
+        ],
+        "parent_dispersion": 0.08919797180456894,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_9a88fadb",
+            "faq_3fb1caf7",
+            "faq_2f201863",
+            "faq_da8c52ca"
+          ],
+          "parent_dispersion": 0.08919797180456894,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_9a88fadb",
+            "faq_2f201863",
+            "faq_e94ad933",
+            "faq_3fb1caf7"
+          ],
+          "parent_dispersion": 0.08165069538291113,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_9a88fadb"
+          ],
+          "parent_dispersion": null,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "stock_autoinvest_multiple_plans_policy_dominant",
+      "expected_parent_id": "faq_9a88fadb",
+      "direct_parent_dispersion": 0.07494437845306777,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_9a88fadb",
+          "faq_3fb1caf7",
+          "faq_2f201863",
+          "faq_b73dbebe"
+        ],
+        "parent_dispersion": 0.07494437845306777,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_9a88fadb",
+            "faq_3fb1caf7",
+            "faq_2f201863",
+            "faq_0193ee46"
+          ],
+          "parent_dispersion": 0.0751025422776552,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_9a88fadb",
+            "faq_b73dbebe",
+            "faq_2f201863",
+            "faq_e94ad933"
+          ],
+          "parent_dispersion": 0.0845026313557296,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_9a88fadb",
+            "faq_b73dbebe",
+            "faq_3fb1caf7",
+            "faq_3a182d84"
+          ],
+          "parent_dispersion": 0.08044919896480804,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "stock_autoinvest_multiple_plans_procedural_dominant",
+      "expected_parent_id": "faq_9a88fadb",
+      "direct_parent_dispersion": 0.13839242883770092,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_9a88fadb",
+          "faq_3fb1caf7",
+          "faq_2f201863",
+          "faq_b73dbebe"
+        ],
+        "parent_dispersion": 0.13839242883770092,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_9a88fadb",
+            "faq_3fb1caf7",
+            "faq_2f201863"
+          ],
+          "parent_dispersion": 0.1111207451632285,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_9a88fadb",
+            "faq_b73dbebe",
+            "faq_2f201863",
+            "faq_e94ad933"
+          ],
+          "parent_dispersion": 0.15935114750018806,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_9a88fadb",
+            "faq_b73dbebe",
+            "faq_c8d61dc6",
+            "faq_3fb1caf7"
+          ],
+          "parent_dispersion": 0.16177620800448644,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "stock_autoinvest_setup_indirect_conceptual",
+      "expected_parent_id": "faq_2f201863",
+      "direct_parent_dispersion": 0.06433761237134183,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_3fb1caf7",
+          "faq_2f201863",
+          "faq_da8c52ca",
+          "faq_d22a7a8c"
+        ],
+        "parent_dispersion": 0.06433761237134183,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_3fb1caf7",
+            "faq_2f201863",
+            "faq_d22a7a8c",
+            "faq_9a88fadb"
+          ],
+          "parent_dispersion": 0.06679868086791296,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_3fb1caf7",
+            "faq_2f201863",
+            "faq_c8d61dc6",
+            "faq_da8c52ca"
+          ],
+          "parent_dispersion": 0.0692302275008376,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_3fb1caf7",
+            "faq_2f201863",
+            "faq_c8d61dc6",
+            "faq_3a182d84"
+          ],
+          "parent_dispersion": 0.07417234359031624,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "stock_autoinvest_setup_policy_dominant",
+      "expected_parent_id": "faq_2f201863",
+      "direct_parent_dispersion": 0.076492673380706,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_3fb1caf7",
+          "faq_2f201863",
+          "faq_9a88fadb",
+          "faq_b73dbebe"
+        ],
+        "parent_dispersion": 0.076492673380706,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_3fb1caf7",
+            "faq_9a88fadb",
+            "faq_2f201863"
+          ],
+          "parent_dispersion": 0.03851034069178882,
+          "expected_rank": 3,
+          "mrr_delta": -0.16666666666666669
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_3fb1caf7",
+            "faq_2f201863",
+            "faq_9a88fadb",
+            "faq_b73dbebe"
+          ],
+          "parent_dispersion": 0.076492673380706,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_3fb1caf7",
+            "faq_2f201863",
+            "faq_c8d61dc6",
+            "faq_9a88fadb"
+          ],
+          "parent_dispersion": 0.07810169128862987,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "stock_autoinvest_setup_procedural_dominant",
+      "expected_parent_id": "faq_2f201863",
+      "direct_parent_dispersion": 0.08866293071322866,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_2f201863",
+          "faq_3fb1caf7",
+          "faq_502da680",
+          "faq_9a88fadb"
+        ],
+        "parent_dispersion": 0.08866293071322866,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_3fb1caf7",
+            "faq_2f201863",
+            "faq_9a88fadb"
+          ],
+          "parent_dispersion": 0.08975725142342088,
+          "expected_rank": 2,
+          "mrr_delta": -0.5
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_2f201863",
+            "faq_3fb1caf7",
+            "faq_9a88fadb",
+            "faq_502da680"
+          ],
+          "parent_dispersion": 0.08866293071322864,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_3fb1caf7",
+            "faq_2f201863",
+            "faq_9a88fadb",
+            "faq_c8d61dc6"
+          ],
+          "parent_dispersion": 0.08975725142342088,
+          "expected_rank": 2,
+          "mrr_delta": -0.5
+        }
+      }
+    },
+    {
+      "id": "credit_card_balance_transfer_fee_indirect_conceptual",
+      "expected_parent_id": "faq_f7412d3a",
+      "direct_parent_dispersion": 0.09988696517235705,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_5f31fc26",
+          "faq_f7412d3a",
+          "faq_3d77cf86",
+          "faq_a5ab2ed8"
+        ],
+        "parent_dispersion": 0.09988696517235705,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_5f31fc26",
+            "faq_f7412d3a",
+            "faq_a5ab2ed8",
+            "faq_3d77cf86"
+          ],
+          "parent_dispersion": 0.09988696517235705,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_5f31fc26",
+            "faq_f7412d3a"
+          ],
+          "parent_dispersion": 0.023917895225423424,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_5f31fc26",
+            "faq_f7412d3a"
+          ],
+          "parent_dispersion": 0.023917895225423424,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "credit_card_balance_transfer_fee_policy_dominant",
+      "expected_parent_id": "faq_f7412d3a",
+      "direct_parent_dispersion": 0.05852257857097221,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_5f31fc26",
+          "faq_f7412d3a",
+          "faq_1b3f3507",
+          "faq_df0e6cbd"
+        ],
+        "parent_dispersion": 0.05852257857097221,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_5f31fc26",
+            "faq_f7412d3a"
+          ],
+          "parent_dispersion": 0.01272770722031219,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_f7412d3a",
+            "faq_5f31fc26",
+            "faq_1b3f3507",
+            "faq_df0e6cbd"
+          ],
+          "parent_dispersion": 0.05852257857097221,
+          "expected_rank": 1,
+          "mrr_delta": 0.5
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_5f31fc26",
+            "faq_f7412d3a",
+            "faq_1b3f3507",
+            "faq_4659512d"
+          ],
+          "parent_dispersion": 0.06378765955462255,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "credit_card_balance_transfer_fee_procedural_dominant",
+      "expected_parent_id": "faq_f7412d3a",
+      "direct_parent_dispersion": 0.07239288137729288,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_5f31fc26",
+          "faq_f7412d3a",
+          "faq_a5ab2ed8",
+          "faq_87be3543"
+        ],
+        "parent_dispersion": 0.07239288137729288,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_5f31fc26",
+            "faq_f7412d3a",
+            "faq_a5ab2ed8",
+            "faq_87be3543"
+          ],
+          "parent_dispersion": 0.07239288137729288,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_f7412d3a",
+            "faq_5f31fc26"
+          ],
+          "parent_dispersion": 0.025452064376101258,
+          "expected_rank": 1,
+          "mrr_delta": 0.5
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_5f31fc26",
+            "faq_f7412d3a"
+          ],
+          "parent_dispersion": 0.025452064376101258,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "debit_card_delivery_indirect_conceptual",
+      "expected_parent_id": "faq_9d7a4b83",
+      "direct_parent_dispersion": 0.05002559276503793,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_9d7a4b83",
+          "faq_5ad80c63",
+          "faq_ff1c2b9c",
+          "faq_74392fe2"
+        ],
+        "parent_dispersion": 0.05002559276503793,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c"
+          ],
+          "parent_dispersion": 0.04713446260152578,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_74392fe2"
+          ],
+          "parent_dispersion": 0.05002559276503793,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_74392fe2"
+          ],
+          "parent_dispersion": 0.05002559276503793,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "debit_card_delivery_policy_dominant",
+      "expected_parent_id": "faq_9d7a4b83",
+      "direct_parent_dispersion": 0.06269389791085363,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_9d7a4b83",
+          "faq_5ad80c63",
+          "faq_ff1c2b9c",
+          "faq_74392fe2"
+        ],
+        "parent_dispersion": 0.06269389791085363,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_74abafeb"
+          ],
+          "parent_dispersion": 0.07793353459234297,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_74392fe2"
+          ],
+          "parent_dispersion": 0.06269389791085363,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_74abafeb"
+          ],
+          "parent_dispersion": 0.07793353459234297,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "debit_card_delivery_procedural_dominant",
+      "expected_parent_id": "faq_9d7a4b83",
+      "direct_parent_dispersion": 0.0776204889146936,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_9d7a4b83",
+          "faq_5ad80c63",
+          "faq_74392fe2",
+          "faq_ff1c2b9c"
+        ],
+        "parent_dispersion": 0.0776204889146936,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_74abafeb"
+          ],
+          "parent_dispersion": 0.0996286878943735,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_74392fe2"
+          ],
+          "parent_dispersion": 0.0776204889146936,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_74abafeb"
+          ],
+          "parent_dispersion": 0.0996286878943735,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "debit_card_pin_update_indirect_conceptual",
+      "expected_parent_id": "faq_6dae126c",
+      "direct_parent_dispersion": 0.05452170557176615,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_6dae126c",
+          "faq_74abafeb",
+          "faq_33f045af",
+          "faq_26561f81"
+        ],
+        "parent_dispersion": 0.05452170557176615,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "parent_dispersion": 0.05959358760391974,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_26561f81"
+          ],
+          "parent_dispersion": 0.05452170557176615,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_26561f81"
+          ],
+          "parent_dispersion": 0.05452170557176615,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "debit_card_pin_update_policy_dominant",
+      "expected_parent_id": "faq_6dae126c",
+      "direct_parent_dispersion": 0.04196022794594441,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_6dae126c",
+          "faq_33f045af",
+          "faq_26561f81",
+          "faq_74abafeb"
+        ],
+        "parent_dispersion": 0.04196022794594441,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "parent_dispersion": 0.04497329983594882,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_26561f81",
+            "faq_74abafeb"
+          ],
+          "parent_dispersion": 0.04196022794594441,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_26561f81"
+          ],
+          "parent_dispersion": 0.04196022794594441,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "debit_card_pin_update_procedural_dominant",
+      "expected_parent_id": "faq_6dae126c",
+      "direct_parent_dispersion": 0.03815687808554716,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_6dae126c",
+          "faq_74abafeb",
+          "faq_33f045af",
+          "faq_7883a8c2"
+        ],
+        "parent_dispersion": 0.03815687808554716,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "parent_dispersion": 0.03815687808554716,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_26561f81"
+          ],
+          "parent_dispersion": 0.033987746230552646,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "parent_dispersion": 0.03815687808554716,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "deposit_bonus_interest_timing_indirect_conceptual",
+      "expected_parent_id": "faq_871bd177",
+      "direct_parent_dispersion": 0.047836088547004635,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_871bd177",
+          "faq_cb9d3330",
+          "faq_0b62be43",
+          "faq_fc5a7921"
+        ],
+        "parent_dispersion": 0.047836088547004635,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_871bd177",
+            "faq_cb9d3330",
+            "faq_fc5a7921",
+            "faq_01a85fa7"
+          ],
+          "parent_dispersion": 0.048382646887721696,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_871bd177",
+            "faq_cb9d3330",
+            "faq_0b62be43",
+            "faq_ff2ee5cc"
+          ],
+          "parent_dispersion": 0.044624130020164,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_871bd177",
+            "faq_cb9d3330",
+            "faq_fc5a7921",
+            "faq_01a85fa7"
+          ],
+          "parent_dispersion": 0.048382646887721696,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "deposit_bonus_interest_timing_policy_dominant",
+      "expected_parent_id": "faq_871bd177",
+      "direct_parent_dispersion": 0.04725931797018452,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_cb9d3330",
+          "faq_871bd177",
+          "faq_fc5a7921",
+          "faq_01a85fa7"
+        ],
+        "parent_dispersion": 0.04725931797018452,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_cb9d3330",
+            "faq_871bd177",
+            "faq_fc5a7921",
+            "faq_01a85fa7"
+          ],
+          "parent_dispersion": 0.04725931797018452,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_cb9d3330",
+            "faq_871bd177"
+          ],
+          "parent_dispersion": 0.0037892938187795155,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_cb9d3330",
+            "faq_871bd177",
+            "faq_fc5a7921",
+            "faq_01a85fa7"
+          ],
+          "parent_dispersion": 0.04725931797018452,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "deposit_bonus_interest_timing_procedural_dominant",
+      "expected_parent_id": "faq_871bd177",
+      "direct_parent_dispersion": 0.013946647287245706,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_871bd177",
+          "faq_cb9d3330",
+          "faq_fc5a7921",
+          "faq_01a85fa7"
+        ],
+        "parent_dispersion": 0.013946647287245706,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_871bd177",
+            "faq_cb9d3330",
+            "faq_fc5a7921",
+            "faq_01a85fa7"
+          ],
+          "parent_dispersion": 0.013946647287245706,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_871bd177",
+            "faq_cb9d3330"
+          ],
+          "parent_dispersion": 0.0,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_871bd177",
+            "faq_cb9d3330",
+            "faq_fc5a7921",
+            "faq_01a85fa7"
+          ],
+          "parent_dispersion": 0.013946647287245706,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "horizon_app_obtain_indirect_conceptual",
+      "expected_parent_id": "faq_ec3376a6",
+      "direct_parent_dispersion": 0.087755222864197,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_ec3376a6",
+          "faq_1e61de43",
+          "faq_b5bac2fd",
+          "faq_a12466ec"
+        ],
+        "parent_dispersion": 0.087755222864197,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_ec3376a6",
+            "faq_b5bac2fd",
+            "faq_1e61de43",
+            "faq_a12466ec"
+          ],
+          "parent_dispersion": 0.087755222864197,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_ec3376a6",
+            "faq_b5bac2fd",
+            "faq_1e61de43",
+            "faq_ef1c544e"
+          ],
+          "parent_dispersion": 0.08742572903874883,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_ec3376a6",
+            "faq_1e61de43",
+            "faq_234b2d5c",
+            "faq_b5bac2fd"
+          ],
+          "parent_dispersion": 0.08742572903874883,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "horizon_app_obtain_policy_dominant",
+      "expected_parent_id": "faq_ec3376a6",
+      "direct_parent_dispersion": 0.04090051196800009,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_ec7083f6",
+          "faq_1e61de43",
+          "faq_ec3376a6",
+          "faq_ef1c544e"
+        ],
+        "parent_dispersion": 0.04090051196800009,
+        "expected_rank": 3
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_ec3376a6",
+            "faq_1e61de43",
+            "faq_ec7083f6",
+            "faq_b5bac2fd"
+          ],
+          "parent_dispersion": 0.01345549658488785,
+          "expected_rank": 1,
+          "mrr_delta": 0.6666666666666667
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_ec3376a6",
+            "faq_ec7083f6",
+            "faq_ef1c544e",
+            "faq_1e61de43"
+          ],
+          "parent_dispersion": 0.04090051196800009,
+          "expected_rank": 1,
+          "mrr_delta": 0.6666666666666667
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_ec3376a6",
+            "faq_ec7083f6",
+            "faq_1e61de43",
+            "faq_ef1c544e"
+          ],
+          "parent_dispersion": 0.04090051196800009,
+          "expected_rank": 1,
+          "mrr_delta": 0.6666666666666667
+        }
+      }
+    },
+    {
+      "id": "horizon_app_obtain_procedural_dominant",
+      "expected_parent_id": "faq_ec3376a6",
+      "direct_parent_dispersion": 0.07563198000882698,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_ec3376a6",
+          "faq_b5bac2fd",
+          "faq_234b2d5c",
+          "faq_a12466ec"
+        ],
+        "parent_dispersion": 0.07563198000882698,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_ec3376a6",
+            "faq_b5bac2fd",
+            "faq_a12466ec",
+            "faq_234b2d5c"
+          ],
+          "parent_dispersion": 0.07563198000882698,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_ec3376a6",
+            "faq_b5bac2fd",
+            "faq_234b2d5c",
+            "faq_ec7083f6"
+          ],
+          "parent_dispersion": 0.07758125084806351,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_ec3376a6",
+            "faq_234b2d5c",
+            "faq_ec7083f6",
+            "faq_b5bac2fd"
+          ],
+          "parent_dispersion": 0.07758125084806351,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "life_insurance_products_indirect_conceptual",
+      "expected_parent_id": "faq_88e75264",
+      "direct_parent_dispersion": 0.03571701712014814,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_88e75264",
+          "faq_e423653d",
+          "faq_1d97d3a0",
+          "faq_8e57f7ac"
+        ],
+        "parent_dispersion": 0.03571701712014814,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_e423653d",
+            "faq_1d97d3a0",
+            "faq_598df143",
+            "faq_8e57f7ac"
+          ],
+          "parent_dispersion": 0.034844827785687225,
+          "expected_rank": null,
+          "mrr_delta": -1.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_88e75264",
+            "faq_e423653d",
+            "faq_1d97d3a0",
+            "faq_598df143"
+          ],
+          "parent_dispersion": 0.043354753180668906,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_88e75264",
+            "faq_e423653d",
+            "faq_1d97d3a0",
+            "faq_8e57f7ac"
+          ],
+          "parent_dispersion": 0.03571701712014814,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "life_insurance_products_policy_dominant",
+      "expected_parent_id": "faq_88e75264",
+      "direct_parent_dispersion": 0.03149451777586411,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_88e75264",
+          "faq_e423653d",
+          "faq_1d97d3a0",
+          "faq_441386d0"
+        ],
+        "parent_dispersion": 0.03149451777586411,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_1d97d3a0",
+            "faq_e423653d",
+            "faq_cd9c2a05",
+            "faq_88e75264"
+          ],
+          "parent_dispersion": 0.038429338023708785,
+          "expected_rank": 4,
+          "mrr_delta": -0.75
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_88e75264",
+            "faq_e423653d",
+            "faq_1d97d3a0",
+            "faq_441386d0"
+          ],
+          "parent_dispersion": 0.03149451777586411,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_88e75264",
+            "faq_e423653d",
+            "faq_1d97d3a0",
+            "faq_441386d0"
+          ],
+          "parent_dispersion": 0.03149451777586411,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "life_insurance_products_procedural_dominant",
+      "expected_parent_id": "faq_88e75264",
+      "direct_parent_dispersion": 0.026392934474636386,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_1d97d3a0",
+          "faq_88e75264",
+          "faq_e423653d",
+          "faq_598df143"
+        ],
+        "parent_dispersion": 0.026392934474636386,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_1d97d3a0",
+            "faq_e423653d",
+            "faq_598df143",
+            "faq_8e57f7ac"
+          ],
+          "parent_dispersion": 0.031476787599430796,
+          "expected_rank": null,
+          "mrr_delta": -0.5
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_1d97d3a0",
+            "faq_88e75264",
+            "faq_e423653d",
+            "faq_598df143"
+          ],
+          "parent_dispersion": 0.026392934474636386,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_88e75264",
+            "faq_1d97d3a0",
+            "faq_e423653d",
+            "faq_8e57f7ac"
+          ],
+          "parent_dispersion": 0.0304851045310854,
+          "expected_rank": 1,
+          "mrr_delta": 0.5
+        }
+      }
+    },
+    {
+      "id": "mutual_fund_costs_indirect_conceptual",
+      "expected_parent_id": "faq_eb2caf90",
+      "direct_parent_dispersion": 0.02128202681447799,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_eb2caf90",
+          "faq_85546eac",
+          "faq_ec764904",
+          "faq_464ab8da"
+        ],
+        "parent_dispersion": 0.02128202681447799,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_eb2caf90",
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_a3804917"
+          ],
+          "parent_dispersion": 0.023492472333987408,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_eb2caf90",
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_464ab8da"
+          ],
+          "parent_dispersion": 0.023888478414180434,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_eb2caf90",
+            "faq_85546eac",
+            "faq_ec764904",
+            "faq_a0f8d46b"
+          ],
+          "parent_dispersion": 0.02220829403557131,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "mutual_fund_costs_policy_dominant",
+      "expected_parent_id": "faq_eb2caf90",
+      "direct_parent_dispersion": 0.015793566603733208,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_eb2caf90",
+          "faq_ec764904",
+          "faq_85546eac",
+          "faq_a0f8d46b"
+        ],
+        "parent_dispersion": 0.015793566603733208,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_eb2caf90",
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_ec764904"
+          ],
+          "parent_dispersion": 0.015793566603733208,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_eb2caf90",
+            "faq_a0f8d46b",
+            "faq_85546eac",
+            "faq_4d848374"
+          ],
+          "parent_dispersion": 0.02413192642466606,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_eb2caf90",
+            "faq_85546eac",
+            "faq_ec764904",
+            "faq_a0f8d46b"
+          ],
+          "parent_dispersion": 0.015793566603733208,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "mutual_fund_costs_procedural_dominant",
+      "expected_parent_id": "faq_eb2caf90",
+      "direct_parent_dispersion": 0.036910655053232155,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_eb2caf90",
+          "faq_d8529e8c",
+          "faq_a0f8d46b",
+          "faq_63fec5b6"
+        ],
+        "parent_dispersion": 0.036910655053232155,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_eb2caf90",
+            "faq_d8529e8c",
+            "faq_63fec5b6",
+            "faq_a3804917"
+          ],
+          "parent_dispersion": 0.04230182996727274,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_eb2caf90",
+            "faq_a0f8d46b",
+            "faq_85546eac",
+            "faq_464ab8da"
+          ],
+          "parent_dispersion": 0.044119563111533214,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_eb2caf90",
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_464ab8da"
+          ],
+          "parent_dispersion": 0.044119563111533214,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "mutual_fund_products_indirect_conceptual",
+      "expected_parent_id": "faq_85546eac",
+      "direct_parent_dispersion": 0.04813306794163902,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_85546eac",
+          "faq_a0f8d46b",
+          "faq_ec764904",
+          "faq_90105f61"
+        ],
+        "parent_dispersion": 0.04813306794163902,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_90105f61",
+            "faq_d8529e8c"
+          ],
+          "parent_dispersion": 0.055398804281411744,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_ec764904",
+            "faq_4d848374"
+          ],
+          "parent_dispersion": 0.04916263725663763,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_ec764904",
+            "faq_4d848374"
+          ],
+          "parent_dispersion": 0.04916263725663763,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "mutual_fund_products_policy_dominant",
+      "expected_parent_id": "faq_85546eac",
+      "direct_parent_dispersion": 0.02426000599889536,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_85546eac",
+          "faq_a0f8d46b",
+          "faq_ec764904",
+          "faq_4d848374"
+        ],
+        "parent_dispersion": 0.02426000599889536,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_d8529e8c",
+            "faq_ec764904"
+          ],
+          "parent_dispersion": 0.02501373743474947,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_4d848374",
+            "faq_ec764904"
+          ],
+          "parent_dispersion": 0.02426000599889536,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_ec764904",
+            "faq_4d848374"
+          ],
+          "parent_dispersion": 0.02426000599889536,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "mutual_fund_products_procedural_dominant",
+      "expected_parent_id": "faq_85546eac",
+      "direct_parent_dispersion": 0.046202478879806094,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_d8529e8c",
+          "faq_85546eac",
+          "faq_a0f8d46b",
+          "faq_63fec5b6"
+        ],
+        "parent_dispersion": 0.046202478879806094,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_d8529e8c",
+            "faq_85546eac",
+            "faq_63fec5b6",
+            "faq_a0f8d46b"
+          ],
+          "parent_dispersion": 0.046202478879806094,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_f17efc64",
+            "faq_d8529e8c"
+          ],
+          "parent_dispersion": 0.048714510622819916,
+          "expected_rank": 1,
+          "mrr_delta": 0.5
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_85546eac",
+            "faq_a0f8d46b",
+            "faq_f17efc64",
+            "faq_d8529e8c"
+          ],
+          "parent_dispersion": 0.048714510622819916,
+          "expected_rank": 1,
+          "mrr_delta": 0.5
+        }
+      }
+    },
+    {
+      "id": "rewards_membership_connection_indirect_conceptual",
+      "expected_parent_id": "faq_da866599",
+      "direct_parent_dispersion": 0.06657732626001082,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_da866599",
+          "faq_ee61a97b",
+          "faq_31afb42a",
+          "faq_59210acf"
+        ],
+        "parent_dispersion": 0.06657732626001082,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_da866599",
+            "faq_31afb42a",
+            "faq_59210acf",
+            "faq_ee61a97b"
+          ],
+          "parent_dispersion": 0.06657732626001082,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_da866599",
+            "faq_31afb42a",
+            "faq_59210acf",
+            "faq_ee61a97b"
+          ],
+          "parent_dispersion": 0.06657732626001082,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_da866599",
+            "faq_31afb42a",
+            "faq_59210acf",
+            "faq_ee61a97b"
+          ],
+          "parent_dispersion": 0.06657732626001082,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "rewards_membership_connection_policy_dominant",
+      "expected_parent_id": "faq_da866599",
+      "direct_parent_dispersion": 0.06349553271449154,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_da866599",
+          "faq_560b6fac",
+          "faq_31afb42a",
+          "faq_59210acf"
+        ],
+        "parent_dispersion": 0.06349553271449154,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_da866599",
+            "faq_560b6fac",
+            "faq_31afb42a",
+            "faq_59210acf"
+          ],
+          "parent_dispersion": 0.06349553271449154,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_da866599",
+            "faq_560b6fac",
+            "faq_31afb42a",
+            "faq_59210acf"
+          ],
+          "parent_dispersion": 0.06349553271449154,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_da866599",
+            "faq_560b6fac",
+            "faq_59210acf",
+            "faq_31afb42a"
+          ],
+          "parent_dispersion": 0.06349553271449154,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "rewards_membership_connection_procedural_dominant",
+      "expected_parent_id": "faq_da866599",
+      "direct_parent_dispersion": 0.03104054620133838,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_da866599",
+          "faq_31afb42a",
+          "faq_560b6fac",
+          "faq_59210acf"
+        ],
+        "parent_dispersion": 0.03104054620133838,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_da866599",
+            "faq_31afb42a",
+            "faq_560b6fac",
+            "faq_59210acf"
+          ],
+          "parent_dispersion": 0.03104054620133838,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_da866599",
+            "faq_31afb42a",
+            "faq_560b6fac",
+            "faq_59210acf"
+          ],
+          "parent_dispersion": 0.03104054620133838,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_da866599",
+            "faq_560b6fac",
+            "faq_31afb42a",
+            "faq_59210acf"
+          ],
+          "parent_dispersion": 0.03104054620133838,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "verify_bank_email_indirect_conceptual",
+      "expected_parent_id": "faq_ed92e41d",
+      "direct_parent_dispersion": 0.12572002956144604,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_ed92e41d",
+          "faq_2cadcac6",
+          "faq_7fc44444"
+        ],
+        "parent_dispersion": 0.12572002956144604,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_ed92e41d",
+            "faq_2cadcac6",
+            "faq_7fc44444"
+          ],
+          "parent_dispersion": 0.12572002956144604,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_ed92e41d",
+            "faq_7fc44444",
+            "faq_2cadcac6"
+          ],
+          "parent_dispersion": 0.12572002956144604,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_ed92e41d",
+            "faq_7fc44444",
+            "faq_2cadcac6"
+          ],
+          "parent_dispersion": 0.12572002956144604,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "verify_bank_email_policy_dominant",
+      "expected_parent_id": "faq_ed92e41d",
+      "direct_parent_dispersion": 0.08055192841896061,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_ed92e41d",
+          "faq_7fc44444",
+          "faq_2cadcac6"
+        ],
+        "parent_dispersion": 0.08055192841896061,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_ed92e41d",
+            "faq_7fc44444",
+            "faq_2cadcac6"
+          ],
+          "parent_dispersion": 0.08055192841896061,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_ed92e41d",
+            "faq_7fc44444",
+            "faq_2cadcac6"
+          ],
+          "parent_dispersion": 0.08055192841896061,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_ed92e41d",
+            "faq_7fc44444",
+            "faq_2cadcac6"
+          ],
+          "parent_dispersion": 0.08055192841896061,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "verify_bank_email_procedural_dominant",
+      "expected_parent_id": "faq_ed92e41d",
+      "direct_parent_dispersion": 0.16361864230737133,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_ed92e41d",
+          "faq_2cadcac6",
+          "faq_7fc44444"
+        ],
+        "parent_dispersion": 0.16361864230737133,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_ed92e41d",
+            "faq_2cadcac6",
+            "faq_7fc44444"
+          ],
+          "parent_dispersion": 0.16361864230737133,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_ed92e41d",
+            "faq_7fc44444",
+            "faq_2cadcac6"
+          ],
+          "parent_dispersion": 0.16361864230737133,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_ed92e41d",
+            "faq_7fc44444",
+            "faq_2cadcac6"
+          ],
+          "parent_dispersion": 0.16361864230737133,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "credit_card_verification_indirect_conceptual",
+      "expected_parent_id": "faq_26561f81",
+      "direct_parent_dispersion": 0.06422195475502188,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_26561f81",
+          "faq_66004845",
+          "faq_a2a2d70f",
+          "faq_74abafeb"
+        ],
+        "parent_dispersion": 0.06422195475502188,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_74abafeb",
+            "faq_a2a2d70f",
+            "faq_adff3913"
+          ],
+          "parent_dispersion": 0.06878201906144259,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_74abafeb",
+            "faq_a2a2d70f",
+            "faq_adff3913"
+          ],
+          "parent_dispersion": 0.06878201906144259,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_a2a2d70f",
+            "faq_74abafeb",
+            "faq_66004845"
+          ],
+          "parent_dispersion": 0.06422195475502188,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "credit_card_verification_policy_dominant",
+      "expected_parent_id": "faq_26561f81",
+      "direct_parent_dispersion": 0.06820419746063955,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_26561f81",
+          "faq_a2a2d70f",
+          "faq_74abafeb",
+          "faq_adff3913"
+        ],
+        "parent_dispersion": 0.06820419746063955,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_74abafeb",
+            "faq_a2a2d70f",
+            "faq_adff3913"
+          ],
+          "parent_dispersion": 0.06820419746063955,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_a2a2d70f",
+            "faq_74abafeb",
+            "faq_adff3913"
+          ],
+          "parent_dispersion": 0.06820419746063955,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_a2a2d70f",
+            "faq_adff3913",
+            "faq_74abafeb"
+          ],
+          "parent_dispersion": 0.06820419746063956,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "credit_card_verification_procedural_dominant",
+      "expected_parent_id": "faq_26561f81",
+      "direct_parent_dispersion": 0.026962405515340414,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_a2a2d70f",
+          "faq_26561f81",
+          "faq_74abafeb",
+          "faq_adff3913"
+        ],
+        "parent_dispersion": 0.026962405515340414,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_a2a2d70f",
+            "faq_74abafeb",
+            "faq_26561f81",
+            "faq_adff3913"
+          ],
+          "parent_dispersion": 0.026962405515340414,
+          "expected_rank": 3,
+          "mrr_delta": -0.16666666666666669
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_a2a2d70f",
+            "faq_74abafeb",
+            "faq_adff3913"
+          ],
+          "parent_dispersion": 0.026962405515340414,
+          "expected_rank": 1,
+          "mrr_delta": 0.5
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_a2a2d70f",
+            "faq_74abafeb",
+            "faq_adff3913"
+          ],
+          "parent_dispersion": 0.026962405515340414,
+          "expected_rank": 1,
+          "mrr_delta": 0.5
+        }
+      }
+    },
+    {
+      "id": "deposit_account_funding_indirect_conceptual",
+      "expected_parent_id": "faq_7d49c937",
+      "direct_parent_dispersion": 0.05074999706869496,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_7d49c937",
+          "faq_2fe8118e",
+          "faq_beeeec2d",
+          "faq_13757d59"
+        ],
+        "parent_dispersion": 0.05074999706869496,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_beeeec2d",
+            "faq_44bb339e"
+          ],
+          "parent_dispersion": 0.05540272428858831,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_13757d59",
+            "faq_05e7c520"
+          ],
+          "parent_dispersion": 0.06160279785675354,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_13757d59",
+            "faq_44bb339e"
+          ],
+          "parent_dispersion": 0.05996168953120646,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "deposit_account_funding_policy_dominant",
+      "expected_parent_id": "faq_7d49c937",
+      "direct_parent_dispersion": 0.03800634002289778,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_7d49c937",
+          "faq_2fe8118e",
+          "faq_13757d59",
+          "faq_beeeec2d"
+        ],
+        "parent_dispersion": 0.03800634002289778,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_beeeec2d",
+            "faq_13757d59"
+          ],
+          "parent_dispersion": 0.03800634002289778,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_13757d59",
+            "faq_453239a8"
+          ],
+          "parent_dispersion": 0.0421501373047335,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_13757d59"
+          ],
+          "parent_dispersion": 0.03943445533051269,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "deposit_account_funding_procedural_dominant",
+      "expected_parent_id": "faq_7d49c937",
+      "direct_parent_dispersion": 0.05988283314840077,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_7d49c937",
+          "faq_beeeec2d",
+          "faq_2fe8118e",
+          "faq_ffbc9df3"
+        ],
+        "parent_dispersion": 0.05988283314840077,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_beeeec2d",
+            "faq_44bb339e"
+          ],
+          "parent_dispersion": 0.0666146468352488,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_beeeec2d",
+            "faq_453239a8"
+          ],
+          "parent_dispersion": 0.047306578233515056,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_44bb339e",
+            "faq_ffbc9df3"
+          ],
+          "parent_dispersion": 0.07302960207225827,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "horizon_key_setup_indirect_conceptual",
+      "expected_parent_id": "faq_b074c2e1",
+      "direct_parent_dispersion": 0.05215624684662889,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_bb116f35",
+          "faq_518c355e",
+          "faq_b074c2e1",
+          "faq_ed9b5ce2"
+        ],
+        "parent_dispersion": 0.05215624684662889,
+        "expected_rank": 3
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_b074c2e1",
+            "faq_518c355e",
+            "faq_7f54cd55",
+            "faq_bb116f35"
+          ],
+          "parent_dispersion": 0.059753147803730935,
+          "expected_rank": 1,
+          "mrr_delta": 0.6666666666666667
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_bb116f35",
+            "faq_b074c2e1",
+            "faq_518c355e",
+            "faq_7f54cd55"
+          ],
+          "parent_dispersion": 0.059753147803730935,
+          "expected_rank": 2,
+          "mrr_delta": 0.16666666666666669
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_bb116f35",
+            "faq_b074c2e1",
+            "faq_518c355e",
+            "faq_ed9b5ce2"
+          ],
+          "parent_dispersion": 0.05215624684662889,
+          "expected_rank": 2,
+          "mrr_delta": 0.16666666666666669
+        }
+      }
+    },
+    {
+      "id": "horizon_key_setup_policy_dominant",
+      "expected_parent_id": "faq_b074c2e1",
+      "direct_parent_dispersion": 0.06323065888327103,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_b074c2e1",
+          "faq_518c355e",
+          "faq_bb116f35",
+          "faq_46116179"
+        ],
+        "parent_dispersion": 0.06323065888327103,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_b074c2e1",
+            "faq_518c355e",
+            "faq_46116179",
+            "faq_7f54cd55"
+          ],
+          "parent_dispersion": 0.07217481654412138,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_b074c2e1",
+            "faq_518c355e",
+            "faq_bb116f35"
+          ],
+          "parent_dispersion": 0.047907652539611725,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_b074c2e1",
+            "faq_bb116f35",
+            "faq_518c355e",
+            "faq_9da9234e"
+          ],
+          "parent_dispersion": 0.047907652539611725,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "horizon_key_setup_procedural_dominant",
+      "expected_parent_id": "faq_b074c2e1",
+      "direct_parent_dispersion": 0.07392981615006441,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_b074c2e1",
+          "faq_518c355e",
+          "faq_46116179",
+          "faq_406bf55a"
+        ],
+        "parent_dispersion": 0.07392981615006441,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_b074c2e1",
+            "faq_518c355e",
+            "faq_46116179",
+            "faq_406bf55a"
+          ],
+          "parent_dispersion": 0.07392981615006441,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_b074c2e1",
+            "faq_518c355e"
+          ],
+          "parent_dispersion": 0.04535734182387652,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_b074c2e1",
+            "faq_518c355e",
+            "faq_bb116f35",
+            "faq_9da9234e"
+          ],
+          "parent_dispersion": 0.04535734182387652,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "life_insurance_policy_access_indirect_conceptual",
+      "expected_parent_id": "faq_598df143",
+      "direct_parent_dispersion": 0.03480315817516062,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_e423653d",
+          "faq_598df143",
+          "faq_616c0a66",
+          "faq_d8b93ac3"
+        ],
+        "parent_dispersion": 0.03480315817516062,
+        "expected_rank": 2
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_e423653d",
+            "faq_598df143",
+            "faq_616c0a66",
+            "faq_d8b93ac3"
+          ],
+          "parent_dispersion": 0.03480315817516062,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_e423653d",
+            "faq_598df143",
+            "faq_616c0a66",
+            "faq_d8b93ac3"
+          ],
+          "parent_dispersion": 0.03480315817516062,
+          "expected_rank": 2,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_e423653d",
+            "faq_d8b93ac3",
+            "faq_598df143",
+            "faq_8e57f7ac"
+          ],
+          "parent_dispersion": 0.04614203160569068,
+          "expected_rank": 3,
+          "mrr_delta": -0.16666666666666669
+        }
+      }
+    },
+    {
+      "id": "life_insurance_policy_access_policy_dominant",
+      "expected_parent_id": "faq_598df143",
+      "direct_parent_dispersion": 0.05209144629683607,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_598df143",
+          "faq_e423653d",
+          "faq_1d97d3a0",
+          "faq_8e57f7ac"
+        ],
+        "parent_dispersion": 0.05209144629683607,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_598df143",
+            "faq_e423653d",
+            "faq_8e57f7ac",
+            "faq_1d97d3a0"
+          ],
+          "parent_dispersion": 0.05209144629683607,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_598df143",
+            "faq_e423653d"
+          ],
+          "parent_dispersion": 0.02530525081106816,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_e423653d",
+            "faq_598df143",
+            "faq_8e57f7ac",
+            "faq_84f93166"
+          ],
+          "parent_dispersion": 0.05364413389046252,
+          "expected_rank": 2,
+          "mrr_delta": -0.5
+        }
+      }
+    },
+    {
+      "id": "life_insurance_policy_access_procedural_dominant",
+      "expected_parent_id": "faq_598df143",
+      "direct_parent_dispersion": 0.07218909491574084,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_598df143",
+          "faq_e423653d",
+          "faq_616c0a66",
+          "faq_84f93166"
+        ],
+        "parent_dispersion": 0.07218909491574084,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_598df143",
+            "faq_e423653d",
+            "faq_616c0a66",
+            "faq_1d97d3a0"
+          ],
+          "parent_dispersion": 0.07367195650206358,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_598df143",
+            "faq_e423653d",
+            "faq_616c0a66",
+            "faq_d8b93ac3"
+          ],
+          "parent_dispersion": 0.0827172913556835,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_e423653d",
+            "faq_598df143",
+            "faq_d8b93ac3",
+            "faq_84f93166"
+          ],
+          "parent_dispersion": 0.08607165481138716,
+          "expected_rank": 2,
+          "mrr_delta": -0.5
+        }
+      }
+    },
+    {
+      "id": "personal_loan_borrowing_cost_indirect_conceptual",
+      "expected_parent_id": "faq_98ed4759",
+      "direct_parent_dispersion": 0.17263870577809237,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_98ed4759",
+          "faq_ac3045cf"
+        ],
+        "parent_dispersion": 0.17263870577809237,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_98ed4759",
+            "faq_ac3045cf"
+          ],
+          "parent_dispersion": 0.17263870577809237,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_98ed4759",
+            "faq_ac3045cf"
+          ],
+          "parent_dispersion": 0.17263870577809237,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_98ed4759",
+            "faq_ac3045cf"
+          ],
+          "parent_dispersion": 0.17263870577809237,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "personal_loan_borrowing_cost_policy_dominant",
+      "expected_parent_id": "faq_98ed4759",
+      "direct_parent_dispersion": 0.17098095813658867,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_98ed4759",
+          "faq_ac3045cf"
+        ],
+        "parent_dispersion": 0.17098095813658867,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_98ed4759",
+            "faq_ac3045cf"
+          ],
+          "parent_dispersion": 0.17098095813658867,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_98ed4759",
+            "faq_ac3045cf"
+          ],
+          "parent_dispersion": 0.17098095813658867,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_98ed4759",
+            "faq_ac3045cf"
+          ],
+          "parent_dispersion": 0.17098095813658867,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    },
+    {
+      "id": "personal_loan_borrowing_cost_procedural_dominant",
+      "expected_parent_id": "faq_98ed4759",
+      "direct_parent_dispersion": 0.19741804526725712,
+      "direct": {
+        "selected_parent_ids": [
+          "faq_98ed4759",
+          "faq_ac3045cf"
+        ],
+        "parent_dispersion": 0.19741804526725712,
+        "expected_rank": 1
+      },
+      "single_angle": {
+        "procedural": {
+          "selected_parent_ids": [
+            "faq_98ed4759",
+            "faq_ac3045cf"
+          ],
+          "parent_dispersion": 0.19741804526725712,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "policy": {
+          "selected_parent_ids": [
+            "faq_98ed4759",
+            "faq_ac3045cf"
+          ],
+          "parent_dispersion": 0.19741804526725712,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        },
+        "conceptual": {
+          "selected_parent_ids": [
+            "faq_98ed4759",
+            "faq_ac3045cf"
+          ],
+          "parent_dispersion": 0.19741804526725712,
+          "expected_rank": 1,
+          "mrr_delta": 0.0
+        }
+      }
+    }
+  ],
+  "summary": {
+    "case_count": 60,
+    "unique_target_count": 20,
+    "valid_dispersion_count": 60,
+    "best_of_three_oracle": {
+      "mean_mrr_delta": 0.07222222222222223,
+      "improved_count": 8,
+      "spearman_dispersion_vs_best_gain": {
+        "coefficient": -0.1718941389146729,
+        "p_value": 0.18908974791734892
+      },
+      "point_biserial_dispersion_vs_any_improvement": {
+        "coefficient": -0.17334928015202147,
+        "p_value": 0.18531553635060946
+      },
+      "low_quartile": {
+        "maximum_dispersion": 0.03811924356988482,
+        "count": 15,
+        "mean_best_mrr_delta": 0.06666666666666667,
+        "improved_count": 2
+      },
+      "high_quartile": {
+        "minimum_dispersion": 0.07418345672581525,
+        "count": 15,
+        "mean_best_mrr_delta": 0.0,
+        "improved_count": 0
+      }
+    },
+    "per_single_angle": {
+      "procedural": {
+        "mean_mrr_delta": -0.020833333333333336,
+        "improved_count": 3,
+        "regressed_count": 6,
+        "spearman_dispersion_vs_gain": {
+          "coefficient": 0.05636057355107569,
+          "p_value": 0.6688522476942983
+        }
+      },
+      "policy": {
+        "mean_mrr_delta": 0.03888888888888889,
+        "improved_count": 6,
+        "regressed_count": 1,
+        "spearman_dispersion_vs_gain": {
+          "coefficient": -0.059784012935867555,
+          "p_value": 0.6500089597356788
+        }
+      },
+      "conceptual": {
+        "mean_mrr_delta": 0.002777777777777779,
+        "improved_count": 5,
+        "regressed_count": 5,
+        "spearman_dispersion_vs_gain": {
+          "coefficient": -0.16847008041354222,
+          "p_value": 0.1981877446615722
+        }
+      }
+    }
+  }
+}

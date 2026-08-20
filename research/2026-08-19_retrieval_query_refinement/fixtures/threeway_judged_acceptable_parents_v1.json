@@ -1,0 +1,3380 @@
+{
+  "metadata": {
+    "source": "/Users/bensonwu/Projects/AgenticBanking/research/2026-08-19_retrieval_query_refinement/results/threeway_narrative_validation_v1.json",
+    "method": "Reverse deterministic evidence shuffle; retain FAQ parent judged relevant in >=2 full-answerability strategy presentations.",
+    "important_limit": "These labels remain pooled from the evaluated retrieval outputs; they are stronger than category labels but not independent relevance annotations."
+  },
+  "cases": [
+    {
+      "id": "threeway_activate_my_card_01",
+      "customer_query": "Tell me how to go about activating my new card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "activate_my_card",
+      "old_category_parent_id": "faq_74abafeb",
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "votes": {
+        "faq_74abafeb": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_activate_my_card_02",
+      "customer_query": "Assist me please with card activation.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "activate_my_card",
+      "old_category_parent_id": "faq_74abafeb",
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "votes": {
+        "faq_74abafeb": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_activate_my_card_03",
+      "customer_query": "I got my new card where do I go to activate it?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "activate_my_card",
+      "old_category_parent_id": "faq_74abafeb",
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "votes": {
+        "faq_74abafeb": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_activate_my_card_04",
+      "customer_query": "I just got this card & I don't know how to activate it.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "activate_my_card",
+      "old_category_parent_id": "faq_74abafeb",
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "votes": {
+        "faq_74abafeb": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_activate_my_card_05",
+      "customer_query": "How do I go about activating my new card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "activate_my_card",
+      "old_category_parent_id": "faq_74abafeb",
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "votes": {
+        "faq_74abafeb": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_activate_my_card_06",
+      "customer_query": "Would like to use my card and need to activate it first.  Can you help me do this?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "activate_my_card",
+      "old_category_parent_id": "faq_74abafeb",
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "votes": {
+        "faq_74abafeb": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_activate_my_card_07",
+      "customer_query": "How do I activate a new card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "activate_my_card",
+      "old_category_parent_id": "faq_74abafeb",
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "votes": {
+        "faq_74abafeb": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_activate_my_card_08",
+      "customer_query": "I received my new card, how is it activated?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "activate_my_card",
+      "old_category_parent_id": "faq_74abafeb",
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "votes": {
+        "faq_74abafeb": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_activate_my_card_09",
+      "customer_query": "I would like to get help from someone with activating my card.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "activate_my_card",
+      "old_category_parent_id": "faq_74abafeb",
+      "acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "votes": {
+        "faq_74abafeb": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_activate_my_card_10",
+      "customer_query": "I tried activating my bill of fare and it didn't workplace",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "activate_my_card",
+      "old_category_parent_id": "faq_74abafeb",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74abafeb"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_change_pin_01",
+      "customer_query": "Please tell me which cash machines will allow me to change my pin.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "change_pin",
+      "old_category_parent_id": "faq_6dae126c",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_change_pin_02",
+      "customer_query": "How do I update my PIN to a new number?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "change_pin",
+      "old_category_parent_id": "faq_6dae126c",
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "votes": {
+        "faq_6dae126c": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_change_pin_03",
+      "customer_query": "I want to set a new PIN",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "change_pin",
+      "old_category_parent_id": "faq_6dae126c",
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "votes": {
+        "faq_6dae126c": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_change_pin_04",
+      "customer_query": "How might  I change my PIN?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "change_pin",
+      "old_category_parent_id": "faq_6dae126c",
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "votes": {
+        "faq_6dae126c": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_change_pin_05",
+      "customer_query": "Do cash machines let me change my pin?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "change_pin",
+      "old_category_parent_id": "faq_6dae126c",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_change_pin_06",
+      "customer_query": "How can I change my Tholepin ?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "change_pin",
+      "old_category_parent_id": "faq_6dae126c",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_change_pin_07",
+      "customer_query": "I am travelling for two more weeks but really need to change my PIN asap. What do I do?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "change_pin",
+      "old_category_parent_id": "faq_6dae126c",
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "votes": {
+        "faq_6dae126c": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_change_pin_08",
+      "customer_query": "I need to change my pin but I am on the road.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "change_pin",
+      "old_category_parent_id": "faq_6dae126c",
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "votes": {
+        "faq_6dae126c": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_change_pin_09",
+      "customer_query": "Where can I find instructions to change my PIN?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "change_pin",
+      "old_category_parent_id": "faq_6dae126c",
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "votes": {
+        "faq_6dae126c": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_change_pin_10",
+      "customer_query": "How to change the PIN on my card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "source_intent": "change_pin",
+      "old_category_parent_id": "faq_6dae126c",
+      "acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "votes": {
+        "faq_6dae126c": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6dae126c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_card_arrival_01",
+      "customer_query": "My card hasn't arrived yet.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "source_intent": "card_arrival",
+      "old_category_parent_id": "faq_9d7a4b83",
+      "acceptable_parent_ids": [
+        "faq_74392fe2",
+        "faq_ff1c2b9c"
+      ],
+      "votes": {
+        "faq_74392fe2": 3,
+        "faq_ff1c2b9c": 2,
+        "faq_5ad80c63": 1,
+        "faq_9d7a4b83": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74392fe2"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_74392fe2"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74392fe2",
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_card_arrival_02",
+      "customer_query": "When will I get my card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "source_intent": "card_arrival",
+      "old_category_parent_id": "faq_9d7a4b83",
+      "acceptable_parent_ids": [
+        "faq_5ad80c63",
+        "faq_9d7a4b83"
+      ],
+      "votes": {
+        "faq_5ad80c63": 3,
+        "faq_9d7a4b83": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_card_arrival_03",
+      "customer_query": "My card has not arrived yet, where is it?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "source_intent": "card_arrival",
+      "old_category_parent_id": "faq_9d7a4b83",
+      "acceptable_parent_ids": [
+        "faq_5ad80c63",
+        "faq_74392fe2"
+      ],
+      "votes": {
+        "faq_74392fe2": 2,
+        "faq_5ad80c63": 2,
+        "faq_ff1c2b9c": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74392fe2",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_74392fe2"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_74392fe2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_card_arrival_04",
+      "customer_query": "i want to track the card you sent",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "source_intent": "card_arrival",
+      "old_category_parent_id": "faq_9d7a4b83",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_card_arrival_05",
+      "customer_query": "I was expecting my new card and am wondering why I haven't received it yet?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "source_intent": "card_arrival",
+      "old_category_parent_id": "faq_9d7a4b83",
+      "acceptable_parent_ids": [],
+      "votes": {
+        "faq_5ad80c63": 1,
+        "faq_9d7a4b83": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_74392fe2",
+            "faq_9d7a4b83"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74392fe2",
+            "faq_ff1c2b9c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_card_arrival_06",
+      "customer_query": "Is there tracking info available?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "source_intent": "card_arrival",
+      "old_category_parent_id": "faq_9d7a4b83",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_card_arrival_07",
+      "customer_query": "How long should my new card take to arrive?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "source_intent": "card_arrival",
+      "old_category_parent_id": "faq_9d7a4b83",
+      "acceptable_parent_ids": [],
+      "votes": {
+        "faq_5ad80c63": 1,
+        "faq_9d7a4b83": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_card_arrival_08",
+      "customer_query": "My card has not arrived yet.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "source_intent": "card_arrival",
+      "old_category_parent_id": "faq_9d7a4b83",
+      "acceptable_parent_ids": [],
+      "votes": {
+        "faq_74392fe2": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_74392fe2"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74392fe2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_card_arrival_09",
+      "customer_query": "Is there a way to know when my card will arrive?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "source_intent": "card_arrival",
+      "old_category_parent_id": "faq_9d7a4b83",
+      "acceptable_parent_ids": [
+        "faq_5ad80c63",
+        "faq_9d7a4b83"
+      ],
+      "votes": {
+        "faq_9d7a4b83": 2,
+        "faq_5ad80c63": 2
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_card_arrival_10",
+      "customer_query": "I ordered a card but it has not arrived. Help please!",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "source_intent": "card_arrival",
+      "old_category_parent_id": "faq_9d7a4b83",
+      "acceptable_parent_ids": [
+        "faq_74392fe2"
+      ],
+      "votes": {
+        "faq_74392fe2": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74392fe2"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74392fe2"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_74392fe2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_01",
+      "customer_query": "How do I report my card stolen?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "source_intent": "lost_or_stolen_card",
+      "old_category_parent_id": "faq_7883a8c2",
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "votes": {
+        "faq_8e5e63ca": 3,
+        "faq_7883a8c2": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_02",
+      "customer_query": "My entire gym bag, including my wallet, was stolen out of my locker today. Everything in my wallet is gone - how do I block the card to make it can't be used?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "source_intent": "lost_or_stolen_card",
+      "old_category_parent_id": "faq_7883a8c2",
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "votes": {
+        "faq_8e5e63ca": 2,
+        "faq_7883a8c2": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_03",
+      "customer_query": "Is a copy of the police report necessary for completing the report process?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "source_intent": "lost_or_stolen_card",
+      "old_category_parent_id": "faq_7883a8c2",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_04",
+      "customer_query": "I believe my credit card was stolen.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "source_intent": "lost_or_stolen_card",
+      "old_category_parent_id": "faq_7883a8c2",
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "votes": {
+        "faq_7883a8c2": 3,
+        "faq_8e5e63ca": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_05",
+      "customer_query": "I can't find my card and think it may have been stolen.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "source_intent": "lost_or_stolen_card",
+      "old_category_parent_id": "faq_7883a8c2",
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "votes": {
+        "faq_8e5e63ca": 3,
+        "faq_7883a8c2": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_06",
+      "customer_query": "I cant find my card, it's gone.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "source_intent": "lost_or_stolen_card",
+      "old_category_parent_id": "faq_7883a8c2",
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "votes": {
+        "faq_7883a8c2": 3,
+        "faq_8e5e63ca": 2
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_07",
+      "customer_query": "I believe my card has been stolen, what can I do about this situation? It's urgent.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "source_intent": "lost_or_stolen_card",
+      "old_category_parent_id": "faq_7883a8c2",
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "votes": {
+        "faq_8e5e63ca": 3,
+        "faq_7883a8c2": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_08",
+      "customer_query": "Help.  I have a stolen card!",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "source_intent": "lost_or_stolen_card",
+      "old_category_parent_id": "faq_7883a8c2",
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "votes": {
+        "faq_7883a8c2": 3,
+        "faq_8e5e63ca": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_09",
+      "customer_query": "My card is gone I think it was stolen",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "source_intent": "lost_or_stolen_card",
+      "old_category_parent_id": "faq_7883a8c2",
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "votes": {
+        "faq_8e5e63ca": 3,
+        "faq_7883a8c2": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_10",
+      "customer_query": "My card is lost! What can I do?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "source_intent": "lost_or_stolen_card",
+      "old_category_parent_id": "faq_7883a8c2",
+      "acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "votes": {
+        "faq_8e5e63ca": 3,
+        "faq_7883a8c2": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_timing_01",
+      "customer_query": "I need a fast transfer from China?  How fast will it be?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_timing",
+      "old_category_parent_id": "faq_ccd37584",
+      "acceptable_parent_ids": [
+        "faq_32c1662f"
+      ],
+      "votes": {
+        "faq_32c1662f": 2
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_32c1662f"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_32c1662f"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_timing_02",
+      "customer_query": "How long do I have to wait for a transfer from the US?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_timing",
+      "old_category_parent_id": "faq_ccd37584",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": [
+            "faq_32c1662f"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": [
+            "faq_32c1662f"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_timing_03",
+      "customer_query": "What is the fastest that I can make a transfer?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_timing",
+      "old_category_parent_id": "faq_ccd37584",
+      "acceptable_parent_ids": [],
+      "votes": {
+        "faq_ccd37584": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_timing_04",
+      "customer_query": "What would the approximate delivery date be if I transferred something urgently to China?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_timing",
+      "old_category_parent_id": "faq_ccd37584",
+      "acceptable_parent_ids": [],
+      "votes": {
+        "faq_32c1662f": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_32c1662f"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": [
+            "faq_32c1662f"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_timing_05",
+      "customer_query": "How long does it take for funds to come through the US to my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_timing",
+      "old_category_parent_id": "faq_ccd37584",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_timing_06",
+      "customer_query": "How long is the wait for a US transfer?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_timing",
+      "old_category_parent_id": "faq_ccd37584",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_timing_07",
+      "customer_query": "When will money be available in my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_timing",
+      "old_category_parent_id": "faq_ccd37584",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_timing_08",
+      "customer_query": "How long do i have to wait for a transfer to reach my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_timing",
+      "old_category_parent_id": "faq_ccd37584",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_4b2d99b1",
+            "faq_ccd37584"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_timing_09",
+      "customer_query": "How long does a funds transfer take from one back to another?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_timing",
+      "old_category_parent_id": "faq_ccd37584",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_timing_10",
+      "customer_query": "How many days does a transfer from the US take?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_timing",
+      "old_category_parent_id": "faq_ccd37584",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ccd37584"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_cancel_transfer_01",
+      "customer_query": "If I make a transaction can I cancel it?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "cancel_transfer",
+      "old_category_parent_id": "faq_ea430613",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6ec2e740"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_cancel_transfer_02",
+      "customer_query": "Can i cancel a charge?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "cancel_transfer",
+      "old_category_parent_id": "faq_ea430613",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6ec2e740"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_cancel_transfer_03",
+      "customer_query": "I made a transaction this morning and would like to revert it.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "cancel_transfer",
+      "old_category_parent_id": "faq_ea430613",
+      "acceptable_parent_ids": [],
+      "votes": {
+        "faq_ea430613": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_cancel_transfer_04",
+      "customer_query": "My transaction needs to be canceled.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "cancel_transfer",
+      "old_category_parent_id": "faq_ea430613",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_4b2d99b1",
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_cancel_transfer_05",
+      "customer_query": "I don't want the transaction to go through now",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "cancel_transfer",
+      "old_category_parent_id": "faq_ea430613",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_4b2d99b1"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613",
+            "faq_4b2d99b1"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_4b2d99b1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_cancel_transfer_06",
+      "customer_query": "I want to go back on what I did this morning",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "cancel_transfer",
+      "old_category_parent_id": "faq_ea430613",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_cancel_transfer_07",
+      "customer_query": "Cancel my last transfer",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "cancel_transfer",
+      "old_category_parent_id": "faq_ea430613",
+      "acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "votes": {
+        "faq_ea430613": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_cancel_transfer_08",
+      "customer_query": "How do i cancel my transaction?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "cancel_transfer",
+      "old_category_parent_id": "faq_ea430613",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_cancel_transfer_09",
+      "customer_query": "I made a transaction but did it to the wrong account.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "cancel_transfer",
+      "old_category_parent_id": "faq_ea430613",
+      "acceptable_parent_ids": [],
+      "votes": {
+        "faq_ea430613": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_cancel_transfer_10",
+      "customer_query": "I made a mistake and need to cancel a transaction",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "cancel_transfer",
+      "old_category_parent_id": "faq_ea430613",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_into_account_01",
+      "customer_query": "I don't understand the money transfer process.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_into_account",
+      "old_category_parent_id": "faq_7d49c937",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_32c1662f",
+            "faq_ccd37584"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_32c1662f",
+            "faq_05669a00"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_05669a00",
+            "faq_7d49c937",
+            "faq_44bb339e"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_into_account_02",
+      "customer_query": "How can I transfer money from an outside bank?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_into_account",
+      "old_category_parent_id": "faq_7d49c937",
+      "acceptable_parent_ids": [
+        "faq_44bb339e",
+        "faq_7d49c937"
+      ],
+      "votes": {
+        "faq_7d49c937": 2,
+        "faq_44bb339e": 2
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937",
+            "faq_44bb339e"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_44bb339e"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937",
+            "faq_44bb339e"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_into_account_03",
+      "customer_query": "Are there ways to transfer money into my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_into_account",
+      "old_category_parent_id": "faq_7d49c937",
+      "acceptable_parent_ids": [
+        "faq_44bb339e",
+        "faq_7d49c937"
+      ],
+      "votes": {
+        "faq_453239a8": 1,
+        "faq_44bb339e": 3,
+        "faq_7d49c937": 2
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_453239a8",
+            "faq_44bb339e"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_44bb339e",
+            "faq_7d49c937"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_44bb339e",
+            "faq_7d49c937"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_into_account_04",
+      "customer_query": "CAN YOU EXPLAIN HOW TO TRANSFER MONEY INTO MY  ACCOUNT FOR ME?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_into_account",
+      "old_category_parent_id": "faq_7d49c937",
+      "acceptable_parent_ids": [
+        "faq_44bb339e",
+        "faq_7d49c937"
+      ],
+      "votes": {
+        "faq_7d49c937": 2,
+        "faq_44bb339e": 2
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_44bb339e",
+            "faq_6f4ef9e6",
+            "faq_05669a00"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937",
+            "faq_44bb339e"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_44bb339e",
+            "faq_7d49c937"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_into_account_05",
+      "customer_query": "How to I transfer my funds into my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_into_account",
+      "old_category_parent_id": "faq_7d49c937",
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "votes": {
+        "faq_7d49c937": 3,
+        "faq_44bb339e": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937",
+            "faq_44bb339e"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_into_account_06",
+      "customer_query": "When I want to transfer money to my account, how can I do that?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_into_account",
+      "old_category_parent_id": "faq_7d49c937",
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "votes": {
+        "faq_7d49c937": 3,
+        "faq_44bb339e": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937",
+            "faq_44bb339e"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_into_account_07",
+      "customer_query": "I would like to transfer some money from my other bank account into this one.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_into_account",
+      "old_category_parent_id": "faq_7d49c937",
+      "acceptable_parent_ids": [
+        "faq_44bb339e"
+      ],
+      "votes": {
+        "faq_44bb339e": 2,
+        "faq_7d49c937": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_44bb339e"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937",
+            "faq_44bb339e"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_into_account_08",
+      "customer_query": "I want to transfer from accounts in order to Top up. What are the steps necessary.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_into_account",
+      "old_category_parent_id": "faq_7d49c937",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_into_account_09",
+      "customer_query": "How can I perform a dual money transferring from one account to another?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_into_account",
+      "old_category_parent_id": "faq_7d49c937",
+      "acceptable_parent_ids": [],
+      "votes": {},
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_transfer_into_account_10",
+      "customer_query": "What methods can I use to add money to my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "source_intent": "transfer_into_account",
+      "old_category_parent_id": "faq_7d49c937",
+      "acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "votes": {
+        "faq_7d49c937": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_7d49c937"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_passcode_forgotten_01",
+      "customer_query": "I have forgotten my password.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "source_intent": "passcode_forgotten",
+      "old_category_parent_id": "faq_b00e6476",
+      "acceptable_parent_ids": [],
+      "votes": {
+        "faq_b00e6476": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_passcode_forgotten_02",
+      "customer_query": "Can you tell me what to do to reset my passcode?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "source_intent": "passcode_forgotten",
+      "old_category_parent_id": "faq_b00e6476",
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "votes": {
+        "faq_b00e6476": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_passcode_forgotten_03",
+      "customer_query": "I can't find my password",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "source_intent": "passcode_forgotten",
+      "old_category_parent_id": "faq_b00e6476",
+      "acceptable_parent_ids": [],
+      "votes": {
+        "faq_b00e6476": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "none",
+          "reconstructed_relevant_parent_ids": []
+        }
+      ]
+    },
+    {
+      "id": "threeway_passcode_forgotten_04",
+      "customer_query": "I can't recall my passcode and need to reset it.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "source_intent": "passcode_forgotten",
+      "old_category_parent_id": "faq_b00e6476",
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "votes": {
+        "faq_b00e6476": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_passcode_forgotten_05",
+      "customer_query": "Can I be given a new passcode?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "source_intent": "passcode_forgotten",
+      "old_category_parent_id": "faq_b00e6476",
+      "acceptable_parent_ids": [],
+      "votes": {
+        "faq_b00e6476": 1
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_passcode_forgotten_06",
+      "customer_query": "I don't remember my code to get into the app.",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "source_intent": "passcode_forgotten",
+      "old_category_parent_id": "faq_b00e6476",
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "votes": {
+        "faq_b00e6476": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_passcode_forgotten_07",
+      "customer_query": "What should I do if the passcode doesn't work for me?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "source_intent": "passcode_forgotten",
+      "old_category_parent_id": "faq_b00e6476",
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "votes": {
+        "faq_b00e6476": 2
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "partial",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_passcode_forgotten_08",
+      "customer_query": "How do I reset a forgotten passcode, please?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "source_intent": "passcode_forgotten",
+      "old_category_parent_id": "faq_b00e6476",
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "votes": {
+        "faq_b00e6476": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_passcode_forgotten_09",
+      "customer_query": "Something is wrong with my passcode",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "source_intent": "passcode_forgotten",
+      "old_category_parent_id": "faq_b00e6476",
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "votes": {
+        "faq_b00e6476": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threeway_passcode_forgotten_10",
+      "customer_query": "Can I resent my passcode?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "source_intent": "passcode_forgotten",
+      "old_category_parent_id": "faq_b00e6476",
+      "acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "votes": {
+        "faq_b00e6476": 3
+      },
+      "trace": [
+        {
+          "strategy": "direct",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "complete_three_angle",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        },
+        {
+          "strategy": "faq_scope_pattern",
+          "answerability": "full",
+          "reconstructed_relevant_parent_ids": [
+            "faq_b00e6476"
+          ]
+        }
+      ]
+    }
+  ]
+}

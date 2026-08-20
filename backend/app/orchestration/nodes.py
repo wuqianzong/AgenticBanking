@@ -16,10 +16,22 @@ from backend.app.core.llm_service import (
     MODEL_E_TRIAGE,
 )
 from backend.app.core.compliance import MAS_REGULATIONS_CONTEXT
-from backend.app.core.system_logger import log_event
+from backend.app.core.system_logger import log_event, request_context
 
 # Define the DB Path (adjust relative path if necessary based on your working directory)
 SQLITE_DB_PATH = "backend/data/knowledge_base.db"
+# Preserve approved-evidence cache serving for normal traffic.  A tagged
+# retrieval-evaluation turn always bypasses it so every fixture prompt has a
+# comparable live retrieval record.
+EVIDENCE_CACHE_ENABLED = os.getenv("EVIDENCE_CACHE_ENABLED", "1").strip().lower() in {"1", "true", "yes"}
+EVALUATION_TAG = "retrieval_cosine_eval"
+
+
+def _evidence_cache_enabled_for_request() -> bool:
+    return (
+        EVIDENCE_CACHE_ENABLED
+        and request_context.get().get("evaluation_tag") != EVALUATION_TAG
+    )
 
 # --- 🧹 VOLATILE STATE RESET DICTIONARY ---
 # Applied at the start of every turn to prevent cross-turn memory leakage
@@ -833,11 +845,22 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     Latest User Input (context only; the components above are authoritative): "{user_msg}"
     TASK: Act as a Decoupled Database Search Architect.
 
-    CRITICAL RULES FOR VECTOR DENSITY:
-    - NEVER use conversational filler (e.g., "Provide a guide", "Explain how to", "What is").
-    - NEVER use complete sentences.
-    - Extract ONLY the core nouns, target verbs, and specific constraints.
-    - Format each angle as a concise, comma-separated string of keywords.
+    CRITICAL RULES FOR RETRIEVAL FOCUS:
+    - `customer_component` is the complete, authoritative resolved subquery.
+      The backend always preserves it and appends each angle field as a
+      retrieval focus; do NOT rewrite or restate the whole request in an
+      angle field.
+    - Format each angle field as a concise, comma-separated focus phrase, not
+      a complete sentence or conversational filler.
+    - A focus may use meaning-preserving synonyms, grammatical variants, and
+      terminology from the validated Product/Intent Matrix when they clarify
+      the same request. It may emphasize explicit user constraints.
+    - Do not add a specific factual scenario or commitment that the customer
+      did not state: for example, do not assume delivery, replacement, loss,
+      fraud, a particular channel, a threshold, or eligibility condition.
+    - Aim for three distinct useful focuses. If a lens cannot safely add
+      meaning, return an empty string for that field; never emit "none", "N/A",
+      or a duplicate of the whole subquery.
 
     1. CONTEXTUAL INHERITANCE: Read each component's customer_component text first. A Product or Intent may be inherited only when it is unambiguously established by the current-session trusted history, Active Context Matrix, or an active graph plan. Do not use the user baseline or prior-session recall to fill a missing Product or Intent, unless the component explicitly continues that recalled topic (for example, "yes, continue").
     2. FOR EACH supplied component, evaluate the two mandatory retrieval foundations:
@@ -849,10 +872,13 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        - CLARIFY: use when either mandatory foundation is missing or ambiguous, but the component could plausibly become searchable with more detail from the user. A generic process or policy word alone—such as "application", "fee", "eligibility", "limit", "rate", "requirements", or "processing time"—is an INTENT only. It does not identify a PRODUCT and MUST be CLARIFY unless a product is explicit or unambiguously inherited from permitted context. Likewise, a product name alone without a discernible request type MUST be CLARIFY.
        - DECLINE: use only when the component clearly and confidently names a specific product, account type, or service that does NOT exist anywhere in the PRODUCT/INTENT MATRIX (e.g., margin trading, cryptocurrency trading, or any product with no matrix entry at all). Never use DECLINE merely because wording is vague or underspecified — that is CLARIFY. DECLINE means no amount of user clarification would ever produce a valid matrix pair.
        A component, its wording, a substring of its wording, or a paraphrase of it MUST NOT appear under more than one resolution.
-    4. For EACH SEARCH component, formulate exactly one base Angle Group with three distinct semantic angles based strictly on the density rules below. An angle group is a complete alternative semantic description; never concatenate unrelated wording into one angle:
-       - "procedural": Only the action verbs and tool nouns (e.g., "Horizon App, navigation, setup MyInfo, verification process").
-       - "policy": Only the rule nouns and constraints (e.g., "eligibility rules, required documents, security policy, restrictions").
-       - "conceptual": Only the definition nouns (e.g., "MyInfo service, personal data sharing, Horizon Bank").
+    4. For EACH SEARCH component, formulate exactly one base Angle Group with three distinct retrieval focuses. The field names remain unchanged, but their values are only appended to `customer_component` by the backend:
+       - "procedural": Focus on user-stated actions or steps.
+       - "policy": Focus on user-stated eligibility, limits, fees, timing, or constraints.
+       - "conceptual": Focus on user-stated entities or definitions.
+       Use meaning-preserving paraphrases or validated taxonomy terms when
+       useful, but never add a scenario that the customer did not state (for
+       example, delivery, replacement, loss, fraud, or a specific app flow).
     5. For EACH SEARCH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed. In RETRY MODE preserve the supplied task_id and use its task-specific sufficiency feedback to change the search terms, product, or intent.
     6. INTENT CLARIFICATION: For a CLARIFY component, copy only the ambiguous customer term into clarification.unresolved_request and explain internally whether Product, Intent, or both are missing or ambiguous. Do not guess a product or create a generic task merely to fill the array.
     7. SCOPE DECLINE: For a DECLINE component, set decline.reason to a short, factual statement naming the product/service Horizon does not offer. Only decline when the matrix confirms no such product exists — never guess.
@@ -898,8 +924,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         - ANGLE_EXPANSION: keep the exact prior product and intent filters.
           Return every prior angle group unchanged and append exactly one new,
           complete angle group with group_id "retry_<next_attempt>". The new
-          group's three concise angles must target the missing detail described
-          in the feedback. Do not append terms into an existing angle.
+          group's three concise retrieval focuses may use safe paraphrases or
+          validated taxonomy terms to emphasize the missing detail described
+          in the feedback, but must not invent a scenario or fact beyond the
+          unchanged customer_component. Do not append terms into an existing
+          angle.
         - INTENT_EXPANSION: keep the exact prior product filter; retain all
           prior angle groups and intents, then add valid intent filters that
           can improve recall of the missing detail. Do not remove prior
@@ -912,9 +941,12 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         - The revised task must remain about the same customer component as its
           supplied failed task.
         - Every revised Product/Intent pair must be valid in the matrix.
-        - NEVER use conversational filler or complete sentences in semantic
-          angles. Extract only core nouns, verbs, and constraints as concise,
-          comma-separated keywords.
+        - Angle-field values are retrieval-focus phrases appended to the
+          unchanged customer_component by the backend. NEVER use a full
+          rewrite, conversational filler, or an invented scenario. Use concise
+          meaning-preserving terms grounded in the task, feedback, or validated
+          Product/Intent Matrix only; return an empty string when no safe lens
+          exists.
 
         Output JSON ONLY:
         {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","angle_groups":[{{"group_id":"base","procedural":"unchanged","policy":"unchanged","conceptual":"unchanged"}},{{"group_id":"retry_2","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"valid matrix product or ordered product array during PRODUCT_EXPANSION","target_intent":["valid matrix intent"]}},"clarification":null}}]}}
@@ -1034,7 +1066,27 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             new_matrix.append({"product": prod, "intents": ints})
             
     print(f"   🔎 [SEARCH TASKS]: {len(search_tasks)} tasks | Matrix: {new_matrix} | Intent clarifications: {len(intent_clarification_tasks)}")
-    log_event("task.formulated", task_ids=[task.get("task_id") for task in search_tasks], task_count=len(search_tasks), intent_clarification_count=len(intent_clarification_tasks), retry_mode=bool(retry_tasks))
+    # This remains useful even when an evidence-cache hit means no live RAG
+    # event will follow.  It records the exact task representation entering
+    # each retry stage without storing hydrated FAQ text.
+    log_event(
+        "task.formulated",
+        task_ids=[task.get("task_id") for task in search_tasks],
+        task_count=len(search_tasks),
+        intent_clarification_count=len(intent_clarification_tasks),
+        retry_mode=bool(retry_tasks),
+        tasks=[
+            {
+                "task_id": task.get("task_id"),
+                "customer_component": task.get("customer_component", ""),
+                "target_commercial_product": task.get("target_commercial_product"),
+                "target_intent": task.get("target_intent", []),
+                "angle_groups": _normalize_angle_groups(task),
+            }
+            for task in search_tasks
+        ],
+        planned_expansion=retry_expansion_plan if retry_tasks else [],
+    )
 
     if not search_tasks:
         if not intent_clarification_tasks and decline_tasks:
@@ -1074,13 +1126,15 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     # run a new RAG search; a prior cache insufficiency is not a RAG attempt.
     cached_results = []
     cache_hits = 0
+    cache_candidates = []
     if not retry_tasks:
         evidence_cache = state.get("approved_evidence_cache", {})
         cache_candidates = [
             (task, _task_evidence_cache_key(task), evidence_cache.get(_task_evidence_cache_key(task), {}))
             for task in search_tasks
         ]
-        if any(entry.get("approved_parent_ids") for _, _, entry in cache_candidates):
+        cache_enabled_for_request = _evidence_cache_enabled_for_request()
+        if cache_enabled_for_request and any(entry.get("approved_parent_ids") for _, _, entry in cache_candidates):
             evidence_store = RAGEngine()
             for task, cache_key, entry in cache_candidates:
                 parent_ids = entry.get("approved_parent_ids", []) if cache_key else []
@@ -1110,7 +1164,25 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         print(f"   ⚡ [EVIDENCE CACHE]: {cache_hits} hit(s), {cache_misses} RAG task(s).")
     else:
         print("   🎯 [TASK ROUTER]: No approved-evidence cache match; retrieval required.")
-    log_event("evidence_cache.route", hit_count=cache_hits, miss_count=cache_misses, retry_mode=bool(retry_tasks))
+    log_event(
+        "evidence_cache.route",
+        cache_enabled=_evidence_cache_enabled_for_request(),
+        hit_count=cache_hits,
+        miss_count=cache_misses,
+        retry_mode=bool(retry_tasks),
+        task_routes=[
+            {
+                "task_id": task.get("task_id"),
+                "cache_key": cache_key,
+                "cache_eligible": bool(entry.get("approved_parent_ids")),
+                "cache_used": _evidence_cache_enabled_for_request() and bool(entry.get("approved_parent_ids")),
+            }
+            for task, cache_key, entry in cache_candidates
+        ] if not retry_tasks else [
+            {"task_id": task.get("task_id"), "cache_key": None, "cache_eligible": False, "cache_used": False}
+            for task in search_tasks
+        ],
+    )
     return {
         "preflight_status": "validate_cached" if cache_hits == len(search_tasks) else "retrieve",
         "search_tasks": search_tasks,
@@ -1150,15 +1222,38 @@ async def node_03b_rag_worker(state: AgentState):
     engine = RAGEngine()
     async def retrieve_task(task: dict) -> dict:
         scope_pairs = _valid_product_intent_scope_pairs(task)
-        parents = await engine.execute_multi_angle_search(
-            blueprint=task,
+        # Preserve the untouched turn message only for the diagnostic shadow
+        # query. The live direct baseline and all live angle searches remain
+        # task-specific `customer_component` searches.
+        retrieval_blueprint = {
+            **task,
+            "original_user_query": state.get("user_input", ""),
+        }
+        parents, retrieval_telemetry = await engine.execute_multi_angle_search(
+            blueprint=retrieval_blueprint,
             scope_pairs=scope_pairs,
+            include_telemetry=True,
         )
-        return {"task_id": task.get("task_id"), "status": "RETRIEVED", "origin": "RAG", "parents": parents}
+        return {
+            "task_id": task.get("task_id"),
+            "status": "RETRIEVED",
+            "origin": "RAG",
+            "parents": parents,
+            "retrieval_telemetry": retrieval_telemetry,
+        }
 
     retrieved_results = await asyncio.gather(*(retrieve_task(task) for task in tasks_to_retrieve))
     merged_results = {**prior_results, **{result["task_id"]: result for result in retrieved_results}}
     print(f"   🔎 [TASK RAG]: Retrieved {len(retrieved_results)} task result set(s) in parallel.")
+    for result in retrieved_results:
+        task = next((item for item in tasks_to_retrieve if item.get("task_id") == result.get("task_id")), {})
+        log_event(
+            "task.retrieval.completed",
+            task_id=result.get("task_id"),
+            customer_component=task.get("customer_component", ""),
+            retry_count=state.get("task_retry_counts", {}).get(result.get("task_id"), 0),
+            telemetry=result.get("retrieval_telemetry", {}),
+        )
     log_event("task.rag.completed", task_ids=[result.get("task_id") for result in retrieved_results])
     return {"rag_payload": "", "task_results": list(merged_results.values())}
 
@@ -1176,6 +1271,17 @@ def node_03c_sufficiency_auditor(state: AgentState):
         result for result in current_results.values()
         if result.get("status") in {"RETRIEVED", "CACHED"}
     ]
+    # The state intentionally replaces raw parents with a compact retry or
+    # terminal result after judging. Preserve the exact ID set here for the
+    # structured judgement log, including unsuccessful attempts.
+    judged_candidate_ids = {
+        result.get("task_id"): [
+            parent.get("parent_id")
+            for parent in result.get("parents", [])
+            if parent.get("parent_id")
+        ]
+        for result in evidence_candidates
+    }
     retry_counts = dict(state.get("task_retry_counts", {}))
     feedback = dict(state.get("task_feedback", {}))
 
@@ -1275,6 +1381,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             current_results[task_id] = {
                 "task_id": task_id,
                 "status": "CLARIFICATION_REQUIRED",
+                "origin": result.get("origin", "RAG"),
                 "approved_parent_ids": [],
                 "reason": reason,
                 "terminal_feedback": refinement,
@@ -1282,7 +1389,13 @@ def node_03c_sufficiency_auditor(state: AgentState):
             }
             feedback.pop(task_id, None)
         else:
-            current_results[task_id] = {"task_id": task_id, "status": "RETRY", "approved_parent_ids": [], "reason": reason}
+            current_results[task_id] = {
+                "task_id": task_id,
+                "status": "RETRY",
+                "origin": result.get("origin", "RAG"),
+                "approved_parent_ids": [],
+                "reason": reason,
+            }
             feedback[task_id] = refinement
             if cache_fallback:
                 log_event("evidence_cache.insufficient", task_id=task_id, cache_key=result.get("cache_key", ""), reason=reason)
@@ -1314,7 +1427,49 @@ def node_03c_sufficiency_auditor(state: AgentState):
     for result in current_results.values():
         event = "task.sufficiency.completed" if result.get("status") == "SUFFICIENT" else "task.retry" if result.get("status") == "RETRY" else "task.clarification_required"
         next_stage = next((item for item in retry_expansion if item.get("task_id") == result.get("task_id")), {})
-        log_event(event, task_id=result.get("task_id"), status=result.get("status"), approved_parent_ids=result.get("approved_parent_ids", []), reason=result.get("reason", ""), retry_count=retry_counts.get(result.get("task_id"), 0), next_expansion_stage=next_stage.get("stage", ""))
+        log_event(
+            event,
+            task_id=result.get("task_id"),
+            status=result.get("status"),
+            auditor_status=auditor_results.get(result.get("task_id"), {}).get("status", ""),
+            origin=result.get("origin", "RAG"),
+            candidate_parent_ids=judged_candidate_ids.get(result.get("task_id"), []),
+            approved_parent_ids=result.get("approved_parent_ids", []),
+            reason=result.get("reason", ""),
+            search_feedback=auditor_results.get(result.get("task_id"), {}).get("search_feedback", ""),
+            retry_count=retry_counts.get(result.get("task_id"), 0),
+            next_expansion_stage=next_stage.get("stage", ""),
+        )
+
+    sufficient_count = sum(result.get("status") == "SUFFICIENT" for result in current_results.values())
+    pending_retry_count = sum(result.get("status") == "RETRY" for result in current_results.values())
+    terminal_failure_count = sum(result.get("status") == "CLARIFICATION_REQUIRED" for result in current_results.values())
+    if pending_retry_count:
+        overall_outcome = "RETRY_PENDING"
+    elif sufficient_count and terminal_failure_count:
+        overall_outcome = "PARTIAL_SUCCESS"
+    elif sufficient_count:
+        overall_outcome = "SUCCESS"
+    else:
+        overall_outcome = "FAILURE"
+    log_event(
+        "retrieval.turn.progress",
+        overall_outcome=overall_outcome,
+        task_count=len(current_results),
+        sufficient_task_count=sufficient_count,
+        pending_retry_task_count=pending_retry_count,
+        terminal_failure_task_count=terminal_failure_count,
+        tasks=[
+            {
+                "task_id": result.get("task_id"),
+                "status": result.get("status"),
+                "origin": result.get("origin", "RAG"),
+                "approved_parent_ids": result.get("approved_parent_ids", []),
+                "retry_count": retry_counts.get(result.get("task_id"), 0),
+            }
+            for result in current_results.values()
+        ],
+    )
     return {
         "preflight_status": "retry_tasks" if unresolved else "task_resolution_ready",
         "task_results": list(current_results.values()),

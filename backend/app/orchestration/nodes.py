@@ -52,7 +52,7 @@ VOLATILE_STATE_RESET = {
 
 MAX_VERIFIED_TASK_HISTORY_TURNS = 10
 ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "PARTIALLY_SUFFICIENT"}
-MAX_RAG_ATTEMPTS = 4
+MAX_RAG_ATTEMPTS = 3
 
 
 def _normalized_product_tags(product_value: Any) -> list[str]:
@@ -253,14 +253,10 @@ def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int])
     """Describe the deterministic precision-to-recall stage for each retry."""
     stages = {
         2: {
-            "stage": "INTENT_EXPANSION",
-            "instruction": "Keep the exact product filter. Retain every prior angle term and intent, then add one or more additional valid intents for that same product when they can improve recall of the missing detail.",
+            "stage": "META_FILTER_EXPANSION",
+            "instruction": "Expand the Product and/or Intent scope based on the feedback status. If INSUFFICIENT, the previous search completely failed; you must aggressively broaden the Intents and/or add a plausible related Product. If PARTIALLY_SUFFICIENT, the previous search successfully answered part of the question; you must be conservative and ONLY add an Intent or Product that targets the remaining missing gap. Never remove the original product or intents.",
         },
         3: {
-            "stage": "PRODUCT_EXPANSION",
-            "instruction": "Retain every prior angle term, intent, and product. Add only a clearly plausible, matrix-valid related product as an additional product tag; never replace the original product.",
-        },
-        4: {
             "stage": "ANGLE_EXPANSION",
             "instruction": "Keep the exact product and intent filters. Preserve every existing angle group unchanged and append one complete new angle group that targets the missing detail in the sufficiency feedback.",
         },
@@ -271,7 +267,7 @@ def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int])
         plan.append({
             "task_id": task.get("task_id"),
             "next_attempt": next_attempt,
-            **stages.get(next_attempt, stages[4]),
+            **stages.get(next_attempt, stages[3]),
         })
     return plan
 
@@ -284,7 +280,7 @@ def _retrieval_mode_for_task(task: dict, retry_counts: dict[str, int]) -> str:
     final, feedback-guided angle-expansion attempt.
     """
     retry_count = retry_counts.get(task.get("task_id"), 0)
-    return "ANGLE_GROUP_RRF" if retry_count >= 3 else "DIRECT"
+    return "ANGLE_GROUP_RRF" if retry_count >= 2 else "DIRECT"
 
 
 def _merge_retry_task(prior_task: dict, revision: dict, expansion: dict) -> dict:
@@ -322,25 +318,18 @@ def _merge_retry_task(prior_task: dict, revision: dict, expansion: dict) -> dict
             print(f"   ⚠️ [ANGLE EXPANSION OMITTED]: Task '{merged['task_id']}' returned no distinct retry group.")
         merged["target_commercial_product"] = prior_task.get("target_commercial_product")
         merged["target_intent"] = prior_task.get("target_intent", [])
-    elif stage == "INTENT_EXPANSION":
-        prior_intents = prior_task.get("target_intent", [])
-        prior_intents = [prior_intents] if isinstance(prior_intents, str) else prior_intents
-        proposed_intents = revision.get("target_intent", [])
-        proposed_intents = [proposed_intents] if isinstance(proposed_intents, str) else proposed_intents
-        merged["angle_groups"] = prior_groups
-        merged["target_commercial_product"] = prior_task.get("target_commercial_product")
-        merged["target_intent"] = list(dict.fromkeys([*prior_intents, *proposed_intents]))
-    elif stage == "PRODUCT_EXPANSION":
+    elif stage == "META_FILTER_EXPANSION":
         prior_products = _normalized_product_tags(prior_task.get("target_commercial_product"))
         proposed_products = _normalized_product_tags(revision.get("target_commercial_product"))
         prior_intents = prior_task.get("target_intent", [])
         prior_intents = [prior_intents] if isinstance(prior_intents, str) else prior_intents
+        proposed_intents = revision.get("target_intent", [])
+        proposed_intents = [proposed_intents] if isinstance(proposed_intents, str) else proposed_intents
+
         products = list(dict.fromkeys([*prior_products, *proposed_products]))
         merged["angle_groups"] = prior_groups
         merged["target_commercial_product"] = products[0] if len(products) == 1 else products
-        # Product expansion widens only the product boundary. Intent widening
-        # belongs exclusively to the preceding INTENT_EXPANSION stage.
-        merged["target_intent"] = prior_intents
+        merged["target_intent"] = list(dict.fromkeys([*prior_intents, *proposed_intents]))
     else:
         merged["angle_groups"] = prior_groups
 
@@ -1012,15 +1001,13 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           hypothetical FAQ answer about this task's topic (steps,
           rules/conditions, or explanation).
           Do not append terms into an existing angle.
-        - INTENT_EXPANSION: keep the exact prior product filter; retain all
-          prior angle groups and intents, then add valid intent filters that
-          can improve recall of the missing detail. Do not remove prior
-          intents or alter any angle group.
-        - PRODUCT_EXPANSION: retain all prior angle terms, intents, and
-          product tags. Keep angle groups unchanged. Output
-          target_commercial_product as an ordered array containing the
-          original product first plus only a clearly plausible, matrix-valid
-          related product. Never replace the original product.
+        - META_FILTER_EXPANSION: retain all prior angle terms, intents, and
+          product tags. Evaluate the provided feedback status. Add valid intent
+          filters that target the missing detail. You MAY ALSO output
+          target_commercial_product as an ordered array containing the original
+          product first plus a related matrix-valid product, but ONLY if the
+          feedback implies the missing detail belongs to a different product
+          family. Never replace the original product.
         - The revised task must remain about the same customer component as its
           supplied failed task.
         - Every revised Product/Intent pair must be valid in the matrix.
@@ -1031,7 +1018,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           branch details. Do not paraphrase the customer's original question.
 
         Output JSON ONLY:
-        {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","angle_groups":[{{"group_id":"base","procedural":"unchanged","policy":"unchanged","conceptual":"unchanged"}},{{"group_id":"retry_2","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"valid matrix product or ordered product array during PRODUCT_EXPANSION","target_intent":["valid matrix intent"]}},"clarification":null}}]}}
+        {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","angle_groups":[{{"group_id":"base","procedural":"unchanged","policy":"unchanged","conceptual":"unchanged"}},{{"group_id":"retry_2","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"valid matrix product or ordered product array during META_FILTER_EXPANSION","target_intent":["valid matrix intent"]}},"clarification":null}}]}}
         """
     
     try:
@@ -1397,7 +1384,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         - For PARTIALLY_SUFFICIENT or INSUFFICIENT, return an `evidence_delta`
           list. This is internal evidence-only retrieval context for the intent
           formulator, not a query, diagnosis, or rewrite instruction. The
-          backend determines terminal clarification after four attempts.
+          backend determines terminal clarification after the configured retry limit.
         - Include an evidence_delta item only when a supplied candidate parent
           contains a materially task-relevant factual proposition that is NOT
           already explicit in that task's customer_component. Each item must
@@ -1509,7 +1496,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             # response that still uses the former string field.
             refinement = audit.get("search_feedback") or reason
         # A partial task remains retryable with its retained evidence until the
-        # fourth attempt. At the boundary it is answerable for the supported
+        # configured final attempt. At the boundary it is answerable for the supported
         # part and carries a clarification only for the unresolved part.
         if attempt_count >= MAX_RAG_ATTEMPTS:
             unapproved_ids = [
@@ -1543,7 +1530,10 @@ def node_03c_sufficiency_auditor(state: AgentState):
                 "approved_parent_ids": [],
                 "reason": reason,
             }
-            feedback[task_id] = refinement
+            feedback[task_id] = {
+                "status": requested_status,
+                "missing_detail_clues": refinement
+            }
 
     unresolved = [result for result in current_results.values() if result.get("status") == "RETRY"]
     task_resolution_instructions = [

@@ -15,7 +15,7 @@ from backend.app.core.llm_service import (
     MODEL_D_PROMPT_GUARD,
     MODEL_E_TRIAGE,
 )
-from backend.app.core.compliance import MAS_REGULATIONS_CONTEXT
+from backend.app.core.compliance import MAS_REGULATIONS_CONTEXT, PRECISION_REFERENCE_CONTRACT
 from backend.app.core.system_logger import log_event
 
 # Define the DB Path (adjust relative path if necessary based on your working directory)
@@ -520,16 +520,15 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
         for result in state.get("task_results", [])
         if result.get("status") in ANSWERABLE_TASK_STATUSES
     }
-    plan = state.get("presentation_plan", {})
-    raw_blocks = plan.get("response_blocks") or plan.get("presentation_tasks") or []
-    manifest = []
-    for block in raw_blocks:
-        task_id = block.get("task_id")
-        allowed_ids = approved_by_task.get(task_id, set())
-        selected_ids = [parent_id for parent_id in block.get("evidence_parent_ids", []) if parent_id in allowed_ids]
-        if task_id and selected_ids:
-            manifest.append({"task_id": task_id, "approved_parent_ids": selected_ids})
-    return manifest
+    # Presentation is intentionally decoupled from retrieval-task boundaries.
+    # The response and outbound groundedness audit therefore share the full
+    # approved evidence set. Optional element-level source_task_ids narrow
+    # provenance for logs and audits but never decide what may be displayed.
+    return [
+        {"task_id": task_id, "approved_parent_ids": sorted(parent_ids)}
+        for task_id, parent_ids in approved_by_task.items()
+        if task_id and parent_ids
+    ]
 
 
 def _hydrate_response_evidence(state: AgentState) -> list[dict]:
@@ -1355,6 +1354,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
           restriction, or other related factual information rather than a
           literal yes/no answer. The response generator will state only what
           the evidence supports and must not invent a broader conclusion.
+        {PRECISION_REFERENCE_CONTRACT}
         - PARTIALLY_SUFFICIENT: selected parents provide grounded, material
           information for one meaningful part of the `customer_component`,
           while another material part has no useful related evidence. Select
@@ -1401,7 +1401,6 @@ def node_03c_sufficiency_auditor(state: AgentState):
           evidence_delta list. Do not substitute a generic sentence.
         - evidence_delta is internal diagnostic context only. It is never
           approved answer evidence.
-        - Treat {{placeholders}} in parent content as valid approved facts.
         - Never invent a parent ID, fact, or instruction.
 
         Output JSON only: {{"task_results": [{{"task_id": "...", "status": "SUFFICIENT" | "PARTIALLY_SUFFICIENT" | "INSUFFICIENT", "approved_parent_ids": ["..."], "reason": "...", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}]}}]}}
@@ -1576,202 +1575,96 @@ def node_03c_sufficiency_auditor(state: AgentState):
 # --- PHASE 3: RESOLUTION BLUEPRINT & STEP-BY-STEP RESPONSE ---
 
 def node_04a_resolution_planner(state: AgentState):
-    """n19: choose the response presentation after task evidence is sufficient or terminal."""
-    print("🟢 [NODE 04a] Executing User Journey V2.0 Presentation Planner")
-    existing_plan = state.get("active_plan", {})
-    existing_steps = existing_plan.get("steps", [])
-    existing_index = existing_plan.get("current_step_index", 0)
-    if state.get("preflight_status") == "continue_plan" and existing_steps:
-        return {
-            "preflight_status": "presentation_ready",
-            "selected_ux_journey": "PROGRESS",
-            "presentation_plan": state.get("presentation_plan", {"presentation_type": "PROGRESS", "steps": existing_steps, "options": []}),
-        }
-
-    intent_clarification_tasks = state.get("intent_clarification_tasks", [])
-    if state.get("preflight_status") == "intent_clarification" and not state.get("task_results", []):
-        # No valid retrieval task exists. Keep the UX intentionally plain so
-        # Node 04b can ask only for the exact unresolved customer wording.
-        return {
-            "preflight_status": "presentation_ready",
-            "selected_ux_journey": "TEXT",
-            "presentation_plan": {"presentation_type": "TEXT", "steps": [], "options": [], "reason": "Intent clarification required before retrieval."},
-            "active_plan": {},
-            "completed_steps": [],
-        }
-
+    """n19: create optional UX guidance without imposing visible structure."""
+    print("🟢 [NODE 04a] Executing Flexible User Journey Planner")
     task_results = state.get("task_results", [])
+    answerable_task_ids = [
+        result.get("task_id") for result in task_results
+        if result.get("status") in ANSWERABLE_TASK_STATUSES and result.get("task_id")
+    ]
     planner_tasks = []
-    approved_by_task = {}
     for result in task_results:
-        task_id = result.get("task_id")
-        parents = _hydrate_parent_ids(result.get("approved_parent_ids", [])) if result.get("status") in ANSWERABLE_TASK_STATUSES else []
-        approved_ids = {parent.get("parent_id") for parent in parents}
-        approved_by_task[task_id] = approved_ids
+        if result.get("status") not in ANSWERABLE_TASK_STATUSES:
+            continue
         planner_tasks.append({
-            "task_id": task_id,
+            "task_id": result.get("task_id"),
             "status": result.get("status"),
-            "reason": result.get("reason", ""),
-            "approved_parents": parents,
+            "resolved_request": next((
+                task.get("customer_component", "")
+                for task in state.get("search_tasks", [])
+                if task.get("task_id") == result.get("task_id")
+            ), ""),
+            "approved_parents": _hydrate_parent_ids(result.get("approved_parent_ids", [])),
         })
 
-    decline_tasks = state.get("decline_tasks", [])
     prompt = f"""
-    USER JOURNEY V2.0 PRESENTATION PLANNER
-    You are designing the presentation for a read-only Horizon Bank FAQ response.
-    Decide the user experience only after reviewing task-level approved evidence.
+    FLEXIBLE USER EXPERIENCE PLANNER
+    You are an internal communication designer for a read-only Horizon Bank FAQ assistant.
+    Produce guidance for a natural response; you do NOT write customer-facing
+    text and you do NOT prescribe a fixed response structure.
 
-    User request: {state.get("user_input", "")}
-    Task results: {json.dumps(planner_tasks, ensure_ascii=False)}
-    Intent-level clarification tasks (unresolved user-derived components; no FAQ evidence): {json.dumps(intent_clarification_tasks, ensure_ascii=False)}
-    Declined components (out of scope for this planner; do not plan a presentation or UI slot for them — their explanation is added separately, outside any presentation type you choose here): {json.dumps(decline_tasks, ensure_ascii=False)}
+    Customer request: {state.get("user_input", "")}
+    Answerable evidence by retrieval task: {json.dumps(planner_tasks, ensure_ascii=False)}
+    Intent clarification inputs: {json.dumps(state.get("intent_clarification_tasks", []), ensure_ascii=False)}
+    Declined inputs: {json.dumps(state.get("decline_tasks", []), ensure_ascii=False)}
 
-    DEEPER PRESENTATION PRINCIPLE:
-    Select the presentation that visualizes the mental model the customer needs at this moment. The customer's higher-level intent selects the experience; approved FAQ evidence limits every title, item, stage, and option within that experience.
+    {PRECISION_REFERENCE_CONTRACT}
 
-    Choose one presentation type for EACH answerable task:
-    - TEXT — use when the customer needs to understand an explanation, policy, factual answer, or comparison. For a comparison, organise the supported facts into clear labelled sections; there is no dedicated comparison table yet.
-    - LIST — use when the customer needs to scan or remember independent items. This is optimal for three or more eligibility criteria, required documents, prerequisites, fees, limits, or security checks.
-    - PROGRESS — use when the customer needs to know where they are in, or complete, a process. This is especially appropriate for an account-opening or application/onboarding request asking how to proceed, how to apply, or what steps remain.
-    - ESCALATION — use only when human assistance was explicitly requested or required.
+    Principle: presentation should visualize the mental model the customer
+    needs now. Use prose to understand, a list to scan, options to choose,
+    progress to understand a genuine process, and no UI at all when it would
+    not lower cognitive load.
 
     Rules:
-    - Never invent facts, parent IDs, or a banking action.
-    - Select evidence_parent_ids only from approved parents of the same task.
-    - A PROGRESS presentation is allowed only when the evidence supports at least two genuine sequential stages. Do not create those stages yourself: the response generator owns the titles and expandable details as one paired structure.
-    - For account-opening or application/onboarding requests, prefer PROGRESS when approved evidence supports two or more distinct actions, prerequisites, or constraints that can be presented as honest preparation stages. Do not invent app clicks or claim a complete bank workflow when the evidence only supports preparation.
-    - A LIST presentation requires at least three independent, grounded items. Do not use LIST when order matters.
-    - A single customer turn may contain multiple response blocks. Choose the best presentation independently for each answerable task. Each block may use TEXT, LIST, or PROGRESS when its approved evidence supports it.
-    - Do not force a visual payload: use TEXT when a list or progress flow would not improve the customer's understanding.
-    - Tasks marked PARTIALLY_SUFFICIENT have grounded evidence for only part
-      of the customer's request. Plan their supported answer normally, but do
-      not imply the visual completes the unresolved part; clarification is
-      added separately outside the response block.
-    - Mark unavailable tasks as UNAVAILABLE and use no evidence IDs for them.
-    - Intent-level clarification tasks do not have FAQ evidence and must not be treated as answerable tasks or UI choices.
-    - Declined components do not have FAQ evidence and must not be treated as answerable tasks or UI choices; preserve the ordering of the remaining answerable tasks as if the declined components were never present.
-    - Use up to two grounded `options` only when the customer needs to choose a supported next action or topic. Every option must be an object with a concise visible `label` (2-6 words) and a complete, unambiguous `message` that will be sent when clicked. Options are supplementary interaction, not a replacement for the selected presentation type. Leave options empty when the answer is complete, clarification is required, or the evidence does not support a meaningful choice.
-
-    CRITICAL OUTPUT CONTRACT:
-    - The JSON key MUST be `response_blocks`. Never output `journey`.
-    - Every block's `presentation_type` MUST be exactly TEXT, PROGRESS, LIST, or ESCALATION. Never output legacy labels such as INFORMATIONAL, GUIDED_PROCESS, TROUBLESHOOTING, or CLARIFICATION.
-    - Return blocks in the same order as the customer raised the corresponding task.
-    - For eligibility requirements with three or more independent criteria, use LIST.
+    - Search tasks are evidence-retrieval units, never mandatory visible
+      sections. Do not create a block plan or one UI element per task.
+    - Recommend only optional visual hints. A response may be entirely text,
+      may group several tasks in one explanation, or may use several visuals
+      only when each materially helps comprehension.
+    - Preserve the customer's priorities and make the most useful information
+      easy to understand first. Group related facts naturally; do not impose
+      headings, introductions, closings, titles, lists, or progress payloads
+      merely because they exist.
+    - A progress hint is appropriate only for a genuinely sequential process.
+      A list hint is appropriate only for independently scannable items.
+    - Keep clarification outside any suggested process/list and place it after
+      useful supported information when both exist.
+    - coverage_expectation must include every supplied answerable task_id, but
+      it is an internal completeness reminder, not a demand for separate UI.
+    - Never invent facts, banking actions, products, steps, or customer text.
 
     Output JSON only:
-    {{"response_blocks":[{{"task_id":"task_1","presentation_type":"LIST","evidence_parent_ids":["approved_parent_id"],"reason":"Independent eligibility criteria are best reviewed as a list."}}]}}
+    {{"primary_user_need":"...","narrative_focus":"...","grouping_guidance":"...","visual_hints":[{{"type":"LIST|PROGRESS|OPTIONS","purpose":"..."}}],"clarification_guidance":"...","coverage_expectation":["task_1"]}}
     """
     try:
-        plan = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER))
+        guidance = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER))
     except Exception as error:
-        print(f"🚨 [USER JOURNEY PLANNER ERROR]: {error}")
-        plan = {"presentation_type": "TEXT", "primary_task_id": "", "presentation_tasks": [], "steps": [], "list_title": "", "options": [], "reason": "Planner unavailable."}
+        print(f"🚨 [FLEXIBLE JOURNEY PLANNER ERROR]: {error}")
+        guidance = {}
 
-    # Response Generation v2.0: every answerable task receives its own
-    # presentation plan, while the generator still composes one coherent turn.
-    if isinstance(plan.get("response_blocks"), list):
-        valid_task_ids = set(approved_by_task)
-        normalized_blocks = []
-        selected_blocks = []
-        for raw_block in plan["response_blocks"]:
-            task_id = raw_block.get("task_id")
-            if task_id not in valid_task_ids:
-                continue
-            result = next((value for value in task_results if value.get("task_id") == task_id), {})
-            if result.get("status") not in ANSWERABLE_TASK_STATUSES:
-                continue
-            allowed_ids = approved_by_task[task_id]
-            evidence_ids = [parent_id for parent_id in raw_block.get("evidence_parent_ids", []) if parent_id in allowed_ids]
-            if not evidence_ids:
-                evidence_ids = list(allowed_ids)
-            block_type = raw_block.get("presentation_type", "TEXT")
-            if block_type not in {"TEXT", "PROGRESS", "LIST", "ESCALATION"}:
-                block_type = "TEXT"
-            normalized_blocks.append({
-                "task_id": task_id,
-                "presentation_type": block_type,
-                "evidence_parent_ids": evidence_ids,
-                "reason": raw_block.get("reason", ""),
-            })
-            for parent in _hydrate_parent_ids(result.get("approved_parent_ids", [])):
-                if parent.get("parent_id") in evidence_ids:
-                    selected_blocks.append(f"[Task {task_id} | Parent {parent.get('parent_id')}]\\n{parent.get('content', '')}")
-        if normalized_blocks:
-            normalized_plan = {"response_blocks": normalized_blocks, "reason": "Task-level response block plan."}
-            print(f"   🧭 [RESPONSE BLOCKS PLANNED]: {len(normalized_blocks)} blocks")
-            log_event("journey.planned", presentation_type="BLOCKS", presentation_task_ids=[block["task_id"] for block in normalized_blocks])
-            return {
-                "preflight_status": "presentation_ready",
-                "selected_ux_journey": "BLOCKS",
-                "presentation_plan": normalized_plan,
-                "active_plan": {},
-                "completed_steps": [],
-            }
-
-    # Accept the old planner labels during a rolling backend restart, but
-    # normalize all persisted and newly generated plans to the UI-first model.
-    legacy_presentation_map = {
-        "INFORMATIONAL": "TEXT",
-        "GUIDED_PROCESS": "PROGRESS",
-        "TROUBLESHOOTING": "TEXT",
-        "CLARIFICATION": "TEXT",
+    visual_hints = [
+        {"type": str(hint.get("type", "")).upper(), "purpose": str(hint.get("purpose", "")).strip()}
+        for hint in guidance.get("visual_hints", []) if isinstance(hint, dict)
+        and str(hint.get("type", "")).upper() in {"LIST", "PROGRESS", "OPTIONS"}
+        and str(hint.get("purpose", "")).strip()
+    ]
+    planned_coverage = [task_id for task_id in guidance.get("coverage_expectation", []) if task_id in answerable_task_ids]
+    ux_guidance = {
+        "primary_user_need": str(guidance.get("primary_user_need", "Provide a clear, useful answer.")).strip(),
+        "narrative_focus": str(guidance.get("narrative_focus", "Answer naturally and directly using approved evidence.")).strip(),
+        "grouping_guidance": str(guidance.get("grouping_guidance", "Group related facts only when it improves clarity.")).strip(),
+        "visual_hints": visual_hints,
+        "clarification_guidance": str(guidance.get("clarification_guidance", "Place unresolved information after supported information.")).strip(),
+        "coverage_expectation": planned_coverage or answerable_task_ids,
     }
-    raw_presentation_type = plan.get("presentation_type", plan.get("journey", "TEXT"))
-    presentation_type = legacy_presentation_map.get(raw_presentation_type, raw_presentation_type)
-    if presentation_type not in {"TEXT", "PROGRESS", "LIST", "ESCALATION"}:
-        presentation_type = "TEXT"
-    valid_task_ids = set(approved_by_task)
-    presentations = []
-    selected_blocks = []
-    for item in plan.get("presentation_tasks", []):
-        task_id = item.get("task_id")
-        if task_id not in valid_task_ids:
-            continue
-        valid_ids = [parent_id for parent_id in item.get("evidence_parent_ids", []) if parent_id in approved_by_task[task_id]]
-        result = next((value for value in task_results if value.get("task_id") == task_id), {})
-        if result.get("status") in ANSWERABLE_TASK_STATUSES and not valid_ids:
-            valid_ids = list(approved_by_task[task_id])
-        presentations.append({
-            "task_id": task_id,
-            "display_mode": item.get("display_mode", "SECTION"),
-            "evidence_parent_ids": valid_ids,
-            "section_title": item.get("section_title", "Horizon Bank guidance"),
-        })
-        for parent in _hydrate_parent_ids(result.get("approved_parent_ids", [])):
-            if parent.get("parent_id") in valid_ids:
-                selected_blocks.append(f"[Task {task_id} | {item.get('section_title', 'Horizon Bank guidance')} | Parent {parent.get('parent_id')}]\n{parent.get('content', '')}")
-
-    if not presentations:
-        for result in task_results:
-            if result.get("status") in ANSWERABLE_TASK_STATUSES:
-                parent_ids = list(result.get("approved_parent_ids", []))
-                presentations.append({"task_id": result.get("task_id"), "display_mode": "SECTION", "evidence_parent_ids": parent_ids, "section_title": "Horizon Bank guidance"})
-
-    steps = [step for step in plan.get("steps", []) if isinstance(step, str) and step.strip()]
-    primary_task_id = plan.get("primary_task_id", "")
-    if presentation_type == "PROGRESS" and (primary_task_id not in valid_task_ids or len(steps) < 2):
-        presentation_type = "TEXT"
-        steps = []
-    if presentation_type != "PROGRESS":
-        steps = []
-
-    normalized_plan = {
-        "presentation_type": presentation_type,
-        "primary_task_id": primary_task_id,
-        "presentation_tasks": presentations,
-        "steps": steps,
-        "list_title": plan.get("list_title", "") if presentation_type == "LIST" else "",
-        "options": _normalize_ui_options(plan.get("options", [])),
-        "reason": plan.get("reason", ""),
-    }
-    print(f"   🧭 [PRESENTATION PLANNED]: {presentation_type} | Tasks shown: {len(presentations)}")
-    log_event("journey.planned", presentation_type=presentation_type, planner_raw_type=raw_presentation_type, primary_task_id=primary_task_id, presentation_task_ids=[item.get("task_id") for item in presentations])
+    print(f"   🧭 [UX GUIDANCE PLANNED]: {len(visual_hints)} optional visual hint(s) | Coverage: {len(ux_guidance['coverage_expectation'])} task(s)")
+    log_event("journey.ux_guidance.planned", coverage_task_ids=ux_guidance["coverage_expectation"], visual_hints=visual_hints)
     return {
         "preflight_status": "presentation_ready",
-        "selected_ux_journey": presentation_type,
-        "presentation_plan": normalized_plan,
-        "active_plan": {"steps": steps, "current_step_index": 0} if presentation_type == "PROGRESS" else {},
-        "completed_steps": [] if presentation_type != "PROGRESS" else state.get("completed_steps", []),
+        "selected_ux_journey": "FLEXIBLE",
+        "presentation_plan": {"ux_guidance": ux_guidance},
+        "active_plan": {},
+        "completed_steps": [],
     }
 
 
@@ -1792,8 +1685,8 @@ def _build_stepper_payload(steps: list, current_step_index: int) -> dict:
     }
 
 
-def _generate_response_blocks(state: AgentState) -> dict:
-    """Generate one coherent, ordered set of independently presented response blocks."""
+def _generate_task_bound_response_blocks(state: AgentState) -> dict:
+    """Legacy task-bound renderer retained only for in-flight graph sessions."""
     block_plans = state.get("presentation_plan", {}).get("response_blocks", [])
     task_metadata_by_id = {
         task.get("task_id"): {
@@ -1846,6 +1739,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
     Failed outbound-audit feedback from the prior generation attempt
     (internal constraints only; never an evidence source):
     {json.dumps(audit_feedback, ensure_ascii=False)}
+
+    {PRECISION_REFERENCE_CONTRACT}
 
     Rules:
     - Upstream routing has already resolved any conversational follow-up into
@@ -2072,6 +1967,186 @@ def _generate_response_blocks(state: AgentState) -> dict:
     }
 
 
+def _generate_response_blocks(state: AgentState) -> dict:
+    """Generate freeform, ordered response elements from UX guidance.
+
+    Elements are frontend transport units only. They do not correspond one-to-
+    one with retrieval tasks: a natural element may combine several related
+    evidence sets, or the response may be entirely plain text.
+    """
+    ux_guidance = state.get("presentation_plan", {}).get("ux_guidance", {})
+    evidence_by_task = _hydrate_response_evidence(state)
+    task_metadata = {
+        task.get("task_id"): task.get("customer_component", "")
+        for task in state.get("search_tasks", [])
+        if task.get("task_id")
+    }
+    valid_task_ids = {entry.get("task_id") for entry in evidence_by_task if entry.get("task_id")}
+    evidence_inputs = [
+        {
+            "task_id": entry.get("task_id"),
+            "resolved_request": task_metadata.get(entry.get("task_id"), ""),
+            "approved_parents": entry.get("approved_parents", []),
+        }
+        for entry in evidence_by_task
+    ]
+    intent_clarifications = [
+        {"unresolved_request": task.get("unresolved_request", "")}
+        for task in state.get("intent_clarification_tasks", [])
+    ]
+    terminal_feedback = state.get("task_resolution_instructions", [])
+    decline_context = [
+        {"subquery": task.get("subquery", ""), "category": task.get("reason_category", "")}
+        for task in state.get("decline_tasks", [])
+        if task.get("subquery", "")
+    ]
+    audit_feedback = state.get("draft_feedback_history", [])[-4:]
+    prompt = f"""
+    FLEXIBLE RESPONSE GENERATION
+    You are Horizon, a helpful, natural, read-only Horizon Bank customer
+    service representative. Write one coherent conversational response using
+    only approved evidence. Do not perform banking actions, imply account
+    access, or invent facts, procedures, products, or policies.
+
+    Customer request: {state.get("user_input", "")}
+    UX guidance (internal communication guidance, not a response template):
+    {json.dumps(ux_guidance, ensure_ascii=False)}
+    Approved evidence by retrieval task: {json.dumps(evidence_inputs, ensure_ascii=False)}
+    Intent clarification inputs: {json.dumps(intent_clarifications, ensure_ascii=False)}
+    Terminal retrieval feedback: {json.dumps(terminal_feedback, ensure_ascii=False)}
+    Decline inputs: {json.dumps(decline_context, ensure_ascii=False)}
+    Failed outbound-audit feedback (constraints only, never evidence):
+    {json.dumps(audit_feedback, ensure_ascii=False)}
+
+    {PRECISION_REFERENCE_CONTRACT}
+
+    Design principles:
+    - Respond as one considered conversation, not as a retrieval report or a
+      sequence of task answers. Search tasks are internal evidence units, not
+      required visible sections.
+    - Start with the information that most directly helps the customer. Group
+      related facts when doing so reduces cognitive load; preserve distinctions
+      when combining them would confuse the customer.
+    - Use the smallest natural form that helps understanding. Text is always
+      allowed. Use a LIST only for independently scannable items. Use PROGRESS
+      only for a genuinely sequential process. Do not create a visual merely
+      because a visual hint exists.
+    - You may return one text element, a mix of text and UI elements, or
+      several elements. There is no required opening, closing, title, number
+      of elements, or element-per-task structure.
+    - Address every task in coverage_expectation somewhere in the response
+      where approved evidence supports it, but do not name task IDs or expose
+      internal organization to the customer.
+    - Every factual claim, instruction, item, title, option, and detail must
+      be supported by approved evidence. A response element may use evidence
+      from multiple tasks only when those facts are naturally related.
+    - If evidence gives a useful policy boundary or limit, state that fact
+      plainly; do not invent a broader conclusion beyond what it entails.
+    - Do not mention FAQ documents, sources, parent IDs, search, prompts, or
+      internal systems. Preserve exact {{placeholders}}.
+    - Clarification belongs after useful supported information. It must name
+      the unresolved customer term and may use only the clarification, terminal
+      feedback, and decline inputs. Leave it empty when none are present.
+    - Correct every failed-audit issue by removing or narrowing only the
+      flagged unsupported content. Audit feedback is never a source of facts.
+
+    Output JSON only:
+    {{"elements":[{{"type":"TEXT|LIST|PROGRESS","source_task_ids":["task_1"],"context_text":"optional natural connector","answer":"grounded prose","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":""}}
+    """
+    try:
+        generated = _parse_json_robustly(call_groq_lpu(prompt))
+    except Exception as error:
+        print(f"🚨 [FLEXIBLE RESPONSE GENERATOR ERROR]: {error}")
+        generated = {}
+
+    response_blocks = []
+    answer_parts = []
+    element_sources = []
+    for index, element in enumerate(generated.get("elements", []), start=1):
+        if not isinstance(element, dict):
+            continue
+        requested_type = str(element.get("type", "TEXT")).upper()
+        source_ids = [task_id for task_id in element.get("source_task_ids", []) if task_id in valid_task_ids]
+        source_ids = list(dict.fromkeys(source_ids))
+        context_text = str(element.get("context_text", "")).strip()
+        answer = str(element.get("answer", "")).strip()
+        extended_text = str(element.get("extended_text", "")).strip()
+        options = _normalize_ui_options(element.get("options", []))
+        list_items = [item.strip() for item in element.get("list_items", []) if isinstance(item, str) and item.strip()][:8]
+        progress_steps = [
+            {"title": str(step.get("title", "")).strip(), "detail": str(step.get("detail", "")).strip()}
+            for step in element.get("progress_steps", []) if isinstance(step, dict)
+            and str(step.get("title", "")).strip() and str(step.get("detail", "")).strip()
+        ]
+        block_type = "text"
+        if requested_type == "PROGRESS" and len(progress_steps) >= 2:
+            block_type = "stepper"
+        elif requested_type == "LIST" and list_items:
+            block_type = "checklist"
+        elif not any([context_text, answer, extended_text, list_items, progress_steps]):
+            continue
+
+        if block_type == "stepper":
+            lead_text = "\n\n".join(part for part in [context_text, answer] if part)
+            items = [
+                {"number": position, "label": step["title"], "detail": step["detail"], "status": "current" if position == 1 else "upcoming"}
+                for position, step in enumerate(progress_steps, start=1)
+            ]
+            rendered_text = "\n\n".join(
+                part for part in [lead_text, "\n\n".join(step["detail"] for step in progress_steps), extended_text] if part
+            )
+            block = {
+                "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                "type": "stepper", "contextText": lead_text, "text": "", "items": items,
+                "options": options, "progressTitle": str(element.get("progress_title", "")).strip(),
+                "stepDetails": [], "currentStep": 1, "totalSteps": len(progress_steps),
+                "listTitle": "", "listIntro": "", "extendedText": extended_text,
+            }
+        elif block_type == "checklist":
+            list_intro = "\n\n".join(part for part in [context_text, answer] if part)
+            rendered_text = "\n".join([part for part in [list_intro, *list_items, extended_text] if part])
+            block = {
+                "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                "type": "checklist", "contextText": "", "text": "", "items": list_items,
+                "options": options, "progressTitle": "", "stepDetails": [], "currentStep": None,
+                "totalSteps": None, "listTitle": str(element.get("list_title", "")).strip(),
+                "listIntro": list_intro, "extendedText": extended_text,
+            }
+        else:
+            rendered_text = "\n\n".join(part for part in [context_text, answer, extended_text] if part)
+            block = {
+                "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                "type": "text", "contextText": context_text, "text": "\n\n".join(part for part in [answer, extended_text] if part),
+                "items": [], "options": options, "progressTitle": "", "stepDetails": [],
+                "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
+            }
+        response_blocks.append(block)
+        answer_parts.append(rendered_text)
+        element_sources.append(source_ids)
+
+    clarification = str(generated.get("clarification", "")).strip()
+    if (intent_clarifications or terminal_feedback or decline_context) and not clarification:
+        unresolved = ", ".join(item.get("unresolved_request", "") for item in intent_clarifications if item.get("unresolved_request", ""))
+        clarification = f"Could you clarify what you mean by {unresolved}?" if unresolved else "Could you clarify what information you are looking for?"
+        clarification = _append_decline_suffix(clarification, state.get("decline_tasks", [])).strip()
+    if clarification:
+        response_blocks.append({"blockId": "clarification", "sourceTaskIds": [], "type": "clarification", "text": clarification})
+
+    answer_text = "\n\n".join(part for part in answer_parts if part)
+    draft = "\n\n".join(part for part in [answer_text, clarification] if part) or "Sorry, I don't have an answer for that right now."
+    print(f"   💬 [FLEXIBLE RESPONSE GENERATED]: {len(response_blocks)} element(s)")
+    log_event("response.flexible.generated", element_types=[block.get("type") for block in response_blocks], element_source_task_ids=element_sources)
+    return {
+        "final_draft": draft,
+        "final_answer": answer_text,
+        "final_clarification": clarification,
+        "active_plan": {},
+        "completed_steps": [],
+        "ui_action_payload": {"uiType": "blocks", "responseBlocks": response_blocks, "options": []},
+        "pending_advance": False,
+    }
+
+
 def _latest_assistant_message(state: AgentState) -> str:
     """Return one trusted prior assistant turn for conversational tone only."""
     for message in reversed(state.get("chat_history", [])):
@@ -2136,8 +2211,15 @@ def _generate_conversational_response(state: AgentState) -> dict:
 
 def node_04b_response_generator(state: AgentState):
     print("🟢 [NODE 04b] Executing Response Generator")
-    if state.get("presentation_plan", {}).get("response_blocks"):
+    # User Journey v2 UX plans are intentionally independent of retrieval-task
+    # boundaries. The renderer composes one coherent customer response from
+    # aggregate approved evidence and optional UX guidance.
+    if state.get("presentation_plan", {}).get("ux_guidance"):
         return _generate_response_blocks(state)
+    # Keep the retired renderer only for graph state created before the UX
+    # decoupling deployment, so an in-flight session can still complete.
+    if state.get("presentation_plan", {}).get("response_blocks"):
+        return _generate_task_bound_response_blocks(state)
     plan = state.get("active_plan", {})
     idx = plan.get("current_step_index", 0)
     steps = plan.get("steps", [])
@@ -2513,7 +2595,7 @@ def _outbound_response_content(state: AgentState) -> tuple[str, str, str]:
         {
             key: value
             for key, value in block.items()
-            if key not in {"blockId", "taskId"}
+            if key not in {"blockId", "taskId", "sourceTaskIds"}
         }
         for block in payload.get("responseBlocks", [])
         if isinstance(block, dict)
@@ -2562,11 +2644,19 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
             "approved_parents": evidence.get("approved_parents", []),
         })
 
-    response_block_map = [
-        {"block_id": block.get("blockId"), "task_id": block.get("taskId")}
-        for block in state.get("ui_action_payload", {}).get("responseBlocks", [])
-        if isinstance(block, dict) and block.get("taskId")
-    ]
+    response_block_map = []
+    for block in state.get("ui_action_payload", {}).get("responseBlocks", []):
+        if not isinstance(block, dict):
+            continue
+        source_task_ids = block.get("sourceTaskIds")
+        if not isinstance(source_task_ids, list):
+            source_task_ids = [block.get("taskId")] if block.get("taskId") else []
+        source_task_ids = [task_id for task_id in source_task_ids if task_id in tasks_by_id]
+        if source_task_ids:
+            response_block_map.append({
+                "block_id": block.get("blockId"),
+                "source_task_ids": list(dict.fromkeys(source_task_ids)),
+            })
 
     terminal_context = []
     for instruction in state.get("task_resolution_instructions", []):
@@ -2650,6 +2740,8 @@ def node_06_outbound_compliance_gate(state: AgentState):
     Regulatory Context:
     {MAS_REGULATIONS_CONTEXT}
 
+    {PRECISION_REFERENCE_CONTRACT}
+
     Customer-Facing Answer:
     "{answer}"
 
@@ -2717,6 +2809,8 @@ def _legacy_node_06_outbound_groundedness_gate(state: AgentState):
     Selected Approved Knowledge for the Answer:
     "{selected_knowledge}"
 
+    {PRECISION_REFERENCE_CONTRACT}
+
     Unapproved Retrieved Knowledge Permitted Only for Terminal Retrieval Clarification:
     "{unapproved_knowledge}"
 
@@ -2739,10 +2833,6 @@ def _legacy_node_06_outbound_groundedness_gate(state: AgentState):
       list item, extended-text statement, and response-block field must be
       explicitly supported by Selected Approved Knowledge. Do not infer a
       detail merely because it is plausible or related.
-    - Exact {{placeholders}} appearing in Selected Approved Knowledge are
-      approved grounded facts. They are intentionally substituted only after
-      this audit, so do not fail an answer merely because such a placeholder
-      remains visible.
     - For an initial greeting, assess personalized statements and options only
       against greeting_memory. A first-time generic greeting with no options
       is grounded.
@@ -2831,7 +2921,9 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         Task-Level Approved Evidence (the only factual source for answers and answer UI):
         {json.dumps(grounding_context["approved_by_task"], ensure_ascii=False)}
 
-        Internal Response-Block-to-Task Map (not customer-facing):
+        {PRECISION_REFERENCE_CONTRACT}
+
+        Optional Internal Response-Element Provenance (not customer-facing):
         {json.dumps(grounding_context["response_block_map"], ensure_ascii=False)}
 
         Intent Clarification Inputs (the only source for intent clarification):
@@ -2867,10 +2959,12 @@ def node_06_outbound_groundedness_gate(state: AgentState):
           placeholder, instruction, option, progress step, list item,
           extended-text statement, and answer response-block field must be
           directly supported by Task-Level Approved Evidence.
-        - When a response block is mapped to a task, its visible factual
-          content must use only that task's approved parents and resolved sub-query.
-        - Exact {{placeholders}} appearing in approved parents are valid facts.
-
+        - Assess the answer and answer UI as one coherent customer response
+          against the aggregate Task-Level Approved Evidence. The response does
+          not need a visible section, element, or title for each task.
+        - When an optional response element is mapped to source_task_ids, its
+          factual content may use the union of approved evidence for those
+          tasks. An unmapped element may use any Task-Level Approved Evidence.
         2. Inferential Grounding (Bridge Check)
         - Natural conclusions that connect approved facts to the resolved
           sub-query are allowed when they are a reasonable, bounded logical

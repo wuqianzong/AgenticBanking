@@ -50,8 +50,8 @@ class AgentState(TypedDict):
     task_resolution_instructions: List[Dict[str, Any]]  # Terminal retrieval feedback for natural clarification generation
     safe_answer_for_fallback: str                 # Individually approved answer retained for deterministic clarification fallback
     clarification_fallback_required: bool         # True only when clarification retries exhausted while answer remains safe
-    selected_ux_journey: str                     # TEXT, PROGRESS, LIST, or ESCALATION presentation type
-    presentation_plan: Dict[str, Any]            # Evidence-selected UI and response plan
+    selected_ux_journey: str                     # FLEXIBLE UX guidance (legacy TEXT/PROGRESS/LIST values may complete in-flight sessions)
+    presentation_plan: Dict[str, Any]            # Internal UX guidance; never a required customer-visible task/block plan
     outbound_compliance_result: Dict[str, Any]    # Focused outbound MAS-compliance audit result
     outbound_groundedness_result: Dict[str, Any]  # Audit result plus structured, non-evidential grounding_violations for retries
     pending_advance: bool                           # V4.1 Fix: Tracks if the current step should advance upon safety clearance

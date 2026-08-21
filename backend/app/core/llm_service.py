@@ -8,12 +8,14 @@ from pydantic import BaseModel, Field
 from backend.app.core.system_logger import log_event
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
-MODEL_A_GENERATOR = "openai/gpt-oss-120b"       # Groq: Conversational Engine
-#MODEL_A_GENERATOR = "gemini-3.1-flash-lite"
-MODEL_B_AUDITOR = "gemini-3.5-flash-lite"            # Google: Safety & Sufficiency Judge
-MODEL_C_PLANNER = "gemini-3.5-flash-lite"            # Google: Resolution Planner & Tool Calling Generator
+model_A="gemini-3.5-flash-lite"  # For response generation
+model_B="gemini-3.1-flash-lite"  # For sufficiency, gourndedness, and compliance audits
+model_C="gemini-3.1-flash-lite"  # For triage, decomposition, and journey planning
+MODEL_A_GENERATOR = model_A       # Groq: Conversational Engine
+MODEL_B_AUDITOR = model_B            # Google: Safety & Sufficiency Judge
+MODEL_C_PLANNER = model_C            # Google: Resolution Planner & Tool Calling Generator
 MODEL_D_PROMPT_GUARD = "meta-llama/llama-prompt-guard-2-86m"  # Groq: Cyber Security Pre-check
-MODEL_E_TRIAGE = "gemini-3.5-flash-lite"             # Google: Journey Classifier
+MODEL_E_TRIAGE = model_C             # Google: Journey Classifier
 # --------------------------------------------
 
 groq_api_key = os.environ.get("GROQ_API_KEY")
@@ -146,18 +148,17 @@ class ChipOption(BaseModel):
     label: str = Field(description="Concise visible chip label of 2-6 words.")
     message: str = Field(description="Complete, unambiguous customer message submitted when the chip is clicked.")
 
-class ResponseBlockPlan(BaseModel):
-    task_id: str = Field(description="The exact task_id supplied to the planner.")
-    presentation_type: str = Field(description="Must be exactly TEXT, PROGRESS, LIST, or ESCALATION.")
-    evidence_parent_ids: List[str] = Field(description="Only approved parent IDs belonging to this task.")
-    section_title: str = Field(description="Short user-facing title for this block.")
-    steps: List[str] = Field(description="Grounded short step titles for PROGRESS only; otherwise empty.")
-    list_title: str = Field(description="Concise customer-facing title for LIST only; otherwise empty.")
-    options: List[ChipOption] = Field(description="At most two grounded answer-related chips for this block.")
-    reason: str = Field(description="Brief explanation of this presentation choice.")
+class VisualHint(BaseModel):
+    type: str = Field(description="Optional visual type: LIST, PROGRESS, or OPTIONS.")
+    purpose: str = Field(description="Why this visual would materially help the customer understand the response.")
 
 class UserJourneyPlan(BaseModel):
-    response_blocks: List[ResponseBlockPlan] = Field(description="Ordered presentation plans, one for every answerable task.")
+    primary_user_need: str = Field(description="What the customer most needs to understand first.")
+    narrative_focus: str = Field(description="Concise internal guidance for a natural, coherent response.")
+    grouping_guidance: str = Field(description="How related facts may be grouped to reduce cognitive load; never a required visible structure.")
+    visual_hints: List[VisualHint] = Field(description="Optional UI suggestions only when they materially improve comprehension.")
+    clarification_guidance: str = Field(description="Whether and where unresolved information should be mentioned.")
+    coverage_expectation: List[str] = Field(description="Answerable task IDs that the natural response should address; they do not require separate blocks.")
 
 # 5. SUPERVISOR TOOL ROUTER (Node 03a)
 class SupervisorRouting(BaseModel):
@@ -210,7 +211,7 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
                 active_schema = TriageEvaluation
             elif "Act as a Decoupled Database Search Architect" in prompt:
                 active_schema = QueryFormulation
-            elif "USER JOURNEY V2.0 PRESENTATION PLANNER" in prompt:
+            elif "FLEXIBLE USER EXPERIENCE PLANNER" in prompt or "USER JOURNEY V2.0 PRESENTATION PLANNER" in prompt:
                 active_schema = UserJourneyPlan
             elif "Determine which retrieval tools are necessary" in prompt:
                 active_schema = SupervisorRouting

@@ -685,6 +685,11 @@ export default function BankingBotUI() {
           </div>
         )}
         {block.type === 'clarification' && renderClarificationCard(block.text)}
+        {block.type === 'stepper' && block.contextText && (
+          <div className="mb-2 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+            {block.contextText}
+          </div>
+        )}
         {block.type === 'stepper' && renderStepper(
           block.items,
           block.progressTitle,

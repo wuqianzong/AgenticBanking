@@ -1608,6 +1608,20 @@ def node_04a_resolution_planner(state: AgentState):
             ), ""),
             "approved_parents": _hydrate_parent_ids(result.get("approved_parent_ids", [])),
         })
+    tasks_by_id = {
+        task.get("task_id"): task
+        for task in state.get("search_tasks", [])
+        if task.get("task_id")
+    }
+    terminal_task_context = [
+        {
+            "task_id": instruction.get("task_id"),
+            "resolved_request": tasks_by_id.get(instruction.get("task_id"), {}).get("customer_component", ""),
+            "reason": instruction.get("reason", ""),
+        }
+        for instruction in state.get("task_resolution_instructions", [])
+        if instruction.get("task_id")
+    ]
 
     prompt = f"""
     FLEXIBLE USER EXPERIENCE PLANNER
@@ -1618,6 +1632,7 @@ def node_04a_resolution_planner(state: AgentState):
     Customer request: {state.get("user_input", "")}
     Answerable evidence by retrieval task: {json.dumps(planner_tasks, ensure_ascii=False)}
     Intent clarification inputs: {json.dumps(state.get("intent_clarification_tasks", []), ensure_ascii=False)}
+    Terminal unresolved retrieval tasks (semantic anchors only; NOT answer evidence): {json.dumps(terminal_task_context, ensure_ascii=False)}
     Declined inputs: {json.dumps(state.get("decline_tasks", []), ensure_ascii=False)}
 
     {PRECISION_REFERENCE_CONTRACT}
@@ -1641,6 +1656,21 @@ def node_04a_resolution_planner(state: AgentState):
       A list hint is appropriate only for independently scannable items.
     - Keep clarification outside any suggested process/list and place it after
       useful supported information when both exist.
+    - For every terminal unresolved retrieval task, treat its
+      `resolved_request` as the authoritative meaning of that unresolved
+      topic, even when the literal latest customer message is short (for
+      example, "appearance") or relies on prior conversational context.
+    - When there is no answerable evidence for a terminal unresolved task,
+      preserve that exact topic in `primary_user_need`, `narrative_focus`, and
+      `clarification_guidance`. Do not reinterpret it as a different product,
+      channel, feature category, UI surface, example, or customer need. Do not
+      introduce possible interpretations, visual hints, or a new ambiguity.
+      The appropriate guidance is a brief inability statement about the
+      resolved request, followed only by a general clarification if genuinely
+      necessary.
+    - Terminal unresolved task context is not evidence. It may preserve the
+      topic for a safe clarification, but must never justify a factual claim,
+      procedure, product capability, policy, or UI option.
     - coverage_expectation must include every supplied answerable task_id, but
       it is an internal completeness reminder, not a demand for separate UI.
     - Never invent facts, banking actions, products, steps, or customer text.

@@ -610,6 +610,63 @@ export default function BankingBotUI() {
     </div>
   );
 
+  const renderEscalationConfirmation = (block) => {
+    const confirmation = block.confirmation || {};
+    const confirmationMessage = confirmation.message || '';
+    return (
+      <section className="mt-3 w-full max-w-sm overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
+        <div className="border-b border-blue-100 bg-blue-50 px-4 py-3">
+          <div className="flex items-center gap-2 text-blue-900">
+            <UserCheck size={18} className="text-blue-600" />
+            <h4 className="text-sm font-semibold">{block.title || 'Confirm transfer to a human agent'}</h4>
+          </div>
+        </div>
+        <div className="space-y-3 px-4 py-3.5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{block.caseTitle || 'Current case summary'}</p>
+            <dl className="mt-2 space-y-2 text-sm leading-relaxed text-slate-700">
+              <div>
+                <dt className="font-medium text-slate-600">Your request</dt>
+                <dd className="mt-0.5 whitespace-pre-wrap">{block.request || 'The current banking conversation.'}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-slate-600">What needs attention</dt>
+                <dd className="mt-0.5 whitespace-pre-wrap">{block.problem || 'A human review has been requested for this conversation.'}</dd>
+              </div>
+              {block.unresolvedIssues?.length > 0 && (
+                <div>
+                  <dt className="font-medium text-slate-600">Unresolved items</dt>
+                  <dd className="mt-1">
+                    <ul className="space-y-1.5">
+                      {block.unresolvedIssues.map((issue, issueIndex) => (
+                        <li key={issueIndex} className="flex gap-2">
+                          <AlertCircle size={14} className="mt-1 shrink-0 text-blue-600" aria-hidden="true" />
+                          <span>{issue}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+          <p className="border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-500">
+            {block.notice || 'This AI-generated summary helps a human agent quickly understand your case.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => confirmationMessage && handleSend(confirmationMessage)}
+            disabled={!confirmationMessage || isTyping || isCompactingMemory}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            <UserCheck size={16} />
+            {confirmation.label || 'Confirm transfer'}
+          </button>
+        </div>
+      </section>
+    );
+  };
+
   const renderResponseBlock = (block, messageId, index, precisionSubstituted = false) => {
     const blockId = `${messageId}-${block.blockId || index}`;
     const expandedStep = expandedProgressSteps[blockId] ?? 1;
@@ -644,6 +701,7 @@ export default function BankingBotUI() {
           </div>
         )}
         {block.type === 'checklist' && renderChecklist(block.items, block.listTitle, block.options)}
+        {block.type === 'escalation_confirmation' && renderEscalationConfirmation(block)}
         {block.extendedText && (
           <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
             {block.extendedText}

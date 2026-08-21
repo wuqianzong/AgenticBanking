@@ -20,6 +20,7 @@ from backend.app.core.system_logger import log_event
 
 # Define the DB Path (adjust relative path if necessary based on your working directory)
 SQLITE_DB_PATH = "backend/data/knowledge_base.db"
+ESCALATION_CONFIRMATION_MESSAGE = "Yes, transfer me to a human agent."
 
 # --- 🧹 VOLATILE STATE RESET DICTIONARY ---
 # Applied at the start of every turn to prevent cross-turn memory leakage
@@ -33,6 +34,7 @@ VOLATILE_STATE_RESET = {
     "task_results": [],
     "task_retry_counts": {},
     "task_feedback": {},
+    "task_partial_evidence": {},
     "intent_clarification_tasks": [],
     "task_resolution_instructions": [],
     "safe_answer_for_fallback": "",
@@ -49,6 +51,7 @@ VOLATILE_STATE_RESET = {
 }
 
 MAX_APPROVED_EVIDENCE_CACHE_ENTRIES = 30
+ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "PARTIALLY_SUFFICIENT"}
 MAX_RAG_ATTEMPTS = 4
 
 
@@ -425,13 +428,20 @@ def _task_evidence_cache_key(task: dict) -> str:
     return f"{','.join(sorted(products))}|{','.join(sorted(intent_set))}"
 
 
-def _terminal_retrieval_feedback(task_id: str, feedback: str, reason: str, unapproved_parent_ids: list[str]) -> dict:
+def _terminal_retrieval_feedback(
+    task_id: str,
+    feedback: str,
+    reason: str,
+    unapproved_parent_ids: list[str],
+    resolution_status: str = "CLARIFICATION_REQUIRED",
+) -> dict:
     """Keep terminal retrieval context internal until clarification generation."""
     return {
         "task_id": task_id,
         "type": "TERMINAL_RETRIEVAL_FEEDBACK",
         "feedback": feedback,
         "reason": reason,
+        "resolution_status": resolution_status,
         # IDs are retained rather than model-visible parent text. They may be
         # hydrated only for grounded terminal clarification suggestions.
         "unapproved_parent_ids": unapproved_parent_ids,
@@ -454,7 +464,7 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
     approved_by_task = {
         result.get("task_id"): set(result.get("approved_parent_ids", []))
         for result in state.get("task_results", [])
-        if result.get("status") == "SUFFICIENT"
+        if result.get("status") in ANSWERABLE_TASK_STATUSES
     }
     plan = state.get("presentation_plan", {})
     raw_blocks = plan.get("response_blocks") or plan.get("presentation_tasks") or []
@@ -635,6 +645,18 @@ def node_01_deterministic_ingest_gate(state: AgentState):
         history.append(HumanMessage(content=user_msg, additional_kwargs={"trust_status": "untrusted"}))
         print(f"💾 [MEMORY] User input stored as untrusted. History length: {len(history)}")
 
+    # The confirmation control is a deterministic UI action, not a new banking
+    # request. Route it directly to the shared escalation handler after keeping
+    # the customer's confirmation in the visible conversation transcript.
+    if user_msg.strip().casefold() == ESCALATION_CONFIRMATION_MESSAGE.casefold():
+        print("   🤝 [ESCALATION]: Human-transfer confirmation accepted.")
+        log_event("escalation.transfer.confirmed", confirmation_source="ui")
+        return {
+            **VOLATILE_STATE_RESET,
+            "preflight_status": "escalation_confirmation_accepted",
+            "chat_history": history,
+        }
+
     # 1. Sweep for hardcoded threats (Garbled text, SQL drops, XSS)
     if "<script>" in user_msg.lower() or "DROP TABLE" in user_msg.upper():
         print("   🚫 [INGEST VETO]: Malicious string detected.")
@@ -711,7 +733,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     active_plan = state.get("active_plan", {})
     has_active_plan = bool(active_plan.get("steps"))
     has_retrieved_knowledge = any(
-        result.get("status") == "SUFFICIENT" and result.get("approved_parent_ids")
+        result.get("status") in ANSWERABLE_TASK_STATUSES and result.get("approved_parent_ids")
         for result in state.get("task_results", [])
     )
     recalled_context = state.get("last_session_summary", state.get("working_context", "")).strip()
@@ -813,7 +835,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     active_plan = state.get("active_plan", {})
     has_active_plan = bool(active_plan.get("steps"))
     has_retrieved_knowledge = any(
-        result.get("status") == "SUFFICIENT" and result.get("approved_parent_ids")
+        result.get("status") in ANSWERABLE_TASK_STATUSES and result.get("approved_parent_ids")
         for result in state.get("task_results", [])
     )
     recalled_context = state.get("last_session_summary", state.get("working_context", "")).strip()
@@ -1159,7 +1181,7 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
     prior_results = {result.get("task_id"): result for result in state.get("task_results", [])}
     tasks_to_retrieve = [
         task for task in state.get("search_tasks", [])
-        if prior_results.get(task.get("task_id"), {}).get("status") not in {"CACHED", "SUFFICIENT", "UNAVAILABLE"}
+        if prior_results.get(task.get("task_id"), {}).get("status") not in {"CACHED", *ANSWERABLE_TASK_STATUSES, "UNAVAILABLE"}
     ]
     routes = ["n17_rag"] if tasks_to_retrieve else []
         
@@ -1172,7 +1194,7 @@ async def node_03b_rag_worker(state: AgentState):
     prior_results = {result.get("task_id"): result for result in state.get("task_results", [])}
     tasks_to_retrieve = [
         task for task in tasks
-        if prior_results.get(task.get("task_id"), {}).get("status") not in {"CACHED", "SUFFICIENT", "UNAVAILABLE"}
+        if prior_results.get(task.get("task_id"), {}).get("status") not in {"CACHED", *ANSWERABLE_TASK_STATUSES, "UNAVAILABLE"}
     ]
     if not tasks_to_retrieve:
         return {"rag_payload": "", "task_results": list(prior_results.values())}
@@ -1229,21 +1251,42 @@ def node_03c_sufficiency_auditor(state: AgentState):
     ]
     retry_counts = dict(state.get("task_retry_counts", {}))
     feedback = dict(state.get("task_feedback", {}))
+    partial_evidence = {
+        str(task_id): list(dict.fromkeys(parent_ids))
+        for task_id, parent_ids in state.get("task_partial_evidence", {}).items()
+        if isinstance(parent_ids, list)
+    }
 
-    evaluation_inputs = [
-        {
-            "task_id": result.get("task_id"),
-            "task": tasks_by_id.get(result.get("task_id"), {}),
-            "parents": result.get("parents", []),
+    # A partly answerable task may accumulate evidence across retries.  The
+    # auditor must see retained parents together with the latest candidates so
+    # it can promote the combined set when the remaining gap is filled.
+    evaluation_inputs = []
+    candidate_ids_by_task = {}
+    for result in evidence_candidates:
+        task_id = result.get("task_id")
+        fresh_parents = list(result.get("parents", []))
+        fresh_ids = {parent.get("parent_id") for parent in fresh_parents if parent.get("parent_id")}
+        retained_ids = partial_evidence.get(str(task_id), [])
+        retained_parents = [
+            parent for parent in _hydrate_parent_ids(retained_ids)
+            if parent.get("parent_id") not in fresh_ids
+        ]
+        all_parents = fresh_parents + retained_parents
+        candidate_ids_by_task[task_id] = {
+            parent.get("parent_id") for parent in all_parents if parent.get("parent_id")
         }
-        for result in evidence_candidates
-    ]
+        evaluation_inputs.append({
+            "task_id": task_id,
+            "task": tasks_by_id.get(task_id, {}),
+            "retained_partial_parent_ids": retained_ids,
+            "parents": all_parents,
+        })
     auditor_results = {}
     if evaluation_inputs:
         prompt = f"""
         TASK-LEVEL SUFFICIENCY AND EVIDENCE SELECTION
         You are a groundedness auditor for a read-only Horizon Bank FAQ assistant.
-        Evaluate EACH supplied task independently. A parent is sufficient only if it directly supports that task.
+        Evaluate EACH supplied task independently for answerability.
 
         Original User Message (advisory context only; never use it as an
         individual task's completeness target): {state.get("user_input", "")}
@@ -1255,9 +1298,22 @@ def node_03c_sufficiency_auditor(state: AgentState):
           formulator's resolved sub-query for that task. Evaluate a task ONLY
           against its own `customer_component` and that task's candidate
           parents.
-        - A task is SUFFICIENT when its candidate parents directly answer its
-          own `customer_component`, even when another task from the same
-          customer turn remains unanswered.
+        - Classify each task as SUFFICIENT, PARTIALLY_SUFFICIENT, or
+          INSUFFICIENT. Judge whether the supplied parents answer the task,
+          not whether they repeat the customer's wording.
+        - SUFFICIENT: the selected parents provide enough grounded information
+          to answer the `customer_component` as a whole, even when another
+          task from the same customer turn remains unanswered.
+        - PARTIALLY_SUFFICIENT: selected parents provide grounded, material
+          information for part of the `customer_component`, but one or more
+          material parts remain unresolved. Select only the supporting parent
+          IDs; the backend will retain them while retrieval continues.
+        - INSUFFICIENT: the supplied parents provide no grounded, material
+          information that answers the `customer_component`.
+        - Use the ordinary meaning of explicit policy boundaries, quantities,
+          conditions, and restrictions when deciding whether a task is
+          answered. Do not require a parent to restate the customer's question.
+          Preserve each parent's scope and do not infer facts beyond it.
         - Do NOT require a task's evidence to answer the complete original
           user message, another task's customer_component, or another
           product/intent component.
@@ -1265,12 +1321,13 @@ def node_03c_sufficiency_auditor(state: AgentState):
           explain references or continuations only; they are never the
           completeness benchmark for an individual task.
         - Return one result for every supplied task_id.
-        - For SUFFICIENT, return only parent IDs from that exact task that are directly relevant. At least one approved ID is required.
-        - For RETRY, return no approved IDs and an `evidence_delta` list. This
-          is internal evidence-only retrieval context for the intent
+        - For SUFFICIENT or PARTIALLY_SUFFICIENT, return only parent IDs from
+          that exact task that materially support the answer. At least one ID
+          is required for either status.
+        - For PARTIALLY_SUFFICIENT or INSUFFICIENT, return an `evidence_delta`
+          list. This is internal evidence-only retrieval context for the intent
           formulator, not a query, diagnosis, or rewrite instruction. The
-          backend determines terminal UNAVAILABLE status after four failed
-          attempts.
+          backend determines terminal clarification after four attempts.
         - Include an evidence_delta item only when a supplied candidate parent
           contains a materially task-relevant factual proposition that is NOT
           already explicit in that task's customer_component. Each item must
@@ -1289,7 +1346,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         - Treat {{placeholders}} in parent content as valid approved facts.
         - Never invent a parent ID, fact, or instruction.
 
-        Output JSON only: {{"task_results": [{{"task_id": "...", "status": "SUFFICIENT" | "RETRY" | "UNAVAILABLE", "approved_parent_ids": ["..."], "reason": "...", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}]}}]}}
+        Output JSON only: {{"task_results": [{{"task_id": "...", "status": "SUFFICIENT" | "PARTIALLY_SUFFICIENT" | "INSUFFICIENT", "approved_parent_ids": ["..."], "reason": "...", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}]}}]}}
         """
         try:
             auditor_results = {
@@ -1301,10 +1358,16 @@ def node_03c_sufficiency_auditor(state: AgentState):
 
     for result in evidence_candidates:
         task_id = result.get("task_id")
-        available_ids = {parent.get("parent_id") for parent in result.get("parents", [])}
+        available_ids = candidate_ids_by_task.get(task_id, set())
         audit = auditor_results.get(task_id, {})
         approved_ids = [parent_id for parent_id in audit.get("approved_parent_ids", []) if parent_id in available_ids]
-        requested_status = audit.get("status", "RETRY")
+        requested_status = str(audit.get("status", "INSUFFICIENT")).upper()
+        # Accept legacy values during an in-flight backend restart, but never
+        # let them shape the three-way state model.
+        if requested_status in {"RETRY", "UNAVAILABLE"}:
+            requested_status = "INSUFFICIENT"
+        if requested_status not in {"SUFFICIENT", "PARTIALLY_SUFFICIENT", "INSUFFICIENT"}:
+            requested_status = "INSUFFICIENT"
         reason = audit.get("reason", "No sufficient grounded FAQ evidence was selected.")
         if requested_status == "SUFFICIENT" and approved_ids:
             # The sufficiency model is permitted to select identifiers only.  Do
@@ -1326,7 +1389,18 @@ def node_03c_sufficiency_auditor(state: AgentState):
                     "reason": reason,
                 }
                 feedback.pop(task_id, None)
+                partial_evidence.pop(str(task_id), None)
                 continue
+
+        retained_ids = partial_evidence.get(str(task_id), [])
+        partial_ids = list(dict.fromkeys([*retained_ids, *approved_ids]))
+        if requested_status == "PARTIALLY_SUFFICIENT" and not approved_ids:
+            # A partial outcome without selected supporting evidence is not a
+            # usable partial answer. Treat it as insufficient rather than
+            # retaining an ungrounded state.
+            requested_status = "INSUFFICIENT"
+        if requested_status == "PARTIALLY_SUFFICIENT":
+            partial_evidence[str(task_id)] = partial_ids
 
         cache_fallback = result.get("origin") == "CACHE"
         # A cached result that fails sufficiency must fall through to a live
@@ -1355,22 +1429,41 @@ def node_03c_sufficiency_auditor(state: AgentState):
             # Backward-compatible handling for an in-flight / legacy model
             # response that still uses the former string field.
             refinement = audit.get("search_feedback") or reason
-        # An unsupported task remains retryable until its fourth failed
-        # retrieval attempt; only then ask the user for targeted clarification.
+        # A partial task remains retryable with its retained evidence until the
+        # fourth attempt. At the boundary it is answerable for the supported
+        # part and carries a clarification only for the unresolved part.
         if attempt_count >= MAX_RAG_ATTEMPTS:
-            unapproved_ids = [parent.get("parent_id") for parent in result.get("parents", []) if parent.get("parent_id")]
+            unapproved_ids = [
+                parent.get("parent_id") for parent in result.get("parents", [])
+                if parent.get("parent_id") and parent.get("parent_id") not in partial_ids
+            ]
             unapproved_parents = RAGEngine().hydrate_parent_ids(unapproved_ids)
-            current_results[task_id] = {
-                "task_id": task_id,
-                "status": "CLARIFICATION_REQUIRED",
-                "approved_parent_ids": [],
-                "reason": reason,
-                "terminal_feedback": refinement,
-                "unapproved_parent_ids": [parent.get("parent_id") for parent in unapproved_parents if parent.get("parent_id")],
-            }
+            if partial_ids:
+                current_results[task_id] = {
+                    "task_id": task_id,
+                    "status": "PARTIALLY_SUFFICIENT",
+                    "approved_parent_ids": partial_ids,
+                    "reason": reason,
+                    "terminal_feedback": refinement,
+                    "unapproved_parent_ids": [parent.get("parent_id") for parent in unapproved_parents if parent.get("parent_id")],
+                }
+            else:
+                current_results[task_id] = {
+                    "task_id": task_id,
+                    "status": "CLARIFICATION_REQUIRED",
+                    "approved_parent_ids": [],
+                    "reason": reason,
+                    "terminal_feedback": refinement,
+                    "unapproved_parent_ids": [parent.get("parent_id") for parent in unapproved_parents if parent.get("parent_id")],
+                }
             feedback.pop(task_id, None)
         else:
-            current_results[task_id] = {"task_id": task_id, "status": "RETRY", "approved_parent_ids": [], "reason": reason}
+            current_results[task_id] = {
+                "task_id": task_id,
+                "status": "RETRY",
+                "approved_parent_ids": [],
+                "reason": reason,
+            }
             feedback[task_id] = refinement
             if cache_fallback:
                 log_event("evidence_cache.insufficient", task_id=task_id, cache_key=result.get("cache_key", ""), reason=reason)
@@ -1390,17 +1483,25 @@ def node_03c_sufficiency_auditor(state: AgentState):
             result.get("terminal_feedback", result.get("reason", "")),
             result.get("reason", ""),
             result.get("unapproved_parent_ids", []),
+            result.get("status", "CLARIFICATION_REQUIRED"),
         )
         for result in current_results.values()
-        if result.get("status") == "CLARIFICATION_REQUIRED"
+        if result.get("status") in {"CLARIFICATION_REQUIRED", "PARTIALLY_SUFFICIENT"}
     ]
-    print(f"   ✅ [TASK AUDIT]: {sum(result.get('status') == 'SUFFICIENT' for result in current_results.values())} sufficient, {len(unresolved)} pending retry.")
+    full_count = sum(result.get("status") == "SUFFICIENT" for result in current_results.values())
+    partial_count = sum(result.get("status") == "PARTIALLY_SUFFICIENT" for result in current_results.values())
+    print(f"   ✅ [TASK AUDIT]: {full_count} sufficient, {partial_count} terminal partial, {len(unresolved)} pending retry.")
     retry_expansion = _retry_expansion_plan(
         [tasks_by_id[result.get("task_id")] for result in unresolved if result.get("task_id") in tasks_by_id],
         retry_counts,
     )
     for result in current_results.values():
-        event = "task.sufficiency.completed" if result.get("status") == "SUFFICIENT" else "task.retry" if result.get("status") == "RETRY" else "task.clarification_required"
+        event = (
+            "task.sufficiency.completed" if result.get("status") == "SUFFICIENT"
+            else "task.partial_terminal" if result.get("status") == "PARTIALLY_SUFFICIENT"
+            else "task.retry" if result.get("status") == "RETRY"
+            else "task.clarification_required"
+        )
         next_stage = next((item for item in retry_expansion if item.get("task_id") == result.get("task_id")), {})
         log_event(event, task_id=result.get("task_id"), status=result.get("status"), approved_parent_ids=result.get("approved_parent_ids", []), reason=result.get("reason", ""), retry_count=retry_counts.get(result.get("task_id"), 0), next_expansion_stage=next_stage.get("stage", ""))
     return {
@@ -1408,6 +1509,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         "task_results": list(current_results.values()),
         "task_retry_counts": retry_counts,
         "task_feedback": feedback,
+        "task_partial_evidence": partial_evidence,
         "task_resolution_instructions": task_resolution_instructions,
         "pending_evidence_cache_updates": pending_cache_updates,
     }
@@ -1445,7 +1547,7 @@ def node_04a_resolution_planner(state: AgentState):
     approved_by_task = {}
     for result in task_results:
         task_id = result.get("task_id")
-        parents = _hydrate_parent_ids(result.get("approved_parent_ids", [])) if result.get("status") == "SUFFICIENT" else []
+        parents = _hydrate_parent_ids(result.get("approved_parent_ids", [])) if result.get("status") in ANSWERABLE_TASK_STATUSES else []
         approved_ids = {parent.get("parent_id") for parent in parents}
         approved_by_task[task_id] = approved_ids
         planner_tasks.append({
@@ -1483,6 +1585,10 @@ def node_04a_resolution_planner(state: AgentState):
     - A LIST presentation requires at least three independent, grounded items. Do not use LIST when order matters.
     - A single customer turn may contain multiple response blocks. Choose the best presentation independently for each answerable task. Each block may use TEXT, LIST, or PROGRESS when its approved evidence supports it.
     - Do not force a visual payload: use TEXT when a list or progress flow would not improve the customer's understanding.
+    - Tasks marked PARTIALLY_SUFFICIENT have grounded evidence for only part
+      of the customer's request. Plan their supported answer normally, but do
+      not imply the visual completes the unresolved part; clarification is
+      added separately outside the response block.
     - Mark unavailable tasks as UNAVAILABLE and use no evidence IDs for them.
     - Intent-level clarification tasks do not have FAQ evidence and must not be treated as answerable tasks or UI choices.
     - Declined components do not have FAQ evidence and must not be treated as answerable tasks or UI choices; preserve the ordering of the remaining answerable tasks as if the declined components were never present.
@@ -1514,7 +1620,7 @@ def node_04a_resolution_planner(state: AgentState):
             if task_id not in valid_task_ids:
                 continue
             result = next((value for value in task_results if value.get("task_id") == task_id), {})
-            if result.get("status") != "SUFFICIENT":
+            if result.get("status") not in ANSWERABLE_TASK_STATUSES:
                 continue
             allowed_ids = approved_by_task[task_id]
             evidence_ids = [parent_id for parent_id in raw_block.get("evidence_parent_ids", []) if parent_id in allowed_ids]
@@ -1565,7 +1671,7 @@ def node_04a_resolution_planner(state: AgentState):
             continue
         valid_ids = [parent_id for parent_id in item.get("evidence_parent_ids", []) if parent_id in approved_by_task[task_id]]
         result = next((value for value in task_results if value.get("task_id") == task_id), {})
-        if result.get("status") == "SUFFICIENT" and not valid_ids:
+        if result.get("status") in ANSWERABLE_TASK_STATUSES and not valid_ids:
             valid_ids = list(approved_by_task[task_id])
         presentations.append({
             "task_id": task_id,
@@ -1579,7 +1685,7 @@ def node_04a_resolution_planner(state: AgentState):
 
     if not presentations:
         for result in task_results:
-            if result.get("status") == "SUFFICIENT":
+            if result.get("status") in ANSWERABLE_TASK_STATUSES:
                 parent_ids = list(result.get("approved_parent_ids", []))
                 presentations.append({"task_id": result.get("task_id"), "display_mode": "SECTION", "evidence_parent_ids": parent_ids, "section_title": "Horizon Bank guidance"})
 
@@ -2979,15 +3085,174 @@ def node_08_soft_escalation_analyzer(state: AgentState):
         history.append(AIMessage(content=state.get("final_response", "")))
     return {"ui_action_payload": payload, "chat_history": history}
 
+
+def _escalation_case_request(state: AgentState) -> str:
+    """Return a compact current-request description without echoing the UI confirmation."""
+    current_input = str(state.get("user_input", "")).strip()
+    if current_input and current_input.casefold() != ESCALATION_CONFIRMATION_MESSAGE.casefold():
+        return current_input[:280]
+
+    for message in reversed(state.get("chat_history", [])):
+        if not isinstance(message, HumanMessage):
+            continue
+        content = str(message.content or "").strip()
+        if content and content.casefold() != ESCALATION_CONFIRMATION_MESSAGE.casefold():
+            return content[:280]
+    return "The current banking conversation."
+
+
+def _escalation_case_problem(state: AgentState) -> str:
+    """Provide a concise deterministic handoff reason without exposing diagnostics."""
+    if state.get("triage_status") == "ESCALATION":
+        return "You asked to continue with a human agent."
+    if state.get("safety_retry_count", 0) >= 3:
+        return "The assistant could not safely complete the request after its validation checks."
+    return "A human review has been requested for this conversation."
+
+
+def _build_current_session_escalation_context(state: AgentState) -> str:
+    """Expose only trusted current-session material to the handoff summarizer."""
+    rolling_summary = str(state.get("compacted_history_summary", "")).strip()
+    trusted_history = []
+    for message in state.get("chat_history", []):
+        if isinstance(message, HumanMessage) and message.additional_kwargs.get("trust_status") != "trusted":
+            continue
+        content = str(message.content or "").strip()
+        if not content or content.casefold() == ESCALATION_CONFIRMATION_MESSAGE.casefold():
+            continue
+        role = "Customer" if isinstance(message, HumanMessage) else "Assistant"
+        trusted_history.append(f"{role}: {content}")
+
+    transcript = "\n".join(trusted_history) or "None"
+    return (
+        f"Current-session rolling memory (older trusted turns):\n{rolling_summary or 'None'}\n\n"
+        f"Current-session trusted transcript:\n{transcript}"
+    )
+
+
+def _build_escalation_case_summary(state: AgentState) -> dict:
+    """Create a bounded, source-only handoff summary for the confirmation UI."""
+    fallback_request = _escalation_case_request(state)
+    fallback_problem = _escalation_case_problem(state)
+    unresolved_inputs = {
+        "intent_clarifications": [
+            str(item.get("unresolved_request", "")).strip()
+            for item in state.get("intent_clarification_tasks", [])
+            if isinstance(item, dict) and str(item.get("unresolved_request", "")).strip()
+        ],
+        "terminal_retrieval_reasons": [
+            str(item.get("reason", "")).strip()
+            for item in state.get("task_resolution_instructions", [])
+            if isinstance(item, dict) and str(item.get("reason", "")).strip()
+        ],
+    }
+    prompt = f"""
+    CURRENT SESSION ESCALATION CASE SUMMARY
+    You create a concise internal handoff summary for a human banking agent.
+
+    Source material (use only this material):
+    {_build_current_session_escalation_context(state)}
+
+    Current unresolved-state signals (use only when they match the source material):
+    {json.dumps(unresolved_inputs, ensure_ascii=False)}
+
+    Rules:
+    - Identify the customer's main pursuit in this CURRENT session, not a
+      previous session or long-term user preference.
+    - Identify only unresolved issues that are explicit in the supplied source.
+    - Do not invent products, policies, account details, actions, outcomes,
+      customer preferences, or reasons for the escalation.
+    - Do not quote internal parent IDs, diagnostics, model names, or safety
+      rules. Do not provide advice or instructions.
+    - If the current-session source has no clear pursuit, use the general
+      phrase "The current banking conversation.".
+    - Return an empty unresolved_issues array when there is no explicit issue.
+
+    Output JSON only:
+    {{"main_pursuit": "...", "unresolved_issues": ["..."]}}
+    """
+    try:
+        result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER))
+        main_pursuit = str(result.get("main_pursuit", "")).strip()[:280]
+        unresolved_issues = [
+            str(item).strip()[:280]
+            for item in result.get("unresolved_issues", [])
+            if str(item).strip()
+        ][:3]
+        if main_pursuit:
+            log_event(
+                "escalation.case_summary.generated",
+                main_pursuit=main_pursuit,
+                unresolved_issues=unresolved_issues,
+                source="trusted_current_session",
+            )
+            return {
+                "request": main_pursuit,
+                "problem": fallback_problem,
+                "unresolvedIssues": unresolved_issues,
+                "source": "current_session_summary",
+            }
+    except Exception as error:
+        print(f"⚠️ [ESCALATION SUMMARY] Current-session summarization failed: {error}")
+        log_event("escalation.case_summary.failed", level="WARNING", error=str(error))
+
+    return {
+        "request": fallback_request,
+        "problem": fallback_problem,
+        "unresolvedIssues": [],
+        "source": "deterministic_fallback",
+    }
+
+
 def node_09_hard_escalation_broker(state: AgentState):
     print("🟢 [NODE 09] Executing Hard Escalation Broker")
-    summary_items = [f"RAG Diagnostics: {f}" for f in state.get("search_feedback_history", [])] + [f"Safety: {f}" for f in state.get("draft_feedback_history", [])]
     history = list(state.get("chat_history", []))
-    response = "I am transferring you to a human agent."
+    if state.get("preflight_status") == "escalation_confirmation_accepted":
+        response = "Your transfer to a human agent is in progress. Please wait."
+        history.append(AIMessage(content=response))
+        log_event("escalation.transfer.mock_started", transfer_mode="mock")
+        return {
+            "final_response": response,
+            "final_answer": response,
+            "final_clarification": "",
+            "ui_action_payload": {"uiType": "none", "options": []},
+            "chat_history": history,
+        }
+
+    case_summary = _build_escalation_case_summary(state)
+    response = "I can prepare a summary for a human agent to review your request."
     history.append(AIMessage(content=response))
+    log_event(
+        "escalation.confirmation.presented",
+        trigger_status=state.get("preflight_status", ""),
+        triage_status=state.get("triage_status", ""),
+        request_summary=case_summary["request"],
+        problem_summary=case_summary["problem"],
+        unresolved_issues=case_summary["unresolvedIssues"],
+        summary_source=case_summary["source"],
+    )
     return {
         "final_response": response,
-        "ui_action_payload": {"uiType": "case_summary", "items": summary_items},
+        "final_answer": response,
+        "final_clarification": "",
+        "ui_action_payload": {
+            "uiType": "blocks",
+            "options": [],
+            "responseBlocks": [{
+                "blockId": "escalation-confirmation",
+                "type": "escalation_confirmation",
+                "title": "Confirm transfer to a human agent",
+                "caseTitle": "Current case summary",
+                "request": case_summary["request"],
+                "problem": case_summary["problem"],
+                "unresolvedIssues": case_summary["unresolvedIssues"],
+                "notice": "This AI-generated summary helps a human agent quickly understand your case.",
+                "confirmation": {
+                    "label": "Confirm transfer",
+                    "message": ESCALATION_CONFIRMATION_MESSAGE,
+                },
+            }],
+        },
         "chat_history": history,
     }
 

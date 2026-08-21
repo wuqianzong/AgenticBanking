@@ -47,6 +47,8 @@ def build_agent_graph():
         return "n3"
 
     def route_n3(state: AgentState):
+        if state.get("preflight_status") == "escalation_confirmation_accepted":
+            return "n23"
         return "n16" if state.get("preflight_status") == "pass" else "n5"
 
     def route_n16(state: AgentState):
@@ -101,7 +103,7 @@ def build_agent_graph():
 
     workflow.set_conditional_entry_point(route_start, {"n00": "n00", "n3": "n3"})
     workflow.add_edge("n00", "n20")
-    workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n5": "n5"})
+    workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n23": "n23", "n5": "n5"})
     workflow.add_conditional_edges("n16", route_n16, {"n2d": "n2d", "n5": "n5"})
     workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n8": "n8", "n2e": "n2e", "n5": "n5"})
     workflow.add_conditional_edges("n2e", route_n2e, {"n14": "n14", "n18": "n18", "n19": "n19", "n8": "n8", "n5": "n5"})

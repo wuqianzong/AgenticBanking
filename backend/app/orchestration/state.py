@@ -44,6 +44,7 @@ class AgentState(TypedDict):
     task_results: List[Dict[str, Any]]           # Parent-ID evidence selections and sufficiency result per task
     task_retry_counts: Dict[str, int]            # Retry count keyed by task_id
     task_feedback: Dict[str, List[Dict[str, str]]]  # Task-specific observed candidate-evidence deltas
+    task_partial_evidence: Dict[str, List[str]]  # Parent IDs retained while a task is only partly answerable and continues retrieval
     intent_clarification_tasks: List[Dict[str, Any]]  # Unresolved user-derived components that cannot form a valid retrieval task
     task_resolution_instructions: List[Dict[str, Any]]  # Terminal retrieval feedback for natural clarification generation
     safe_answer_for_fallback: str                 # Individually approved answer retained for deterministic clarification fallback

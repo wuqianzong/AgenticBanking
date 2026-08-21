@@ -17,7 +17,7 @@ MODEL_E_TRIAGE = "gemini-3.5-flash-lite"             # Google: Journey Classifie
 # --------------------------------------------
 
 groq_api_key = os.environ.get("GROQ_API_KEY")
-google_api_key = os.environ.get("GOOGLE_API_KEY", "AQ.Ab8RN6JT4AL6142h9RH5kjIvS9cxNdzmty-akxr7PmfUV1U4yg")
+google_api_key = os.environ.get("GOOGLE_API_KEY")
 
 # =====================================================================
 # 📝 PYDANTIC SCHEMAS FOR GOOGLE GEMINI STRUCTURED OUTPUTS
@@ -48,13 +48,13 @@ class RetryEvidenceDeltaItem(BaseModel):
 
 class TaskSufficiencyItem(BaseModel):
     task_id: str = Field(description="The exact task_id supplied in the task input.")
-    status: str = Field(description="Must be SUFFICIENT, RETRY, or UNAVAILABLE.")
-    approved_parent_ids: List[str] = Field(description="Only parent IDs supplied for this exact task and directly relevant to it.")
-    reason: str = Field(description="Brief evidence or insufficiency reason.")
+    status: str = Field(description="Must be SUFFICIENT, PARTIALLY_SUFFICIENT, or INSUFFICIENT.")
+    approved_parent_ids: List[str] = Field(description="Only supplied parent IDs that provide material grounded information for this exact task.")
+    reason: str = Field(description="Brief explanation of how completely the candidate evidence answers the task.")
     evidence_delta: List[RetryEvidenceDeltaItem] = Field(
         default_factory=list,
         description=(
-            "For RETRY only: newly observed, materially task-relevant facts from "
+            "For PARTIALLY_SUFFICIENT or INSUFFICIENT only: newly observed, materially task-relevant facts from "
             "supplied candidate parents. Empty when no such fact exists."
         ),
     )
@@ -137,6 +137,16 @@ class MemorySummaryEvaluation(BaseModel):
     has_clarification_dependent_content: bool = Field(description="True if a durable last-session or baseline candidate retains an unresolved, ambiguous, incomplete, or clarification-dependent issue that would require a new-session user response before it can be answered.")
     reason: str = Field(description="Brief validation reason or correction guidance.")
 
+# 7. ESCALATION CONFIRMATION CASE SUMMARY
+class EscalationCaseSummary(BaseModel):
+    main_pursuit: str = Field(
+        description="A concise factual description of the customer's main current-session banking pursuit."
+    )
+    unresolved_issues: List[str] = Field(
+        default_factory=list,
+        description="Current-session unresolved issues only. Empty when none are present."
+    )
+
 # =====================================================================
 
 def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
@@ -171,6 +181,8 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
                 active_schema = SupervisorRouting
             elif "MEMORY SUMMARY SECURITY VALIDATION" in prompt:
                 active_schema = MemorySummaryEvaluation
+            elif "CURRENT SESSION ESCALATION CASE SUMMARY" in prompt:
+                active_schema = EscalationCaseSummary
                 
             config_kwargs = {
                 "response_mime_type": "application/json",

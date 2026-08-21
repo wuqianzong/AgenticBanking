@@ -15,7 +15,7 @@ class AgentState(TypedDict):
     active_plan: Dict[str, Any]                  # e.g., {"steps": [], "current_step_index": 0}
     completed_steps: List[str]                   # Stateful Milestone Tracker for Anti-Amnesia
     process_slots: Dict[str, Any]                # Verified data (e.g., {"age": 25})
-    approved_evidence_cache: Dict[str, Dict[str, Any]]  # Session-scoped parent-ID cache keyed by product + intent set
+    verified_task_history: List[Dict[str, Any]]  # Latest verified turn records: existing search-task snapshots plus approved parent IDs
     
     # --- VOLATILE TURN STATE (Reset per turn) ---
     user_id: str
@@ -44,6 +44,7 @@ class AgentState(TypedDict):
     task_results: List[Dict[str, Any]]           # Parent-ID evidence selections and sufficiency result per task
     task_retry_counts: Dict[str, int]            # Retry count keyed by task_id
     task_feedback: Dict[str, List[Dict[str, str]]]  # Task-specific observed candidate-evidence deltas
+    task_sufficiency_history: Dict[str, List[Dict[str, Any]]]  # Current-turn audit trail used to keep repeated sufficiency judgments consistent
     task_partial_evidence: Dict[str, List[str]]  # Parent IDs retained while a task is only partly answerable and continues retrieval
     intent_clarification_tasks: List[Dict[str, Any]]  # Unresolved user-derived components that cannot form a valid retrieval task
     task_resolution_instructions: List[Dict[str, Any]]  # Terminal retrieval feedback for natural clarification generation
@@ -51,7 +52,6 @@ class AgentState(TypedDict):
     clarification_fallback_required: bool         # True only when clarification retries exhausted while answer remains safe
     selected_ux_journey: str                     # TEXT, PROGRESS, LIST, or ESCALATION presentation type
     presentation_plan: Dict[str, Any]            # Evidence-selected UI and response plan
-    pending_evidence_cache_updates: Dict[str, Dict[str, Any]]  # Promote only after outbound semantic approval
     outbound_compliance_result: Dict[str, Any]    # Focused outbound MAS-compliance audit result
     outbound_groundedness_result: Dict[str, Any]  # Audit result plus structured, non-evidential grounding_violations for retries
     pending_advance: bool                           # V4.1 Fix: Tracks if the current step should advance upon safety clearance

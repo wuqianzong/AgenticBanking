@@ -34,6 +34,39 @@ class SemanticEvaluation(BaseModel):
     is_approved_knowledge_compliant: bool = Field(description="True if the selected approved FAQ evidence is safe and compliant for use in a read-only banking response.")
     reason: str = Field(description="A brief sentence explaining the reasoning.")
 
+
+class GroundingViolation(BaseModel):
+    """Internal-only explanation of one customer-visible grounding failure."""
+
+    task_id: str = Field(description="The related task ID, or an empty string when not task-specific.")
+    scope: str = Field(description="Must be answer, ui_payload, or clarification.")
+    audit_layer: str = Field(
+        description="Must be evidence for a direct factual-support failure, bridge for an unsupported inference, or other for a non-answer-specific failure."
+    )
+    violation_type: str = Field(
+        description="A concise failure category such as unsupported_factual_claim, unsupported_bridge_inference, wrong_task_evidence, or unsupported_clarification_suggestion."
+    )
+    unsupported_content: List[str] = Field(
+        default_factory=list,
+        description="Exact customer-facing phrase(s) that failed the audit."
+    )
+    evidence_gap: str = Field(
+        description="Why the permitted evidence does not support the phrase. This is an internal constraint, never new evidence."
+    )
+
+
+class AnswerGroundednessEvaluation(BaseModel):
+    """Structured result for the normal-answer groundedness v2 audit only."""
+
+    passed: bool = Field(description="True only when every answer, clarification, and visible UI field passes its applicable grounding check.")
+    answer_grounded: bool = Field(description="True only when both direct factual evidence and inferential bridge checks pass for the answer and answer UI.")
+    answer_evidence_grounded: bool = Field(description="True only when all explicit answer and answer-UI facts are directly supported by task-level approved evidence.")
+    answer_bridge_grounded: bool = Field(description="True only when every conclusion or logical connection in the answer is a bounded inference from task-level approved evidence.")
+    clarification_grounded: bool = Field(description="True when clarification factual content uses only its permitted clarification sources.")
+    clarification_connected: bool = Field(description="True when each clarification explicitly identifies its supplied unresolved term.")
+    reason: str = Field(description="Concise overall internal audit result.")
+    grounding_violations: List[GroundingViolation] = Field(default_factory=list, description="Every material visible grounding failure, labelled by audit layer.")
+
 # 2. SUFFICIENCY AUDITOR (Node 03c)
 class RetryEvidenceDeltaItem(BaseModel):
     """One newly observed, task-relevant fact from an unapproved candidate."""
@@ -169,6 +202,8 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
             active_schema = None
             if "TASK-LEVEL SUFFICIENCY AND EVIDENCE SELECTION" in prompt:
                 active_schema = TaskSufficiencyEvaluation
+            elif "ANSWER GROUNDEDNESS V2 AUDIT" in prompt:
+                active_schema = AnswerGroundednessEvaluation
             elif "APPROVED-KNOWLEDGE SAFETY:" in prompt:
                 active_schema = SemanticEvaluation
             elif "TRIAGE A BANKING REQUEST" in prompt:

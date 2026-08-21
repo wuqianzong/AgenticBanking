@@ -101,11 +101,10 @@ The RAG pipeline operates as an isolated sequence within the main conversational
 
 search\_tasks (List\[Dict\]): Independently formulated retrieval tasks. Each task contains a stable task\_id, one or more complete procedural/policy/conceptual angle groups, target\_commercial\_product, and target\_intent.
 
-* task\_results (List\[Dict\]): Per-task retrieval and evaluation state, including CACHED, RETRIEVED, SUFFICIENT, RETRY, or CLARIFICATION\_REQUIRED status, candidate parents, approved parent IDs, and source origin.  
-* task\_retry\_counts (Dict\[str, int\]): Live-RAG insufficiency count per task ID. Cache insufficiency does not consume this count.  
+* task\_results (List\[Dict\]): Per-task retrieval and evaluation state, including RETRIEVED, SUFFICIENT, RETRY, or CLARIFICATION\_REQUIRED status, candidate parents, approved parent IDs, and source origin.
+* task\_retry\_counts (Dict\[str, int\]): Live-RAG insufficiency count per task ID.
 * task\_feedback (Dict\[str, str\]): Task-specific refinement feedback used only when Node 02e retries unresolved tasks.  
-* approved\_evidence\_cache (Dict): Session-scoped cache of approved SQLite parent IDs, keyed by normalized product and unordered intent-family set.  
-* pending\_evidence\_cache\_updates (Dict): Candidate cache promotions held until the outbound semantic gate approves the evidence and generated response.  
+* verified\_task\_history (List\[Dict\]): Bounded session-only record of the prior ten verified task snapshots and their approved parent IDs. On a current task with overlapping product and intent, these parent IDs are re-ranked with the live direct result through RRF; they never bypass retrieval or current-turn sufficiency validation.
 * task\_resolution\_instructions (List\[Dict\]): Terminal retrieval context for unresolved tasks, including exact rejected SQLite parent records that may be used only as clarification-topic suggestions.  
 * intent\_clarification\_tasks (List\[Dict\]): User-derived request components that Node 02e cannot safely map to a valid Product/Intent retrieval task. They bypass RAG and may only support a neutral clarification.
 * Approved evidence remains parent-ID based. The presentation planner, response generator, and outbound answer-groundedness check rehydrate only task-scoped parent IDs that Node 03c approved from the authoritative SQLite knowledge database.

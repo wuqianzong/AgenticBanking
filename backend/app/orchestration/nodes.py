@@ -34,6 +34,7 @@ VOLATILE_STATE_RESET = {
     "task_results": [],
     "task_retry_counts": {},
     "task_feedback": {},
+    "task_sufficiency_history": {},
     "task_partial_evidence": {},
     "intent_clarification_tasks": [],
     "task_resolution_instructions": [],
@@ -43,14 +44,13 @@ VOLATILE_STATE_RESET = {
     "final_clarification": "",
     "selected_ux_journey": "TEXT",
     "presentation_plan": {},
-    "pending_evidence_cache_updates": {},
     "outbound_compliance_result": {},
     "outbound_groundedness_result": {},
     "active_tool_routes": [],
     "pending_advance": False,
 }
 
-MAX_APPROVED_EVIDENCE_CACHE_ENTRIES = 30
+MAX_VERIFIED_TASK_HISTORY_TURNS = 10
 ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "PARTIALLY_SUFFICIENT"}
 MAX_RAG_ATTEMPTS = 4
 
@@ -124,6 +124,79 @@ def _valid_product_intent_scope_pairs(task: dict) -> list[dict]:
         for product in products
         if any(intent in PRODUCT_INTENT_MATRIX[product] for intent in intents)
     ]
+
+
+def _verified_session_parent_ids_for_task(state: AgentState, task: dict) -> list[str]:
+    """Return prior verified parents whose existing task scope overlaps this task.
+
+    The history retains the original search-task snapshots, not copied FAQ
+    text.  A parent is merely a candidate for the current RRF branch: it is
+    re-ranked against the current direct subquery and must still pass the
+    current turn's sufficiency audit before it becomes approved evidence.
+    """
+    current_products = set(_normalized_product_tags(task.get("target_commercial_product")))
+    current_intents = {
+        str(intent).strip()
+        for intent in (task.get("target_intent", []) if isinstance(task.get("target_intent", []), list) else [task.get("target_intent", "")])
+        if str(intent).strip()
+    }
+    if not current_products or not current_intents:
+        return []
+
+    matched_ids = []
+    seen_ids = set()
+    # Recency is the tie-breaker after the required product-and-intent overlap.
+    for record in reversed(state.get("verified_task_history", [])):
+        for verified_task in reversed(record.get("tasks", []) if isinstance(record, dict) else []):
+            prior_task = verified_task.get("search_task", {}) if isinstance(verified_task, dict) else {}
+            prior_products = set(_normalized_product_tags(prior_task.get("target_commercial_product")))
+            prior_raw_intents = prior_task.get("target_intent", [])
+            prior_raw_intents = prior_raw_intents if isinstance(prior_raw_intents, list) else [prior_raw_intents]
+            prior_intents = {str(intent).strip() for intent in prior_raw_intents if str(intent).strip()}
+            if not (current_products & prior_products and current_intents & prior_intents):
+                continue
+            for parent_id in verified_task.get("approved_parent_ids", []):
+                if isinstance(parent_id, str) and parent_id and parent_id not in seen_ids:
+                    seen_ids.add(parent_id)
+                    matched_ids.append(parent_id)
+    return matched_ids
+
+
+def _append_verified_task_history(state: AgentState) -> list[dict]:
+    """Append this passed turn's existing task objects and approved parent IDs.
+
+    It intentionally stores no hydrated knowledge, chat text, drafts, or
+    unapproved candidates.  The history is session-scoped and bounded by
+    verified turns, so later retrieval can rehydrate authoritative parents on
+    demand without increasing prompt state materially.
+    """
+    results_by_task = {
+        result.get("task_id"): result
+        for result in state.get("task_results", [])
+        if result.get("status") in ANSWERABLE_TASK_STATUSES and result.get("approved_parent_ids")
+    }
+    verified_tasks = []
+    for task in state.get("search_tasks", []):
+        result = results_by_task.get(task.get("task_id"), {})
+        parent_ids = list(dict.fromkeys(
+            parent_id for parent_id in result.get("approved_parent_ids", [])
+            if isinstance(parent_id, str) and parent_id
+        ))
+        if parent_ids:
+            verified_tasks.append({
+                "search_task": dict(task),
+                "approved_parent_ids": parent_ids,
+            })
+
+    history = list(state.get("verified_task_history", []))
+    if not verified_tasks:
+        return history
+
+    history.append({
+        "turn_number": state.get("turn_count", 0),
+        "tasks": verified_tasks,
+    })
+    return history[-MAX_VERIFIED_TASK_HISTORY_TURNS:]
 
 
 def _normalize_search_task_scope(task: dict) -> dict | None:
@@ -409,25 +482,6 @@ def _normalize_ui_options(options: list) -> list:
     return normalized[:2]
 
 
-def _task_evidence_cache_key(task: dict) -> str:
-    """Return an order- and case-insensitive product/intent cache key."""
-    products = {
-        product.casefold()
-        for product in _normalized_product_tags(task.get("target_commercial_product", ""))
-    }
-    intents = task.get("target_intent", [])
-    if isinstance(intents, str):
-        intents = [intents]
-    intent_set = {
-        str(intent).strip().casefold()
-        for intent in intents
-        if str(intent).strip()
-    }
-    if not products or not intent_set:
-        return ""
-    return f"{','.join(sorted(products))}|{','.join(sorted(intent_set))}"
-
-
 def _terminal_retrieval_feedback(
     task_id: str,
     feedback: str,
@@ -621,7 +675,7 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         "active_plan": {},
         "completed_steps": [],
         "process_slots": {},
-        "approved_evidence_cache": {},
+        "verified_task_history": [],
         "final_draft": greeting,
         "final_answer": greeting,
         "final_clarification": "",
@@ -1121,53 +1175,16 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             return {"preflight_status": "continue_plan", "search_tasks": [], "decline_tasks": decline_tasks}
         return {"preflight_status": "intent_clarification_needed", "search_tasks": [], "decline_tasks": decline_tasks}
 
-    # Cache routing is deliberately deterministic and happens only after the
-    # formulator has independently created the current task set.  A retry must
-    # run a new RAG search; a prior cache insufficiency is not a RAG attempt.
-    cached_results = []
-    cache_hits = 0
-    if not retry_tasks:
-        evidence_cache = state.get("approved_evidence_cache", {})
-        cache_candidates = [
-            (task, _task_evidence_cache_key(task), evidence_cache.get(_task_evidence_cache_key(task), {}))
-            for task in search_tasks
-        ]
-        if any(entry.get("approved_parent_ids") for _, _, entry in cache_candidates):
-            evidence_store = RAGEngine()
-            for task, cache_key, entry in cache_candidates:
-                parent_ids = entry.get("approved_parent_ids", []) if cache_key else []
-                if not parent_ids:
-                    continue
-                parents = evidence_store.hydrate_parent_ids(parent_ids)
-                if not parents:
-                    log_event("evidence_cache.stale", task_id=task.get("task_id"), cache_key=cache_key)
-                    continue
-                cached_results.append({
-                    "task_id": task.get("task_id"),
-                    "status": "CACHED",
-                    "origin": "CACHE",
-                    "cache_key": cache_key,
-                    "parents": parents,
-                })
-                cache_hits += 1
-                log_event(
-                    "evidence_cache.hit",
-                    task_id=task.get("task_id"),
-                    cache_key=cache_key,
-                    parent_ids=[parent.get("parent_id") for parent in parents],
-                )
-
-    cache_misses = len(search_tasks) - cache_hits
-    if cache_hits:
-        print(f"   ⚡ [EVIDENCE CACHE]: {cache_hits} hit(s), {cache_misses} RAG task(s).")
-    else:
-        print("   🎯 [TASK ROUTER]: No approved-evidence cache match; retrieval required.")
-    log_event("evidence_cache.route", hit_count=cache_hits, miss_count=cache_misses, retry_mode=bool(retry_tasks))
+    # Every task enters live direct retrieval. Search Strategy v2.7 may add
+    # matching verified-session parents as a separate RRF list, but no broad
+    # product/intent cache may bypass the current subquery's retrieval.
+    print("   🎯 [TASK ROUTER]: Live retrieval required; verified session evidence may join RRF when task scope overlaps.")
+    log_event("task.retrieval.route", task_count=len(search_tasks), retry_mode=bool(retry_tasks), strategy="v2.7_verified_session_rrf")
     return {
-        "preflight_status": "validate_cached" if cache_hits == len(search_tasks) else "retrieve",
+        "preflight_status": "retrieve",
         "search_tasks": search_tasks,
         "intent_clarification_tasks": intent_clarification_tasks,
-        "task_results": cached_results if not retry_tasks else task_results,
+        "task_results": task_results if retry_tasks else [],
         "active_product_intents": new_matrix,
         "active_plan": {} if not retry_tasks else active_plan,
         "completed_steps": [] if not retry_tasks else state.get("completed_steps", []),
@@ -1181,7 +1198,7 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
     prior_results = {result.get("task_id"): result for result in state.get("task_results", [])}
     tasks_to_retrieve = [
         task for task in state.get("search_tasks", [])
-        if prior_results.get(task.get("task_id"), {}).get("status") not in {"CACHED", *ANSWERABLE_TASK_STATUSES, "UNAVAILABLE"}
+        if prior_results.get(task.get("task_id"), {}).get("status") not in {*ANSWERABLE_TASK_STATUSES, "UNAVAILABLE"}
     ]
     routes = ["n17_rag"] if tasks_to_retrieve else []
         
@@ -1194,7 +1211,7 @@ async def node_03b_rag_worker(state: AgentState):
     prior_results = {result.get("task_id"): result for result in state.get("task_results", [])}
     tasks_to_retrieve = [
         task for task in tasks
-        if prior_results.get(task.get("task_id"), {}).get("status") not in {"CACHED", *ANSWERABLE_TASK_STATUSES, "UNAVAILABLE"}
+        if prior_results.get(task.get("task_id"), {}).get("status") not in {*ANSWERABLE_TASK_STATUSES, "UNAVAILABLE"}
     ]
     if not tasks_to_retrieve:
         return {"rag_payload": "", "task_results": list(prior_results.values())}
@@ -1203,10 +1220,19 @@ async def node_03b_rag_worker(state: AgentState):
     async def retrieve_task(task: dict) -> dict:
         scope_pairs = _valid_product_intent_scope_pairs(task)
         retrieval_mode = _retrieval_mode_for_task(task, state.get("task_retry_counts", {}))
+        verified_session_parent_ids = _verified_session_parent_ids_for_task(state, task)
+        log_event(
+            "verified_session_evidence.matched",
+            task_id=task.get("task_id"),
+            retrieval_mode=retrieval_mode,
+            parent_ids=verified_session_parent_ids,
+            candidate_count=len(verified_session_parent_ids),
+        )
         if retrieval_mode == "DIRECT":
             parents = await engine.execute_direct_search(
                 query_text=task.get("direct_query", task.get("customer_component", "")),
                 scope_pairs=scope_pairs,
+                verified_session_parent_ids=verified_session_parent_ids,
             )
         else:
             parents = await engine.execute_multi_angle_search(
@@ -1218,6 +1244,7 @@ async def node_03b_rag_worker(state: AgentState):
             "status": "RETRIEVED",
             "origin": "RAG",
             "retrieval_mode": retrieval_mode,
+            "verified_session_parent_ids": verified_session_parent_ids,
             "parents": parents,
         }
 
@@ -1228,6 +1255,10 @@ async def node_03b_rag_worker(state: AgentState):
         "task.rag.completed",
         task_ids=[result.get("task_id") for result in retrieved_results],
         retrieval_modes={result.get("task_id"): result.get("retrieval_mode") for result in retrieved_results},
+        verified_session_parent_ids={
+            result.get("task_id"): result.get("verified_session_parent_ids", [])
+            for result in retrieved_results
+        },
         selected_parent_ids={
             result.get("task_id"): [parent.get("parent_id") for parent in result.get("parents", [])]
             for result in retrieved_results
@@ -1247,10 +1278,15 @@ def node_03c_sufficiency_auditor(state: AgentState):
     current_results = {result.get("task_id"): result for result in state.get("task_results", [])}
     evidence_candidates = [
         result for result in current_results.values()
-        if result.get("status") in {"RETRIEVED", "CACHED"}
+        if result.get("status") == "RETRIEVED"
     ]
     retry_counts = dict(state.get("task_retry_counts", {}))
     feedback = dict(state.get("task_feedback", {}))
+    sufficiency_history = {
+        str(task_id): list(entries)
+        for task_id, entries in state.get("task_sufficiency_history", {}).items()
+        if isinstance(entries, list)
+    }
     partial_evidence = {
         str(task_id): list(dict.fromkeys(parent_ids))
         for task_id, parent_ids in state.get("task_partial_evidence", {}).items()
@@ -1279,6 +1315,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "task_id": task_id,
             "task": tasks_by_id.get(task_id, {}),
             "retained_partial_parent_ids": retained_ids,
+            "prior_sufficiency_audit_history": sufficiency_history.get(str(task_id), []),
             "parents": all_parents,
         })
     auditor_results = {}
@@ -1286,7 +1323,10 @@ def node_03c_sufficiency_auditor(state: AgentState):
         prompt = f"""
         TASK-LEVEL SUFFICIENCY AND EVIDENCE SELECTION
         You are a groundedness auditor for a read-only Horizon Bank FAQ assistant.
-        Evaluate EACH supplied task independently for answerability.
+        Evaluate EACH supplied task independently for whether its supplied
+        parents are response-ready: they must contain enough materially
+        relevant, grounded information for the assistant to give the customer
+        a useful FAQ response.
 
         Original User Message (advisory context only; never use it as an
         individual task's completeness target): {state.get("user_input", "")}
@@ -1298,21 +1338,39 @@ def node_03c_sufficiency_auditor(state: AgentState):
           formulator's resolved sub-query for that task. Evaluate a task ONLY
           against its own `customer_component` and that task's candidate
           parents.
+        - Each Task Input may include `prior_sufficiency_audit_history` from
+          earlier attempts for the same task in this turn. Read it before
+          judging the current candidates and remain consistent with its prior
+          sufficiency judgments. This history is internal audit context only;
+          it is not customer-facing evidence and does not authorize any new
+          factual claim.
         - Classify each task as SUFFICIENT, PARTIALLY_SUFFICIENT, or
-          INSUFFICIENT. Judge whether the supplied parents answer the task,
-          not whether they repeat the customer's wording.
-        - SUFFICIENT: the selected parents provide enough grounded information
-          to answer the `customer_component` as a whole, even when another
-          task from the same customer turn remains unanswered.
+          INSUFFICIENT. Judge whether the supplied parents provide useful,
+          materially relevant information for the task—not whether they repeat
+          the customer's wording or explicitly resolve every possible
+          interpretation of the customer's question.
+        - SUFFICIENT: the selected parents contain enough grounded information
+          for a useful response to the `customer_component`, even when that
+          response is an explicit policy boundary, limit, condition,
+          restriction, or other related factual information rather than a
+          literal yes/no answer. The response generator will state only what
+          the evidence supports and must not invent a broader conclusion.
         - PARTIALLY_SUFFICIENT: selected parents provide grounded, material
-          information for part of the `customer_component`, but one or more
-          material parts remain unresolved. Select only the supporting parent
-          IDs; the backend will retain them while retrieval continues.
-        - INSUFFICIENT: the supplied parents provide no grounded, material
-          information that answers the `customer_component`.
+          information for one meaningful part of the `customer_component`,
+          while another material part has no useful related evidence. Select
+          only the supporting parent IDs; the backend will retain them while
+          retrieval continues.
+        - INSUFFICIENT: the supplied parents provide no grounded, materially
+          relevant information that could be usefully presented in response to
+          the `customer_component`.
         - Use the ordinary meaning of explicit policy boundaries, quantities,
           conditions, and restrictions when deciding whether a task is
-          answered. Do not require a parent to restate the customer's question.
+          response-ready. Do not require a parent to restate the customer's
+          question or explicitly state the customer's requested conclusion.
+          For example, an explicit statutory maximum or fixed policy limit is
+          response-ready for a question about raising that limit, even if the
+          parent does not separately say "no" or describe every possible
+          external arrangement.
           Preserve each parent's scope and do not infer facts beyond it.
         - Do NOT require a task's evidence to answer the complete original
           user message, another task's customer_component, or another
@@ -1369,6 +1427,23 @@ def node_03c_sufficiency_auditor(state: AgentState):
         if requested_status not in {"SUFFICIENT", "PARTIALLY_SUFFICIENT", "INSUFFICIENT"}:
             requested_status = "INSUFFICIENT"
         reason = audit.get("reason", "No sufficient grounded FAQ evidence was selected.")
+        history_delta = [
+            {
+                "parent_id": str(item.get("parent_id", "")).strip(),
+                "fact": str(item.get("fact", "")).strip(),
+            }
+            for item in audit.get("evidence_delta", [])
+            if isinstance(item, dict)
+            and str(item.get("parent_id", "")).strip() in available_ids
+            and str(item.get("fact", "")).strip()
+        ]
+        sufficiency_history.setdefault(str(task_id), []).append({
+            "attempt": retry_counts.get(task_id, 0) + 1,
+            "status": requested_status,
+            "approved_parent_ids": approved_ids,
+            "reason": reason,
+            "evidence_delta": history_delta,
+        })
         if requested_status == "SUFFICIENT" and approved_ids:
             # The sufficiency model is permitted to select identifiers only.  Do
             # not retain any model-visible parent text: re-read this exact
@@ -1384,7 +1459,6 @@ def node_03c_sufficiency_auditor(state: AgentState):
                     "task_id": task_id,
                     "status": "SUFFICIENT",
                     "origin": result.get("origin", "RAG"),
-                    "cache_key": result.get("cache_key", _task_evidence_cache_key(tasks_by_id.get(task_id, {}))),
                     "approved_parent_ids": approved_ids,
                     "reason": reason,
                 }
@@ -1402,14 +1476,8 @@ def node_03c_sufficiency_auditor(state: AgentState):
         if requested_status == "PARTIALLY_SUFFICIENT":
             partial_evidence[str(task_id)] = partial_ids
 
-        cache_fallback = result.get("origin") == "CACHE"
-        # A cached result that fails sufficiency must fall through to a live
-        # retrieval without consuming a RAG retry.  It therefore may not have
-        # a retry counter yet.
-        attempt_count = retry_counts.get(task_id, 0)
-        if not cache_fallback:
-            attempt_count += 1
-            retry_counts[task_id] = attempt_count
+        attempt_count = retry_counts.get(task_id, 0) + 1
+        retry_counts[task_id] = attempt_count
         # Preserve an intentionally empty evidence delta. It means the
         # sufficiency auditor found no novel, material clue in the candidate
         # parents; replacing it with the failure reason would reintroduce a
@@ -1465,18 +1533,8 @@ def node_03c_sufficiency_auditor(state: AgentState):
                 "reason": reason,
             }
             feedback[task_id] = refinement
-            if cache_fallback:
-                log_event("evidence_cache.insufficient", task_id=task_id, cache_key=result.get("cache_key", ""), reason=reason)
 
     unresolved = [result for result in current_results.values() if result.get("status") == "RETRY"]
-    pending_cache_updates = {}
-    for result in current_results.values():
-        if result.get("status") != "SUFFICIENT":
-            continue
-        cache_key = result.get("cache_key") or _task_evidence_cache_key(tasks_by_id.get(result.get("task_id"), {}))
-        parent_ids = result.get("approved_parent_ids", [])
-        if cache_key and parent_ids:
-            pending_cache_updates[cache_key] = {"approved_parent_ids": parent_ids}
     task_resolution_instructions = [
         _terminal_retrieval_feedback(
             result.get("task_id"),
@@ -1509,9 +1567,9 @@ def node_03c_sufficiency_auditor(state: AgentState):
         "task_results": list(current_results.values()),
         "task_retry_counts": retry_counts,
         "task_feedback": feedback,
+        "task_sufficiency_history": sufficiency_history,
         "task_partial_evidence": partial_evidence,
         "task_resolution_instructions": task_resolution_instructions,
-        "pending_evidence_cache_updates": pending_cache_updates,
     }
 
 
@@ -1885,6 +1943,14 @@ def _generate_response_blocks(state: AgentState) -> dict:
       or next action from audit feedback. Do not repeat an unsupported claim
       merely because it appeared in an earlier response, conversation context,
       or memory.
+    - A grounding violation with audit_layer="evidence" means the named
+      factual claim or instruction lacks direct approved support: remove it or
+      replace it only with a directly supported fact. A violation with
+      audit_layer="bridge" means the factual evidence may remain useful but
+      the named conclusion adds an unsupported logical leap: keep the natural
+      response style, but narrow the conclusion to what the evidence actually
+      entails. Audit feedback never requires the response to expose factual
+      and inferential reasoning as separate customer-facing sections.
 
     Output JSON only:
     {{"intro_text":"...","blocks":[{{"task_id":"task_1","context_text":"...","answer":"...","progress_title":"...","progress_steps":[{{"title":"...","detail":"..."}}],"list_title":"...","list_items":["..."],"extended_text":"...","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"closing_text":"...","clarification":"..."}}
@@ -2225,6 +2291,11 @@ def node_04b_response_generator(state: AgentState):
       evidence_gap only to understand what the approved evidence does not
       establish. Neither field permits a new customer-facing fact, support
       channel, escalation path, service capability, or next action.
+      When audit_layer is "evidence", remove or replace the named factual
+      claim only with directly approved content. When audit_layer is
+      "bridge", retain a natural answer but narrow the named conclusion to
+      the logical implication actually supported by approved evidence; never
+      expose those internal audit layers to the customer.
     - If Selected Approved Knowledge is empty, do not state any specific
       product, service, policy, feature, fee, account, or historical fact.
       Produce only a concise, neutral clarification or refusal based on the
@@ -2535,6 +2606,8 @@ def _normalize_grounding_violations(raw_violations: Any) -> list[dict]:
 
     allowed_types = {
         "unsupported_claim",
+        "unsupported_factual_claim",
+        "unsupported_bridge_inference",
         "unsupported_instruction",
         "wrong_task_evidence",
         "unsupported_clarification_suggestion",
@@ -2555,6 +2628,11 @@ def _normalize_grounding_violations(raw_violations: Any) -> list[dict]:
         normalized.append({
             "task_id": str(item.get("task_id", "")).strip(),
             "scope": str(item.get("scope", "answer")).strip() or "answer",
+            "audit_layer": (
+                str(item.get("audit_layer", "other")).strip()
+                if str(item.get("audit_layer", "other")).strip() in {"evidence", "bridge", "other"}
+                else "other"
+            ),
             "violation_type": violation_type if violation_type in allowed_types else "other",
             "unsupported_content": [str(value).strip() for value in unsupported_content if str(value).strip()],
             "evidence_gap": str(item.get("evidence_gap", "")).strip(),
@@ -2747,7 +2825,7 @@ def node_06_outbound_groundedness_gate(state: AgentState):
     else:
         grounding_context = _normal_outbound_grounding_context(state)
         prompt = f"""
-        NORMAL RESPONSE GROUNDEDNESS AUDIT
+        ANSWER GROUNDEDNESS V2 AUDIT
         You are an evidence-groundedness auditor for a read-only Horizon Bank FAQ assistant.
 
         Task-Level Approved Evidence (the only factual source for answers and answer UI):
@@ -2778,13 +2856,34 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         advice, helpfulness, completeness, or whether the response used every
         available source.
 
-        Answer and Answer UI Rules:
-        - Every factual claim, instruction, option, progress step, list item,
+        ANSWER AUDIT: assess the customer's natural answer as one coherent
+        response. Do NOT require it to be written in separate factual and
+        inferential sections. Instead, distinguish the following two internal
+        checks while reading the same natural answer and answer UI.
+
+        1. Direct Factual Grounding (Evidence Check)
+        - Every explicit factual assertion, parameter, eligibility rule,
+          product capability, policy condition, limit, date, amount,
+          placeholder, instruction, option, progress step, list item,
           extended-text statement, and answer response-block field must be
-          explicitly supported by Task-Level Approved Evidence.
+          directly supported by Task-Level Approved Evidence.
         - When a response block is mapped to a task, its visible factual
           content must use only that task's approved parents and resolved sub-query.
         - Exact {{placeholders}} appearing in approved parents are valid facts.
+
+        2. Inferential Grounding (Bridge Check)
+        - Natural conclusions that connect approved facts to the resolved
+          sub-query are allowed when they are a reasonable, bounded logical
+          implication of the approved evidence. Do not require verbatim FAQ
+          wording for such a conclusion.
+        - Reject a bridge only when it adds an unstated premise, actor,
+          policy, procedure, reason, certainty, exception, or consequence; or
+          when the conclusion is not entailed by the approved evidence.
+        - Example: evidence that explicitly sets a maximum coverage cap can
+          support the bounded conclusion that coverage cannot be increased
+          above that cap. It does NOT support attributing control of the cap
+          to a particular bank, regulator, or process unless that attribution
+          is explicit in the evidence.
 
         Clarification Rules:
         - For an intent clarification, every named unresolved term must come
@@ -2810,9 +2909,16 @@ def node_06_outbound_groundedness_gate(state: AgentState):
 
         Audit-Feedback Rules:
         - grounding_violations is internal validation data, never customer-facing text.
-        - Report only unsupported visible content and the specific evidence that
-          is missing. Do not draft a rewrite or recommend an alternative action,
-          support channel, product, service, escalation path, or remedy.
+        - For every material failure, identify the exact visible phrase in
+          unsupported_content and set audit_layer to evidence or bridge.
+        - For evidence failures, explain which direct factual support is
+          missing. For bridge failures, explain the unsupported logical leap
+          or added premise. If both layers fail, report separate entries.
+        - If all of the answer is unsupported, say so explicitly in reason and
+          include the material unsupported phrases. Do not use vague feedback
+          such as "not grounded" without identifying why.
+        - Do not draft a rewrite or recommend an alternative action, support
+          channel, product, service, escalation path, or remedy.
         - The evidence_gap describes an absence in the permitted source. It is
           not evidence and must not be used to support a new customer claim.
         - If the approved evidence does not answer a task, record a
@@ -2828,15 +2934,19 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         - Every visible field in the payload is in scope.
 
         Output JSON only:
-        {{"passed": true/false, "answer_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false, "reason": "...", "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "violation_type": "unsupported_claim" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]}}
+        {{"passed": true/false, "answer_grounded": true/false, "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false, "reason": "...", "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]}}
         """
         audit_scope = "normal_response"
 
     try:
         result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
         answer_grounded = bool(result.get("answer_grounded", False))
+        answer_evidence_grounded = bool(result.get("answer_evidence_grounded", answer_grounded))
+        answer_bridge_grounded = bool(result.get("answer_bridge_grounded", answer_grounded))
         clarification_grounded = bool(result.get("clarification_grounded", False))
         clarification_connected = bool(result.get("clarification_connected", False))
+        if audit_scope == "normal_response":
+            answer_grounded = answer_grounded and answer_evidence_grounded and answer_bridge_grounded
         passed = bool(result.get("passed", False)) and answer_grounded and clarification_grounded and clarification_connected
     except Exception as error:
         print(f"🚨 [GROUNDEDNESS AUDIT ERROR]: {error}")
@@ -2850,13 +2960,15 @@ def node_06_outbound_groundedness_gate(state: AgentState):
                 "evidence_gap": "The groundedness audit was unavailable; no additional customer-facing facts or actions may be added.",
             }],
         }
-        passed = answer_grounded = clarification_grounded = clarification_connected = False
+        passed = answer_grounded = answer_evidence_grounded = answer_bridge_grounded = clarification_grounded = clarification_connected = False
 
     grounding_violations = _normalize_grounding_violations(result.get("grounding_violations", []))
 
     audit = {
         "passed": passed,
         "answer_grounded": answer_grounded,
+        "answer_evidence_grounded": answer_evidence_grounded,
+        "answer_bridge_grounded": answer_bridge_grounded,
         "clarification_grounded": clarification_grounded,
         "clarification_connected": clarification_connected,
         "reason": result.get("reason", "Groundedness audit failed."),
@@ -2867,6 +2979,8 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         scope=audit_scope,
         passed=passed,
         reason=audit["reason"],
+        answer_evidence_grounded=answer_evidence_grounded,
+        answer_bridge_grounded=answer_bridge_grounded,
         grounding_violation_count=len(grounding_violations),
     )
     return {"outbound_groundedness_result": audit}
@@ -2903,7 +3017,6 @@ def node_06_outbound_audit_join(state: AgentState):
                 "final_clarification": "",
                 "ui_action_payload": {"uiType": "text", "options": []},
                 "pending_advance": False,
-                "pending_evidence_cache_updates": {},
             }
         count = state.get("safety_retry_count", 0) + 1
         failed_feedback = []
@@ -2961,24 +3074,27 @@ def node_06_outbound_audit_join(state: AgentState):
             plan["current_step_index"] = idx + 1
             print(f"   ⏩ [ATOMIC LEDGER UPDATE]: Safely advanced to step index {plan['current_step_index']}")
 
-    evidence_cache = dict(state.get("approved_evidence_cache", {}))
-    for cache_key, entry in state.get("pending_evidence_cache_updates", {}).items():
-        parent_ids = entry.get("approved_parent_ids", [])
-        if cache_key and parent_ids:
-            evidence_cache.pop(cache_key, None)
-            evidence_cache[cache_key] = {"approved_parent_ids": parent_ids}
-    while len(evidence_cache) > MAX_APPROVED_EVIDENCE_CACHE_ENTRIES:
-        evidence_cache.pop(next(iter(evidence_cache)))
-    if state.get("pending_evidence_cache_updates"):
-        log_event("evidence_cache.promoted", entry_count=len(evidence_cache), keys=list(state.get("pending_evidence_cache_updates", {}).keys()))
+    verified_task_history = _append_verified_task_history(state)
+    if verified_task_history:
+        latest_record = verified_task_history[-1]
+        log_event(
+            "verified_session_evidence.recorded",
+            turn_number=latest_record.get("turn_number"),
+            task_ids=[item.get("search_task", {}).get("task_id") for item in latest_record.get("tasks", [])],
+            parent_ids=[
+                parent_id
+                for item in latest_record.get("tasks", [])
+                for parent_id in item.get("approved_parent_ids", [])
+            ],
+            retained_turns=len(verified_task_history),
+        )
 
     return {
         "preflight_status": "pass",
         "active_plan": plan,
         "completed_steps": completed_steps,
         "pending_advance": False,
-        "approved_evidence_cache": evidence_cache,
-        "pending_evidence_cache_updates": {},
+        "verified_task_history": verified_task_history,
         "safe_answer_for_fallback": "",
         "clarification_fallback_required": False,
     }

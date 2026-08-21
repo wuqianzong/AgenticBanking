@@ -70,8 +70,6 @@ def build_agent_graph():
             return "n5"
         if status == "retrieve":
             return "n14"
-        if status == "validate_cached":
-            return "n18"
         if status == "continue_plan":
             return "n19"
         if status == "intent_clarification":
@@ -106,7 +104,7 @@ def build_agent_graph():
     workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n23": "n23", "n5": "n5"})
     workflow.add_conditional_edges("n16", route_n16, {"n2d": "n2d", "n5": "n5"})
     workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n8": "n8", "n2e": "n2e", "n5": "n5"})
-    workflow.add_conditional_edges("n2e", route_n2e, {"n14": "n14", "n18": "n18", "n19": "n19", "n8": "n8", "n5": "n5"})
+    workflow.add_conditional_edges("n2e", route_n2e, {"n14": "n14", "n19": "n19", "n8": "n8", "n5": "n5"})
     workflow.add_conditional_edges("n14", route_tools, {"n17_rag": "n17_rag"})
     workflow.add_edge("n17_rag", "n18")
     workflow.add_conditional_edges("n18", route_n18, {"n2e": "n2e", "n19": "n19"})

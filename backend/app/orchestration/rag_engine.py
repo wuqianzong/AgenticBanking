@@ -102,7 +102,114 @@ class RAGEngine:
                 })
         return formatted_hits
 
-    async def execute_direct_search(self, query_text: str, scope_pairs: list[dict]) -> List[Dict[str, str]]:
+    @staticmethod
+    def _rank_unique_parents(hits: list[dict]) -> list[tuple[str, float]]:
+        """Keep each parent's strongest returned child score in ranked order."""
+        parent_scores: Dict[str, float] = {}
+        for hit in hits:
+            parent_id = hit.get("parent_id")
+            if parent_id and parent_id not in parent_scores:
+                parent_scores[parent_id] = float(hit.get("score", 0.0))
+        return sorted(parent_scores.items(), key=lambda item: item[1], reverse=True)
+
+    @staticmethod
+    def _select_ranked_parents(ranked_parents: list[tuple[str, float]], label: str) -> list[str]:
+        """Apply the shared top-four / score-drop boundary to ranked parents."""
+        selected_parent_ids = []
+        previous_score = None
+        print(f"    [{label}] --- Parent Selection ---")
+        for rank, (parent_id, score) in enumerate(ranked_parents, start=1):
+            if not selected_parent_ids:
+                selected_parent_ids.append(parent_id)
+                previous_score = score
+                print(f"      [Rank 1] Parent: '{parent_id}' | Score: {score:.4f} -> ✅ AUTO-SELECTED")
+                continue
+            if len(selected_parent_ids) >= MAX_PARENTS:
+                print(f"      [Rank {rank}] Parent: '{parent_id}' | Score: {score:.4f} -> ❌ DROPPED (Max Limit {MAX_PARENTS} Reached)")
+                continue
+            ratio = score / previous_score if previous_score else 0.0
+            if ratio < 0.50:
+                print(f"      [Rank {rank}] Parent: '{parent_id}' | Score: {score:.4f} | Ratio: {ratio * 100:.1f}% -> ❌ DROPPED (Ratio < 50%)")
+                break
+            selected_parent_ids.append(parent_id)
+            previous_score = score
+            print(f"      [Rank {rank}] Parent: '{parent_id}' | Score: {score:.4f} | Ratio: {ratio * 100:.1f}% -> ✅ SELECTED")
+        return selected_parent_ids
+
+    async def _execute_direct_search_with_verified_session_evidence(
+        self,
+        query_text: str,
+        metadata_filter: dict,
+        verified_parent_ids: list[str],
+    ) -> List[Dict[str, str]]:
+        """Fuse current direct ranking with re-ranked verified session parents.
+
+        Historical evidence is not given a score merely because it was used in
+        a prior answer. Node 03b has already admitted each candidate through
+        product-and-intent overlap of its original verified search task. Each
+        admitted parent is then queried against the current direct subquery;
+        its resulting rank becomes one additional RRF list. We intentionally
+        do not reapply the current vector metadata filter here: a previously
+        verified parent's stored child metadata may be narrower or stale even
+        though the verified task scope was valid.
+        """
+        deduped_ids = list(dict.fromkeys(
+            parent_id for parent_id in verified_parent_ids
+            if isinstance(parent_id, str) and parent_id
+        ))
+        if not deduped_ids:
+            return []
+
+        print("\n    [SESSION EVIDENCE RRF] Re-ranking verified prior parents against the current subquery.")
+        print(f"      Candidate parent IDs: {deduped_ids}")
+        session_filter = {"parent_id": {"$in": deduped_ids}}
+        # The session branch must be able to inspect at least one child per
+        # candidate parent. The production child schema can contain more than
+        # one child for a long FAQ, hence the small multiplier.
+        session_top_k = max(RRF_CANDIDATES_PER_ANGLE, len(deduped_ids) * 4)
+        live_hits, session_hits = await asyncio.gather(
+            self._query_single_angle(query_text, metadata_filter),
+            self._query_single_angle(query_text, session_filter, top_k=session_top_k),
+        )
+        live_ranked = self._rank_unique_parents(live_hits)
+        session_ranked = self._rank_unique_parents(session_hits)
+
+        print("    [SESSION EVIDENCE RRF] Current direct ranking:")
+        for rank, (parent_id, score) in enumerate(live_ranked, start=1):
+            print(f"      Live Rank {rank}: '{parent_id}' | Cosine Sim: {score:.4f}")
+        print("    [SESSION EVIDENCE RRF] Verified-session ranking:")
+        for rank, (parent_id, score) in enumerate(session_ranked, start=1):
+            print(f"      Session Rank {rank}: '{parent_id}' | Cosine Sim: {score:.4f}")
+
+        # A stale/deleted verified parent, or one with no current child vector,
+        # must not change ordinary direct-search selection mathematics.
+        if not session_ranked:
+            print("    ⚠️ No verified-session parent ranked for this task; preserving ordinary direct-search selection.")
+            selected_parent_ids = self._select_ranked_parents(live_ranked, "DIRECT RAG")
+            return self._hydrate_parents_from_sqlite(selected_parent_ids)
+
+        rrf_scores: Dict[str, float] = {}
+        for source, ranked in (("live_direct", live_ranked), ("verified_session", session_ranked)):
+            seen = set()
+            for rank, (parent_id, _) in enumerate(ranked, start=1):
+                if parent_id in seen:
+                    continue
+                seen.add(parent_id)
+                points = 1.0 / (RRF_K_CONSTANT + rank)
+                rrf_scores[parent_id] = rrf_scores.get(parent_id, 0.0) + points
+                print(f"      + {points:.4f} RRF pts to '{parent_id}' ({source} rank {rank})")
+
+        ranked_rrf = sorted(rrf_scores.items(), key=lambda item: item[1], reverse=True)
+        selected_parent_ids = self._select_ranked_parents(ranked_rrf, "DIRECT + VERIFIED SESSION RRF")
+        print(f"    📊 Direct + session RRF finalized {len(selected_parent_ids)} Parent(s): {selected_parent_ids}")
+        return self._hydrate_parents_from_sqlite(selected_parent_ids)
+
+    async def execute_direct_search(
+        self,
+        query_text: str,
+        scope_pairs: list[dict],
+        verified_session_parent_ids: list[str] | None = None,
+    ) -> List[Dict[str, str]]:
         """Retrieve a task through its resolved customer subquery only.
 
         Direct retrieval is the default path: it retains the customer's most
@@ -121,6 +228,16 @@ class RAGEngine:
         print(" 🔍 [RAG ENGINE] INITIALIZING DIRECT TASK SEARCH")
         print(f" 📦 Valid Product/Intent Scope: {scope_pairs}")
         print(f" 🗣️  Resolved task subquery: '{clean_query}'")
+
+        if verified_session_parent_ids:
+            payload = await self._execute_direct_search_with_verified_session_evidence(
+                clean_query,
+                metadata_filter,
+                verified_session_parent_ids,
+            )
+            print(f" ⏱️  [DIRECT + SESSION RRF] Total Execution Time: {(time.time() - start_time) * 1000:.2f} ms")
+            print("═" * 60 + "\n")
+            return payload
 
         hits = await self._query_single_angle(clean_query, metadata_filter)
         if not hits:

@@ -107,8 +107,10 @@ refreshes and normal turns retain the active session state.
 The resolved task subquery is the default vector query. Attempts one through
 three use that direct query while the metadata filter expands in a fixed order:
 initial scope, then additive intent expansion, then additive product expansion.
-Only the fourth attempt uses complete procedural, policy, and conceptual angle
-groups. Product and intent remain one shared matrix-valid metadata filter.
+Only the fourth attempt shifts vector focus from the question-side to the
+answer-side by using complete procedural, policy, and conceptual angle groups
+formulated as natural sentence fragments. Product and intent remain one shared
+matrix-valid metadata filter.
 
 On the final angle attempt, RRF fuses the ranked lists within each angle group
 and combines group scores with equal normalisation at task level. The engine

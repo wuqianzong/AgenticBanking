@@ -931,11 +931,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     Latest User Input (context only; the components above are authoritative): "{user_msg}"
     TASK: Act as a Decoupled Database Search Architect.
 
-    CRITICAL RULES FOR VECTOR DENSITY:
+    CRITICAL RULES FOR ANGLE QUERIES:
     - NEVER use conversational filler (e.g., "Provide a guide", "Explain how to", "What is").
-    - NEVER use complete sentences.
-    - Extract ONLY the core nouns, target verbs, and specific constraints.
-    - Format each angle as a concise, comma-separated string of keywords.
+    - NEVER paraphrase the customer's original question in an angle.
+    - Each angle must be a short natural-language PHRASE (10-20 words) that reads like a sentence fragment from an FAQ answer.
+    - Use common banking vocabulary only. Do not invent specific product names, amounts, dates, or branch details.
 
     1. CONTEXTUAL INHERITANCE: Read each component's customer_component text first. A Product or Intent may be inherited only when it is unambiguously established by the current-session trusted history, Active Context Matrix, or an active graph plan. Do not use the user baseline or prior-session recall to fill a missing Product or Intent, unless the component explicitly continues that recalled topic (for example, "yes, continue").
     2. FOR EACH supplied component, evaluate the two mandatory retrieval foundations:
@@ -947,10 +947,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        - CLARIFY: use when either mandatory foundation is missing or ambiguous, but the component could plausibly become searchable with more detail from the user. A generic process or policy word alone—such as "application", "fee", "eligibility", "limit", "rate", "requirements", or "processing time"—is an INTENT only. It does not identify a PRODUCT and MUST be CLARIFY unless a product is explicit or unambiguously inherited from permitted context. Likewise, a product name alone without a discernible request type MUST be CLARIFY.
        - DECLINE: use only when the component clearly and confidently names a specific product, account type, or service that does NOT exist anywhere in the PRODUCT/INTENT MATRIX (e.g., margin trading, cryptocurrency trading, or any product with no matrix entry at all). Never use DECLINE merely because wording is vague or underspecified — that is CLARIFY. DECLINE means no amount of user clarification would ever produce a valid matrix pair.
        A component, its wording, a substring of its wording, or a paraphrase of it MUST NOT appear under more than one resolution.
-    4. For EACH SEARCH component, formulate exactly one base Angle Group with three distinct semantic angles based strictly on the density rules below. An angle group is a complete alternative semantic description; never concatenate unrelated wording into one angle:
-       - "procedural": Only the action verbs and tool nouns (e.g., "Horizon App, navigation, setup MyInfo, verification process").
-       - "policy": Only the rule nouns and constraints (e.g., "eligibility rules, required documents, security policy, restrictions").
-       - "conceptual": Only the definition nouns (e.g., "MyInfo service, personal data sharing, Horizon Bank").
+    4. For EACH SEARCH component, formulate exactly one base Angle Group with three distinct semantic angles. Each angle must be a SHORT NATURAL-LANGUAGE PHRASE (10-20 words) that resembles a sentence fragment likely found in an FAQ answer TO THAT COMPONENT'S TOPIC — NOT an FAQ question. The direct customer query is searched separately; your angles must approach from the ANSWER side of the knowledge base.
+       - "procedural": A phrase describing the actions, steps, or navigation a customer or bank performs to address this specific component. Should sound like it comes from an FAQ answer's step-by-step instructions for this topic.
+       - "policy": A phrase describing the rules, conditions, eligibility criteria, limits, fees, or restrictions that apply to this specific component. Should sound like it comes from an FAQ answer's requirements or conditions section for this topic.
+       - "conceptual": A phrase describing what the product, feature, or service in this specific component is and how it works. Should sound like it comes from an FAQ answer's explanatory introduction for this topic.
+       DO NOT use comma-separated keywords. DO NOT paraphrase the customer's original question. Use common banking vocabulary only — do not invent specific product names, amounts, dates, or branch details. Each angle MUST target a structurally different part of a hypothetical FAQ answer about the component's topic.
     5. For EACH SEARCH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed. In RETRY MODE preserve the supplied task_id and use its task-specific sufficiency feedback to change the search terms, product, or intent.
     6. INTENT CLARIFICATION: For a CLARIFY component, copy only the ambiguous customer term into clarification.unresolved_request and explain internally whether Product, Intent, or both are missing or ambiguous. Do not guess a product or create a generic task merely to fill the array.
     7. SCOPE DECLINE: For a DECLINE component, set decline.reason to a short, factual statement naming the product/service Horizon does not offer. Only decline when the matrix confirms no such product exists — never guess.
@@ -999,9 +1000,18 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           plan's stage controls which filters may expand on this attempt.
         - ANGLE_EXPANSION: keep the exact prior product and intent filters.
           Return every prior angle group unchanged and append exactly one new,
-          complete angle group with group_id "retry_<next_attempt>". The new
-          group's three concise angles must target the missing detail described
-          in the feedback. Do not append terms into an existing angle.
+          complete angle group with group_id "retry_<next_attempt>". Each of
+          the new group's three angles must be a SHORT NATURAL-LANGUAGE PHRASE
+          (10-20 words) that resembles a sentence fragment likely found in an
+          FAQ answer ABOUT THE FAILED TASK'S TOPIC, guided by the missing
+          detail described in the feedback.
+          Use common banking vocabulary only — do not invent specific product
+          names, amounts, dates, or branch details. Do not paraphrase the
+          customer's original question or repeat wording from the prior base
+          group. Each angle must target a structurally different part of a
+          hypothetical FAQ answer about this task's topic (steps,
+          rules/conditions, or explanation).
+          Do not append terms into an existing angle.
         - INTENT_EXPANSION: keep the exact prior product filter; retain all
           prior angle groups and intents, then add valid intent filters that
           can improve recall of the missing detail. Do not remove prior
@@ -1014,9 +1024,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         - The revised task must remain about the same customer component as its
           supplied failed task.
         - Every revised Product/Intent pair must be valid in the matrix.
-        - NEVER use conversational filler or complete sentences in semantic
-          angles. Extract only core nouns, verbs, and constraints as concise,
-          comma-separated keywords.
+        - NEVER use conversational filler in semantic angles. Each angle must
+          be a short natural-language PHRASE (10-20 words) that reads like a
+          sentence fragment from an FAQ answer. Use common banking vocabulary
+          only — do not invent specific product names, amounts, dates, or
+          branch details. Do not paraphrase the customer's original question.
 
         Output JSON ONLY:
         {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","angle_groups":[{{"group_id":"base","procedural":"unchanged","policy":"unchanged","conceptual":"unchanged"}},{{"group_id":"retry_2","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"valid matrix product or ordered product array during PRODUCT_EXPANSION","target_intent":["valid matrix intent"]}},"clarification":null}}]}}

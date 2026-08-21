@@ -56,7 +56,7 @@ The assistant is a read-only FAQ/navigation service. Memory is advisory context 
 
 | Layer | Storage | Lifetime / size | Primary use |
 |---|---|---|---|
-| Graph working memory | LangGraph `MemorySaver` | Process-local; current thread | Active plan, task-level evidence, recent message objects, and turn state. |
+| Graph working memory | LangGraph `MemorySaver` | Process-local; current thread | Active plan, task-level evidence, verified session evidence history, recent message objects, and turn state. |
 | Recent conversation window | `chat_history` in graph state | Latest 20 messages / 10 turns | Short-term prompt context. |
 | Rolling compact memory | `compacted_history_summary` in graph state | Current graph session; target 100 tokens | Compounded summary of messages removed from the recent window. |
 | Durable chat history | `Persistent_Chat_Message` | SQLite; paginated | UI “Load earlier messages”, refresh recovery, audit transcript. |
@@ -73,7 +73,8 @@ The assistant is a read-only FAQ/navigation service. Memory is advisory context 
 - `history_sequence_offset`: number of messages previously removed from graph history.
 - `compacted_history_summary`: compounded compact context for removed messages.
 - `user_baseline_summary`: read-only baseline loaded at Turn 0.
-- Workflow state such as `active_product_intents`, `active_plan`, `completed_steps`, task-level evidence, and the selected response experience.
+- `verified_task_history`: the latest ten outbound-verified task snapshots, each retaining only its search-task metadata and approved parent IDs. Search Strategy v2.7 may re-rank overlapping records with current first-pass direct retrieval; this history is not a cached answer.
+- Workflow state such as `active_product_intents`, `active_plan`, `completed_steps`, task-level evidence, flexible UX guidance, and turn state.
 
 ### 5.2 New login behavior
 

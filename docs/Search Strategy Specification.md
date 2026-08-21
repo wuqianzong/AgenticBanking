@@ -1,10 +1,17 @@
-# Search Strategy Specification v2.6
+# Search Strategy Specification v2.6 — Historical Research Proposal
 
 **Project:** Horizon Bank Agentic Banking Chatbot  
 **Module:** RAG Search Strategy and Retrieval Scope Expansion  
-**Status:** Proposed architecture for implementation  
+**Status:** Historical research proposal; **not the active runtime implementation**.
 **Branch baseline:** `development`  
-**Supersedes:** Search Strategy v2.5 retry-expansion logic only; parent-child evidence architecture, RRF selection, sufficiency auditing, evidence approval, cache safety, and outbound groundedness remain authoritative unless explicitly changed below.
+**Supersedes:** This document records a graph-guided v2.6 proposal explored before the direct-first runtime revision. It does not supersede the implemented Search Strategy v2.7 described in `RAG Specification.md` and `USER_JOURNEY_v2.0.md`.
+
+> **Runtime note (2026-08-21):** Production uses Search Strategy v2.7: live
+> direct retrieval first; additive intent expansion on retry 1; additive product
+> expansion on retry 2; final complete angle-group RRF on retry 3; and bounded
+> re-ranking of overlapping approved parent IDs from the latest ten verified
+> session turns. The graph/BFS and weighted-navigation mechanisms below are
+> research material only and must not be assumed to exist in code.
 
 ---
 

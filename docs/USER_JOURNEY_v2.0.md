@@ -10,15 +10,15 @@ Product, intent, and free-form task queries determine what FAQ knowledge is retr
 - `TEXT` — factual answer, explanation, or concise topic sections.
 - `PROGRESS` — one supported, multi-step FAQ procedure displayed as an expandable progress payload. All grounded step details are delivered together; the first step is expanded initially and customers may open any other step.
 - `LIST` — a titled checklist of three or more independent, grounded items, such as eligibility criteria, required documents, prerequisites, fees, limits, or security checks. Each item has a green check marker.
-- `ESCALATION` — human assistance is required or explicitly requested.
+- `ESCALATION_CONFIRMATION` — a separate handoff-confirmation block when human assistance is required or explicitly requested.
 
-Clarification is response content, not a presentation type. It can be appended to `TEXT`, `PROGRESS`, or `LIST` while retaining its separate groundedness and compliance checks. Only one interactive presentation may be active in a response. Multiple business tasks are allowed.
+Clarification is response content, not a presentation type. It can appear after any answer block while retaining its separate groundedness and compliance checks. A response may contain several independently useful blocks; the UI structure is not constrained to the number or order of retrieval tasks.
 
 ## Presentation decision principle
 
 The planner visualizes the mental model the customer needs at that moment. A need to understand uses `TEXT`; a need to scan or remember independent items uses `LIST`; and a need to know where they are in, or complete, a process uses `PROGRESS`. Supported choices may be appended as up to two chips when the customer needs to choose a next action or topic. A comparison remains organised `TEXT` until a dedicated comparison component is introduced.
 
-When multiple tasks are supported, `LIST` and `PROGRESS` have one primary task only. Their title and items or stages must be derived only from that primary task's approved evidence. Other supported tasks are displayed as separate supporting text rather than mixed into the primary payload.
+When multiple tasks are supported, the planner and generator organise aggregate approved evidence around the customer’s cognitive need, not a one-task/one-block rule. A block may draw on the union of its internally recorded source tasks; an unmapped block may use aggregate approved evidence. The response must remain coherent, avoid mixing unrelated facts into a misleading title or list, and preserve task provenance internally for auditing.
 
 The customer’s higher-level intent selects the presentation, while approved FAQ evidence constrains every displayed fact. Account-opening and application/onboarding requests therefore prefer `PROGRESS` when the evidence supports at least two honest actions, prerequisites, or constraints that can be expressed as preparation stages. The planner must not invent app navigation or represent preparation as a complete bank workflow.
 
@@ -27,24 +27,25 @@ The customer’s higher-level intent selects the presentation, while approved FA
 ```text
 Inbound safety
   → request triage
-  → formulate task-id-labelled retrieval tasks
-  → deterministic product-and-intent evidence-cache comparison, per task
-  → database parent-ID fetch for cache hits; angle-group RRF only for misses
-  → batched task sufficiency and parent-ID evidence selection
-  → retry only retryable tasks, up to four genuine RAG attempts per task
-  → turn terminally unresolved tasks into safe clarification instructions
-  → User Journey Planner
-  → response generator and deterministic UI payload
+  → formulate task-id-labelled direct retrieval tasks
+  → live direct retrieval, with qualifying verified session evidence joining first-pass RRF
+  → batched three-way sufficiency and parent-ID evidence selection
+  → retry only unresolved tasks: intent scope, product scope, then angle group
+  → retain partial evidence; turn wholly terminal tasks into clarification context
+  → flexible UX guidance planner
+  → coherent multi-block response generator and deterministic UI payload
 ```
 
 ## Evidence contract
 
 Each RAG task retains the selected parent documents as `{parent_id, content}`. The task sufficiency evaluator returns only approved parent IDs that were supplied for that same task. The backend validates IDs deterministically before forwarding the matching content to the User Journey Planner or response generator.
 
-Successful task evidence is never overwritten by a retry for another task. A task
-that remains unsupported after four attempts is marked
-`CLARIFICATION_REQUIRED`. The exact SQLite parent records returned by that
-task's final failed retrieval attempt are passed downstream only as
+Successful task evidence is never overwritten by a retry for another task. A
+`PARTIALLY_SUFFICIENT` task retains its selected parent IDs while the unresolved
+portion retries; at the final attempt it remains answerable for that supported
+portion and carries clarification context. A wholly unsupported task after four
+attempts is marked `CLARIFICATION_REQUIRED`. The exact SQLite parent records
+returned by that task's final failed retrieval attempt are passed downstream only as
 suggestion-only clarification evidence. The generator may use them to offer up
 to two related topics, but may not use them as an answer, instruction, product
 claim, or UI action. It produces a natural clarification without quoting the
@@ -84,48 +85,47 @@ independently safe answer. When no retrieval task could be formed at all, it
 uses a distinct full-intent fallback that asks for the product or service and
 the information the customer wants.
 
-### Session evidence cache
+### Verified session evidence re-ranking (Search Strategy v2.7)
 
-The graph keeps a session-scoped, bounded cache of approved parent IDs only. Its
-key is the lower-cased commercial product plus the unordered lower-cased intent
-set; task order and the three retrieval-angle strings do not affect matching.
-For every cache hit, the backend re-reads the parent IDs from the authoritative
-SQLite knowledge database and still submits the current task and evidence to
-the sufficiency checker. An insufficient cache hit falls back to RAG without
-consuming a RAG retry. Cache entries are promoted only after the outbound
-semantic gate has approved both the evidence and the response. Cache content is
-not restored across login sessions.
+The graph retains a bounded record of approved parent IDs and their search-task
+metadata for the latest ten verified session turns. It is not a response cache.
+For a new task’s first direct live retrieval only, deterministic code finds
+prior records with overlapping normalized product and intent scope, rehydrates
+their authoritative SQLite parents, and lets them participate in the same RRF
+candidate ranking as live results. They remain candidates only: current-turn
+sufficiency must approve them before they can support a response. The record
+stores no hydrated parent text, unapproved candidates, drafts, or cross-session
+state, and is cleared with the graph session.
 
 At logout or timeout, the gateway archives the durable transcript and memory
 summaries first, then deletes the LangGraph checkpoint thread. This releases
-ephemeral graph state, including the evidence cache, while refreshes and normal
-turns retain the active session state.
+ephemeral graph state, including verified session evidence history, while
+refreshes and normal turns retain the active session state.
 
-### Search Expansion v2.5
+### Search Strategy v2.7
 
-A task has one or more complete `angle_groups`. Each group contains procedural,
-policy, and conceptual query text; a retry adds a new group rather than
-concatenating terms into an existing vector query. Product and intent remain one
-shared, matrix-valid metadata filter across every angle group. Thus a task with
-one group runs three searches, two groups run six, and three groups run nine.
+The resolved task subquery is the default vector query. Attempts one through
+three use that direct query while the metadata filter expands in a fixed order:
+initial scope, then additive intent expansion, then additive product expansion.
+Only the fourth attempt uses complete procedural, policy, and conceptual angle
+groups. Product and intent remain one shared matrix-valid metadata filter.
 
-RRF first fuses the three ranked lists inside each angle group. Its task score
-is the equal-normalised average of the group RRF scores, so adding a group
-improves coverage without mechanically inflating ranking scores. The engine
-then keeps the existing parent-ID selection contract: rank one is selected,
-later candidates stop at a greater-than-50% score drop from the preceding
-selected candidate, and no more than four parents are hydrated. There is no
-cosine-score direct-hit bypass.
+On the final angle attempt, RRF fuses the ranked lists within each angle group
+and combines group scores with equal normalisation at task level. The engine
+then retains the parent-selection contract: rank one is selected, later
+candidates stop at a greater-than-50% score drop from the preceding selected
+candidate, and no more than four parents are hydrated. There is no cosine-score
+direct-hit bypass.
 
 ## Presentation policy
 
 | Evidence outcome | Presentation |
 |---|---|
-| All tasks factual and sufficient | `TEXT`, grouped by task topic when useful. |
-| One task has grounded sequential steps | `PROGRESS` for that task, with supporting factual topics in the response. |
+| All tasks factual and sufficient | Natural text and optional UI blocks organised for comprehension, not necessarily by task topic. |
+| Supported sequential process | `PROGRESS` when stages genuinely reduce cognitive load; supplementary grounded text may appear in the same or another block. |
 | Account opening or application asks how to proceed | Prefer `PROGRESS` when approved evidence supports at least two honest preparation stages. |
 | Three or more independent requirements or review items | `LIST` with a concise dynamic title and green check markers. |
-| Two or more tasks could support progress processes | Select the single most helpful `PROGRESS` process from the customer context; present other supported topics as concise supporting information rather than asking the customer to choose a workflow. |
+| Several supported topics | Use one or more response blocks only when each makes the answer easier to understand; never force retrieval-task-shaped blocks. |
 | A task is terminally unresolved after retries | Answer supported tasks, then provide a safe, connected clarification; do not include UI options. |
 
 ## Removed v1 behavior
@@ -134,8 +134,9 @@ V2.0 removes product/topic-labelled user journeys, `pending_journey_queue`, `pen
 
 ## Observability and safety
 
-The system log records task formulation, evidence-cache hits/misses/promotions,
-retrieval completion, sufficiency outcome, retry/unavailable decisions,
-approved parent IDs, and the final presentation decision. Existing trusted-input,
-Prompt Guard, outbound groundedness, precision substitution, and memory-safety
-controls remain in force.
+The system log records task formulation, verified-session evidence candidates,
+retrieval completion, three-way sufficiency outcomes, retry/refinement evidence,
+approved parent IDs, UX guidance, flexible response blocks, and final audit
+decisions. Existing trusted-input, Prompt Guard, outbound compliance,
+Groundedness v2.0, precision substitution, and memory-safety controls remain in
+force.

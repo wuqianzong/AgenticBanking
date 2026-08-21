@@ -624,15 +624,10 @@ export default function BankingBotUI() {
         <div className="space-y-3 px-4 py-3.5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{block.caseTitle || 'Current case summary'}</p>
+            <p className="mt-2 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+              {block.request || 'The current banking conversation.'}
+            </p>
             <dl className="mt-2 space-y-2 text-sm leading-relaxed text-slate-700">
-              <div>
-                <dt className="font-medium text-slate-600">Your request</dt>
-                <dd className="mt-0.5 whitespace-pre-wrap">{block.request || 'The current banking conversation.'}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-slate-600">What needs attention</dt>
-                <dd className="mt-0.5 whitespace-pre-wrap">{block.problem || 'A human review has been requested for this conversation.'}</dd>
-              </div>
               {block.unresolvedIssues?.length > 0 && (
                 <div>
                   <dt className="font-medium text-slate-600">Unresolved items</dt>

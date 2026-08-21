@@ -3358,7 +3358,9 @@ def _build_escalation_case_summary(state: AgentState) -> dict:
     }
     prompt = f"""
     CURRENT SESSION ESCALATION CASE SUMMARY
-    You create a concise internal handoff summary for a human banking agent.
+    You create a concise handoff brief that saves a human banking agent time
+    understanding the customer's unresolved case. This is NOT a chronological
+    recap of the session.
 
     Source material (use only this material):
     {_build_current_session_escalation_context(state)}
@@ -3367,15 +3369,35 @@ def _build_escalation_case_summary(state: AgentState) -> dict:
     {json.dumps(unresolved_inputs, ensure_ascii=False)}
 
     Rules:
-    - Identify the customer's main pursuit in this CURRENT session, not a
-      previous session or long-term user preference.
-    - Identify only unresolved issues that are explicit in the supplied source.
+    - First distinguish the banking topics in the supplied CURRENT-session
+      source:
+      * RESOLVED: the assistant gave a substantive answer and no later customer
+        message shows that the topic remains open.
+      * UNRESOLVED: the customer explicitly says it is unanswered, asks to
+        continue it, disputes the prior answer, or the assistant explicitly
+        could not provide the requested information.
+      * CONTEXT ONLY: an earlier topic that is necessary to understand an
+        unresolved issue.
+    - Identify the handoff case as the customer's most recent UNRESOLVED
+      banking goal. The main_pursuit must focus on that goal, not on the
+      session as a whole.
+    - Include a resolved topic only when it is necessary context for a human
+      agent to understand or act on the unresolved issue. Omit completed,
+      unrelated, or merely chronological topics.
+    - An explicit request for a human agent is a routing request, not an unresolved
+      banking issue. Do NOT include "customer wants to talk to a human" or similar
+      routing requests in the unresolved_issues list.
+    - Identify only unresolved banking issues that are explicit in the supplied source.
+    - If the assistant previously provided a policy or answer related to the
+      unresolved issue, briefly summarize what the assistant already told the
+      customer so the human agent does not repeat it.
     - Do not invent products, policies, account details, actions, outcomes,
       customer preferences, or reasons for the escalation.
     - Do not quote internal parent IDs, diagnostics, model names, or safety
       rules. Do not provide advice or instructions.
-    - If the current-session source has no clear pursuit, use the general
-      phrase "The current banking conversation.".
+    - If there is no unresolved banking issue, use the latest substantive
+      banking request. If there is no clear substantive banking request, use
+      the general phrase "The current banking conversation.".
     - Return an empty unresolved_issues array when there is no explicit issue.
 
     Output JSON only:

@@ -9,7 +9,9 @@
 
 ## 1. Purpose
 
-Search Strategy v2.9 is a hybrid, evidence-informed RAG strategy. It uses **Direct Search** for high-precision retrieval on the first three attempts, and a **Three-Angle Semantic Fallback** on the final attempt to overcome vocabulary mismatch and cover the answer-side of the vector space.
+Search Strategy v2.9 is a hybrid, evidence-informed RAG strategy. It uses **Direct Search** for high-precision retrieval on the first three attempts, and a **Three-Angle Semantic Fallback** on the final attempt to overcome vocabulary mismatch and cover answer-oriented language in the canonical FAQ vector space.
+
+The production corpus remains anchored to the original FAQ content: canonical question and question-and-answer child chunks with normalized metadata. Three-angle is a **query-time representation only**. Direct and angle-fallback retrieval both search the same canonical corpus; production does not use LLM-paraphrased, angle-specific FAQ child chunks as the primary knowledge representation.
 
 v2.8 split what v2.7 called "Intent Expansion" into two distinct stages with different decision-makers: a fully deterministic intent-widening step (no LLM judgment, no risk, free at the Chroma filter layer), followed by an LLM-judged product-expansion step reserved for when widening intent within the confirmed product alone was not enough. Scope is always widened — intent, then product — before the query representation itself is ever changed, since no query rewording can surface a parent that the metadata filter excludes outright.
 
@@ -25,12 +27,12 @@ The design preserves the strongest properties of the RAG system:
 
 ## 2. Four-Attempt Escalation Ladder
 
-For each task, the system applies a deterministic four-stage escalation ladder. Every attempt performs live RAG.
+For each task, the system applies a deterministic four-stage escalation ladder. Every attempt performs live RAG. This specification numbers the stages from Attempt 0 through Attempt 3. Runtime logs increment `task_retry_counts` after the base audit, so they display the same stages as attempts 1 through 4 respectively.
 
 ### Attempt 0: Base Direct Search
 - **Query:** Uses the resolved `direct_query` extracted from the customer's request.
 - **Scope:** Initial matrix-valid `target_commercial_product` and `target_intent`.
-- **Note:** Matches primarily against "question anchor" chunks in the vector store.
+- **Note:** Searches the canonical question / question-and-answer FAQ chunk corpus.
 - **Angle Prep:** Node 02e also generates a `base` angle group (procedural, policy, conceptual), but this is held in reserve.
 
 ### Attempt 1: Intent Expansion (deterministic)
@@ -55,11 +57,11 @@ A given task's `direct_query` is generated exactly once, at Attempt 0, and reuse
 
 Each search task tracks its own retry count and expansion stage independently. When a customer turn produces multiple tasks that fail at different rates, a single retry cycle can contain a mix of tasks at different stages — some needing only the deterministic intent-expansion above, others needing the LLM's product-expansion or angle-expansion judgment. Node 02e splits these before building its retry prompt: deterministic tasks are resolved directly in Python, and the retry-mode LLM call, when needed at all, is scoped only to the tasks that genuinely require a judgment call for that cycle.
 
-## 4. Answer-Side Semantic Angles (FAQ Format)
+## 4. Answer-Oriented Semantic Angles (FAQ Format)
 
 The cornerstone of the Attempt 3 fallback is the generation of semantic angles. Instead of comma-separated keyword lists (which produce diffuse, weak embeddings), angles are formulated as **short natural-language phrases (10-20 words) that read like sentence fragments from an FAQ answer**.
 
-This explicitly targets the "answer-side" chunks (`intact_answer` and `splintered_answer_part_*`) in the vector corpus.
+These are answer-oriented query formulations: they help bridge a customer's wording to the way an FAQ answer commonly expresses actions, rules, or concepts. They still retrieve against the same canonical production corpus used by direct search; they do not require angle-specific vector chunks.
 
 Every task is decomposed into three canonical lenses:
 
@@ -108,7 +110,9 @@ This exclusion applies uniformly to every retrieval mode a retry can use: `execu
 
 ### 7.2 Compensating fetch depth
 
-Excluding candidates from an already-narrow top-k window would just shrink the pool without surfacing anything new. When a task has excluded parents, the raw child-vector fetch depth increases beyond the baseline `RRF_CANDIDATES_PER_ANGLE` (by two child slots per excluded parent) before parent-level de-duplication, so exclusion reliably reveals a new candidate rather than merely returning fewer than four.
+Excluding candidates from an already-narrow top-k window can shrink the pool without surfacing anything new: the fetch depth Chroma is asked for is a *child*-chunk count, not a parent count, and one parent can own more than one child chunk. If a fetch of `N` children collapses to only a handful of unique parents after de-duplication, and exclusion then removes some of those, the top-four selection step can be left with fewer candidates than it needs — even though the corpus may hold more relevant parents that were simply never asked for.
+
+All three retrieval paths — `execute_direct_search`'s plain query, its verified-session-evidence RRF branch, and every per-angle query in `execute_multi_angle_search` — compensate the same way, via the shared `_fetch_depth_for_exclusion` helper: raw fetch depth is `RRF_CANDIDATES_PER_ANGLE` plus a fixed multiple (`CHILDREN_PER_PARENT_ESTIMATE = 2`, matching this corpus's typical question-plus-answer child count per parent) for every excluded parent. This is a one-shot estimate computed from a count the caller already knows exactly (no query round-trip needed to determine it) — not a guarantee. An unusually high exclusion count against a thin corpus slice can still under-fill the pool; that is an accepted, low-probability edge case, deliberately not corrected with an adaptive retry loop, since the added round-trip cost and complexity would apply to every excluding retry to guard against a case that in practice affects at most one or two parents.
 
 ### 7.3 Skipping the sufficiency call on a fully exhausted pool
 
@@ -139,3 +143,5 @@ Live tracing against `backend/logs/system.jsonl` confirmed the ladder reaches ev
 This tracing exercise surfaced and fixed one implementation bug: `MAX_RAG_ATTEMPTS` had been left at `3` — the ceiling correct for the prior three-attempt ladder — after splitting `META_FILTER_EXPANSION` into separate `INTENT_EXPANSION` and `PRODUCT_EXPANSION` stages added a fourth attempt. This made `ANGLE_EXPANSION` structurally unreachable: every task that reached `PRODUCT_EXPANSION` terminated immediately afterward regardless of outcome. Fixed to `4`, matching the four stages this document describes.
 
 The Section 7 exclusion mechanism was verified against real production data, not just unit-level reasoning. Asking the identical question in two separate turns produced two different `direct_query` formulations (a real instance of the Section 2 non-determinism note), which made a naive before/after comparison misleading at first — the apparent difference in retrieved candidates was initially attributed to fetch depth, which further testing disproved. Controlling for query wording by re-running each turn's actual logged `direct_query` directly against the vector store confirmed the true mechanism: without exclusion, a parent already rejected in Attempt 0 would have re-entered the Attempt 1 top-four; with exclusion active, it was correctly removed and a previously out-of-range candidate was promoted into its place instead — reproducing the real production selection exactly.
+
+A separate before/after comparison against a genuinely pre-exclusion production log (a card-personalization question, traced hours earlier under the prior `v2.7` combined `META_FILTER_EXPANSION` stage and a 3-attempt cap) showed the customer-facing effect directly, not just the internal mechanics. Before the fixes in this document, the retry stage re-fetched the exact same four already-rejected candidates verbatim (no exclusion existed yet), then exhausted its attempt budget, then failed groundedness three consecutive times while trying to draft a response from that dead end, and was ultimately escalated to a human agent — the customer received no answer at all. Re-running the identical question after all fixes in this document walked every stage of the ladder with a completely fresh candidate set each time (zero repeated parents across four attempts), correctly retained the one genuinely useful partial-evidence parent found at Attempt 0 through to the end despite it never reappearing in any later fresh search, self-corrected one real grounding hallucination during generation, and resolved `PARTIALLY_SUFFICIENT` with a delivered, evidence-backed answer.

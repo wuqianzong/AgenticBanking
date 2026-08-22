@@ -30,6 +30,20 @@ MAX_PARENTS = 4
 # A deeper pool gives expanded metadata scopes enough candidates to compete
 # without increasing the number of vector queries.
 RRF_CANDIDATES_PER_ANGLE = int(os.getenv("RRF_CANDIDATES_PER_ANGLE", "8"))
+# A parent typically owns about two child chunks in this corpus (a question
+# anchor plus an answer chunk). Excluding N already-judged parents from a
+# ranked child-level fetch effectively removes about 2N children worth of
+# room, so widening the raw fetch by that much recovers roughly N genuinely
+# new parents. This is a one-shot estimate, not a guarantee: an unusually
+# high exclusion count against a thin corpus slice can still under-fill: an
+# accepted, low-probability edge case rather than something worth an
+# additional round-trip to Chroma to correct.
+CHILDREN_PER_PARENT_ESTIMATE = 2
+
+
+def _fetch_depth_for_exclusion(excluded_count: int) -> int:
+    """One-shot child-level fetch depth that compensates for known exclusions."""
+    return RRF_CANDIDATES_PER_ANGLE + (excluded_count * CHILDREN_PER_PARENT_ESTIMATE)
 
 
 # ==========================================
@@ -189,11 +203,11 @@ class RAGEngine:
         # candidate parent. The production child schema can contain more than
         # one child for a long FAQ, hence the small multiplier.
         session_top_k = max(RRF_CANDIDATES_PER_ANGLE, len(deduped_ids) * 4)
+        exclude_set = excluded_parent_ids or set()
         live_hits, session_hits = await asyncio.gather(
-            self._query_single_angle(query_text, metadata_filter),
+            self._query_single_angle(query_text, metadata_filter, top_k=_fetch_depth_for_exclusion(len(exclude_set))),
             self._query_single_angle(query_text, session_filter, top_k=session_top_k),
         )
-        exclude_set = excluded_parent_ids or set()
         live_ranked = self._exclude_rejected(self._rank_unique_parents(live_hits), exclude_set, "SESSION EVIDENCE RRF (live)")
         session_ranked = self._exclude_rejected(self._rank_unique_parents(session_hits), exclude_set, "SESSION EVIDENCE RRF (session)")
 
@@ -254,10 +268,7 @@ class RAGEngine:
             return []
 
         exclude_set = {pid for pid in (excluded_parent_ids or []) if pid}
-        # Each excluded parent may cost up to a couple of child slots in the
-        # raw hit list before parent-level de-duplication; fetch deeper so
-        # excluding them still leaves genuinely new candidates to select from.
-        fetch_top_k = RRF_CANDIDATES_PER_ANGLE + (len(exclude_set) * 2 if exclude_set else 0)
+        fetch_top_k = _fetch_depth_for_exclusion(len(exclude_set))
 
         start_time = time.time()
         metadata_filter = self._build_metadata_filter(scope_pairs)
@@ -411,8 +422,9 @@ class RAGEngine:
         if not query_specs:
             print("    ⚠️ No valid semantic angles supplied for this task.")
             return []
+        angle_fetch_top_k = _fetch_depth_for_exclusion(len({pid for pid in (excluded_parent_ids or []) if pid}))
         query_results = await asyncio.gather(*[
-            self._query_single_angle(angle_text, metadata_filter)
+            self._query_single_angle(angle_text, metadata_filter, top_k=angle_fetch_top_k)
             for _, _, angle_text, metadata_filter in query_specs
         ])
         ranked_query_results = [

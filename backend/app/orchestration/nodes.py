@@ -474,21 +474,21 @@ def _normalize_ui_options(options: list) -> list:
 
 def _terminal_retrieval_feedback(
     task_id: str,
-    feedback: str,
-    reason: str,
-    unapproved_parent_ids: list[str],
+    resolved_subquery: str,
     resolution_status: str = "CLARIFICATION_REQUIRED",
 ) -> dict:
-    """Keep terminal retrieval context internal until clarification generation."""
+    """Create a non-evidential marker for a terminally unresolved task.
+
+    Rejected retrieval candidates and evidence-delta facts may inform a retry,
+    but they never cross this boundary into planning, generation, or outbound
+    groundedness.  The resolved customer request is sufficient to produce a
+    safe, non-factual availability notice when the retry budget is exhausted.
+    """
     return {
         "task_id": task_id,
         "type": "TERMINAL_RETRIEVAL_FEEDBACK",
-        "feedback": feedback,
-        "reason": reason,
+        "resolved_subquery": resolved_subquery,
         "resolution_status": resolution_status,
-        # IDs are retained rather than model-visible parent text. They may be
-        # hydrated only for grounded terminal clarification suggestions.
-        "unapproved_parent_ids": unapproved_parent_ids,
     }
 
 
@@ -1485,26 +1485,24 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "evidence_delta": history_delta,
         })
         if requested_status == "SUFFICIENT" and approved_ids:
-            # The sufficiency model is permitted to select identifiers only.  Do
-            # not retain any model-visible parent text: re-read this exact
-            # allow-listed ID set from SQLite, the authoritative FAQ source.
-            approved_parents = RAGEngine().hydrate_parent_ids(approved_ids)
-            hydrated_ids = {parent.get("parent_id") for parent in approved_parents}
-            approved_ids = [parent_id for parent_id in approved_ids if parent_id in hydrated_ids]
-            if not approved_ids:
-                requested_status = "RETRY"
-                reason = "The approved FAQ parent could not be re-hydrated from the knowledge database."
-            else:
-                current_results[task_id] = {
-                    "task_id": task_id,
-                    "status": "SUFFICIENT",
-                    "origin": result.get("origin", "RAG"),
-                    "approved_parent_ids": approved_ids,
-                    "reason": reason,
-                }
-                feedback.pop(task_id, None)
-                partial_evidence.pop(str(task_id), None)
-                continue
+            # Parent IDs were already constrained to `available_ids`, the
+            # candidate set produced by this RAG attempt. Keep only that
+            # allow-list here; consumers hydrate lazily and task-by-task.
+            current_results[task_id] = {
+                "task_id": task_id,
+                "status": "SUFFICIENT",
+                "origin": result.get("origin", "RAG"),
+                "approved_parent_ids": approved_ids,
+                "reason": reason,
+            }
+            log_event(
+                "evidence.boundary.approved",
+                task_id=task_id,
+                approved_parent_ids=approved_ids,
+            )
+            feedback.pop(task_id, None)
+            partial_evidence.pop(str(task_id), None)
+            continue
 
         retained_ids = partial_evidence.get(str(task_id), [])
         partial_ids = list(dict.fromkeys([*retained_ids, *approved_ids]))
@@ -1541,29 +1539,32 @@ def node_03c_sufficiency_auditor(state: AgentState):
         # configured final attempt. At the boundary it is answerable for the supported
         # part and carries a clarification only for the unresolved part.
         if attempt_count >= MAX_RAG_ATTEMPTS:
-            unapproved_ids = [
-                parent.get("parent_id") for parent in result.get("parents", [])
-                if parent.get("parent_id") and parent.get("parent_id") not in partial_ids
-            ]
-            unapproved_parents = RAGEngine().hydrate_parent_ids(unapproved_ids)
             if partial_ids:
                 current_results[task_id] = {
                     "task_id": task_id,
                     "status": "PARTIALLY_SUFFICIENT",
                     "approved_parent_ids": partial_ids,
                     "reason": reason,
-                    "terminal_feedback": refinement,
-                    "unapproved_parent_ids": [parent.get("parent_id") for parent in unapproved_parents if parent.get("parent_id")],
                 }
+                log_event(
+                    "evidence.boundary.approved",
+                    task_id=task_id,
+                    approved_parent_ids=partial_ids,
+                    status="PARTIALLY_SUFFICIENT",
+                )
             else:
                 current_results[task_id] = {
                     "task_id": task_id,
                     "status": "CLARIFICATION_REQUIRED",
                     "approved_parent_ids": [],
                     "reason": reason,
-                    "terminal_feedback": refinement,
-                    "unapproved_parent_ids": [parent.get("parent_id") for parent in unapproved_parents if parent.get("parent_id")],
                 }
+            log_event(
+                "evidence.boundary.terminal_unresolved",
+                task_id=task_id,
+                status=current_results[task_id]["status"],
+                approved_parent_ids=partial_ids,
+            )
             feedback.pop(task_id, None)
         else:
             current_results[task_id] = {
@@ -1581,9 +1582,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
     task_resolution_instructions = [
         _terminal_retrieval_feedback(
             result.get("task_id"),
-            result.get("terminal_feedback", result.get("reason", "")),
-            result.get("reason", ""),
-            result.get("unapproved_parent_ids", []),
+            tasks_by_id.get(result.get("task_id"), {}).get("customer_component", ""),
             result.get("status", "CLARIFICATION_REQUIRED"),
         )
         for result in current_results.values()
@@ -1610,7 +1609,14 @@ def node_03c_sufficiency_auditor(state: AgentState):
         "task_results": list(current_results.values()),
         "task_retry_counts": retry_counts,
         "task_feedback": feedback,
-        "task_sufficiency_history": sufficiency_history,
+        # Completed-task audit history can include internal evidence deltas.
+        # Retain it only for tasks that will retry; it must not cross the
+        # terminal evidence boundary into subsequent nodes.
+        "task_sufficiency_history": {
+            task_id: sufficiency_history.get(task_id, [])
+            for task_id in {result.get("task_id") for result in unresolved}
+            if task_id
+        },
         "task_partial_evidence": partial_evidence,
         "task_resolution_instructions": task_resolution_instructions,
     }
@@ -1648,8 +1654,8 @@ def node_04a_resolution_planner(state: AgentState):
     terminal_task_context = [
         {
             "task_id": instruction.get("task_id"),
-            "resolved_request": tasks_by_id.get(instruction.get("task_id"), {}).get("customer_component", ""),
-            "reason": instruction.get("reason", ""),
+            "resolved_request": instruction.get("resolved_subquery", "") or tasks_by_id.get(instruction.get("task_id"), {}).get("customer_component", ""),
+            "resolution_status": instruction.get("resolution_status", "CLARIFICATION_REQUIRED"),
         }
         for instruction in state.get("task_resolution_instructions", [])
         if instruction.get("task_id")
@@ -1788,7 +1794,7 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
         {"unresolved_request": task.get("unresolved_request", "")}
         for task in state.get("intent_clarification_tasks", [])
     ]
-    terminal_feedback = state.get("task_resolution_instructions", [])
+    terminal_markers = state.get("task_resolution_instructions", [])
     decline_context = [
         {"subquery": task.get("subquery", ""), "category": task.get("reason_category", "")}
         for task in state.get("decline_tasks", [])
@@ -1808,7 +1814,7 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
     Customer's complete request: {state.get("user_input", "")}
     Planned response blocks and their approved evidence: {json.dumps(block_inputs, ensure_ascii=False)}
     Intent clarification tasks: {json.dumps(intent_clarifications, ensure_ascii=False)}
-    Terminal retrieval feedback: {json.dumps(terminal_feedback, ensure_ascii=False)}
+    Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
     Decline Inputs (the ONLY source for a declined-topic explanation): {json.dumps(decline_context, ensure_ascii=False)}
     Failed outbound-audit feedback from the prior generation attempt
     (internal constraints only; never an evidence source):
@@ -1877,8 +1883,8 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
       customer. Ask one only when an additional customer detail could
       materially disambiguate the request or enable a different grounded
       response. It is not required merely because an intent-clarification
-      task or terminal retrieval feedback exists.
-    - A terminal retrieval item means the available information did not
+      task or terminal unresolved marker exists.
+    - A terminal unresolved item means the available information did not
       resolve an otherwise clear request. In that case, normally provide a
       concise, neutral availability notice using the customer's wording and
       leave `clarification` empty. Do not state that Horizon does not offer
@@ -1886,7 +1892,7 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
       already clear request.
     - If a clarification is useful, combine the relevant unresolved
       components into one natural clarification field at the end, sourced
-      ONLY from Intent clarification tasks, Terminal retrieval feedback, and
+      ONLY from Intent clarification tasks, Terminal unresolved task markers, and
       Decline Inputs above. Explicitly name each unresolved customer term;
       do not invent a product or fact. Clarification is plain text, not a UI
       block.
@@ -2065,7 +2071,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
         {"unresolved_request": task.get("unresolved_request", "")}
         for task in state.get("intent_clarification_tasks", [])
     ]
-    terminal_feedback = state.get("task_resolution_instructions", [])
+    terminal_markers = state.get("task_resolution_instructions", [])
     decline_context = [
         {"subquery": task.get("subquery", ""), "category": task.get("reason_category", "")}
         for task in state.get("decline_tasks", [])
@@ -2084,7 +2090,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
     {json.dumps(ux_guidance, ensure_ascii=False)}
     Approved evidence by retrieval task: {json.dumps(evidence_inputs, ensure_ascii=False)}
     Intent clarification inputs: {json.dumps(intent_clarifications, ensure_ascii=False)}
-    Terminal retrieval feedback: {json.dumps(terminal_feedback, ensure_ascii=False)}
+    Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
     Decline inputs: {json.dumps(decline_context, ensure_ascii=False)}
     Failed outbound-audit feedback (constraints only, never evidence):
     {json.dumps(audit_feedback, ensure_ascii=False)}
@@ -2118,9 +2124,9 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - Decide whether a clarification question would genuinely help the
       customer. Ask one only when an additional customer detail could
       materially disambiguate the request or enable a different grounded
-      response. It is not required merely because terminal retrieval feedback
+      response. It is not required merely because a terminal unresolved marker
       or an intent-clarification input exists.
-    - Terminal retrieval feedback means the available information did not
+    - A terminal unresolved marker means the available information did not
       resolve an otherwise clear request. In that case, normally provide a
       concise, neutral availability notice using the customer's wording and
       leave `clarification` empty. Do not state that Horizon does not offer a
@@ -2128,7 +2134,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
       clear request.
     - When a clarification is useful, it belongs after useful supported
       information, must name the unresolved customer term, and may use only
-      the clarification, terminal feedback, and decline inputs.
+      the clarification, terminal unresolved markers, and decline inputs.
     - Correct every failed-audit issue by removing or narrowing only the
       flagged unsupported content. Audit feedback is never a source of facts.
 
@@ -2344,21 +2350,11 @@ def node_04b_response_generator(state: AgentState):
     has_terminal_retrieval_feedback = bool(task_resolution_instructions)
     has_intent_clarification = bool(intent_clarification_tasks)
     has_any_clarification = has_terminal_retrieval_feedback or has_intent_clarification
-    unapproved_suggestion_blocks = []
-    for instruction in task_resolution_instructions:
-        for parent in _hydrate_parent_ids(instruction.get("unapproved_parent_ids", [])):
-            parent_id = parent.get("parent_id", "")
-            content = parent.get("content", "")
-            if content:
-                unapproved_suggestion_blocks.append(
-                    f"[Task {instruction.get('task_id')} | Unapproved Parent {parent_id}]\n{content}"
-                )
-    unapproved_suggestion_knowledge = "\n\n---\n\n".join(unapproved_suggestion_blocks)
     terminal_feedback_context = [
         {
             "task_id": instruction.get("task_id"),
-            "feedback": instruction.get("feedback", ""),
-            "reason": instruction.get("reason", ""),
+            "resolved_subquery": instruction.get("resolved_subquery", ""),
+            "resolution_status": instruction.get("resolution_status", "CLARIFICATION_REQUIRED"),
         }
         for instruction in task_resolution_instructions
     ]
@@ -2418,9 +2414,8 @@ def node_04b_response_generator(state: AgentState):
     Primary LIST Evidence (use ONLY this evidence for list_items): "{primary_list_knowledge}"
     Additional Selected Evidence (available for extended_text, never for primary list_items): "{extended_knowledge}"
     Intent Clarification Tasks (user-derived internal guidance only; do not quote reason text): {json.dumps(intent_clarification_context, ensure_ascii=False)}
-    Terminal Retrieval Feedback (internal guidance only; do not quote it or treat it as FAQ knowledge): {json.dumps(terminal_feedback_context, ensure_ascii=False)}
+    Terminal Unresolved Task Markers (topic/status only; never evidence): {json.dumps(terminal_feedback_context, ensure_ascii=False)}
     Decline Inputs (the ONLY source for a declined-topic explanation): {json.dumps(decline_context, ensure_ascii=False)}
-    Unapproved Retrieved Knowledge for Clarification Suggestions (not approved answer evidence): "{unapproved_suggestion_knowledge}"
     Failed outbound-audit feedback (internal constraints only; never evidence):
     {feedback_str}
 
@@ -2435,14 +2430,10 @@ def node_04b_response_generator(state: AgentState):
     - For LIST, provide 3-8 concise, independent `list_items` derived strictly from Primary LIST Evidence only. Each item must belong to the primary task named by the list title. Do not use a list for ordered instructions. Put other relevant approved material in `extended_text`; never mix it into `list_items`. Supply a brief `answer` introduction only when it improves comprehension.
     - For TEXT, group answers by presentation-plan section title when more than one task is present. Use `extended_text` only when a separate natural continuation improves readability.
     - If Comparison Request is true, begin with a direct, concise comparison conclusion that answers whether the products are the same or different using only the approved evidence. Then explain the relevant similarities and differences under clearly named product headings. Do not merely place two unrelated product summaries next to each other. Put the complete comparison in `answer`.
-    - EVERY entry across Intent Clarification Tasks, Terminal Retrieval Feedback, and Decline Inputs MUST appear in the clarification — never silently drop one to resolve a different entry's audit feedback. If CRITICAL CORRECTION NEEDED below flags one entry, correct only that entry (falling back to a brief, unembellished mention grounded only in its own listed fields if nothing more specific can be safely stated); every other entry must still be included exactly as before.
+    - Address every Intent Clarification Task, Terminal Unresolved Task Marker, and Decline Input naturally when it remains relevant. Never expose internal audit feedback or silently turn an unresolved topic into a different product or request.
     - For every Intent Clarification Task, state what exactly needs clarification by explicitly naming its unresolved_request. Never replace it with an ambiguous reference such as "that", "it", "the request", or "the remaining part". Do not guess a product, policy, or banking fact beyond the customer's wording.
     - For EVERY entry in Decline Inputs, add one brief, polite sentence to the clarification naming only that entry's subquery — never omit one, never invent a reason beyond its category. For category "non_compliant", state plainly that you are unable to help with that specific request and, if natural, suggest speaking with an advisor for that kind of need; never explain the specific regulation, never provide the advice or action being declined. For category "non_financial", state plainly that the topic is outside what a banking assistant can help with. Never ask a clarification question about a declined entry.
-    - For a terminal retrieval feedback item, the clarification MUST begin with a brief apology/inability statement (for example, "Sorry, I couldn't find relevant FAQ details to answer that.").
-    - When the user has multiple requests, explicitly name the unresolved term exactly as the user wrote it in the apology (for example, "Sorry, I couldn't find relevant FAQ details about ABGX loan."). Never use an ambiguous reference such as "that", "it", or "the remaining part" in its place.
-    - You may then offer up to two potentially related FAQ topics, but ONLY when each topic is explicitly present in Unapproved Retrieved Knowledge for Clarification Suggestions. Make clear these are possible related topics, not an answer to the customer's request.
-    - End with a general, natural invitation to clarify if those suggested topics are irrelevant. If no suitable suggestion exists, ask only the general clarification question.
-    - Do not request specific details such as an amount, term, purpose, eligibility, or application information unless they are explicitly supported by Unapproved Retrieved Knowledge for Clarification Suggestions.
+    - For a terminal unresolved task marker, provide only a brief, neutral availability notice naming its resolved subquery. Do not suggest potentially related topics, products, procedures, or specific details unless they are supported by Selected Approved Knowledge.
     - Treat all clarification guidance as uncertain internal guidance: do not quote internal reason text, turn it into a customer-facing product label, or treat it as a fact.
     - Do not offer UI options when any unresolved task requires clarification. Answer UI options are allowed only when every component is supported.
     - If you provide `options`, each must be an object with a concise visible `label` (2-6 words) and a complete, unambiguous `message` that will be sent when clicked. The message must be grounded in the same approved knowledge as the answer.
@@ -2450,7 +2441,7 @@ def node_04b_response_generator(state: AgentState):
     - SOURCE-NEUTRAL CONVERSATION: FAQ records, policies, documents, database entries, search results, and retrieved knowledge are internal evidence only. Never mention or imply those internal sources in customer-facing text. Do not say "according to an FAQ", "another FAQ", "the FAQ says", "the document states", "the knowledge base", "the retrieved information", "the policy database", or similar wording.
     - Present approved facts directly and naturally as Horizon's banking guidance. When several records support one answer, synthesize them into one coherent answer instead of describing separate sources. `extended_text` is normal conversational continuation, not a source note: it may add relevant approved context but must not describe where the information came from.
     - Discuss provenance only when the customer explicitly asks about sources. In that case, refer only at a high level to "Horizon Bank's published information" and never reveal internal retrieval mechanics, FAQ records, parent IDs, model names, or database details.
-    - ZERO HALLUCINATION: Rely EXCLUSIVELY on Selected Approved Knowledge for the answer. Intent clarification may rely only on the user's stated unresolved_request; terminal retrieval suggestions may additionally rely on Unapproved Retrieved Knowledge for Clarification Suggestions.
+    - ZERO HALLUCINATION: Rely EXCLUSIVELY on Selected Approved Knowledge for factual answer content. Intent clarification may rely only on the user's stated unresolved_request; terminal notices may rely only on their named resolved subquery and must remain non-factual.
     - If failed outbound feedback contains Grounding violations, use
       unsupported_content only to identify text that must be removed, and use
       evidence_gap only to understand what the approved evidence does not
@@ -2746,8 +2737,8 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
         task_id = instruction.get("task_id")
         terminal_context.append({
             "task_id": task_id,
-            "resolved_subquery": tasks_by_id.get(task_id, {}).get("customer_component", ""),
-            "unapproved_parents": _hydrate_parent_ids(instruction.get("unapproved_parent_ids", [])),
+            "resolved_subquery": instruction.get("resolved_subquery", "") or tasks_by_id.get(task_id, {}).get("customer_component", ""),
+            "resolution_status": instruction.get("resolution_status", "CLARIFICATION_REQUIRED"),
         })
 
     intent_context = [
@@ -2875,82 +2866,8 @@ def node_06_outbound_compliance_gate(state: AgentState):
 
 
 def _legacy_node_06_outbound_groundedness_gate(state: AgentState):
-    """Focused evidence-entailment audit of the complete customer-facing response."""
-    print("🟢 [NODE 06b] Executing Outbound Groundedness Audit")
-    answer, clarification, rendered_payload = _outbound_response_content(state)
-    selected_knowledge, unapproved_knowledge, auxiliary_sources = _outbound_grounding_sources(state)
-    is_initial_greeting = (
-        state.get("user_input") in {"__INIT__", "**INIT__"}
-        or state.get("preflight_status") == "initial_greeting"
-    )
-    prompt = f"""
-    You are an evidence-groundedness auditor for a read-only Horizon Bank FAQ assistant.
-
-    User Request: "{state.get('user_input', '')}"
-    Is Initial Greeting: {is_initial_greeting}
-
-    Selected Approved Knowledge for the Answer:
-    "{selected_knowledge}"
-
-    {PRECISION_REFERENCE_CONTRACT}
-
-    Unapproved Retrieved Knowledge Permitted Only for Terminal Retrieval Clarification:
-    "{unapproved_knowledge}"
-
-    Intent-clarification and greeting sources:
-    "{auxiliary_sources}"
-
-    Customer-Facing Answer:
-    "{answer}"
-
-    Customer-Facing Clarification:
-    "{clarification}"
-
-    Complete Customer-Facing UI Payload:
-    "{rendered_payload}"
-
-    TASK: Assess GROUNDEDNESS ONLY. Do not assess MAS compliance, safety,
-    advice, or whether the answer is helpful.
-
-    - For a normal answer, every factual claim, instruction, option, step,
-      list item, extended-text statement, and response-block field must be
-      explicitly supported by Selected Approved Knowledge. Do not infer a
-      detail merely because it is plausible or related.
-    - For an initial greeting, assess personalized statements and options only
-      against greeting_memory. A first-time generic greeting with no options
-      is grounded.
-    - For a terminal retrieval clarification, product references and factual
-      suggestions must be supported by the Unapproved Retrieved Knowledge.
-    - For an intent clarification, every named term must come from intent_tasks
-      or the User Request. It must not infer a product, policy, or banking fact.
-    - A generic apology or general request for clarification is grounded.
-    - A clarification that follows an answer must identify its unresolved term
-      rather than use an ambiguous reference such as "that" or "it".
-    - Every visible field in the payload is in scope.
-
-    Output JSON only:
-    {{"passed": true/false, "answer_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false, "reason": "...", "rewrite_instruction": "..."}}
-    """
-    try:
-        result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
-        answer_grounded = bool(result.get("answer_grounded", False))
-        clarification_grounded = bool(result.get("clarification_grounded", False))
-        clarification_connected = bool(result.get("clarification_connected", False))
-        passed = bool(result.get("passed", False)) and answer_grounded and clarification_grounded and clarification_connected
-    except Exception as error:
-        print(f"🚨 [GROUNDEDNESS AUDIT ERROR]: {error}")
-        result = {"reason": "Groundedness audit failed.", "rewrite_instruction": "Use only the permitted evidence sources."}
-        passed = answer_grounded = clarification_grounded = clarification_connected = False
-    audit = {
-        "passed": passed,
-        "answer_grounded": answer_grounded,
-        "clarification_grounded": clarification_grounded,
-        "clarification_connected": clarification_connected,
-        "reason": result.get("reason", "Groundedness audit failed."),
-        "rewrite_instruction": result.get("rewrite_instruction", "Use only the permitted evidence sources."),
-    }
-    log_event("outbound.groundedness.completed", passed=passed, reason=audit["reason"])
-    return {"outbound_groundedness_result": audit}
+    """Compatibility alias for in-flight callers of the retired audit path."""
+    return node_06_outbound_groundedness_gate(state)
 
 
 def node_06_outbound_groundedness_gate(state: AgentState):
@@ -3012,7 +2929,7 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         Intent Clarification Inputs (the only source for intent clarification):
         {json.dumps(grounding_context["intent_clarifications"], ensure_ascii=False)}
 
-        Terminal Retrieval Clarification Evidence (permitted only for factual related-topic suggestions in terminal clarification):
+        Terminal Unresolved Task Markers (topic/status only; never evidence):
         {json.dumps(grounding_context["terminal_clarifications"], ensure_ascii=False)}
 
         Decline Inputs (the only source for a declined-topic explanation):
@@ -3066,10 +2983,11 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         - For an intent clarification, every named unresolved term must come
           only from Intent Clarification Inputs. Do not infer a product, policy,
           or banking fact.
-        - For a terminal retrieval clarification, a factual related-topic
-          suggestion must be supported by the matching task's Terminal Retrieval
-          Clarification Evidence. Those records must never support an answer,
-          instruction, UI action, or answer block.
+        - For a terminal unresolved task, a neutral statement that available
+          information does not resolve its named request is grounded. It must
+          not state, suggest, or imply a banking fact, procedure, product
+          alternative, policy, or next action unless supported by Task-Level
+          Approved Evidence.
         - A generic apology and a general request for clarification are grounded.
         - A brief, non-factual conversational acknowledgement, greeting, or
           banking-scope statement is grounded when it introduces no banking

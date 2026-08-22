@@ -53,7 +53,11 @@ VOLATILE_STATE_RESET = {
 
 MAX_VERIFIED_TASK_HISTORY_TURNS = 10
 ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "PARTIALLY_SUFFICIENT"}
-MAX_RAG_ATTEMPTS = 3
+# One initial attempt plus three refinement stages (INTENT_EXPANSION,
+# PRODUCT_EXPANSION, ANGLE_EXPANSION — see _retry_expansion_plan). Must stay
+# in sync with the highest attempt number keyed in that function's stages
+# dict, or the final stage becomes unreachable.
+MAX_RAG_ATTEMPTS = 4
 
 
 def _normalized_product_tags(product_value: Any) -> list[str]:
@@ -254,10 +258,14 @@ def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int])
     """Describe the deterministic precision-to-recall stage for each retry."""
     stages = {
         2: {
-            "stage": "META_FILTER_EXPANSION",
-            "instruction": "Expand the Product and/or Intent scope based on the feedback status. If INSUFFICIENT, the previous search completely failed; you must aggressively broaden the Intents and/or add a plausible related Product. If PARTIALLY_SUFFICIENT, the previous search successfully answered part of the question; you must be conservative and ONLY add an Intent or Product that targets the remaining missing gap. Never remove the original product or intents.",
+            "stage": "INTENT_EXPANSION",
+            "instruction": "Deterministic: the backend expands intent scope to every valid intent for the task's current product(s). No model judgment is used for this stage.",
         },
         3: {
+            "stage": "PRODUCT_EXPANSION",
+            "instruction": "Evaluate the feedback status. If INSUFFICIENT, the previous search failed across every intent already valid for the current product; consider adding one plausible, matrix-valid related product. If PARTIALLY_SUFFICIENT, be conservative: add a product only if it has a direct, meaningful relationship to the specific remaining gap. Never remove the original product. Do not specify intents for an added product — the backend expands its full intent scope automatically.",
+        },
+        4: {
             "stage": "ANGLE_EXPANSION",
             "instruction": "Keep the exact product and intent filters. Preserve every existing angle group unchanged and append one complete new angle group that targets the missing detail in the sufficiency feedback.",
         },
@@ -268,7 +276,7 @@ def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int])
         plan.append({
             "task_id": task.get("task_id"),
             "next_attempt": next_attempt,
-            **stages.get(next_attempt, stages[3]),
+            **stages.get(next_attempt, stages[4]),
         })
     return plan
 
@@ -277,18 +285,47 @@ def _retrieval_mode_for_task(task: dict, retry_counts: dict[str, int]) -> str:
     """Choose retrieval representation independently of the LLM.
 
     A task keeps its resolved customer subquery as the default retrieval
-    anchor through filter widening.  Multi-angle RRF is reserved for the
-    final, feedback-guided angle-expansion attempt.
+    anchor through both filter-widening attempts (intent, then product).
+    Multi-angle RRF is reserved for the final, feedback-guided attempt.
     """
     retry_count = retry_counts.get(task.get("task_id"), 0)
-    return "ANGLE_GROUP_RRF" if retry_count >= 2 else "DIRECT"
+    return "ANGLE_GROUP_RRF" if retry_count >= 3 else "DIRECT"
+
+
+def _full_intent_scope(products: list[str]) -> list[str]:
+    """Union every matrix-valid intent across one or more products.
+
+    Used both for deterministic intent expansion and for a product newly
+    added at the PRODUCT_EXPANSION stage: once a product is in scope,
+    opening its full intent list is free (Chroma's metadata filter costs
+    nothing extra per value) and carries none of the cross-product
+    relevance risk that a blind product-widening guess would.
+    """
+    full_intents = []
+    for product in products:
+        for intent in PRODUCT_INTENT_MATRIX.get(product, []):
+            if intent not in full_intents:
+                full_intents.append(intent)
+    return full_intents
+
+
+def _expand_intent_to_full(task: dict) -> dict:
+    """Deterministically widen a task's intent scope to every intent valid
+    for its current product(s) — no LLM judgment involved. A task carrying
+    two products already (for example, from an ordered array) expands the
+    union of both products' valid intents, not just the first one's."""
+    products = _normalized_product_tags(task.get("target_commercial_product"))
+    revision = dict(task)
+    revision["target_intent"] = _full_intent_scope(products)
+    return revision
 
 
 def _merge_retry_task(prior_task: dict, revision: dict, expansion: dict) -> dict:
-    """Deterministically preserve cumulative V2.5 retry state.
+    """Deterministically preserve cumulative retry state.
 
-    The LLM proposes a refinement, but it must never be able to erase prior
-    angle groups, products, intents, task identity, or the resolved subquery.
+    The LLM proposes a refinement only at the PRODUCT_EXPANSION and
+    ANGLE_EXPANSION stages; it must never be able to erase prior angle
+    groups, products, intents, task identity, or the resolved subquery.
     """
     stage = expansion.get("stage", "")
     prior_groups = _normalize_angle_groups(prior_task)
@@ -319,18 +356,27 @@ def _merge_retry_task(prior_task: dict, revision: dict, expansion: dict) -> dict
             print(f"   ⚠️ [ANGLE EXPANSION OMITTED]: Task '{merged['task_id']}' returned no distinct retry group.")
         merged["target_commercial_product"] = prior_task.get("target_commercial_product")
         merged["target_intent"] = prior_task.get("target_intent", [])
-    elif stage == "META_FILTER_EXPANSION":
+    elif stage == "INTENT_EXPANSION":
+        # Fully deterministic: `revision` already carries the full valid
+        # intent set for the current product(s) from _expand_intent_to_full.
+        merged["angle_groups"] = prior_groups
+        merged["target_commercial_product"] = prior_task.get("target_commercial_product")
+        merged["target_intent"] = revision.get("target_intent", prior_task.get("target_intent", []))
+    elif stage == "PRODUCT_EXPANSION":
         prior_products = _normalized_product_tags(prior_task.get("target_commercial_product"))
         proposed_products = _normalized_product_tags(revision.get("target_commercial_product"))
         prior_intents = prior_task.get("target_intent", [])
         prior_intents = [prior_intents] if isinstance(prior_intents, str) else prior_intents
-        proposed_intents = revision.get("target_intent", [])
-        proposed_intents = [proposed_intents] if isinstance(proposed_intents, str) else proposed_intents
 
         products = list(dict.fromkeys([*prior_products, *proposed_products]))
+        new_products = [product for product in proposed_products if product not in prior_products]
         merged["angle_groups"] = prior_groups
         merged["target_commercial_product"] = products[0] if len(products) == 1 else products
-        merged["target_intent"] = list(dict.fromkeys([*prior_intents, *proposed_intents]))
+        # A newly added product's own intent scope is opened in full too —
+        # the LLM is not asked to guess intents for it (see instruction
+        # above); a narrow intent chosen for the ORIGINAL product has no
+        # guaranteed relevance to a different product.
+        merged["target_intent"] = list(dict.fromkeys([*prior_intents, *_full_intent_scope(new_products)]))
     else:
         merged["angle_groups"] = prior_groups
 
@@ -456,6 +502,34 @@ def _ui_option_texts(options: list) -> list[str]:
                 if isinstance(value, str) and value.strip():
                     texts.append(value)
     return texts
+
+
+def _llm_text(source: dict, key: str, fallback_key: str | None = None, default: str = "") -> str:
+    """Read an optional string field from an LLM JSON response.
+
+    dict.get(key, default) only applies its default when the key is
+    entirely absent — if the model explicitly returns `"key": null` for an
+    optional field, .get() still returns None, and str(None) silently
+    produces the literal text "None" in customer-facing output instead of
+    an empty string. This treats an explicit null the same as a missing key.
+    """
+    value = source.get(key)
+    if value is None and fallback_key:
+        value = source.get(fallback_key)
+    if value is None:
+        value = default
+    return str(value).strip()
+
+
+def _llm_list(source: dict, key: str) -> list:
+    """Read an optional list field from an LLM JSON response.
+
+    Same null-vs-missing gap as _llm_text: an explicit `"key": null` must
+    not be iterated directly, or it raises TypeError instead of behaving
+    like an empty list.
+    """
+    value = source.get(key)
+    return value if isinstance(value, list) else []
 
 
 def _normalize_ui_options(options: list) -> list:
@@ -898,14 +972,43 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     # next n2e pass always recomputes this list for its own stage.
     fast_forward_task_ids = []
     new_retry_counts = dict(state.get("task_retry_counts", {}))
+    retry_expansion_plan = _retry_expansion_plan(retry_tasks, state.get("task_retry_counts", {}))
+    expansion_by_task_id = {expansion.get("task_id"): expansion for expansion in retry_expansion_plan}
+    # INTENT_EXPANSION is fully deterministic (see _expand_intent_to_full):
+    # widening intent within an already-confirmed product needs no semantic
+    # judgment and costs nothing extra at the Chroma filter layer, so these
+    # tasks never enter the retry-mode prompt at all. Only tasks that still
+    # need a genuine judgment call (PRODUCT_EXPANSION, ANGLE_EXPANSION) are
+    # sent to the model.
+    deterministic_task_ids = {
+        task_id for task_id, expansion in expansion_by_task_id.items()
+        if expansion.get("stage") == "INTENT_EXPANSION"
+    }
+    llm_retry_tasks = [task for task in retry_tasks if task.get("task_id") not in deterministic_task_ids]
+    if retry_expansion_plan:
+        for expansion in retry_expansion_plan:
+            print(f"   🪜 [RETRY STAGE]: Task '{expansion.get('task_id')}' → {expansion.get('stage')} (attempt {expansion.get('next_attempt')})")
+        if not llm_retry_tasks:
+            print(f"   ⚡ [RETRY MODEL SKIPPED]: All {len(retry_tasks)} retry task(s) resolved deterministically this cycle; no LLM call.")
+        elif len(llm_retry_tasks) < len(retry_tasks):
+            print(f"   🧠 [RETRY MODEL SCOPED]: Calling model for {len(llm_retry_tasks)} of {len(retry_tasks)} retry task(s); {len(retry_tasks) - len(llm_retry_tasks)} resolved deterministically.")
+        log_event(
+            "task.retry.stage_plan",
+            stages={item.get("task_id"): item.get("stage") for item in retry_expansion_plan},
+            llm_task_ids=[task.get("task_id") for task in llm_retry_tasks],
+            deterministic_task_ids=list(deterministic_task_ids),
+        )
     retry_context = ""
-    if retry_tasks:
+    if llm_retry_tasks:
+        llm_retry_feedback = {
+            task_id: feedback for task_id, feedback in retry_feedback.items()
+            if task_id in {task.get("task_id") for task in llm_retry_tasks}
+        }
         retry_context = f"""
         RETRY MODE: Rewrite ONLY these existing tasks. Preserve each task_id exactly.
-        Failed tasks: {retry_tasks}
-        Task-specific feedback: {retry_feedback}
+        Failed tasks: {llm_retry_tasks}
+        Task-specific feedback: {llm_retry_feedback}
         """
-    retry_expansion_plan = _retry_expansion_plan(retry_tasks, state.get("task_retry_counts", {}))
     
     prompt = f"""
     PRE-DECOMPOSED CUSTOMER COMPONENTS (from Triage; already screened for financial relevance and compliance): {triaged_subqueries}
@@ -959,7 +1062,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     # A retrieval retry is not a fresh interpretation of the whole customer
     # request.  Isolate it in a dedicated prompt so the model cannot reorder
     # components or overwrite a failed task ID with another successful task.
-    if retry_tasks:
+    if llm_retry_tasks:
         prompt = f"""
         PRODUCT/INTENT MATRIX (Valid Nouns and Verbs):
         {PRODUCT_INTENT_MATRIX}
@@ -972,8 +1075,8 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         tasks. This is NOT a new decomposition of the customer's request.
 
         Latest User Input: "{user_msg}"
-        Failed Retrieval Tasks (the only components in scope): {retry_tasks}
-        Task-Specific Candidate Evidence Delta: {retry_feedback}
+        Failed Retrieval Tasks (the only components in scope): {llm_retry_tasks}
+        Task-Specific Candidate Evidence Delta: {llm_retry_feedback}
         Deterministic Expansion Plan: {retry_expansion_plan}
 
         REQUIRED CONTRACT:
@@ -1009,13 +1112,19 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           the structural perspective (e.g., switch from customer-facing steps
           to bank-internal processing steps) rather than inventing new facts.
           Do not append terms into an existing angle.
-        - META_FILTER_EXPANSION: retain all prior angle terms, intents, and
-          product tags. Evaluate the provided feedback status. Add valid intent
-          filters that target the missing detail. You MAY ALSO output
-          target_commercial_product as an ordered array containing the original
-          product first plus a related matrix-valid product, but ONLY if the
-          feedback implies the missing detail belongs to a different product
-          family. Never replace the original product.
+        - PRODUCT_EXPANSION: retain all prior angle terms and intents. Every
+          task reaching this stage has already been searched across its full
+          existing intent scope without success. Evaluate the provided
+          feedback status. If INSUFFICIENT, consider adding one plausible,
+          matrix-valid related product as an ordered array with the original
+          product first — but only when it has a direct, meaningful
+          relationship to this task's customer_component; never add a product
+          merely because its FAQ wording might be similar. If
+          PARTIALLY_SUFFICIENT, be conservative: add a product only if it
+          targets the specific remaining gap. Never replace the original
+          product. Do NOT specify target_intent for an added product — the
+          backend expands its full valid intent scope automatically; just
+          echo the existing target_intent unchanged.
         - The revised task must remain about the same customer component as its
           supplied failed task.
         - Every revised Product/Intent pair must be valid in the matrix.
@@ -1026,11 +1135,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           branch details. Do not paraphrase the customer's original question.
 
         Output JSON ONLY:
-        {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","angle_groups":[{{"group_id":"base","procedural":"unchanged","policy":"unchanged","conceptual":"unchanged"}},{{"group_id":"retry_2","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"valid matrix product or ordered product array during META_FILTER_EXPANSION","target_intent":["valid matrix intent"]}},"clarification":null}}]}}
+        {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","angle_groups":[{{"group_id":"base","procedural":"unchanged","policy":"unchanged","conceptual":"unchanged"}},{{"group_id":"retry_2","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"valid matrix product or ordered product array during PRODUCT_EXPANSION","target_intent":["existing target_intent, unchanged"]}},"clarification":null}}]}}
         """
-    
+
     try:
-        res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
+        res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE)) if (not retry_tasks or llm_retry_tasks) else {"components": []}
         # The model returns a mutually exclusive component partition. Derive
         # the existing downstream task lists from it so retrieval, caching,
         # retries, and clarification handling retain their current contracts.
@@ -1085,21 +1194,23 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     formulated_tasks = validated_tasks
 
     if retry_tasks:
-        replacements = {task.get("task_id"): task for task in formulated_tasks if task.get("task_id") in retry_task_ids}
-        expansion_by_task_id = {
-            expansion.get("task_id"): expansion
-            for expansion in retry_expansion_plan
-        }
+        llm_replacements = {task.get("task_id"): task for task in formulated_tasks if task.get("task_id") in retry_task_ids}
         search_tasks = []
 
         for prior_task in prior_tasks:
             task_id = prior_task.get("task_id")
-            replacement = replacements.get(task_id)
+            expansion = expansion_by_task_id.get(task_id, {})
+            if task_id in deterministic_task_ids:
+                # INTENT_EXPANSION never touches the LLM: compute the widened
+                # scope directly from the matrix.
+                replacement = _expand_intent_to_full(prior_task)
+            else:
+                replacement = llm_replacements.get(task_id)
             if replacement and task_id in retry_task_ids:
-                expansion = expansion_by_task_id.get(task_id, {})
                 merged = _merge_retry_task(prior_task, replacement, expansion)
+                stage_label = expansion.get("stage", "")
 
-                if expansion.get("stage") == "META_FILTER_EXPANSION":
+                if stage_label in {"INTENT_EXPANSION", "PRODUCT_EXPANSION"}:
                     old_prod = _normalized_product_tags(prior_task.get("target_commercial_product"))
                     new_prod = _normalized_product_tags(merged.get("target_commercial_product"))
                     old_int = prior_task.get("target_intent", [])
@@ -1107,9 +1218,34 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                     old_int = [old_int] if isinstance(old_int, str) else old_int
                     new_int = [new_int] if isinstance(new_int, str) else new_int
                     if old_prod == new_prod and set(old_int) == set(new_int):
-                        print(f"   ⏩ [RETRY BARRIER]: META_FILTER_EXPANSION produced no changes for '{task_id}'. Deferring duplicate RAG until angle expansion.")
+                        print(f"   ⏩ [RETRY BARRIER]: {stage_label} produced no changes for '{task_id}'. Deferring duplicate RAG until the next stage.")
                         fast_forward_task_ids.append(task_id)
                         new_retry_counts[task_id] = new_retry_counts.get(task_id, 0) + 1
+                    else:
+                        print(f"   🔧 [{stage_label}]: Task '{task_id}' | product {old_prod} → {new_prod} | intent {old_int} → {new_int}")
+                    log_event(
+                        "task.expansion.applied",
+                        task_id=task_id,
+                        stage=stage_label,
+                        old_product=old_prod,
+                        new_product=new_prod,
+                        old_intent=old_int,
+                        new_intent=new_int,
+                        no_op=(old_prod == new_prod and set(old_int) == set(new_int)),
+                    )
+                elif stage_label == "ANGLE_EXPANSION":
+                    prior_group_count = len(_normalize_angle_groups(prior_task))
+                    merged_groups = _normalize_angle_groups(merged)
+                    if len(merged_groups) > prior_group_count:
+                        new_group = merged_groups[-1]
+                        print(f"   🔧 [ANGLE_EXPANSION]: Task '{task_id}' added group '{new_group.get('group_id')}' | procedural='{new_group.get('procedural')}' | policy='{new_group.get('policy')}' | conceptual='{new_group.get('conceptual')}'")
+                        log_event(
+                            "task.expansion.applied",
+                            task_id=task_id,
+                            stage=stage_label,
+                            new_angle_group=new_group,
+                            angle_group_count=len(merged_groups),
+                        )
 
                 search_tasks.append(merged)
             else:
@@ -1191,7 +1327,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             return {"preflight_status": "continue_plan", "search_tasks": [], "decline_tasks": decline_tasks}
         return {"preflight_status": "intent_clarification_needed", "search_tasks": [], "decline_tasks": decline_tasks}
 
-    # Every task enters live direct retrieval. Search Strategy v2.7 may add
+    # Every task enters live direct retrieval. Search Strategy v2.8 may add
     # matching verified-session parents as a separate RRF list, but no broad
     # product/intent cache may bypass the current subquery's retrieval.
     print("   🎯 [TASK ROUTER]: Live retrieval required; verified session evidence may join RRF when task scope overlaps.")
@@ -1202,14 +1338,14 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         live_retrieval_task_count=live_retrieval_count,
         deferred_retry_task_ids=fast_forward_task_ids,
         retry_mode=bool(retry_tasks),
-        strategy="v2.7_verified_session_rrf",
+        strategy="v2.8_verified_session_rrf",
     )
     for task_id in fast_forward_task_ids:
         log_event(
             "task.retry.deferred",
             task_id=task_id,
             retry_count=new_retry_counts.get(task_id, 0),
-            reason="META_FILTER_EXPANSION produced no valid scope change; waiting for sibling meta-filter retrieval before angle expansion.",
+            reason="Intent or product expansion produced no valid scope change; waiting for the next expansion stage.",
         )
 
     return {
@@ -1943,8 +2079,8 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
     }
     response_blocks = []
     record_parts = []
-    intro_text = str(generated.get("intro_text", "")).strip()
-    closing_text = str(generated.get("closing_text", "")).strip()
+    intro_text = _llm_text(generated, "intro_text")
+    closing_text = _llm_text(generated, "closing_text")
     # A response-level bridge is useful only when there is more than one
     # answerable component. This deterministic guard keeps a model from adding
     # filler around straightforward one-topic answers.
@@ -1959,15 +2095,15 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
     for index, plan in enumerate(block_plans, start=1):
         item = generated_by_task.get(plan.get("task_id"), {})
         block_type = plan.get("presentation_type", "TEXT")
-        context_text = str(item.get("context_text", "")).strip()
-        answer = str(item.get("answer", "")).strip()
-        extended_text = str(item.get("extended_text", item.get("supporting_text", ""))).strip()
+        context_text = _llm_text(item, "context_text")
+        answer = _llm_text(item, "answer")
+        extended_text = _llm_text(item, "extended_text", "supporting_text")
         options = _normalize_ui_options(item.get("options", []))
         progress_steps = item.get("progress_steps", []) if isinstance(item.get("progress_steps", []), list) else []
         progress_steps = [
-            {"title": str(step.get("title", "")).strip(), "detail": str(step.get("detail", "")).strip()}
+            {"title": _llm_text(step, "title"), "detail": _llm_text(step, "detail")}
             for step in progress_steps
-            if isinstance(step, dict) and str(step.get("title", "")).strip() and str(step.get("detail", "")).strip()
+            if isinstance(step, dict) and _llm_text(step, "title") and _llm_text(step, "detail")
         ]
         list_items = item.get("list_items", []) if isinstance(item.get("list_items", []), list) else []
         list_items = [entry.strip() for entry in list_items if isinstance(entry, str) and entry.strip()][:8]
@@ -2009,11 +2145,11 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
             "text": answer if ui_type == "text" else "",
             "items": items,
             "options": options,
-            "progressTitle": str(item.get("progress_title", "")).strip() if ui_type == "stepper" else "",
+            "progressTitle": _llm_text(item, "progress_title") if ui_type == "stepper" else "",
             "stepDetails": [],
             "currentStep": 1 if ui_type == "stepper" else None,
             "totalSteps": len(progress_steps) if ui_type == "stepper" else None,
-            "listTitle": str(item.get("list_title", "")).strip() if ui_type == "checklist" else "",
+            "listTitle": _llm_text(item, "list_title") if ui_type == "checklist" else "",
             "listIntro": answer if ui_type == "checklist" else "",
             "extendedText": extended_text,
         })
@@ -2022,7 +2158,7 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
     if closing_text and len(block_plans) > 1:
         response_blocks.append({"blockId": "turn_closing", "type": "text", "text": closing_text})
         record_parts.append(closing_text)
-    clarification = str(generated.get("clarification", "")).strip()
+    clarification = _llm_text(generated, "clarification")
     # A decline is not a clarification request. Preserve its deterministic
     # safety fallback without forcing a generic question for an exhausted
     # retrieval or an intent-clarification input.
@@ -2111,9 +2247,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - You may return one text element, a mix of text and UI elements, or
       several elements. There is no required opening, closing, title, number
       of elements, or element-per-task structure.
-    - Address every task in coverage_expectation somewhere in the response
-      where approved evidence supports it, but do not name task IDs or expose
-      internal organization to the customer.
+    - Every task_id listed in "Approved evidence by retrieval task" MUST appear
+      in some element's source_task_ids at least once — never drop an entire
+      task's answer, including when correcting audit feedback that flagged a
+      different task. Fix only the specific flagged content; regenerating one
+      task's element is never a reason to omit another task's element from
+      this response. Do not name task IDs or expose internal organization to
+      the customer.
     - Every factual claim, instruction, item, title, option, and detail must
       be supported by approved evidence. A response element may use evidence
       from multiple tasks only when those facts are naturally related.
@@ -2154,17 +2294,17 @@ def _generate_response_blocks(state: AgentState) -> dict:
         if not isinstance(element, dict):
             continue
         requested_type = str(element.get("type", "TEXT")).upper()
-        source_ids = [task_id for task_id in element.get("source_task_ids", []) if task_id in valid_task_ids]
+        source_ids = [task_id for task_id in _llm_list(element, "source_task_ids") if task_id in valid_task_ids]
         source_ids = list(dict.fromkeys(source_ids))
-        context_text = str(element.get("context_text", "")).strip()
-        answer = str(element.get("answer", "")).strip()
-        extended_text = str(element.get("extended_text", "")).strip()
+        context_text = _llm_text(element, "context_text")
+        answer = _llm_text(element, "answer")
+        extended_text = _llm_text(element, "extended_text")
         options = _normalize_ui_options(element.get("options", []))
-        list_items = [item.strip() for item in element.get("list_items", []) if isinstance(item, str) and item.strip()][:8]
+        list_items = [item.strip() for item in _llm_list(element, "list_items") if isinstance(item, str) and item.strip()][:8]
         progress_steps = [
-            {"title": str(step.get("title", "")).strip(), "detail": str(step.get("detail", "")).strip()}
-            for step in element.get("progress_steps", []) if isinstance(step, dict)
-            and str(step.get("title", "")).strip() and str(step.get("detail", "")).strip()
+            {"title": _llm_text(step, "title"), "detail": _llm_text(step, "detail")}
+            for step in _llm_list(element, "progress_steps") if isinstance(step, dict)
+            and _llm_text(step, "title") and _llm_text(step, "detail")
         ]
         block_type = "text"
         if requested_type == "PROGRESS" and len(progress_steps) >= 2:
@@ -2186,7 +2326,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
             block = {
                 "blockId": f"element_{index}", "sourceTaskIds": source_ids,
                 "type": "stepper", "contextText": lead_text, "text": "", "items": items,
-                "options": options, "progressTitle": str(element.get("progress_title", "")).strip(),
+                "options": options, "progressTitle": _llm_text(element, "progress_title"),
                 "stepDetails": [], "currentStep": 1, "totalSteps": len(progress_steps),
                 "listTitle": "", "listIntro": "", "extendedText": extended_text,
             }
@@ -2197,7 +2337,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
                 "blockId": f"element_{index}", "sourceTaskIds": source_ids,
                 "type": "checklist", "contextText": "", "text": "", "items": list_items,
                 "options": options, "progressTitle": "", "stepDetails": [], "currentStep": None,
-                "totalSteps": None, "listTitle": str(element.get("list_title", "")).strip(),
+                "totalSteps": None, "listTitle": _llm_text(element, "list_title"),
                 "listIntro": list_intro, "extendedText": extended_text,
             }
         else:
@@ -2212,7 +2352,33 @@ def _generate_response_blocks(state: AgentState) -> dict:
         answer_parts.append(rendered_text)
         element_sources.append(source_ids)
 
-    clarification = str(generated.get("clarification", "")).strip()
+    # The model can regenerate one flagged task's element during a redraft and
+    # simply forget to re-emit an already-correct task's element alongside it.
+    # Since nothing is left to flag, outbound audits pass on the truncated
+    # draft and the omission would otherwise reach the customer silently.
+    covered_task_ids = {task_id for ids in element_sources for task_id in ids}
+    for entry in evidence_by_task:
+        task_id = entry.get("task_id")
+        if not task_id or task_id in covered_task_ids:
+            continue
+        component = task_metadata.get(task_id, "").strip()
+        fallback_text = (
+            f"Sorry, I don't have a complete answer for the part about {component} right now."
+            if component else
+            "Sorry, I don't have a complete answer for one part of your request right now."
+        )
+        print(f"   ⚠️ [TASK OMITTED IN DRAFT]: {task_id} missing from generated elements — inserting fallback")
+        log_event("response.flexible.task_omitted", task_id=task_id, component=component)
+        response_blocks.append({
+            "blockId": f"element_fallback_{task_id}", "sourceTaskIds": [task_id],
+            "type": "text", "contextText": "", "text": fallback_text,
+            "items": [], "options": [], "progressTitle": "", "stepDetails": [],
+            "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
+        })
+        answer_parts.append(fallback_text)
+        element_sources.append([task_id])
+
+    clarification = _llm_text(generated, "clarification")
     # A decline is not a clarification request. Preserve its deterministic
     # safety fallback without forcing a generic question for an exhausted
     # retrieval or an intent-clarification input.
@@ -2280,7 +2446,7 @@ def _generate_conversational_response(state: AgentState) -> dict:
     """
     try:
         generated = _parse_json_robustly(call_groq_lpu(prompt))
-        text = str(generated.get("text", "")).strip()
+        text = _llm_text(generated, "text")
     except Exception as error:
         print(f"🚨 [CONVERSATIONAL RESPONSE ERROR]: {error}")
         text = "I’m here if you have a banking question."
@@ -2464,14 +2630,14 @@ def node_04b_response_generator(state: AgentState):
     
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt))
-        answer = res.get("answer", res.get("response", "")).strip()
-        clarification = res.get("clarification", "").strip()
+        answer = _llm_text(res, "answer", "response")
+        clarification = _llm_text(res, "clarification")
         generated_step_details = res.get("step_details", []) or []
         generated_list_items = res.get("list_items", []) or []
         # `supporting_text` is accepted only for responses generated before
         # the extended-text contract rolled out. New responses use the
         # presentation-neutral `extended_text` field.
-        extended_text = res.get("extended_text", res.get("supporting_text", "")).strip()
+        extended_text = _llm_text(res, "extended_text", "supporting_text")
         if presentation_type == "TEXT" and extended_text:
             # TEXT has no separate visual payload, so its continuation belongs
             # directly in the normal answer bubble.

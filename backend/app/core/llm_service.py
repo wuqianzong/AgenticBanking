@@ -66,6 +66,10 @@ class AnswerGroundednessEvaluation(BaseModel):
     answer_bridge_grounded: bool = Field(description="True only when every conclusion or logical connection in the answer is a bounded inference from task-level approved evidence.")
     clarification_grounded: bool = Field(description="True when clarification factual content uses only its permitted clarification sources.")
     clarification_connected: bool = Field(description="True when each clarification explicitly identifies its supplied unresolved term.")
+    response_recovery_strategy: str = Field(
+        default="NO_STRATEGY",
+        description="Must be NO_STRATEGY, REMOVE_UNSUPPORTED_CONTENT, NARROW_TO_EVIDENCE_SCOPE, or CLARIFY_FROM_ALLOWED_CONTEXT. Internal retry constraint only; never evidence or customer wording."
+    )
     reason: str = Field(description="Concise overall internal audit result.")
     grounding_violations: List[GroundingViolation] = Field(default_factory=list, description="Every material visible grounding failure, labelled by audit layer.")
 
@@ -105,9 +109,15 @@ class TriageComponentResolution(BaseModel):
     decline_reason_category: str = Field(default="", description="Present only when resolution is DECLINE. Must be exactly non_compliant or non_financial, otherwise an empty string.")
     decline_detail: str = Field(default="", description="Present only when resolution is DECLINE. A brief factual reason, otherwise an empty string.")
 
+class FinancialSubquery(BaseModel):
+    subquery_id: str = Field(description="Stable identifier for one financial subquery.")
+    customer_component: str = Field(description="Standalone compliant banking request component.")
+
 class TriageEvaluation(BaseModel):
-    triage_status: str = Field(description="Must be ESCALATION, CLARIFICATION, or VALID_REQUEST.")
-    components: List[TriageComponentResolution] = Field(default_factory=list, description="Populated only when triage_status is VALID_REQUEST: an exhaustive decomposition of the latest user input into VALID or DECLINE components.")
+    triage_status: str = Field(description="Must be NON_COMPLIANT, ESCALATION, VALID_REQUEST, or NON_FINANCIAL.")
+    financial_subqueries: List[FinancialSubquery] = Field(default_factory=list, description="For VALID_REQUEST only: financial banking components. Empty otherwise.")
+    has_non_financial_content: bool = Field(default=False, description="True only when a VALID_REQUEST also contained unrelated wording that was omitted from financial_subqueries.")
+    non_financial_context: List[str] = Field(default_factory=list, description="For VALID_REQUEST only: short internal attention cues for non-factual conversational asides omitted from financial_subqueries. Empty otherwise; never customer-facing source text.")
 
 # 4. 2D MATRIX QUERY FORMULATOR (Node 02e) -> NESTED SCHEMA
 class SearchTask(BaseModel):
@@ -152,17 +162,42 @@ class VisualHint(BaseModel):
     type: str = Field(description="Optional visual type: LIST, PROGRESS, or OPTIONS.")
     purpose: str = Field(description="Why this visual would materially help the customer understand the response.")
 
+class ToolGap(BaseModel):
+    subquery_id: str = Field(description="Exact supplied financial subquery identifier.")
+    tool_name: str = Field(description="Registered tool name that could address the gap.")
+    operation: str = Field(description="Registered operation for the tool.")
+    unresolved_need: str = Field(description="Internal non-factual capability gap.")
+
 class UserJourneyPlan(BaseModel):
-    primary_user_need: str = Field(description="What the customer most needs to understand first.")
-    narrative_focus: str = Field(description="Concise internal guidance for a natural, coherent response.")
-    grouping_guidance: str = Field(description="How related facts may be grouped to reduce cognitive load; never a required visible structure.")
-    visual_hints: List[VisualHint] = Field(description="Optional UI suggestions only when they materially improve comprehension.")
-    clarification_guidance: str = Field(description="Whether and where unresolved information should be mentioned.")
-    coverage_expectation: List[str] = Field(description="Answerable task IDs that the natural response should address; they do not require separate blocks.")
+    resolution_status: str = Field(default="RESOLVED", description="Must be RESOLVED, NEEDS_TOOLS, or EXHAUSTED.")
+    tool_gaps: List[ToolGap] = Field(default_factory=list, description="Internal capability gaps only.")
+    validated_task_ids: List[str] = Field(
+        default_factory=list,
+        description="Only supplied answerable task IDs whose validated results contribute to global resolution."
+    )
+    unresolved_topics: List[str] = Field(
+        default_factory=list,
+        description="Concise unresolved customer topics used only as internal scope anchors, never as facts or response wording."
+    )
 
 # 5. SUPERVISOR TOOL ROUTER (Node 03a)
 class SupervisorRouting(BaseModel):
     active_tool_routes: List[str] = Field(description="Array of selected tools (e.g., 'n17_rag', 'n17_api').")
+
+class ToolTaskInput(BaseModel):
+    customer_component: str = Field(default="", description="Resolved customer component for the task.")
+
+class ToolCallingTask(BaseModel):
+    subquery_id: str = Field(description="Exact financial subquery identifier.")
+    tool_name: str = Field(description="Registered enabled tool name.")
+    operation: str = Field(description="Registered operation for the tool.")
+    input: ToolTaskInput = Field(default_factory=ToolTaskInput, description="Validated task input object.")
+
+class ToolCallingPlan(BaseModel):
+    tool_tasks: List[ToolCallingTask] = Field(
+        default_factory=list,
+        description="Additive registered tool tasks, each with subquery_id, tool_name, operation, and input."
+    )
 
 # 6. MEMORY SUMMARY VALIDATOR
 class MemorySummaryEvaluation(BaseModel):
@@ -203,16 +238,19 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
             active_schema = None
             if "TASK-LEVEL SUFFICIENCY AND EVIDENCE SELECTION" in prompt:
                 active_schema = TaskSufficiencyEvaluation
-            elif "ANSWER GROUNDEDNESS V2 AUDIT" in prompt:
+            elif "ANSWER GROUNDEDNESS V2 AUDIT" in prompt or "NON-FINANCIAL CONVERSATION GROUNDEDNESS AUDIT" in prompt:
                 active_schema = AnswerGroundednessEvaluation
             elif "APPROVED-KNOWLEDGE SAFETY:" in prompt:
                 active_schema = SemanticEvaluation
-            elif "TRIAGE A BANKING REQUEST" in prompt:
+            elif "TRIAGE A BANKING REQUEST" in prompt or "WHOLE-TURN FINANCIAL TRIAGE" in prompt:
                 active_schema = TriageEvaluation
             elif "Act as a Decoupled Database Search Architect" in prompt:
                 active_schema = QueryFormulation
-            elif "FLEXIBLE USER EXPERIENCE PLANNER" in prompt or "USER JOURNEY V2.0 PRESENTATION PLANNER" in prompt:
+            elif ("GLOBAL RESPONSE SUFFICIENCY" in prompt or "FLEXIBLE USER EXPERIENCE PLANNER" in prompt
+                  or "USER JOURNEY V2.0 PRESENTATION PLANNER" in prompt):
                 active_schema = UserJourneyPlan
+            elif "INCREMENTAL TOOL-CALLING PLANNER" in prompt:
+                active_schema = ToolCallingPlan
             elif "Determine which retrieval tools are necessary" in prompt:
                 active_schema = SupervisorRouting
             elif "MEMORY SUMMARY SECURITY VALIDATION" in prompt:

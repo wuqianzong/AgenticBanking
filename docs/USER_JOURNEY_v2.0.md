@@ -5,6 +5,15 @@
 User Journey v2.0 separates banking-topic retrieval from response presentation.
 Product, intent, and free-form task queries determine what FAQ knowledge is retrieved. The presentation type is selected only after task-level evidence has passed sufficiency.
 
+Tool Calling v2.0 sits before RAG. Triage emits only compliant financial
+subqueries; a generic Tool-Calling Planner creates idempotent tool tasks and a
+generic dispatcher runs registered enabled tools. RAG is the only enabled tool
+today. API and deeplink contracts are present but disabled until their
+read-only executors and validation contracts are implemented. The Global
+Resolution Check joins validated terminal tool results and may request a
+bounded, additive non-duplicate capability task. The Response Generator alone
+selects the customer-facing presentation.
+
 ## Presentation types
 
 - `TEXT` — factual answer, explanation, or concise topic sections.
@@ -16,23 +25,26 @@ Clarification is response content, not a presentation type. It can appear after 
 
 ## Presentation decision principle
 
-The planner visualizes the mental model the customer needs at that moment. A need to understand uses `TEXT`; a need to scan or remember independent items uses `LIST`; and a need to know where they are in, or complete, a process uses `PROGRESS`. Supported choices may be appended as up to two chips when the customer needs to choose a next action or topic. A comparison remains organised `TEXT` until a dedicated comparison component is introduced.
+The Response Generator visualizes the mental model the customer needs at that moment. A need to understand uses `TEXT`; a need to scan or remember independent items uses `LIST`; and a need to know where they are in, or complete, a process uses `PROGRESS`. Supported choices may be appended as up to two chips when the customer needs to choose a next action or topic. A comparison remains organised `TEXT` until a dedicated comparison component is introduced.
 
-When multiple tasks are supported, the planner and generator organise aggregate approved evidence around the customer’s cognitive need, not a one-task/one-block rule. A block may draw on the union of its internally recorded source tasks; an unmapped block may use aggregate approved evidence. The response must remain coherent, avoid mixing unrelated facts into a misleading title or list, and preserve task provenance internally for auditing.
+When multiple tasks are supported, the generator organises aggregate approved evidence around the customer’s cognitive need, not a one-task/one-block rule. A block may draw on the union of its internally recorded source tasks; an unmapped block may use aggregate approved evidence. The response must remain coherent, avoid mixing unrelated facts into a misleading title or list, and preserve task provenance internally for auditing.
 
-The customer’s higher-level intent selects the presentation, while approved FAQ evidence constrains every displayed fact. Account-opening and application/onboarding requests therefore prefer `PROGRESS` when the evidence supports at least two honest actions, prerequisites, or constraints that can be expressed as preparation stages. The planner must not invent app navigation or represent preparation as a complete bank workflow.
+The customer’s higher-level intent selects the presentation, while approved FAQ evidence constrains every displayed fact. Account-opening and application/onboarding requests therefore prefer `PROGRESS` when the evidence supports at least two honest actions, prerequisites, or constraints that can be expressed as preparation stages. The generator must not invent app navigation or represent preparation as a complete bank workflow.
+
+When groundedness identifies that evidence is relevant but narrower than the customer’s question, it may issue the internal `NARROW_TO_EVIDENCE_SCOPE` recovery strategy. The generator then uses a short `TEXT` response that restates only the verified scope; it does not use UI, infer a broader conclusion, or direct the customer’s decision.
 
 ## Execution flow
 
 ```text
 Inbound safety
   → request triage
-  → formulate task-id-labelled direct retrieval tasks
+  → generic tool-task planning and dispatch
+  → RAG-internal formulation of task-id-labelled direct retrieval tasks
   → live direct retrieval, with qualifying verified session evidence joining first-pass RRF
   → batched three-way sufficiency and parent-ID evidence selection
   → retry only unresolved tasks: intent scope, product scope, then angle group
   → retain partial evidence; turn wholly terminal tasks into clarification context
-  → flexible UX guidance planner
+  → global resolution sufficiency check
   → coherent multi-block response generator and deterministic UI payload
 ```
 
@@ -43,13 +55,16 @@ Each RAG task retains the selected parent documents as `{parent_id, content}`. T
 Successful task evidence is never overwritten by a retry for another task. A
 `PARTIALLY_SUFFICIENT` task retains its selected parent IDs while the unresolved
 portion retries; at the final attempt it remains answerable for that supported
-portion and carries clarification context. A wholly unsupported task after four
-attempts is marked `CLARIFICATION_REQUIRED`. The exact SQLite parent records
-returned by that task's final failed retrieval attempt are passed downstream only as
-suggestion-only clarification evidence. The generator may use them to offer up
-to two related topics, but may not use them as an answer, instruction, product
-claim, or UI action. It produces a natural clarification without quoting the
-internal retrieval feedback or asserting unsupported banking facts. Answer text
+portion and carries clarification context. The auditor must retain a parent as
+partial evidence when it supports a useful, bounded fact about a meaningful
+aspect of the resolved request, even if it cannot establish the customer's
+requested outcome, permission, eligibility, exception, legality, or preferred
+action. `INSUFFICIENT` is reserved for tasks with no materially presentable
+factual evidence. A wholly unsupported task after four
+attempts is marked `CLARIFICATION_REQUIRED`. Rejected candidate records and
+retry feedback are RAG-internal only: downstream receives only the resolved
+topic and terminal status, never rejected content. The generator produces a
+natural clarification without asserting unsupported banking facts. Answer text
 and answer-related UI options remain grounded in approved FAQ evidence;
 clarification is separately checked for suggestion-evidence grounding,
 connection to the unresolved customer term, compliance, and safety. A terminal
@@ -138,7 +153,7 @@ V2.0 removes product/topic-labelled user journeys, `pending_journey_queue`, `pen
 
 The system log records task formulation, verified-session evidence candidates,
 retrieval completion, three-way sufficiency outcomes, retry/refinement evidence,
-approved parent IDs, UX guidance, flexible response blocks, and final audit
+approved parent IDs, global resolution outcomes, flexible response blocks, and final audit
 decisions. Existing trusted-input, Prompt Guard, outbound compliance,
 Groundedness v2.0, precision substitution, and memory-safety controls remain in
 force.

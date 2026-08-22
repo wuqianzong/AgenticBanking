@@ -18,6 +18,7 @@ def build_agent_graph():
     workflow.add_node("n2d", nodes.node_02d_user_journey_classifier_and_triage)
     workflow.add_node("n2e", nodes.node_02e_intent_classifier_and_query_formulator)
     workflow.add_node("n14", nodes.node_03a_knowledge_blueprint_planner)
+    workflow.add_node("n17_dispatch", nodes.node_03b_tool_dispatcher)
     workflow.add_node("n17_rag", nodes.node_03b_rag_worker)
     workflow.add_node("n18", nodes.node_03c_sufficiency_auditor)
     workflow.add_node("n19", nodes.node_04a_resolution_planner)
@@ -31,6 +32,7 @@ def build_agent_graph():
     workflow.add_node("n23", nodes.node_09_hard_escalation_broker)
     workflow.add_node("n5", nodes.node_10_standard_rejection)
     workflow.add_node("n25", nodes.node_11_deterministic_clarification_fallback)
+    workflow.add_node("n26", nodes.node_12_non_financial_response)
 
     def route_start(state: AgentState):
         history = state.get("chat_history", [])
@@ -58,43 +60,52 @@ def build_agent_graph():
         status = state.get("triage_status")
         if status == "ESCALATION":
             return "n23"
-        if status == "CLARIFICATION":
-            return "n8"
-        if state.get("preflight_status") == "declined":
+        if status == "NON_COMPLIANT":
             return "n5"
-        return "n2e"
+        if status == "NON_FINANCIAL":
+            return "n26"
+        return "n14"
 
     def route_n2e(state: AgentState):
         status = state.get("preflight_status")
         if status == "declined":
             return "n5"
         if status == "retrieve":
-            return "n14"
+            return "n17_rag"
         if status == "continue_plan":
             return "n19"
         if status == "intent_clarification":
             return "n19"
         return "n8"
 
-    def route_tools(state: AgentState):
-        return state.get("active_tool_routes", [])
+    def route_tool_planner(state: AgentState):
+        return "n17_dispatch" if state.get("preflight_status") == "tool_dispatch" else "n19"
+
+    def route_tool_dispatcher(state: AgentState):
+        return "n2e" if state.get("preflight_status") == "rag_tool_active" else "n19"
 
     def route_n18(state: AgentState):
         return "n2e" if state.get("preflight_status") == "retry_tasks" else "n19"
 
     def route_n19(state: AgentState):
+        if state.get("preflight_status") == "needs_tools":
+            return "n14"
         return "n8" if state.get("preflight_status") != "fail" else "n5"
 
     def route_n20(state: AgentState):
         count = state.get("safety_retry_count", 0)
         if state.get("preflight_status") == "pass":
             return ["n21_compliance", "n21_groundedness"]
+        if state.get("triage_status") == "NON_FINANCIAL":
+            return "n26"
         return "n8" if count < 3 else "n23"
 
     def route_n21(state: AgentState):
         count = state.get("safety_retry_count", 0)
         if state.get("preflight_status") == "pass":
             return "n22"
+        if state.get("triage_status") == "NON_FINANCIAL":
+            return "n26"
         if count >= 3 and state.get("clarification_fallback_required"):
             return "n25"
         return "n8" if count < 3 else "n23"
@@ -103,12 +114,13 @@ def build_agent_graph():
     workflow.add_edge("n00", "n20")
     workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n23": "n23", "n5": "n5"})
     workflow.add_conditional_edges("n16", route_n16, {"n2d": "n2d", "n5": "n5"})
-    workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n8": "n8", "n2e": "n2e", "n5": "n5"})
-    workflow.add_conditional_edges("n2e", route_n2e, {"n14": "n14", "n19": "n19", "n8": "n8", "n5": "n5"})
-    workflow.add_conditional_edges("n14", route_tools, {"n17_rag": "n17_rag", "n18": "n18"})
+    workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n14": "n14", "n5": "n5", "n26": "n26"})
+    workflow.add_conditional_edges("n2e", route_n2e, {"n17_rag": "n17_rag", "n19": "n19", "n8": "n8", "n5": "n5"})
+    workflow.add_conditional_edges("n14", route_tool_planner, {"n17_dispatch": "n17_dispatch", "n19": "n19"})
+    workflow.add_conditional_edges("n17_dispatch", route_tool_dispatcher, {"n2e": "n2e", "n19": "n19"})
     workflow.add_edge("n17_rag", "n18")
     workflow.add_conditional_edges("n18", route_n18, {"n2e": "n2e", "n19": "n19"})
-    workflow.add_conditional_edges("n19", route_n19, {"n8": "n8", "n5": "n5"})
+    workflow.add_conditional_edges("n19", route_n19, {"n14": "n14", "n8": "n8", "n5": "n5"})
     workflow.add_edge("n8", "n20")
     workflow.add_conditional_edges(
         "n20",
@@ -117,13 +129,15 @@ def build_agent_graph():
             "n21_compliance": "n21_compliance",
             "n21_groundedness": "n21_groundedness",
             "n8": "n8",
+            "n26": "n26",
             "n23": "n23",
         },
     )
     workflow.add_edge(["n21_compliance", "n21_groundedness"], "n21")
-    workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n23": "n23", "n25": "n25"})
+    workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n23": "n23", "n25": "n25", "n26": "n26"})
     workflow.add_edge("n22", "n24")
     workflow.add_edge("n24", END)
+    workflow.add_edge("n26", "n20")
     workflow.add_edge("n23", END)
     workflow.add_edge("n5", END)
     workflow.add_edge("n25", END)

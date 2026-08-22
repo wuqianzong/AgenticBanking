@@ -11,6 +11,11 @@
 
 Search Strategy v2.9 is a hybrid, evidence-informed RAG strategy. It uses **Direct Search** for high-precision retrieval on the first three attempts, and a **Three-Angle Semantic Fallback** on the final attempt to overcome vocabulary mismatch and cover answer-oriented language in the canonical FAQ vector space.
 
+Under Tool Calling v2.0, this strategy is an internal executor of a generic
+RAG tool task. Tool Calling owns financial-subquery intake, idempotent task
+creation, dispatch, and the bounded outer capability loop; this document owns
+only the retrieval and sufficiency loop after a RAG task has started.
+
 The production corpus remains anchored to the original FAQ content: canonical question and question-and-answer child chunks with normalized metadata. Three-angle is a **query-time representation only**. Direct and angle-fallback retrieval both search the same canonical corpus; production does not use LLM-paraphrased, angle-specific FAQ child chunks as the primary knowledge representation.
 
 v2.8 split what v2.7 called "Intent Expansion" into two distinct stages with different decision-makers: a fully deterministic intent-widening step (no LLM judgment, no risk, free at the Chroma filter layer), followed by an LLM-judged product-expansion step reserved for when widening intent within the confirmed product alone was not enough. Scope is always widened — intent, then product — before the query representation itself is ever changed, since no query rewording can surface a parent that the metadata filter excludes outright.
@@ -105,6 +110,13 @@ A widened retry filter (Attempt 1 or 2) does not guarantee the newly eligible ca
 For each task, before the top-four / 50%-drop-off selection runs on any attempt after the first, the candidate pool excludes:
 - **Rejected parents:** any parent_id shown to the sufficiency auditor in a prior attempt for this task and *not* approved. Tracked per task in `task_rejected_parent_ids`, accumulated across attempts, and cleared once the task reaches `SUFFICIENT`.
 - **Retained partial evidence:** any parent_id already approved and held in `task_partial_evidence` for this task. These remain part of the evaluation set every round — they are simply excluded from the *fresh* vector search's own candidate pool, since they are unconditionally re-attached by ID from SQLite regardless of what that search returns.
+
+Partial evidence is selected at proposition level: a parent is retained when it
+supports useful, bounded guidance about a meaningful aspect of the resolved
+request, even if it does not establish the customer's requested outcome,
+permission, eligibility, exception, legality, or preferred action. It is not
+retained merely because it shares a product label; the supported fact must
+address the same topic, condition, process, boundary, or factual premise.
 
 This exclusion applies uniformly to every retrieval mode a retry can use: `execute_direct_search` (including its verified-session-evidence RRF branch) and `execute_multi_angle_search`.
 

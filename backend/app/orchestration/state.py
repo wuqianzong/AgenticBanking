@@ -33,11 +33,21 @@ class AgentState(TypedDict):
     rag_payload: str                             # Buffer for RAG agent
     api_payload: str                             # Buffer for API agent
     deeplink_payload: str                        # Buffer for Deeplink agent
-    triage_status: str                           # 'ESCALATION', 'CLARIFICATION', or 'VALID_REQUEST'
+    triage_status: str                           # 'NON_COMPLIANT', 'ESCALATION', 'NON_FINANCIAL', or 'VALID_REQUEST'
 
-    # Decline v2.0: Triage-Level Decomposition and Compliance/Scope Screening
-    triaged_subqueries: List[Dict[str, Any]]     # n2d-resolved components (compliance/financial-relevance screened) awaiting n2e formulation
-    decline_tasks: List[Dict[str, Any]]          # Components declined for non-compliance, non-financial relevance, or unsupported product scope
+    # Tool Calling v2.0: financial-only triage and generic task/result ledgers
+    triaged_subqueries: List[Dict[str, Any]]     # Legacy alias for financial_subqueries during in-flight sessions
+    financial_subqueries: List[Dict[str, Any]]   # n2d-resolved, compliant banking components only
+    has_non_financial_content: bool              # Triage marker; never carries discarded wording downstream
+    non_financial_context: List[str]             # Safe conversational asides; never a tool input or factual evidence source
+    tool_tasks: List[Dict[str, Any]]             # Append-only tool-task ledger
+    tool_results: List[Dict[str, Any]]           # Validated terminal tool-result ledger
+    pending_tool_task_ids: List[str]             # Tasks eligible for the next generic dispatch
+    tool_task_fingerprints: List[str]            # Terminal/pending duplicate-prevention keys
+    tool_planning_round: int                     # Bounded outer orchestration-loop count
+    tool_plan_status: str                        # continue | resolved | exhausted
+    tool_gaps: List[Dict[str, Any]]              # Non-factual capability gaps returned by resolution planning
+    decline_tasks: List[Dict[str, Any]]          # Legacy downstream scope-decline compatibility only
 
     # Search strategy v2.6 tasks: stable direct subquery plus optional angle groups
     search_tasks: List[Dict[str, Any]]           # Immutable task definitions with stable task_id values

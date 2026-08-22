@@ -37,6 +37,7 @@ VOLATILE_STATE_RESET = {
     "task_feedback": {},
     "task_sufficiency_history": {},
     "task_partial_evidence": {},
+    "task_rejected_parent_ids": {},
     "intent_clarification_tasks": [],
     "task_resolution_instructions": [],
     "safe_answer_for_fallback": "",
@@ -1393,10 +1394,23 @@ async def node_03b_rag_worker(state: AgentState):
         return {"rag_payload": "", "task_results": list(prior_results.values())}
 
     engine = RAGEngine()
+    task_rejected_parent_ids = state.get("task_rejected_parent_ids", {})
+    task_partial_evidence = state.get("task_partial_evidence", {})
     async def retrieve_task(task: dict) -> dict:
         scope_pairs = _valid_product_intent_scope_pairs(task)
         retrieval_mode = _retrieval_mode_for_task(task, state.get("task_retry_counts", {}))
         verified_session_parent_ids = _verified_session_parent_ids_for_task(state, task)
+        # Exclude both outright-rejected parents and already-approved partial
+        # evidence from the fresh candidate pool. Partial evidence is
+        # re-attached from SQLite regardless of whether Chroma resurfaces it
+        # (see node_03c), so letting it also occupy a fresh selection slot
+        # only wastes that slot on evidence the auditor already has — a slot
+        # a widened retry needs for genuinely unseen candidates instead.
+        task_id = task.get("task_id")
+        excluded_parent_ids = list(dict.fromkeys([
+            *task_rejected_parent_ids.get(task_id, []),
+            *task_partial_evidence.get(task_id, []),
+        ]))
         log_event(
             "verified_session_evidence.matched",
             task_id=task.get("task_id"),
@@ -1409,11 +1423,13 @@ async def node_03b_rag_worker(state: AgentState):
                 query_text=task.get("direct_query", task.get("customer_component", "")),
                 scope_pairs=scope_pairs,
                 verified_session_parent_ids=verified_session_parent_ids,
+                excluded_parent_ids=excluded_parent_ids,
             )
         else:
             parents = await engine.execute_multi_angle_search(
                 blueprint=task,
                 scope_pairs=scope_pairs,
+                excluded_parent_ids=excluded_parent_ids,
             )
         return {
             "task_id": task.get("task_id"),
@@ -1468,12 +1484,18 @@ def node_03c_sufficiency_auditor(state: AgentState):
         for task_id, parent_ids in state.get("task_partial_evidence", {}).items()
         if isinstance(parent_ids, list)
     }
+    rejected_parent_ids = {
+        str(task_id): list(dict.fromkeys(parent_ids))
+        for task_id, parent_ids in state.get("task_rejected_parent_ids", {}).items()
+        if isinstance(parent_ids, list)
+    }
 
     # A partly answerable task may accumulate evidence across retries.  The
     # auditor must see retained parents together with the latest candidates so
     # it can promote the combined set when the remaining gap is filled.
     evaluation_inputs = []
     candidate_ids_by_task = {}
+    auditor_results = {}
     for result in evidence_candidates:
         task_id = result.get("task_id")
         fresh_parents = list(result.get("parents", []))
@@ -1487,6 +1509,26 @@ def node_03c_sufficiency_auditor(state: AgentState):
         candidate_ids_by_task[task_id] = {
             parent.get("parent_id") for parent in all_parents if parent.get("parent_id")
         }
+        if not all_parents:
+            # Rejected-parent exclusion (or a genuinely narrow scope) can
+            # leave nothing left to judge. There is no evidence to compare
+            # against the customer_component, so the verdict is deterministic
+            # — a model call here would only spend a call to restate what is
+            # already certain.
+            print(f"   ⚡ [SUFFICIENCY SKIPPED]: Task '{task_id}' has no candidate evidence this attempt; treating as INSUFFICIENT without a model call.")
+            log_event(
+                "task.sufficiency.skipped",
+                task_id=task_id,
+                excluded_parent_ids=rejected_parent_ids.get(str(task_id), []),
+            )
+            auditor_results[task_id] = {
+                "task_id": task_id,
+                "status": "INSUFFICIENT",
+                "approved_parent_ids": [],
+                "reason": "No candidate evidence was retrieved for this component.",
+                "evidence_delta": [],
+            }
+            continue
         evaluation_inputs.append({
             "task_id": task_id,
             "task": tasks_by_id.get(task_id, {}),
@@ -1494,7 +1536,6 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "prior_sufficiency_audit_history": sufficiency_history.get(str(task_id), []),
             "parents": all_parents,
         })
-    auditor_results = {}
     if evaluation_inputs:
         prompt = f"""
         TASK-LEVEL SUFFICIENCY AND EVIDENCE SELECTION
@@ -1583,10 +1624,10 @@ def node_03c_sufficiency_auditor(state: AgentState):
         Output JSON only: {{"task_results": [{{"task_id": "...", "status": "SUFFICIENT" | "PARTIALLY_SUFFICIENT" | "INSUFFICIENT", "approved_parent_ids": ["..."], "reason": "...", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}]}}]}}
         """
         try:
-            auditor_results = {
+            auditor_results.update({
                 result.get("task_id"): result
                 for result in _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR)).get("task_results", [])
-            }
+            })
         except Exception as error:
             print(f"🚨 [NODE 03c EXCEPTION]: {error}")
 
@@ -1620,6 +1661,13 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "reason": reason,
             "evidence_delta": history_delta,
         })
+        # Candidates shown this round but not approved are explicitly judged
+        # not relevant. Excluding them from future candidate pools stops a
+        # widened retry filter from re-surfacing known-bad evidence and
+        # wasting a selection slot on it.
+        newly_rejected = available_ids - set(approved_ids)
+        if newly_rejected:
+            rejected_parent_ids[str(task_id)] = list(set(rejected_parent_ids.get(str(task_id), [])) | newly_rejected)
         if requested_status == "SUFFICIENT" and approved_ids:
             # Parent IDs were already constrained to `available_ids`, the
             # candidate set produced by this RAG attempt. Keep only that
@@ -1638,6 +1686,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             )
             feedback.pop(task_id, None)
             partial_evidence.pop(str(task_id), None)
+            rejected_parent_ids.pop(str(task_id), None)
             continue
 
         retained_ids = partial_evidence.get(str(task_id), [])
@@ -1754,6 +1803,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             if task_id
         },
         "task_partial_evidence": partial_evidence,
+        "task_rejected_parent_ids": rejected_parent_ids,
         "task_resolution_instructions": task_resolution_instructions,
     }
 

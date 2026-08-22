@@ -113,6 +113,27 @@ class RAGEngine:
         return sorted(parent_scores.items(), key=lambda item: item[1], reverse=True)
 
     @staticmethod
+    def _exclude_rejected(ranked_parents: list[tuple[str, float]], excluded_ids: set[str], label: str) -> list[tuple[str, float]]:
+        """Drop parents a prior sufficiency audit already judged not relevant.
+
+        A widened retry filter can re-surface the exact same candidates the
+        auditor already rejected last attempt. Left in, they can occupy a
+        selection slot the widened scope was supposed to use for something
+        genuinely new, silently crowding out the answer the expansion was
+        meant to find. This never removes parents retained as partial
+        evidence — only ones explicitly seen and rejected outright.
+        """
+        if not excluded_ids:
+            return ranked_parents
+        kept = [(parent_id, score) for parent_id, score in ranked_parents if parent_id not in excluded_ids]
+        dropped = [parent_id for parent_id, _ in ranked_parents if parent_id in excluded_ids]
+        if dropped:
+            print(f"    [{label}] --- Excluding Previously-Rejected Parents ---")
+            for parent_id in dropped:
+                print(f"      🚫 '{parent_id}' already judged not relevant in an earlier attempt for this task; excluded from selection.")
+        return kept
+
+    @staticmethod
     def _select_ranked_parents(ranked_parents: list[tuple[str, float]], label: str) -> list[str]:
         """Apply the shared top-four / score-drop boundary to ranked parents."""
         selected_parent_ids = []
@@ -141,6 +162,7 @@ class RAGEngine:
         query_text: str,
         metadata_filter: dict,
         verified_parent_ids: list[str],
+        excluded_parent_ids: set[str] | None = None,
     ) -> List[Dict[str, str]]:
         """Fuse current direct ranking with re-ranked verified session parents.
 
@@ -171,8 +193,9 @@ class RAGEngine:
             self._query_single_angle(query_text, metadata_filter),
             self._query_single_angle(query_text, session_filter, top_k=session_top_k),
         )
-        live_ranked = self._rank_unique_parents(live_hits)
-        session_ranked = self._rank_unique_parents(session_hits)
+        exclude_set = excluded_parent_ids or set()
+        live_ranked = self._exclude_rejected(self._rank_unique_parents(live_hits), exclude_set, "SESSION EVIDENCE RRF (live)")
+        session_ranked = self._exclude_rejected(self._rank_unique_parents(session_hits), exclude_set, "SESSION EVIDENCE RRF (session)")
 
         print("    [SESSION EVIDENCE RRF] Current direct ranking:")
         for rank, (parent_id, score) in enumerate(live_ranked, start=1):
@@ -209,6 +232,7 @@ class RAGEngine:
         query_text: str,
         scope_pairs: list[dict],
         verified_session_parent_ids: list[str] | None = None,
+        excluded_parent_ids: list[str] | None = None,
     ) -> List[Dict[str, str]]:
         """Retrieve a task through its resolved customer subquery only.
 
@@ -216,11 +240,24 @@ class RAGEngine:
         discriminative wording and uses Product × Intent solely as a metadata
         boundary.  It does not manufacture multiple rank lists, so Chroma's
         cosine ranking is used directly before parent-level de-duplication.
+
+        `excluded_parent_ids` removes parents an earlier attempt on this same
+        task already had rejected by the sufficiency auditor, before the
+        top-four / 50%-drop-off selection runs — a widened retry filter must
+        not let those recur and occupy a slot meant for genuinely new
+        candidates. A deeper candidate fetch compensates so exclusion still
+        leaves room to find something new.
         """
         clean_query = str(query_text or "").strip()
         if not clean_query:
             print("    ⚠️ [DIRECT RAG] No resolved task subquery was supplied.")
             return []
+
+        exclude_set = {pid for pid in (excluded_parent_ids or []) if pid}
+        # Each excluded parent may cost up to a couple of child slots in the
+        # raw hit list before parent-level de-duplication; fetch deeper so
+        # excluding them still leaves genuinely new candidates to select from.
+        fetch_top_k = RRF_CANDIDATES_PER_ANGLE + (len(exclude_set) * 2 if exclude_set else 0)
 
         start_time = time.time()
         metadata_filter = self._build_metadata_filter(scope_pairs)
@@ -228,18 +265,21 @@ class RAGEngine:
         print(" 🔍 [RAG ENGINE] INITIALIZING DIRECT TASK SEARCH")
         print(f" 📦 Valid Product/Intent Scope: {scope_pairs}")
         print(f" 🗣️  Resolved task subquery: '{clean_query}'")
+        if exclude_set:
+            print(f" 🚫 Excluding {len(exclude_set)} previously-rejected parent(s) for this task: {sorted(exclude_set)}")
 
         if verified_session_parent_ids:
             payload = await self._execute_direct_search_with_verified_session_evidence(
                 clean_query,
                 metadata_filter,
                 verified_session_parent_ids,
+                exclude_set,
             )
             print(f" ⏱️  [DIRECT + SESSION RRF] Total Execution Time: {(time.time() - start_time) * 1000:.2f} ms")
             print("═" * 60 + "\n")
             return payload
 
-        hits = await self._query_single_angle(clean_query, metadata_filter)
+        hits = await self._query_single_angle(clean_query, metadata_filter, top_k=fetch_top_k)
         if not hits:
             print("    ⚠️ No results returned from ChromaDB.")
             print("═" * 60 + "\n")
@@ -260,25 +300,8 @@ class RAGEngine:
             )
 
         ranked_parents = sorted(parent_scores.items(), key=lambda item: item[1], reverse=True)
-        selected_parent_ids = []
-        previous_score = None
-        print("    [DIRECT RAG] --- Parent Selection ---")
-        for rank, (parent_id, score) in enumerate(ranked_parents, start=1):
-            if not selected_parent_ids:
-                selected_parent_ids.append(parent_id)
-                previous_score = score
-                print(f"      [Rank 1] Parent: '{parent_id}' | Score: {score:.4f} -> ✅ AUTO-SELECTED")
-                continue
-            if len(selected_parent_ids) >= MAX_PARENTS:
-                print(f"      [Rank {rank}] Parent: '{parent_id}' | Score: {score:.4f} -> ❌ DROPPED (Max Limit {MAX_PARENTS} Reached)")
-                continue
-            ratio = score / previous_score if previous_score else 0.0
-            if ratio < 0.50:
-                print(f"      [Rank {rank}] Parent: '{parent_id}' | Score: {score:.4f} | Ratio: {ratio * 100:.1f}% -> ❌ DROPPED (Ratio < 50%)")
-                break
-            selected_parent_ids.append(parent_id)
-            previous_score = score
-            print(f"      [Rank {rank}] Parent: '{parent_id}' | Score: {score:.4f} | Ratio: {ratio * 100:.1f}% -> ✅ SELECTED")
+        ranked_parents = self._exclude_rejected(ranked_parents, exclude_set, "DIRECT RAG")
+        selected_parent_ids = self._select_ranked_parents(ranked_parents, "DIRECT RAG")
 
         print(f"    📊 Direct search finalized {len(selected_parent_ids)} Parent(s) for LLM Hydration: {selected_parent_ids}")
         payload = self._hydrate_parents_from_sqlite(selected_parent_ids)
@@ -335,7 +358,7 @@ class RAGEngine:
         }
         return [legacy_group] if any(legacy_group[name] for name in ("procedural", "policy", "conceptual")) else []
 
-    async def execute_multi_angle_search(self, blueprint: dict, scope_pairs: list[dict]) -> List[Dict[str, str]]:
+    async def execute_multi_angle_search(self, blueprint: dict, scope_pairs: list[dict], excluded_parent_ids: list[str] | None = None) -> List[Dict[str, str]]:
         """Retrieve one task through angle-group RRF under one shared scope.
 
         Every angle group is an alternative semantic representation.  Each
@@ -433,7 +456,8 @@ class RAGEngine:
                 print(f"      + {contribution:.4f} task pts to '{pid}' ({group_id} group score {group_score:.4f} × {group_weight:.3f})")
 
         sorted_parents = sorted(task_rrf_scores.items(), key=lambda item: item[1], reverse=True)
-        
+        sorted_parents = self._exclude_rejected(sorted_parents, {pid for pid in (excluded_parent_ids or []) if pid}, "ANGLE-GROUP RRF")
+
         if not sorted_parents:
             print("    ⚠️ No results returned from ChromaDB.")
             execution_time = (time.time() - start_time) * 1000

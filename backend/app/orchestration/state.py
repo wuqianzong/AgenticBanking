@@ -43,6 +43,7 @@ class AgentState(TypedDict):
     search_tasks: List[Dict[str, Any]]           # Immutable task definitions with stable task_id values
     task_results: List[Dict[str, Any]]           # Parent-ID evidence selections and sufficiency result per task
     task_retry_counts: Dict[str, int]            # Retry count keyed by task_id
+    deferred_retry_task_ids: List[str]           # Meta-filter no-op tasks waiting for sibling retry retrieval before angle expansion
     task_feedback: Dict[str, List[Dict[str, str]]]  # Task-specific observed candidate-evidence deltas
     task_sufficiency_history: Dict[str, List[Dict[str, Any]]]  # Current-turn audit trail used to keep repeated sufficiency judgments consistent
     task_partial_evidence: Dict[str, List[str]]  # Parent IDs retained while a task is only partly answerable and continues retrieval

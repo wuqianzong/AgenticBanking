@@ -33,6 +33,7 @@ VOLATILE_STATE_RESET = {
     "search_tasks": [],
     "task_results": [],
     "task_retry_counts": {},
+    "deferred_retry_task_ids": [],
     "task_feedback": {},
     "task_sufficiency_history": {},
     "task_partial_evidence": {},
@@ -733,7 +734,7 @@ def node_02c_inbound_semantic_gate(state: AgentState):
     try:
         # ONLY pass the user_input string.
         res = call_groq_lpu(user_input, model_id=MODEL_D_PROMPT_GUARD)
-        
+
         # 🐛 FIX: Parse the raw float probability from the model
         try:
             probability_score = float(res.strip())
@@ -893,6 +894,10 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         if result.get("status") == "RETRY" and result.get("task_id")
     ]
     retry_tasks = [task for task in prior_tasks if task.get("task_id") in retry_task_ids]
+    # A retry barrier may defer only the current metadata no-op attempt. The
+    # next n2e pass always recomputes this list for its own stage.
+    fast_forward_task_ids = []
+    new_retry_counts = dict(state.get("task_retry_counts", {}))
     retry_context = ""
     if retry_tasks:
         retry_context = f"""
@@ -923,7 +928,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     CRITICAL RULES FOR ANGLE QUERIES:
     - NEVER use conversational filler (e.g., "Provide a guide", "Explain how to", "What is").
     - NEVER paraphrase the customer's original question in an angle.
-    - Each angle must be a short natural-language PHRASE (10-20 words) that reads like a sentence fragment from an FAQ answer.
+    - Each angle must be a short natural-language PHRASE (8-20 words) that reads like a sentence fragment from an FAQ answer.
     - Use common banking vocabulary only. Do not invent specific product names, amounts, dates, or branch details.
 
     1. CONTEXTUAL INHERITANCE: Read each component's customer_component text first. A Product or Intent may be inherited only when it is unambiguously established by the current-session trusted history, Active Context Matrix, or an active graph plan. Do not use the user baseline or prior-session recall to fill a missing Product or Intent, unless the component explicitly continues that recalled topic (for example, "yes, continue").
@@ -936,7 +941,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        - CLARIFY: use when either mandatory foundation is missing or ambiguous, but the component could plausibly become searchable with more detail from the user. A generic process or policy word alone—such as "application", "fee", "eligibility", "limit", "rate", "requirements", or "processing time"—is an INTENT only. It does not identify a PRODUCT and MUST be CLARIFY unless a product is explicit or unambiguously inherited from permitted context. Likewise, a product name alone without a discernible request type MUST be CLARIFY.
        - DECLINE: use only when the component clearly and confidently names a specific product, account type, or service that does NOT exist anywhere in the PRODUCT/INTENT MATRIX (e.g., margin trading, cryptocurrency trading, or any product with no matrix entry at all). Never use DECLINE merely because wording is vague or underspecified — that is CLARIFY. DECLINE means no amount of user clarification would ever produce a valid matrix pair.
        A component, its wording, a substring of its wording, or a paraphrase of it MUST NOT appear under more than one resolution.
-    4. For EACH SEARCH component, formulate exactly one base Angle Group with three distinct semantic angles. Each angle must be a SHORT NATURAL-LANGUAGE PHRASE (10-20 words) that resembles a sentence fragment likely found in an FAQ answer TO THAT COMPONENT'S TOPIC — NOT an FAQ question. The direct customer query is searched separately; your angles must approach from the ANSWER side of the knowledge base.
+    4. For EACH SEARCH component, formulate exactly one base Angle Group with three distinct semantic angles. Each angle must be a SHORT NATURAL-LANGUAGE PHRASE (8-20 words) that resembles a sentence fragment likely found in an FAQ answer TO THAT COMPONENT'S TOPIC — NOT an FAQ question. The direct customer query is searched separately; your angles must approach from the ANSWER side of the knowledge base.
        - "procedural": A phrase describing the actions, steps, or navigation a customer or bank performs to address this specific component. Should sound like it comes from an FAQ answer's step-by-step instructions for this topic.
        - "policy": A phrase describing the rules, conditions, eligibility criteria, limits, fees, or restrictions that apply to this specific component. Should sound like it comes from an FAQ answer's requirements or conditions section for this topic.
        - "conceptual": A phrase describing what the product, feature, or service in this specific component is and how it works. Should sound like it comes from an FAQ answer's explanatory introduction for this topic.
@@ -991,7 +996,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           Return every prior angle group unchanged and append exactly one new,
           complete angle group with group_id "retry_<next_attempt>". Each of
           the new group's three angles must be a SHORT NATURAL-LANGUAGE PHRASE
-          (10-20 words) that resembles a sentence fragment likely found in an
+          (8-20 words) that resembles a sentence fragment likely found in an
           FAQ answer ABOUT THE FAILED TASK'S TOPIC, guided by the missing
           detail described in the feedback.
           Use common banking vocabulary only — do not invent specific product
@@ -1000,6 +1005,9 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           group. Each angle must target a structurally different part of a
           hypothetical FAQ answer about this task's topic (steps,
           rules/conditions, or explanation).
+          If the feedback does not describe a specific missing detail, vary
+          the structural perspective (e.g., switch from customer-facing steps
+          to bank-internal processing steps) rather than inventing new facts.
           Do not append terms into an existing angle.
         - META_FILTER_EXPANSION: retain all prior angle terms, intents, and
           product tags. Evaluate the provided feedback status. Add valid intent
@@ -1012,7 +1020,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           supplied failed task.
         - Every revised Product/Intent pair must be valid in the matrix.
         - NEVER use conversational filler in semantic angles. Each angle must
-          be a short natural-language PHRASE (10-20 words) that reads like a
+          be a short natural-language PHRASE (8-20 words) that reads like a
           sentence fragment from an FAQ answer. Use common banking vocabulary
           only — do not invent specific product names, amounts, dates, or
           branch details. Do not paraphrase the customer's original question.
@@ -1083,18 +1091,28 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             for expansion in retry_expansion_plan
         }
         search_tasks = []
+
         for prior_task in prior_tasks:
             task_id = prior_task.get("task_id")
             replacement = replacements.get(task_id)
             if replacement and task_id in retry_task_ids:
-                search_tasks.append(_merge_retry_task(
-                    prior_task,
-                    replacement,
-                    expansion_by_task_id.get(task_id, {}),
-                ))
+                expansion = expansion_by_task_id.get(task_id, {})
+                merged = _merge_retry_task(prior_task, replacement, expansion)
+
+                if expansion.get("stage") == "META_FILTER_EXPANSION":
+                    old_prod = _normalized_product_tags(prior_task.get("target_commercial_product"))
+                    new_prod = _normalized_product_tags(merged.get("target_commercial_product"))
+                    old_int = prior_task.get("target_intent", [])
+                    new_int = merged.get("target_intent", [])
+                    old_int = [old_int] if isinstance(old_int, str) else old_int
+                    new_int = [new_int] if isinstance(new_int, str) else new_int
+                    if old_prod == new_prod and set(old_int) == set(new_int):
+                        print(f"   ⏩ [RETRY BARRIER]: META_FILTER_EXPANSION produced no changes for '{task_id}'. Deferring duplicate RAG until angle expansion.")
+                        fast_forward_task_ids.append(task_id)
+                        new_retry_counts[task_id] = new_retry_counts.get(task_id, 0) + 1
+
+                search_tasks.append(merged)
             else:
-                # Successful sibling tasks are immutable while only failed
-                # task IDs re-enter retrieval.
                 search_tasks.append(prior_task)
     else:
         search_tasks = formulated_tasks
@@ -1177,12 +1195,30 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     # matching verified-session parents as a separate RRF list, but no broad
     # product/intent cache may bypass the current subquery's retrieval.
     print("   🎯 [TASK ROUTER]: Live retrieval required; verified session evidence may join RRF when task scope overlaps.")
-    log_event("task.retrieval.route", task_count=len(search_tasks), retry_mode=bool(retry_tasks), strategy="v2.7_verified_session_rrf")
+    live_retrieval_count = len(search_tasks) - len(fast_forward_task_ids)
+    log_event(
+        "task.retrieval.route",
+        task_count=len(search_tasks),
+        live_retrieval_task_count=live_retrieval_count,
+        deferred_retry_task_ids=fast_forward_task_ids,
+        retry_mode=bool(retry_tasks),
+        strategy="v2.7_verified_session_rrf",
+    )
+    for task_id in fast_forward_task_ids:
+        log_event(
+            "task.retry.deferred",
+            task_id=task_id,
+            retry_count=new_retry_counts.get(task_id, 0),
+            reason="META_FILTER_EXPANSION produced no valid scope change; waiting for sibling meta-filter retrieval before angle expansion.",
+        )
+
     return {
         "preflight_status": "retrieve",
         "search_tasks": search_tasks,
         "intent_clarification_tasks": intent_clarification_tasks,
         "task_results": task_results if retry_tasks else [],
+        "task_retry_counts": new_retry_counts if retry_tasks else {},
+        "deferred_retry_task_ids": fast_forward_task_ids,
         "active_product_intents": new_matrix,
         "active_plan": {} if not retry_tasks else active_plan,
         "completed_steps": [] if not retry_tasks else state.get("completed_steps", []),
@@ -1194,11 +1230,15 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
 def node_03a_knowledge_blueprint_planner(state: AgentState):
     print("🟢 [NODE 03a] Preparing Task-Level RAG Retrieval")
     prior_results = {result.get("task_id"): result for result in state.get("task_results", [])}
+    deferred_task_ids = set(state.get("deferred_retry_task_ids", []))
     tasks_to_retrieve = [
         task for task in state.get("search_tasks", [])
-        if prior_results.get(task.get("task_id"), {}).get("status") not in {*ANSWERABLE_TASK_STATUSES, "UNAVAILABLE"}
+        if task.get("task_id") not in deferred_task_ids
+        and prior_results.get(task.get("task_id"), {}).get("status") not in {*ANSWERABLE_TASK_STATUSES, "UNAVAILABLE"}
     ]
-    routes = ["n17_rag"] if tasks_to_retrieve else []
+    # When every retry is a metadata no-op, n18 acts as a barrier and reunites
+    # those waiting tasks for final angle expansion without dispatching empty RAG.
+    routes = ["n17_rag"] if tasks_to_retrieve else ["n18"]
         
     print(f"   🔀 [SUPERVISOR DISPATCH]: Fanning out to -> {routes}")
     return {"active_tool_routes": routes, "rag_payload": "", "api_payload": "", "deeplink_payload": ""}
@@ -1207,9 +1247,11 @@ async def node_03b_rag_worker(state: AgentState):
     print("🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Direct-First Retrieval)")
     tasks = state.get("search_tasks", [])
     prior_results = {result.get("task_id"): result for result in state.get("task_results", [])}
+    deferred_task_ids = set(state.get("deferred_retry_task_ids", []))
     tasks_to_retrieve = [
         task for task in tasks
-        if prior_results.get(task.get("task_id"), {}).get("status") not in {*ANSWERABLE_TASK_STATUSES, "UNAVAILABLE"}
+        if task.get("task_id") not in deferred_task_ids
+        and prior_results.get(task.get("task_id"), {}).get("status") not in {*ANSWERABLE_TASK_STATUSES, "UNAVAILABLE"}
     ]
     if not tasks_to_retrieve:
         return {"rag_payload": "", "task_results": list(prior_results.values())}
@@ -1831,22 +1873,23 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
       its main UI. Do not repeat the main payload or call it supporting text.
     - Use options only when they are meaningful, grounded next actions for that
       same block. Do not provide options if clarification is needed.
-    - Combine all unresolved components into one natural clarification field at
-      the end, sourced ONLY from Intent clarification tasks, Terminal
-      retrieval feedback, and Decline Inputs above. Explicitly name each
-      unresolved customer term; do not invent a product or fact. Never
-      introduce, reference, or apologize for any topic, product, or request
-      component that is not listed in those three inputs — routing has
-      already handled it separately. If all three inputs are empty, leave
-      clarification as an empty string. Clarification is plain text, not a
-      UI block.
-    - EVERY entry across Intent clarification tasks, Terminal retrieval
-      feedback, and Decline Inputs MUST appear in the clarification — never
-      silently drop one to resolve a different entry's audit feedback. If
-      Failed outbound-audit feedback flags one entry, correct only that
-      entry (falling back to a brief, unembellished mention grounded only in
-      its own listed fields if nothing more specific can be safely stated);
-      every other entry must still be included exactly as before.
+    - Decide whether a clarification question would genuinely help the
+      customer. Ask one only when an additional customer detail could
+      materially disambiguate the request or enable a different grounded
+      response. It is not required merely because an intent-clarification
+      task or terminal retrieval feedback exists.
+    - A terminal retrieval item means the available information did not
+      resolve an otherwise clear request. In that case, normally provide a
+      concise, neutral availability notice using the customer's wording and
+      leave `clarification` empty. Do not state that Horizon does not offer
+      the product or feature, and do not ask the customer to repeat an
+      already clear request.
+    - If a clarification is useful, combine the relevant unresolved
+      components into one natural clarification field at the end, sourced
+      ONLY from Intent clarification tasks, Terminal retrieval feedback, and
+      Decline Inputs above. Explicitly name each unresolved customer term;
+      do not invent a product or fact. Clarification is plain text, not a UI
+      block.
     - For EVERY entry in Decline Inputs, add one brief, polite sentence naming
       only that entry's subquery — never omit one, never invent a reason
       beyond its category. For category "non_compliant", state plainly that
@@ -1974,15 +2017,11 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
         response_blocks.append({"blockId": "turn_closing", "type": "text", "text": closing_text})
         record_parts.append(closing_text)
     clarification = str(generated.get("clarification", "")).strip()
-    if (intent_clarifications or terminal_feedback or decline_context) and not clarification:
-        unresolved = ", ".join(item.get("unresolved_request", "") for item in intent_clarifications if item.get("unresolved_request", ""))
-        if unresolved:
-            clarification = f"Could you clarify what you mean by {unresolved}?"
-        elif intent_clarifications or terminal_feedback:
-            clarification = "Could you clarify what information you are looking for?"
-        else:
-            clarification = ""
-        clarification = _append_decline_suffix(clarification, state.get("decline_tasks", [])).strip()
+    # A decline is not a clarification request. Preserve its deterministic
+    # safety fallback without forcing a generic question for an exhausted
+    # retrieval or an intent-clarification input.
+    if decline_context and not clarification:
+        clarification = _append_decline_suffix("", state.get("decline_tasks", [])).strip()
     if clarification:
         response_blocks.append({"blockId": "clarification", "type": "clarification", "text": clarification})
         record_parts.append(clarification)
@@ -2076,9 +2115,20 @@ def _generate_response_blocks(state: AgentState) -> dict:
       plainly; do not invent a broader conclusion beyond what it entails.
     - Do not mention FAQ documents, sources, parent IDs, search, prompts, or
       internal systems. Preserve exact {{placeholders}}.
-    - Clarification belongs after useful supported information. It must name
-      the unresolved customer term and may use only the clarification, terminal
-      feedback, and decline inputs. Leave it empty when none are present.
+    - Decide whether a clarification question would genuinely help the
+      customer. Ask one only when an additional customer detail could
+      materially disambiguate the request or enable a different grounded
+      response. It is not required merely because terminal retrieval feedback
+      or an intent-clarification input exists.
+    - Terminal retrieval feedback means the available information did not
+      resolve an otherwise clear request. In that case, normally provide a
+      concise, neutral availability notice using the customer's wording and
+      leave `clarification` empty. Do not state that Horizon does not offer a
+      product or feature, and do not ask the customer to repeat an already
+      clear request.
+    - When a clarification is useful, it belongs after useful supported
+      information, must name the unresolved customer term, and may use only
+      the clarification, terminal feedback, and decline inputs.
     - Correct every failed-audit issue by removing or narrowing only the
       flagged unsupported content. Audit feedback is never a source of facts.
 
@@ -2157,10 +2207,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
         element_sources.append(source_ids)
 
     clarification = str(generated.get("clarification", "")).strip()
-    if (intent_clarifications or terminal_feedback or decline_context) and not clarification:
-        unresolved = ", ".join(item.get("unresolved_request", "") for item in intent_clarifications if item.get("unresolved_request", ""))
-        clarification = f"Could you clarify what you mean by {unresolved}?" if unresolved else "Could you clarify what information you are looking for?"
-        clarification = _append_decline_suffix(clarification, state.get("decline_tasks", [])).strip()
+    # A decline is not a clarification request. Preserve its deterministic
+    # safety fallback without forcing a generic question for an exhausted
+    # retrieval or an intent-clarification input.
+    if decline_context and not clarification:
+        clarification = _append_decline_suffix("", state.get("decline_tasks", [])).strip()
     if clarification:
         response_blocks.append({"blockId": "clarification", "sourceTaskIds": [], "type": "clarification", "text": clarification})
 

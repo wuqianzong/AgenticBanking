@@ -105,7 +105,7 @@ def build_agent_graph():
     workflow.add_conditional_edges("n16", route_n16, {"n2d": "n2d", "n5": "n5"})
     workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n8": "n8", "n2e": "n2e", "n5": "n5"})
     workflow.add_conditional_edges("n2e", route_n2e, {"n14": "n14", "n19": "n19", "n8": "n8", "n5": "n5"})
-    workflow.add_conditional_edges("n14", route_tools, {"n17_rag": "n17_rag"})
+    workflow.add_conditional_edges("n14", route_tools, {"n17_rag": "n17_rag", "n18": "n18"})
     workflow.add_edge("n17_rag", "n18")
     workflow.add_conditional_edges("n18", route_n18, {"n2e": "n2e", "n19": "n19"})
     workflow.add_conditional_edges("n19", route_n19, {"n8": "n8", "n5": "n5"})

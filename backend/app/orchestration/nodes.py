@@ -17,7 +17,7 @@ from backend.app.core.llm_service import (
     MODEL_E_TRIAGE,
 )
 from backend.app.core.groundedness import check_evidence_groundedness, check_conduct_compliance
-from backend.app.core.compliance import MAS_REGULATIONS_CONTEXT, PRECISION_REFERENCE_CONTRACT
+from backend.app.core.compliance import REGULATORY_LICENSING_CONTEXT, PRECISION_REFERENCE_CONTRACT
 from backend.app.core.system_logger import log_event
 from backend.app.orchestration.tool_registry import enabled_tool_capabilities, is_registered_operation, TOOL_REGISTRY
 
@@ -867,7 +867,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     WHOLE-TURN FINANCIAL TRIAGE FOR A READ-ONLY HORIZON BANK ASSISTANT
 
     MAS COMPLIANCE CONTEXT (screening only; never quote it):
-    {MAS_REGULATIONS_CONTEXT}
+    {REGULATORY_LICENSING_CONTEXT}
 
     Trusted Conversation Context: {history_str}
     User Baseline (advisory only): {user_baseline}

@@ -22,7 +22,7 @@ content, the model call, and the fail-closed error handling live here once.
 """
 import json
 from backend.app.core.llm_service import call_groq_lpu, parse_json_robustly, MODEL_B_AUDITOR
-from backend.app.core.compliance import MAS_REGULATIONS_CONTEXT, BANK_CONDUCT_CONTEXT, PRECISION_REFERENCE_CONTRACT
+from backend.app.core.compliance import REGULATORY_LICENSING_CONTEXT, BANK_CONDUCT_CONTEXT, PRECISION_REFERENCE_CONTRACT
 
 
 def check_evidence_groundedness(
@@ -105,7 +105,7 @@ def check_conduct_compliance(
     {BANK_CONDUCT_CONTEXT}
 
     Regulatory Context:
-    {MAS_REGULATIONS_CONTEXT}
+    {REGULATORY_LICENSING_CONTEXT}
 
     Customer-Facing Content:
     {content_block}

@@ -9,12 +9,14 @@ from backend.app.orchestration.state import AgentState
 from backend.app.orchestration.rag_engine import RAGEngine
 from backend.app.services.memory_service import LongTermMemoryManager
 from backend.app.core.llm_service import (
-    call_groq_lpu, 
-    MODEL_B_AUDITOR, 
+    call_groq_lpu,
+    parse_json_robustly as _parse_json_robustly,
+    MODEL_B_AUDITOR,
     MODEL_C_PLANNER,
     MODEL_D_PROMPT_GUARD,
     MODEL_E_TRIAGE,
 )
+from backend.app.core.groundedness import check_evidence_groundedness, check_conduct_compliance
 from backend.app.core.compliance import MAS_REGULATIONS_CONTEXT, PRECISION_REFERENCE_CONTRACT
 from backend.app.core.system_logger import log_event
 from backend.app.orchestration.tool_registry import enabled_tool_capabilities, is_registered_operation, TOOL_REGISTRY
@@ -488,17 +490,6 @@ Authentication And Security: Login issues, password/PIN resets, OTP failures, to
 Branch And ATM Locator: Finding physical infrastructure. 
 General Inquiries: Catch-all. App navigation, UI bugs, compliance, generic notifications.
 """
-
-def _parse_json_robustly(raw_text: str) -> dict:
-    clean_text = raw_text.strip()
-    if clean_text.startswith("```json"): clean_text = clean_text[7:]
-    elif clean_text.startswith("```"): clean_text = clean_text[3:]
-    if clean_text.endswith("```"): clean_text = clean_text[:-3]
-    try: return json.loads(clean_text.strip())
-    except Exception as e:
-        print(f"🚨 [JSON PARSE ERROR]: {e} \nRaw text was: {raw_text}")
-        raise e
-
 
 def _ui_option_texts(options: list) -> list[str]:
     """Return every customer-visible and submitted value in chip payloads.
@@ -2732,7 +2723,12 @@ def _generate_response_blocks(state: AgentState) -> dict:
     Intent clarification inputs: {json.dumps(intent_clarifications, ensure_ascii=False)}
     Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
     Decline inputs: {json.dumps(decline_context, ensure_ascii=False)}
-    Failed outbound-audit feedback (constraints only, never evidence):
+    Failed outbound-audit feedback (constraints only, never evidence). Each
+    entry identifies one specific claim or instruction to remove — it is
+    never permission to abandon the topic it came from. After removing
+    exactly what is flagged, re-apply every Design Principle below to still
+    give the most complete, honestly-scoped response the remaining approved
+    evidence supports:
     {json.dumps(audit_feedback, ensure_ascii=False)}
 
     {PRECISION_REFERENCE_CONTRACT}
@@ -2769,6 +2765,16 @@ def _generate_response_blocks(state: AgentState) -> dict:
       as guidance for a damaged card, but must not become a claim that only
       damaged cards qualify or that another reason will fail, unless approved
       evidence explicitly says so.
+    - Never respond with only a restatement of the customer's own words, a
+      bare acknowledgement, or anything containing zero Horizon information,
+      when any approved evidence exists for the turn. A mismatch between the
+      customer's stated reason and the evidence's actual condition is not a
+      dead end — hold it to the same standard as a Decline Input: name
+      plainly, in one honest sentence, what the available information does
+      not cover for the customer's specific situation; then, unlike a
+      decline, still share the closest genuinely evidenced information as
+      clearly-scoped optional context (per the Applicability rule above)
+      instead of leaving the customer with nothing.
     - Respond as one considered conversation, not as a retrieval report or a
       sequence of task answers. Search tasks are internal evidence units, not
       required visible sections.
@@ -3560,17 +3566,10 @@ def _normalize_grounding_violations(raw_violations: Any) -> list[dict]:
 
 
 def node_06_outbound_compliance_gate(state: AgentState):
-    """Focused MAS policy audit of the complete customer-facing response."""
+    """Groundedness v2.0 conduct axis: bank conduct + MAS compliance audit."""
     print("🟢 [NODE 06a] Executing Outbound Compliance Audit")
     answer, clarification, rendered_payload = _outbound_response_content(state)
-    prompt = f"""
-    You are an independent Compliance Auditor for a Singaporean Bank.
-
-    Regulatory Context:
-    {MAS_REGULATIONS_CONTEXT}
-
-    {PRECISION_REFERENCE_CONTRACT}
-
+    content_block = f"""
     Customer-Facing Answer:
     "{answer}"
 
@@ -3579,36 +3578,31 @@ def node_06_outbound_compliance_gate(state: AgentState):
 
     Complete Customer-Facing UI Payload:
     "{rendered_payload}"
-
-    TASK: Assess COMPLIANCE ONLY. Do not assess whether facts are supported by
-    evidence; a separate auditor handles groundedness. Determine whether any
-    customer-facing text, UI item, option, step, list entry, or extended text
-    provides unauthorized personalized financial advice, subjective product
-    recommendation, return forecast, transaction execution, deceptive claim,
-    or assistance to bypass security, KYC, AML/CFT, or other controls.
-    Neutral factual information, safe apologies, and neutral clarification
-    requests are compliant. A polite decline of a non-compliant request is
-    compliant ONLY if it declines without itself providing the disallowed
-    advice, action, or information, and does not misstate what Horizon can
-    or cannot do beyond the Regulatory Context above. Every visible field in
-    the payload is in scope.
+    """
+    route_specific_rules = """
+    Determine whether any customer-facing text, UI item, option, step, list
+    entry, or extended text provides unauthorized personalized financial
+    advice, subjective product recommendation, return forecast, transaction
+    execution, deceptive claim, or assistance to bypass security, KYC,
+    AML/CFT, or other controls. Neutral factual information, safe apologies,
+    and neutral clarification requests are compliant. A polite decline of a
+    non-compliant request is compliant ONLY if it declines without itself
+    providing the disallowed advice, action, or information, and does not
+    misstate what Horizon can or cannot do beyond the Bank Conduct Rules and
+    Regulatory Context above. Every visible field in the payload is in scope.
 
     Assess the Customer-Facing Answer (including its UI payload) and the
     Customer-Facing Clarification SEPARATELY, since a failure confined to
     one can be corrected without discarding the other.
-
-    Output JSON only:
-    {{"passed": true/false, "answer_compliant": true/false, "clarification_compliant": true/false, "reason": "...", "rewrite_instruction": "..."}}
     """
-    try:
-        result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
-        answer_compliant = bool(result.get("answer_compliant", False))
-        clarification_compliant = bool(result.get("clarification_compliant", False))
-        passed = bool(result.get("passed", False)) and answer_compliant and clarification_compliant
-    except Exception as error:
-        print(f"🚨 [COMPLIANCE AUDIT ERROR]: {error}")
-        result, passed = {"reason": "Compliance audit failed.", "rewrite_instruction": "Rewrite the response as neutral, factual Horizon Bank information."}, False
-        answer_compliant = clarification_compliant = False
+    result = check_conduct_compliance(
+        content_block,
+        route_specific_rules=route_specific_rules,
+        extra_output_fields=', "answer_compliant": true/false, "clarification_compliant": true/false, "rewrite_instruction": "..."',
+    )
+    answer_compliant = bool(result.get("answer_compliant", False))
+    clarification_compliant = bool(result.get("clarification_compliant", False))
+    passed = bool(result.get("conduct_compliant", False)) and answer_compliant and clarification_compliant
     audit = {
         "passed": passed,
         "answer_compliant": answer_compliant,
@@ -3626,71 +3620,71 @@ def _legacy_node_06_outbound_groundedness_gate(state: AgentState):
 
 
 def node_06_outbound_groundedness_gate(state: AgentState):
-    """Audit only the evidence sources permitted for this response event."""
+    """Groundedness v2.0 evidence axis: audit only the evidence permitted for this response event."""
     print("🟢 [NODE 06b] Executing Outbound Groundedness Audit")
     answer, clarification, rendered_payload = _outbound_response_content(state)
     is_initial_greeting = _is_initial_greeting(state)
     is_non_financial_response = state.get("triage_status") == "NON_FINANCIAL"
+
+    audit_feedback_rules = """
+    Audit-Feedback Rules:
+    - grounding_violations is internal validation data, never customer-facing text.
+    - Set response_recovery_strategy to one of these internal constraints:
+      * REMOVE_UNSUPPORTED_CONTENT when supported response content can be
+        retained after removing the exact unsupported claim or instruction.
+      * NARROW_TO_EVIDENCE_SCOPE when approved evidence is relevant but
+        establishes only a conditional, partial, or narrower policy/process
+        than the customer's broader question. The next response must
+        restate only that explicit evidence scope and must not answer the
+        broader question, infer exclusivity, offer the conditional process
+        as the customer's path, add steps, recommend an action, or ask a
+        further question unless independently supported.
+      * CLARIFY_FROM_ALLOWED_CONTEXT only when a permitted clarification
+        source genuinely contains an unresolved term whose answer could
+        materially change a grounded response.
+      * NO_STRATEGY when no special recovery constraint is needed.
+    - The strategy is never evidence, a rewrite, customer-facing wording,
+      a proposed product, service, action, or remedy.
+    - Report only unsupported visible content and the specific evidence that
+      is missing. Do not draft a rewrite or recommend an alternative action,
+      support channel, product, service, escalation path, or remedy.
+    - The evidence_gap describes an absence in the permitted source. It is
+      not evidence and must not be used to support a new customer claim.
+    """
+    recovery_strategy_field = ', "response_recovery_strategy":"NO_STRATEGY" | "REMOVE_UNSUPPORTED_CONTENT" | "NARROW_TO_EVIDENCE_SCOPE" | "CLARIFY_FROM_ALLOWED_CONTEXT"'
 
     if is_initial_greeting:
         greeting_memory = _build_greeting_memory_context(
             state.get("last_session_summary", state.get("working_context", "")),
             state.get("user_baseline_summary", ""),
         )
-        prompt = f"""
-        GREETING GROUNDEDNESS AUDIT
-        You are an evidence-groundedness auditor for a read-only Horizon Bank FAQ assistant.
-
-        Greeting Memory:
-        "{greeting_memory}"
-
+        content_block = f"""
         Customer-Facing Greeting:
         "{answer}"
 
         Complete Customer-Facing UI Payload:
         "{rendered_payload}"
-
-        TASK: Assess GROUNDEDNESS ONLY for this initialization greeting.
-        - Every recalled statement and suggested chip must be supported by Greeting Memory.
+        """
+        route_specific_rules = f"""
+        - Every recalled statement and suggested chip must be supported by the
+          Permitted Evidence (Greeting Memory) above.
         - A generic first-time greeting with no recalled facts or chips is grounded.
         - Do not assess banking-answer factuality, compliance, helpfulness, or a normal-turn clarification.
         - Every visible field in the greeting payload is in scope.
 
-        Audit-Feedback Rules:
-        - grounding_violations is internal validation data, never customer-facing text.
-        - Set response_recovery_strategy to one of these internal constraints:
-          * REMOVE_UNSUPPORTED_CONTENT when supported response content can be
-            retained after removing the exact unsupported claim or instruction.
-          * NARROW_TO_EVIDENCE_SCOPE when approved evidence is relevant but
-            establishes only a conditional, partial, or narrower policy/process
-            than the customer’s broader question. The next response must
-            restate only that explicit evidence scope and must not answer the
-            broader question, infer exclusivity, offer the conditional process
-            as the customer’s path, add steps, recommend an action, or ask a
-            further question unless independently supported.
-          * CLARIFY_FROM_ALLOWED_CONTEXT only when a permitted clarification
-            source genuinely contains an unresolved term whose answer could
-            materially change a grounded response.
-          * NO_STRATEGY when no special recovery constraint is needed.
-        - The strategy is never evidence, a rewrite, customer-facing wording,
-          a proposed product, service, action, or remedy.
-        - Report only unsupported visible content and the specific evidence that
-          is missing. Do not draft a rewrite or recommend an alternative action,
-          support channel, product, service, escalation path, or remedy.
-        - The evidence_gap describes an absence in the permitted source. It is
-          not evidence and must not be used to support a new customer claim.
-
-        Output JSON only:
-        {{"passed": true/false, "answer_grounded": true/false, "clarification_grounded": true, "clarification_connected": true, "reason": "...", "grounding_violations": [{{"task_id": "", "scope": "answer" | "ui_payload" | "clarification", "violation_type": "unsupported_claim" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]}}
+        {audit_feedback_rules}
         """
+        result = check_evidence_groundedness(
+            content_block,
+            evidence_bundle=greeting_memory,
+            evidence_description="Greeting Memory",
+            route_specific_rules=route_specific_rules,
+            extra_output_fields=f', "clarification_grounded": true, "clarification_connected": true{recovery_strategy_field}',
+        )
         audit_scope = "greeting"
     elif is_non_financial_response:
-        prompt = f"""
-        NON-FINANCIAL CONVERSATION GROUNDEDNESS AUDIT
-        You are a safety auditor for a read-only Horizon Bank assistant's
-        non-financial conversational response.
-
-        Original Customer Message:
+        content_block = f"""
+        Original Customer Message (courtesy-context only; never a source for a banking fact):
         {json.dumps(state.get("user_input", ""), ensure_ascii=False)}
 
         Customer-Facing Answer:
@@ -3701,44 +3695,38 @@ def node_06_outbound_groundedness_gate(state: AgentState):
 
         Complete Customer-Facing UI Payload:
         {rendered_payload}
-
-        TASK: Assess only whether this is a safe non-financial conversational
-        reply. This route is for politeness and natural interaction, never for
-        providing information.
-
-        Pass only when every visible field is a brief, natural, non-material
-        acknowledgement or a generic banking-assistant scope statement. It may
-        respond politely to the customer's tone, feeling, greeting, thanks, or
-        unrelated remark. It must not state or imply any banking fact, product,
-        feature, option, design, service, eligibility, policy, procedure,
-        availability, commitment, recommendation, material suggestion, next
-        action, support channel, or question that invites exploration of a
-        specific offering. It must have no substantive UI, chips, list, steps,
-        progress content, or options.
+        """
+        route_specific_rules = """
+        This route is for politeness and natural interaction, never for
+        providing information. Pass only when every visible field is a brief,
+        natural, non-material acknowledgement or a generic banking-assistant
+        scope statement. It may respond politely to the customer's tone,
+        feeling, greeting, thanks, or unrelated remark. It must not state or
+        imply any banking fact, product, feature, option, design, service,
+        eligibility, policy, procedure, availability, commitment,
+        recommendation, material suggestion, next action, support channel, or
+        question that invites exploration of a specific offering. It must
+        have no substantive UI, chips, list, steps, progress content, or
+        options.
 
         The Original Customer Message supports only a courteous acknowledgement
         of what the customer expressed; it never supports a material claim.
-        Do not assess normal FAQ evidence, compliance, helpfulness, or whether
-        the response answers a banking question.
-
-        Output JSON only:
-        {{"passed":true/false,"answer_grounded":true/false,"answer_evidence_grounded":true/false,"answer_bridge_grounded":true/false,"clarification_grounded":true/false,"clarification_connected":true/false,"reason":"...","grounding_violations":[{{"task_id":"","scope":"answer" | "ui_payload" | "clarification","audit_layer":"other","violation_type":"unsupported_claim" | "unsupported_instruction" | "unsupported_clarification_suggestion" | "other","unsupported_content":["verbatim customer-facing phrase"],"evidence_gap":"non-financial replies may not make material claims or suggestions"}}]}}
+        Do not assess helpfulness or whether the response answers a banking question.
         """
+        result = check_evidence_groundedness(
+            content_block,
+            evidence_bundle="None — this route permits no factual evidence; only a courteous, non-material acknowledgement is grounded.",
+            evidence_description="Non-Financial Conversation (no factual evidence permitted)",
+            route_specific_rules=route_specific_rules,
+            extra_output_fields=', "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false',
+        )
         audit_scope = "non_financial_response"
     else:
         grounding_context = _normal_outbound_grounding_context(state)
-        prompt = f"""
-        ANSWER GROUNDEDNESS V2 AUDIT
-        You are an evidence-groundedness auditor for a read-only Horizon Bank FAQ assistant.
-
-        Task-Level Approved Evidence (the only factual source for answers and answer UI):
-        {json.dumps(grounding_context["approved_by_task"], ensure_ascii=False)}
-
+        content_block = f"""
         Original Customer Message (courtesy-context only; never a source for a
         banking fact, instruction, product capability, policy, or outcome):
         {json.dumps(state.get("user_input", ""), ensure_ascii=False)}
-
-        {PRECISION_REFERENCE_CONTRACT}
 
         Optional Internal Response-Element Provenance (not customer-facing):
         {json.dumps(grounding_context["response_block_map"], ensure_ascii=False)}
@@ -3760,11 +3748,8 @@ def node_06_outbound_groundedness_gate(state: AgentState):
 
         Complete Customer-Facing UI Payload:
         "{rendered_payload}"
-
-        TASK: Assess GROUNDEDNESS ONLY. Do not assess MAS compliance, safety,
-        advice, helpfulness, completeness, or whether the response used every
-        available source.
-
+        """
+        route_specific_rules = f"""
         ANSWER AUDIT: assess the customer's natural answer as one coherent
         response. Do NOT require it to be written in separate factual and
         inferential sections. Instead, distinguish the following two internal
@@ -3775,7 +3760,8 @@ def node_06_outbound_groundedness_gate(state: AgentState):
           product capability, policy condition, limit, date, amount,
           placeholder, instruction, option, progress step, list item,
           extended-text statement, and answer response-block field must be
-          directly supported by Task-Level Approved Evidence.
+          directly supported by the Permitted Evidence (Task-Level Approved
+          Evidence) above.
         - Assess the answer and answer UI as one coherent customer response
           against the aggregate Task-Level Approved Evidence. The response does
           not need a visible section, element, or title for each task.
@@ -3829,8 +3815,7 @@ def node_06_outbound_groundedness_gate(state: AgentState):
           clarification, not silently omitted — treat a missing entry as
           equivalent to an unidentified reference for clarification_connected.
 
-        Audit-Feedback Rules:
-        - grounding_violations is internal validation data, never customer-facing text.
+        {audit_feedback_rules}
         - For every material failure, identify the exact visible phrase in
           unsupported_content and set audit_layer to evidence or bridge.
         - For evidence failures, explain which direct factual support is
@@ -3839,10 +3824,6 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         - If all of the answer is unsupported, say so explicitly in reason and
           include the material unsupported phrases. Do not use vague feedback
           such as "not grounded" without identifying why.
-        - Do not draft a rewrite or recommend an alternative action, support
-          channel, product, service, escalation path, or remedy.
-        - The evidence_gap describes an absence in the permitted source. It is
-          not evidence and must not be used to support a new customer claim.
         - If the approved evidence does not answer a task, record a
           task_not_answered violation. Do not suggest how Horizon should handle
           the task or where the customer should go next.
@@ -3856,37 +3837,26 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         - Do not fail a response because it omits information from any available
           source. Assess whether visible claims use a permitted source only.
         - Every visible field in the payload is in scope.
-
-        Output JSON only:
-        {{"passed": true/false, "answer_grounded": true/false, "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false, "response_recovery_strategy":"NO_STRATEGY" | "REMOVE_UNSUPPORTED_CONTENT" | "NARROW_TO_EVIDENCE_SCOPE" | "CLARIFY_FROM_ALLOWED_CONTEXT", "reason": "...", "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]}}
         """
+        result = check_evidence_groundedness(
+            content_block,
+            evidence_bundle=grounding_context["approved_by_task"],
+            evidence_description="Task-Level Approved Evidence — the only factual source for answers and answer UI",
+            route_specific_rules=route_specific_rules,
+            extra_output_fields=f', "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false{recovery_strategy_field}, "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]',
+        )
         audit_scope = "normal_response"
 
-    try:
-        result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
-        answer_grounded = bool(result.get("answer_grounded", False))
-        answer_evidence_grounded = bool(result.get("answer_evidence_grounded", answer_grounded))
-        answer_bridge_grounded = bool(result.get("answer_bridge_grounded", answer_grounded))
-        clarification_grounded = bool(result.get("clarification_grounded", False))
-        clarification_connected = bool(result.get("clarification_connected", False))
-        if audit_scope == "normal_response":
-            answer_grounded = answer_grounded and answer_evidence_grounded and answer_bridge_grounded
-        passed = bool(result.get("passed", False)) and answer_grounded and clarification_grounded and clarification_connected
-    except Exception as error:
-        print(f"🚨 [GROUNDEDNESS AUDIT ERROR]: {error}")
-        result = {
-            "reason": "Groundedness audit failed.",
-            "grounding_violations": [{
-                "task_id": "",
-                "scope": "answer",
-                "violation_type": "other",
-                "unsupported_content": [],
-                "evidence_gap": "The groundedness audit was unavailable; no additional customer-facing facts or actions may be added.",
-            }],
-        }
-        passed = answer_grounded = answer_evidence_grounded = answer_bridge_grounded = clarification_grounded = clarification_connected = False
+    answer_grounded = bool(result.get("evidence_grounded", False))
+    answer_evidence_grounded = bool(result.get("answer_evidence_grounded", answer_grounded))
+    answer_bridge_grounded = bool(result.get("answer_bridge_grounded", answer_grounded))
+    clarification_grounded = bool(result.get("clarification_grounded", False))
+    clarification_connected = bool(result.get("clarification_connected", False))
+    if audit_scope == "normal_response":
+        answer_grounded = answer_grounded and answer_evidence_grounded and answer_bridge_grounded
+    passed = answer_grounded and clarification_grounded and clarification_connected
 
-    grounding_violations = _normalize_grounding_violations(result.get("grounding_violations", []))
+    grounding_violations = _normalize_grounding_violations(result.get("grounding_violations", result.get("evidence_violations", [])))
     response_recovery_strategy = str(result.get("response_recovery_strategy", "NO_STRATEGY")).upper()
     if response_recovery_strategy not in {
         "NO_STRATEGY",
@@ -4275,18 +4245,43 @@ def _build_escalation_case_summary(state: AgentState) -> dict:
             if str(item).strip()
         ][:3]
         if main_pursuit:
-            log_event(
-                "escalation.case_summary.generated",
-                main_pursuit=main_pursuit,
-                unresolved_issues=unresolved_issues,
-                source="trusted_current_session",
+            # Groundedness v2.0: this summary reaches the customer directly in
+            # the escalation confirmation UI, so it is held to the same two
+            # checks as any other customer-facing content before use.
+            summary_text = json.dumps({"main_pursuit": main_pursuit, "unresolved_issues": unresolved_issues}, ensure_ascii=False)
+            evidence_audit = check_evidence_groundedness(
+                summary_text,
+                evidence_bundle=_build_current_session_escalation_context(state),
+                evidence_description="Current-Session Trusted Transcript",
+                route_specific_rules="""
+                Every stated topic, unresolved issue, and prior-assistant
+                summary must be directly supported by the Permitted Evidence.
+                Do not invent products, policies, account details, actions,
+                outcomes, customer preferences, or reasons for the escalation.
+                """,
             )
-            return {
-                "request": main_pursuit,
-                "problem": fallback_problem,
-                "unresolvedIssues": unresolved_issues,
-                "source": "current_session_summary",
-            }
+            conduct_audit = check_conduct_compliance(summary_text)
+            if evidence_audit.get("evidence_grounded") and conduct_audit.get("conduct_compliant"):
+                log_event(
+                    "escalation.case_summary.generated",
+                    main_pursuit=main_pursuit,
+                    unresolved_issues=unresolved_issues,
+                    source="trusted_current_session",
+                )
+                return {
+                    "request": main_pursuit,
+                    "problem": fallback_problem,
+                    "unresolvedIssues": unresolved_issues,
+                    "source": "current_session_summary",
+                }
+            log_event(
+                "escalation.case_summary.rejected",
+                level="WARNING",
+                evidence_grounded=bool(evidence_audit.get("evidence_grounded")),
+                conduct_compliant=bool(conduct_audit.get("conduct_compliant")),
+                evidence_reason=evidence_audit.get("reason", ""),
+                conduct_reason=conduct_audit.get("reason", ""),
+            )
     except Exception as error:
         print(f"⚠️ [ESCALATION SUMMARY] Current-session summarization failed: {error}")
         log_event("escalation.case_summary.failed", level="WARNING", error=str(error))

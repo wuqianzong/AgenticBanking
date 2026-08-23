@@ -129,5 +129,14 @@ and continues; it never fabricates data.
   The Response Generator alone chooses presentation. A conditional procedure
   cannot become a customer action path merely because a tool returned grounded
   instructions for a different condition.
-- Existing Prompt Guard, MAS compliance, deterministic placeholder validation,
-  precision substitution, and outbound groundedness checks remain unchanged.
+- Existing Prompt Guard, deterministic placeholder validation, and precision
+  substitution remain unchanged. Outbound compliance and groundedness now run
+  as Groundedness v2.0's shared evidence and conduct checks (see
+  `docs/GROUNDEDNESS_v2.0.md`); every route's external pass/fail contract is
+  unchanged, only the underlying implementation is now shared.
+- The escalation case summary — one of the surfaces this document's own
+  design implies should eventually carry validated tool-result facts — now
+  passes the same Groundedness v2.0 checks before it is shown, closing what
+  was previously a gap: it is customer-facing (rendered directly in the
+  escalation-confirmation UI block) and had no groundedness or compliance
+  check at all before this upgrade.

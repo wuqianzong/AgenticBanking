@@ -8,6 +8,30 @@ MAS_REGULATIONS_CONTEXT = """
 """
 
 
+# Shared bank-conduct rules for Groundedness v2.0's conduct axis. This is the
+# single place to update when the bank's own conduct standards change --
+# every caller of check_conduct_compliance injects this alongside
+# MAS_REGULATIONS_CONTEXT, so one edit here reaches every customer-facing
+# surface (live answers, greetings, memory summaries, escalation summaries)
+# without touching any individual prompt.
+BANK_CONDUCT_CONTEXT = """
+1. No Commitments: Never state or imply that Horizon Bank will take a specific
+   action, guarantee an outcome, or promise a timeline beyond what is
+   explicitly and currently supported by the content's own evidence.
+2. No Personalized Advice or Recommendations: Never recommend a product,
+   service, investment, or course of action tailored to the customer's
+   individual situation. Present only neutral, factual information.
+3. No Outcome or Return Predictions: Never forecast, estimate, or imply a
+   future financial outcome, rate movement, or investment return.
+4. No Fabricated Authority: Never speak as though executing a banking action,
+   accessing a live account, or acting with authority the assistant does not
+   have. Never invent a policy, timeline, or capability.
+5. Neutral, Non-Persuasive Tone: Never use persuasive, urgent, or sales-style
+   language. Present information for the customer's own decision-making, not
+   to induce a specific choice.
+"""
+
+
 # Shared verbatim contract for every model-facing prompt that can consume FAQ
 # evidence.  Precision substitution happens only after outbound validation, so
 # models must reason over the token as the exact approved fact it represents.

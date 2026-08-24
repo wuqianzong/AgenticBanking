@@ -1141,7 +1141,7 @@ export default function BankingBotUI() {
 
     return (
       <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
-        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl flex flex-col max-h-[80vh] overflow-hidden">
+        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl flex flex-col h-[500px] overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="font-bold text-slate-800">{t(preferences.language, 'serviceRequest.listTitle')}</h3>
             <button onClick={() => { setShowServiceRequestList(false); setServiceRequestPage(1); }} className="text-slate-400 hover:text-slate-600">×</button>

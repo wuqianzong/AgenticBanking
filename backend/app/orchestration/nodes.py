@@ -68,6 +68,7 @@ VOLATILE_STATE_RESET = {
     "active_tool_routes": [],
     "pending_advance": False,
     "service_request_event": {},
+    "last_session_transcript": [],
 }
 
 MAX_VERIFIED_TASK_HISTORY_TURNS = 10
@@ -698,13 +699,28 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
     if service_request_actions:
         ui_action_payload["serviceRequestActions"] = service_request_actions
 
+    # Read fresh, not stored: the raw last-session transcript is only ever
+    # used by n00b (a follow-up check straight after this node), never
+    # carried forward past this turn. If there's nothing to check (no prior
+    # session beyond the last login's own greeting, and no pending service
+    # request), n00b is skipped entirely -- see route_n00 in graph.py.
+    last_session_transcript = LongTermMemoryManager.fetch_last_session_transcript(customer_id)
+    has_followup_candidate = bool(last_session_transcript) or bool(service_request_actions)
+
     return {
         # A new login begins a clean graph. No plan, task evidence, retry
         # data, or other execution state crosses the session boundary, and
         # -- per the project's scope -- no conversation content does either.
+        # The greeting itself is the one exception: it must be the sole
+        # entry in chat_history (not left empty) so the per-turn archive
+        # step below actually has something to persist. Without this, the
+        # greeting is never written to Persistent_Chat_Message, and the
+        # frontend's post-INIT history sync then overwrites the just-shown
+        # greeting with an empty page -- the login looks like it shows
+        # nothing.
         **VOLATILE_STATE_RESET,
         "user_profile": user_profile,
-        "chat_history": [],
+        "chat_history": [AIMessage(content=greeting)],
         "history_sequence_offset": 0,
         "compacted_history_summary": "",
         "active_product_intents": [],
@@ -717,8 +733,127 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         "final_response": greeting,
         "final_clarification": "",
         "ui_action_payload": ui_action_payload,
-        "preflight_status": "initial_greeting",
+        "last_session_transcript": last_session_transcript,
+        "preflight_status": "greeting_followup_check" if has_followup_candidate else "initial_greeting",
     }
+
+
+def node_00b_followup_check(state: AgentState):
+    """On-demand login follow-up: only runs when n00 found something worth
+    checking (a prior session's transcript, a pending service request, or
+    both). Unlike the deterministic greeting itself, this content is
+    generated -- it has to read and interpret last session's actual
+    transcript -- so unlike the greeting, it goes through the full
+    evidence-groundedness and conduct-compliance audit before ever reaching
+    the customer. On any audit failure, or when the model correctly finds
+    nothing worth following up on, this silently falls back to exactly n00's
+    original deterministic greeting -- a login must never hang, retry, or
+    degrade waiting on this; it can only ever add to the greeting, never
+    replace or block it.
+    """
+    print("🟢 [NODE 00b] Executing Login Follow-Up Check")
+    greeting = state.get("final_draft", "")
+    payload = dict(state.get("ui_action_payload", {}))
+    transcript = state.get("last_session_transcript", [])
+    pending_shortcuts = [
+        {"label": action.get("label", ""), "topic": action.get("description", "")}
+        for action in payload.get("serviceRequestActions", [])
+    ]
+
+    language = state.get("user_profile", {}).get("language") or "English"
+    prompt = f"""
+    LOGIN FOLLOW-UP CHECK
+    You are Horizon, a banking assistant. The customer has just logged back
+    in. Below is the raw transcript of their most recently completed session
+    (if any) and any service requests still pending from before. Decide
+    whether a brief, natural follow-up is warranted.
+
+    Last session's transcript (trusted messages only; empty if this is the
+    customer's first session, or if it was itself just a login greeting with
+    nothing else in it):
+    {json.dumps(transcript, ensure_ascii=False)}
+
+    Pending service requests carried over from before (label/topic only):
+    {json.dumps(pending_shortcuts, ensure_ascii=False)}
+
+    Natively generate response in: {language}
+
+    Rules:
+    - Only identify a topic as unresolved if the transcript clearly shows
+      one: a question the assistant never actually answered, a clarification
+      the assistant asked for that the customer never gave, or an escalation
+      that never concluded. A session that ended with a complete answer, or
+      that was only ever a greeting with nothing else in it, has nothing
+      unresolved -- do not invent a topic to follow up on.
+    - If a topic is unresolved, name it in your own words (never quote
+      internal ids) and ask, in one sentence, whether the customer would
+      like to continue it.
+    - If "Pending service requests" is non-empty, you may add one sentence
+      mentioning them by label only (never inventing what they contain
+      beyond the given topic) and asking if the customer still wants to
+      complete them. The button for each is attached automatically and
+      separately; do not claim to attach, open, or complete anything.
+    - Do not repeat or restate the login greeting itself.
+    - If neither an unresolved topic nor a pending request applies, or the
+      transcript is empty, return an empty string -- an empty follow-up is
+      the normal, expected outcome for most logins, not a failure.
+    - Keep it to at most two sentences. Do not invent any fact, banking
+      procedure, or policy not present above.
+
+    Output JSON only: {{"followup": "one or two sentences, or an empty string"}}
+    """
+    try:
+        followup = _parse_json_robustly(call_groq_lpu(prompt)).get("followup", "").strip()
+    except Exception as error:
+        print(f"⚠️ [NODE 00b] Follow-up generation failed: {error}")
+        followup = ""
+
+    if not followup:
+        return {"last_session_transcript": []}
+
+    evidence_bundle = {
+        "last_session_transcript": transcript,
+        "pending_service_requests": pending_shortcuts,
+    }
+    route_specific_rules = """
+    This is a login follow-up, not an answer to a customer question. It is
+    grounded only if every claim about "what happened last time" is directly
+    supported by "last_session_transcript", and every mention of a pending
+    request uses only the label/topic supplied in
+    "pending_service_requests". It must not state or imply that anything is
+    being executed, attached, or completed by this message itself -- it may
+    only ask whether the customer wants to continue. Reject it if it
+    describes an unresolved topic not actually visible in the transcript,
+    invents detail about a pending request beyond its label/topic, or claims
+    the last session concluded differently than the transcript shows.
+    """
+    evidence_audit = check_evidence_groundedness(
+        followup,
+        evidence_bundle=evidence_bundle,
+        evidence_description="Last Session Transcript and Pending Service Requests",
+        route_specific_rules=route_specific_rules,
+    )
+    conduct_audit = check_conduct_compliance(followup)
+
+    if not (evidence_audit.get("evidence_grounded") and conduct_audit.get("conduct_compliant")):
+        log_event(
+            "greeting.followup.rejected",
+            level="WARNING",
+            evidence_reason=evidence_audit.get("reason"),
+            conduct_reason=conduct_audit.get("reason"),
+        )
+        return {"last_session_transcript": []}
+
+    combined = f"{greeting}\n\n{followup}"
+    log_event("greeting.followup.attached", followup_length=len(followup))
+    return {
+        "final_draft": combined,
+        "final_answer": combined,
+        "final_response": combined,
+        "chat_history": [AIMessage(content=combined)],
+        "last_session_transcript": [],
+    }
+
 
 def node_01_deterministic_ingest_gate(state: AgentState):
     print("🟢 [NODE 01] Executing Deterministic Ingest Gate")

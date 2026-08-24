@@ -6,8 +6,9 @@ class AgentState(TypedDict):
     chat_history: List[BaseMessage]
     history_sequence_offset: int                 # Number of trimmed messages before chat_history
     compacted_history_summary: str               # Rolling summary of messages trimmed from graph memory
-    last_session_summary: str                    # Advisory recall from the most recently completed session
-    user_baseline_summary: str                   # Advisory aggregate of up to five prior sessions
+    last_session_summary: str                    # Dead field: no cross-session summary is generated or stored (see MEMORY_ARCHITECTURE_v3.0.md)
+    user_baseline_summary: str                   # Dead field: no cross-session baseline is generated or stored (see MEMORY_ARCHITECTURE_v3.0.md)
+    last_session_transcript: List[Dict[str, Any]]  # On-demand, unstored raw read of the prior session's trusted messages, for the login follow-up check only
     
     # V2.1: The 2D Relational Matrix (Noun + Verbs)
     active_product_intents: List[Dict[str, Any]] # e.g., [{"product": "Credit_Card", "intents": ["Dispute_Transaction"]}]

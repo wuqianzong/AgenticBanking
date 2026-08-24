@@ -13,6 +13,7 @@ def build_agent_graph():
     workflow = StateGraph(AgentState)
 
     workflow.add_node("n00", nodes.node_00_context_hydrator_and_greeting)
+    workflow.add_node("n00b", nodes.node_00b_followup_check)
     workflow.add_node("n3", nodes.node_01_deterministic_ingest_gate)
     workflow.add_node("n1b", nodes.node_01b_load_user_profile)
     workflow.add_node("n16", nodes.node_02c_inbound_semantic_gate)
@@ -53,6 +54,9 @@ def build_agent_graph():
         print("🔀 [ROUTE] History found -> Routing to n3 (Ingest Gate)")
         print("=" * 50 + "\n")
         return "n3"
+
+    def route_n00(state: AgentState):
+        return "n00b" if state.get("preflight_status") == "greeting_followup_check" else "end"
 
     def route_n3(state: AgentState):
         if state.get("preflight_status") == "escalation_confirmation_accepted":
@@ -118,10 +122,15 @@ def build_agent_graph():
 
     workflow.set_conditional_entry_point(route_start, {"n00": "n00", "n3": "n3", "n_svc": "n_svc"})
     workflow.add_edge("n_svc", END)
-    # The greeting is now fully deterministic (no LLM call, no generated
-    # claim), so it skips the outbound audit/precision/escalation chain
-    # entirely -- there is nothing there for it to check.
-    workflow.add_edge("n00", END)
+    # The greeting itself is fully deterministic (no LLM call, no generated
+    # claim), so it skips the outbound audit/precision/escalation chain --
+    # there is nothing there for it to check. n00b is a separate, optional
+    # step that only runs when n00 found a prior transcript or a pending
+    # service request worth checking; n00b does its own focused audit calls
+    # inline (see node_00b_followup_check) rather than reusing n20/n21,
+    # since those are shaped around a RAG-answered turn, not a login check.
+    workflow.add_conditional_edges("n00", route_n00, {"n00b": "n00b", "end": END})
+    workflow.add_edge("n00b", END)
     workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n23": "n23", "n5": "n5"})
     workflow.add_conditional_edges("n16", route_n16, {"n1b": "n1b", "n5": "n5"})
     workflow.add_edge("n1b", "n2d")

@@ -358,6 +358,42 @@ class LongTermMemoryManager:
             return False
 
     @staticmethod
+    def fetch_last_session_transcript(customer_id: str) -> list[Dict[str, Any]]:
+        """Raw, trusted messages from the customer's most recently completed
+        session, read fresh on demand -- never stored, never summarized.
+
+        This is deliberately not the v1.0 mechanism it superficially
+        resembles: nothing here is generated or persisted ahead of time.
+        Every login re-reads the actual transcript from
+        Persistent_Chat_Message, so there is nothing to go stale and nothing
+        to validate independently of whatever uses it (the caller's own
+        outbound audit covers that).
+        """
+        ensure_db_dir_exists()
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                ensure_memory_schema(conn)
+                last_session_row = conn.execute("""
+                    SELECT session_id FROM Persistent_Chat_Message
+                    WHERE customer_id = ?
+                    GROUP BY session_id
+                    ORDER BY MAX(created_at) DESC
+                    LIMIT 1
+                """, (customer_id,)).fetchone()
+                if not last_session_row:
+                    return []
+                rows = conn.execute("""
+                    SELECT role, content FROM Persistent_Chat_Message
+                    WHERE customer_id = ? AND session_id = ?
+                      AND (role != 'user' OR trust_status = 'trusted')
+                    ORDER BY message_sequence
+                """, (customer_id, last_session_row[0])).fetchall()
+            return [{"role": row[0], "content": row[1]} for row in rows]
+        except Exception as error:
+            print(f"⚠️ [MEMORY SERVICE] Last-session transcript read failed: {error}")
+            return []
+
+    @staticmethod
     def summarize_trimmed_history(existing_summary: str, messages: List[BaseMessage]) -> str:
         """Merge evicted messages into compact context, excluding UI metadata."""
         if not messages:

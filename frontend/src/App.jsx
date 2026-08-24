@@ -94,7 +94,7 @@ export default function BankingBotUI() {
   // made, not the result of whatever legacy system processes it -- so a
   // failed credential check is not terminal, it just leaves the
   // registration "pending" and resubmittable until it expires.
-  const PENDING_SERVICE_REQUEST_STATUSES = ['registered', 'submitted', 'credential_check_pending'];
+  const PENDING_SERVICE_REQUEST_STATUSES = ['pending', 'registered', 'submitted', 'credential_check_pending'];
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);

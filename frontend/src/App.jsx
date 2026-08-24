@@ -1128,7 +1128,7 @@ export default function BankingBotUI() {
   const renderServiceRequestListModal = () => {
     if (!showServiceRequestList) return null;
 
-    const ITEMS_PER_PAGE = 5;
+    const ITEMS_PER_PAGE = 3;
     const filteredList = serviceRequestList.filter(item => {
       if (serviceRequestTab === 'pending') return PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
       if (serviceRequestTab === 'completed') return item.status === 'completed';

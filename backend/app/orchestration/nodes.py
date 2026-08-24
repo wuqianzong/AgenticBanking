@@ -1564,20 +1564,17 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
           no RAG task for that subquery has already reached a terminal state.
         - Return no task if no registered enabled capability can close a gap.
         - For tool_name "service_request", input must use the literal key
-          "service_request_id" -- NOT "customer_component" (that key belongs
-          only to rag tasks; do not copy it here even though it appears
-          elsewhere in this prompt). Example of the exact shape required:
-          {{"service_request_id": "profile-address-update"}}. Choose the
-          single best-fitting id from that tool's available_requests in the
-          enabled tool registry; never invent an id, and never include form
-          field values (the customer has not filled anything in yet).
-        - Read the full description of each available_requests entry before
-          choosing one -- a description can scope out specific reasons, not
-          just name a general topic. "Request a replacement physical card
-          for a non-fraud reason (worn or damaged)" does not cover a lost or
-          stolen card, even though both are card replacement in general
-          terms. If the customer's actual situation falls outside every
-          candidate's stated scope, do not create a task for it at all.
+          "service_request_id". Choose the best-fitting id from that tool's
+          available_requests in the registry. Never invent an id or include form fields.
+        - For tool_name "deeplink", input must use the literal key
+          "destination_id". Example: {{"destination_id": "card-management"}}.
+          Use deeplinks to navigate the user to specific screens in the app
+          (e.g., manage card, view statements) based on the available_destinations
+          in the registry. A deeplink will be substituted into a button for the
+          user to click.
+        - Read the full description of each registry entry before choosing one.
+          If the customer's actual situation falls outside every candidate's stated
+          scope, do not create a task for it at all.
 
         Output JSON only:
         {{"tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}}}}]}}
@@ -3035,6 +3032,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # citation, invented key); removing the ask removes the failure mode.
     pending_service_request_count = len(_pending_service_requests(state))
     unavailable_service_requests = _unavailable_service_requests(state)
+    deeplink_results = [
+        {"destination_id": r.get("approved_result", {}).get("destination_id")}
+        for r in state.get("tool_results", [])
+        if r.get("tool_name") == "deeplink" and r.get("status") == "completed"
+    ]
     # This is deliberately separate from evidence and tool inputs.  It carries
     # only small internal attention cues from an otherwise valid mixed turn
     # (for example, a preference or feeling). The original user_input—not this
@@ -3088,6 +3090,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
     Intent clarification inputs: {json.dumps(intent_clarifications, ensure_ascii=False)}
     Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
     Decline inputs: {json.dumps(decline_context, ensure_ascii=False)}
+    Available deeplinks for this turn: {json.dumps(deeplink_results, ensure_ascii=False)}
+    (If a deeplink destination_id is provided above, you MUST insert a placeholder exactly like {{deeplink-<destination_id>}} in your text where you want to show a button for the user to navigate to that screen.)
     Pending service request forms registered this turn: {pending_service_request_count}
     (forms are attached automatically; you do not know and must not invent
     what any of them ask for)
@@ -4496,9 +4500,25 @@ def node_07_precision_substitution(state: AgentState):
     placeholders_in_draft = list(set(re.findall(r"\{\{(.*?)\}\}", combined_text)))
     precision_substituted = False
     
+    # Check for deeplink placeholders
+    deeplink_matches = re.findall(r"\{\{deeplink-([^}]+)\}\}", combined_text)
+    if deeplink_matches:
+        from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
+        destination_id = deeplink_matches[0]
+        contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
+        if contract:
+            payload["navigationAction"] = {
+                "label": contract["label"],
+                "destinationId": destination_id,
+                "route": contract["route"]
+            }
+            draft = draft.replace(f"{{{{deeplink-{destination_id}}}}}", "").strip()
+            print(f"   🔗 [DEEPLINK SUB]: Replaced deeplink-{destination_id} -> navigationAction")
+            precision_substituted = True
+
     if placeholders_in_draft:
         valid_map = fetch_placeholders_from_db(placeholders_in_draft)
-        precision_substituted = bool(valid_map)
+        precision_substituted = precision_substituted or bool(valid_map)
         
         # 1. Substitute in the main draft
         for p_id, p_val in valid_map.items():

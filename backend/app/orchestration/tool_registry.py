@@ -38,9 +38,9 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
     },
     "deeplink": {
         "operations": {"resolve_navigation"},
-        "enabled": False,
+        "enabled": True,
         "read_only": True,
-        "description": "Return a validated Horizon navigation destination.",
+        "description": "Return a validated Horizon navigation destination. Use this when the customer needs to navigate to a specific screen in the app.",
     },
 }
 
@@ -53,6 +53,7 @@ def enabled_tool_capabilities() -> list[dict[str, Any]]:
     form's actual fields, which stay invisible to every LLM at every stage.
     """
     from backend.app.orchestration.service_request_registry import available_service_requests
+    from backend.app.orchestration.deeplink_destination_registry import available_deeplink_destinations
 
     capabilities = []
     for name, contract in TOOL_REGISTRY.items():
@@ -66,6 +67,8 @@ def enabled_tool_capabilities() -> list[dict[str, Any]]:
         }
         if name == "service_request":
             capability["available_requests"] = available_service_requests()
+        if name == "deeplink":
+            capability["available_destinations"] = available_deeplink_destinations()
         capabilities.append(capability)
     return capabilities
 

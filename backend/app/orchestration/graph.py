@@ -21,7 +21,6 @@ def build_agent_graph():
     workflow.add_node("n14", nodes.node_03a_knowledge_blueprint_planner)
     workflow.add_node("n17_dispatch", nodes.node_03b_tool_dispatcher)
     workflow.add_node("n17_rag", nodes.node_03b_rag_worker)
-workflow.add_node("n17_deeplink", nodes.node_03b_deeplink_worker)
     workflow.add_node("n18", nodes.node_03c_sufficiency_auditor)
     workflow.add_node("n19", nodes.node_04a_resolution_planner)
     workflow.add_node("n8", nodes.node_04b_response_generator)

@@ -1530,23 +1530,24 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
 
     known_subqueries = {item["subquery_id"]: item for item in financial_subqueries}
     candidates = []
-    if not existing_tasks:
-        # RAG is the only enabled executor in this release. This explicit task
-        # creation is the safe fallback if the planner is unavailable.
-        candidates = [
-            {
-                "subquery_id": subquery_id,
-                "tool_name": "rag",
-                "operation": "retrieve_faq_evidence",
-                "input": {"customer_component": item["customer_component"]},
-            }
-            for subquery_id, item in known_subqueries.items()
-        ]
-    elif tool_gaps:
+    if not existing_tasks or tool_gaps:
+        deterministic_rag_candidates = []
+        if not existing_tasks:
+            deterministic_rag_candidates = [
+                {
+                    "subquery_id": subquery_id,
+                    "tool_name": "rag",
+                    "operation": "retrieve_faq_evidence",
+                    "input": {"customer_component": item["customer_component"]},
+                }
+                for subquery_id, item in known_subqueries.items()
+            ]
+
         prompt = f"""
         INCREMENTAL TOOL-CALLING PLANNER
-        You may add tool tasks only when an unresolved, non-factual capability
-        gap can be materially addressed by a registered enabled tool.
+        You must plan tool tasks to address the customer's financial subqueries.
+        In the first round, we automatically plan RAG tasks for knowledge. You should plan any OTHER simultaneous tools (like deeplink or service_request) that are relevant.
+        In later rounds, you may add tool tasks only when an unresolved capability gap remains.
 
         Financial subqueries: {json.dumps(financial_subqueries, ensure_ascii=False)}
         Validated terminal tool results: {json.dumps(state.get("tool_results", []), ensure_ascii=False)}
@@ -1584,6 +1585,12 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         except Exception as error:
             print(f"⚠️ [TOOL PLANNER ERROR]: {error}")
             candidates = []
+            
+        if not existing_tasks:
+            # Combine deterministic RAG with whatever else the LLM decided to run simultaneously.
+            # Filter out any duplicate RAG tasks the LLM might have hallucinated.
+            llm_candidates = [c for c in candidates if c.get("tool_name") != "rag"]
+            candidates = deterministic_rag_candidates + llm_candidates
 
     new_tasks = []
     for candidate in candidates if isinstance(candidates, list) else []:
@@ -1618,6 +1625,29 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
             if get_service_request_contract(requested_id) is None:
                 log_event("tool.task.invalid_service_request_id", subquery_id=subquery_id, requested_id=requested_id, raw_input=payload, level="WARNING")
                 continue
+        if tool_name == "deeplink":
+            from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
+            destination_id = task.get("input", {}).get("destination_id")
+            contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
+            if contract:
+                status = "completed"
+                approved_result = {"destination_id": destination_id, "route": contract["route"]}
+                reason = ""
+            else:
+                status = "unavailable"
+                approved_result = {}
+                reason = f"Destination {destination_id} not in registry"
+            task["status"] = status
+            tool_results.append({
+                "tool_task_id": task["tool_task_id"],
+                "subquery_id": task.get("subquery_id"),
+                "tool_name": tool_name,
+                "status": status,
+                "approved_result": approved_result,
+                "customer_safe_summary": "",
+                "availability_reason": reason,
+            })
+            continue
             payload = {"service_request_id": requested_id}
         fingerprint = _tool_task_fingerprint(tool_name, operation, subquery_id, payload)
         if fingerprint in existing_fingerprints:
@@ -1762,6 +1792,58 @@ def node_03b_tool_dispatcher(state: AgentState):
         if tool_name == "service_request":
             outcome = _dispatch_service_request_task(state, task)
             task["status"] = outcome["status"]
+            tool_results.append({
+                "tool_task_id": task["tool_task_id"],
+                "subquery_id": task.get("subquery_id"),
+                "tool_name": tool_name,
+                "status": outcome["status"],
+                "approved_result": outcome.get("approved_result", {}),
+                "customer_safe_summary": "",
+                "availability_reason": outcome.get("reason", ""),
+            })
+            log_event(
+                "tool.result.service_request",
+                tool_task_id=task["tool_task_id"], subquery_id=task.get("subquery_id"),
+                status=outcome["status"],
+                special_id=outcome.get("approved_result", {}).get("special_id"),
+            )
+            continue
+        if tool_name == "deeplink":
+            from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
+            destination_id = task.get("input", {}).get("destination_id")
+            contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
+            if contract:
+                status = "completed"
+                approved_result = {"destination_id": destination_id, "route": contract["route"]}
+                reason = ""
+            else:
+                status = "unavailable"
+                approved_result = {}
+                reason = f"Destination {destination_id} not in registry"
+            task["status"] = status
+            tool_results.append({
+                "tool_task_id": task["tool_task_id"],
+                "subquery_id": task.get("subquery_id"),
+                "tool_name": tool_name,
+                "status": status,
+                "approved_result": approved_result,
+                "customer_safe_summary": "",
+                "availability_reason": reason,
+            })
+            continue
+        if tool_name == "deeplink":
+            from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
+            destination_id = task.get("input", {}).get("destination_id")
+            contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
+            if contract:
+                status = "completed"
+                approved_result = {"destination_id": destination_id, "route": contract["route"]}
+                reason = ""
+            else:
+                status = "unavailable"
+                approved_result = {}
+                reason = f"Destination {destination_id} not in registry"
+            task["status"] = status
             tool_results.append({
                 "tool_task_id": task["tool_task_id"],
                 "subquery_id": task.get("subquery_id"),

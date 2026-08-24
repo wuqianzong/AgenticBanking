@@ -4497,7 +4497,7 @@ def node_07_precision_substitution(state: AgentState):
         # Clean both single and double bracket forms from ALL text fields globally
         def _strip_deeplink(obj):
             if isinstance(obj, str):
-                return re.sub(f"\\{{1,2}}deeplink-{destination_id}\\}}{{1,2}}", "", obj).strip()
+                return re.sub(r"\{{1,2}deeplink-" + destination_id + r"\}{1,2}", "", obj).strip()
             if isinstance(obj, list):
                 return [_strip_deeplink(item) for item in obj]
             if isinstance(obj, dict):

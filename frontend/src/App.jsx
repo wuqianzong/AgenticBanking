@@ -88,6 +88,11 @@ export default function BankingBotUI() {
   const [serviceRequestList, setServiceRequestList] = useState([]);
   const [showServiceRequestList, setShowServiceRequestList] = useState(false);
   const [serviceRequestPage, setServiceRequestPage] = useState(1);
+  const [serviceRequestTab, setServiceRequestTab] = useState('pending');
+  // Only three statuses exist: this registry tracks that a submission was
+  // made, not the result of whatever legacy system processes it -- so a
+  // failed credential check is not terminal, it just leaves the
+  // registration "pending" and resubmittable until it expires.
   const PENDING_SERVICE_REQUEST_STATUSES = ['registered', 'submitted', 'credential_check_pending'];
 
   const messagesEndRef = useRef(null);
@@ -369,7 +374,7 @@ export default function BankingBotUI() {
     try {
       const res = await fetch(`http://localhost:8000/api/service-request/${action.specialId}`);
       const data = await res.json();
-      if (data.status === 'registered') {
+      if (data.status === 'pending') {
         setActiveServiceRequest({
           specialId: action.specialId,
           serviceRequestId: data.service_request_id,
@@ -1117,9 +1122,6 @@ export default function BankingBotUI() {
     if (status === 'completed') {
       return { label: t(preferences.language, 'serviceRequest.statusCompleted'), icon: <CheckCircle2 size={14} />, className: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
     }
-    if (status === 'denied') {
-      return { label: t(preferences.language, 'serviceRequest.statusDenied'), icon: <XCircle size={14} />, className: 'text-red-700 bg-red-50 border-red-200' };
-    }
     return { label: t(preferences.language, 'serviceRequest.statusExpired'), icon: <XCircle size={14} />, className: 'text-slate-500 bg-slate-50 border-slate-200' };
   };
 
@@ -1127,16 +1129,15 @@ export default function BankingBotUI() {
     if (!showServiceRequestList) return null;
 
     const ITEMS_PER_PAGE = 5;
-    const sortedList = [...serviceRequestList].sort((a, b) => {
-      const aPending = PENDING_SERVICE_REQUEST_STATUSES.includes(a.status);
-      const bPending = PENDING_SERVICE_REQUEST_STATUSES.includes(b.status);
-      if (aPending && !bPending) return -1;
-      if (!aPending && bPending) return 1;
-      return 0;
+    const filteredList = serviceRequestList.filter(item => {
+      if (serviceRequestTab === 'pending') return PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
+      if (serviceRequestTab === 'completed') return item.status === 'completed';
+      if (serviceRequestTab === 'expired') return item.status === 'expired';
+      return false;
     });
 
-    const totalPages = Math.ceil(sortedList.length / ITEMS_PER_PAGE);
-    const paginatedList = sortedList.slice((serviceRequestPage - 1) * ITEMS_PER_PAGE, serviceRequestPage * ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(filteredList.length / ITEMS_PER_PAGE);
+    const paginatedList = filteredList.slice((serviceRequestPage - 1) * ITEMS_PER_PAGE, serviceRequestPage * ITEMS_PER_PAGE);
 
     return (
       <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
@@ -1145,8 +1146,19 @@ export default function BankingBotUI() {
             <h3 className="font-bold text-slate-800">{t(preferences.language, 'serviceRequest.listTitle')}</h3>
             <button onClick={() => { setShowServiceRequestList(false); setServiceRequestPage(1); }} className="text-slate-400 hover:text-slate-600">×</button>
           </div>
+          <div className="flex border-b border-slate-100 px-4">
+            <button onClick={() => { setServiceRequestTab('pending'); setServiceRequestPage(1); }} className={`flex-1 py-3 text-xs font-semibold ${serviceRequestTab === 'pending' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+              {t(preferences.language, 'serviceRequest.statusPending')}
+            </button>
+            <button onClick={() => { setServiceRequestTab('completed'); setServiceRequestPage(1); }} className={`flex-1 py-3 text-xs font-semibold ${serviceRequestTab === 'completed' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+              {t(preferences.language, 'serviceRequest.statusCompleted')}
+            </button>
+            <button onClick={() => { setServiceRequestTab('expired'); setServiceRequestPage(1); }} className={`flex-1 py-3 text-xs font-semibold ${serviceRequestTab === 'expired' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+              {t(preferences.language, 'serviceRequest.statusExpired')}
+            </button>
+          </div>
           <div className="overflow-y-auto flex-1">
-            {sortedList.length === 0 && (
+            {filteredList.length === 0 && (
               <p className="p-4 text-sm text-slate-400 text-center">{t(preferences.language, 'serviceRequest.listEmpty')}</p>
             )}
             <ul className="divide-y divide-slate-100">
@@ -1171,11 +1183,21 @@ export default function BankingBotUI() {
                           {meta.label}
                         </span>
                       </div>
-                      {item.action_label && item.description && (
-                        <span className="text-xs text-slate-500">{item.description}</span>
-                      )}
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        {item.action_label && item.description && (
+                          <span className="text-xs text-slate-500">{item.description}</span>
+                        )}
+                        {item.created_at && (
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {new Date(item.created_at).toLocaleString(preferences.language === 'Mandarin' ? 'zh-CN' : preferences.language === 'Spanish' ? 'es-ES' : 'en-US', {
+                              year: 'numeric', month: 'short', day: 'numeric',
+                              hour: '2-digit', minute: '2-digit'
+                            })}
+                          </span>
+                        )}
+                      </div>
                       {isPending && (
-                        <span className="text-[11px] text-blue-600 font-medium">{t(preferences.language, 'serviceRequest.tapToComplete')}</span>
+                        <span className="text-[11px] text-blue-600 font-medium mt-1">{t(preferences.language, 'serviceRequest.tapToComplete')}</span>
                       )}
                     </button>
                   </li>

@@ -1341,7 +1341,7 @@ export default function BankingBotUI() {
                {isLoggedIn ? (
                  <>
                    <UserCheck size={14} className="text-blue-600"/>
-                   <span className="text-xs font-semibold text-blue-900">{MOCK_PROFILE.displayName}</span>
+                   <span className="text-xs font-semibold text-blue-900">{preferences.nickname || MOCK_PROFILE.displayName}</span>
                  </>
                ) : (
                  <>

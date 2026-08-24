@@ -95,6 +95,9 @@ export const TRANSLATIONS = {
     "serviceRequest.statusCompleted": "Completed",
     "serviceRequest.statusDenied": "Denied",
     "serviceRequest.statusExpired": "Expired",
+    "serviceRequest.prevPage": "Previous",
+    "serviceRequest.nextPage": "Next",
+    "serviceRequest.pageInfo": "Page {current} of {total}",
   },
   Mandarin: {
     "header.title": "Horizon AI客服助理",
@@ -185,6 +188,9 @@ export const TRANSLATIONS = {
     "serviceRequest.statusCompleted": "已完成",
     "serviceRequest.statusDenied": "已拒绝",
     "serviceRequest.statusExpired": "已过期",
+    "serviceRequest.prevPage": "上一页",
+    "serviceRequest.nextPage": "下一页",
+    "serviceRequest.pageInfo": "第 {current} 页，共 {total} 页",
   },
   Spanish: {
     "header.title": "Asistente Horizon",
@@ -275,6 +281,9 @@ export const TRANSLATIONS = {
     "serviceRequest.statusCompleted": "Completado",
     "serviceRequest.statusDenied": "Denegado",
     "serviceRequest.statusExpired": "Expirado",
+    "serviceRequest.prevPage": "Anterior",
+    "serviceRequest.nextPage": "Siguiente",
+    "serviceRequest.pageInfo": "Página {current} de {total}",
   },
 };
 

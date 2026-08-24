@@ -87,6 +87,7 @@ export default function BankingBotUI() {
   // reopenable, completed/expired ones are shown for reference only.
   const [serviceRequestList, setServiceRequestList] = useState([]);
   const [showServiceRequestList, setShowServiceRequestList] = useState(false);
+  const [serviceRequestPage, setServiceRequestPage] = useState(1);
   const PENDING_SERVICE_REQUEST_STATUSES = ['registered', 'submitted', 'credential_check_pending'];
 
   const messagesEndRef = useRef(null);
@@ -1124,19 +1125,32 @@ export default function BankingBotUI() {
 
   const renderServiceRequestListModal = () => {
     if (!showServiceRequestList) return null;
+
+    const ITEMS_PER_PAGE = 5;
+    const sortedList = [...serviceRequestList].sort((a, b) => {
+      const aPending = PENDING_SERVICE_REQUEST_STATUSES.includes(a.status);
+      const bPending = PENDING_SERVICE_REQUEST_STATUSES.includes(b.status);
+      if (aPending && !bPending) return -1;
+      if (!aPending && bPending) return 1;
+      return 0;
+    });
+
+    const totalPages = Math.ceil(sortedList.length / ITEMS_PER_PAGE);
+    const paginatedList = sortedList.slice((serviceRequestPage - 1) * ITEMS_PER_PAGE, serviceRequestPage * ITEMS_PER_PAGE);
+
     return (
       <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
         <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl flex flex-col max-h-[80vh] overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="font-bold text-slate-800">{t(preferences.language, 'serviceRequest.listTitle')}</h3>
-            <button onClick={() => setShowServiceRequestList(false)} className="text-slate-400 hover:text-slate-600">×</button>
+            <button onClick={() => { setShowServiceRequestList(false); setServiceRequestPage(1); }} className="text-slate-400 hover:text-slate-600">×</button>
           </div>
           <div className="overflow-y-auto flex-1">
-            {serviceRequestList.length === 0 && (
+            {sortedList.length === 0 && (
               <p className="p-4 text-sm text-slate-400 text-center">{t(preferences.language, 'serviceRequest.listEmpty')}</p>
             )}
             <ul className="divide-y divide-slate-100">
-              {serviceRequestList.map((item) => {
+              {paginatedList.map((item) => {
                 const meta = serviceRequestStatusMeta(item.status);
                 const isPending = PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
                 return (
@@ -1169,6 +1183,27 @@ export default function BankingBotUI() {
               })}
             </ul>
           </div>
+          {totalPages > 1 && (
+            <div className="p-3 border-t border-slate-100 flex items-center justify-between bg-slate-50">
+              <button
+                onClick={() => setServiceRequestPage(p => Math.max(1, p - 1))}
+                disabled={serviceRequestPage === 1}
+                className="px-3 py-1 text-xs font-medium text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed bg-white border border-slate-200 rounded-md shadow-sm"
+              >
+                {t(preferences.language, 'serviceRequest.prevPage')}
+              </button>
+              <span className="text-xs text-slate-500 font-medium">
+                {t(preferences.language, 'serviceRequest.pageInfo').replace('{current}', serviceRequestPage).replace('{total}', totalPages)}
+              </span>
+              <button
+                onClick={() => setServiceRequestPage(p => Math.min(totalPages, p + 1))}
+                disabled={serviceRequestPage === totalPages}
+                className="px-3 py-1 text-xs font-medium text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed bg-white border border-slate-200 rounded-md shadow-sm"
+              >
+                {t(preferences.language, 'serviceRequest.nextPage')}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

@@ -22,6 +22,7 @@ from backend.app.core.translations import get_message
 from backend.app.core.system_logger import log_event
 from backend.app.orchestration.tool_registry import enabled_tool_capabilities, is_registered_operation, TOOL_REGISTRY
 from backend.app.orchestration.service_request_registry import get_service_request_contract
+from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
 from backend.app.services import service_request_service
 
 # Define the DB Path (adjust relative path if necessary based on your working directory)
@@ -642,101 +643,46 @@ def _build_user_baseline_context(state: AgentState) -> str:
     return baseline or "None"
 
 
-def _build_greeting_memory_context(last_session_summary: str, user_baseline: str) -> str:
-    """Label durable sources used to personalize a new-session greeting."""
-    return (
-        f"Latest Session Memory:\n{last_session_summary.strip() or 'None'}\n\n"
-        f"User Baseline Memory:\n{user_baseline.strip() or 'None'}"
-    )
+def _build_deterministic_greeting(customer_id: str, user_profile: dict) -> tuple[str, list[dict]]:
+    """Assemble a login greeting from on-demand, deterministic checks only.
 
-
-def _generate_returning_customer_greeting(
-    last_session_summary: str,
-    user_baseline: str,
-    user_profile: dict = None,
-) -> tuple[str, list[str]]:
-    """Create a concise welcome and optional, memory-grounded continuation chips.
-
-    Durable memory provides conversational context only; it never restores a
-    graph workflow. First-time customers see a clean greeting with no
-    artificial suggested prompts.
+    The project does not require carrying conversation content across
+    sessions, so no LLM call and no outbound audit is needed here: every
+    fact used (returning-customer status, pending service-request count) is
+    a direct, verifiable database read, not a generated claim.
     """
-    memory_context = ""
-    if last_session_summary.strip() or user_baseline.strip():
-        memory_context = _build_greeting_memory_context(last_session_summary, user_baseline)
+    language = user_profile.get("language") or "English"
+    nickname = (user_profile.get("nickname") or "").strip()
 
-    user_profile = user_profile or {}
-    literacy_level = user_profile.get("financial_literacy", "intermediate")
-    if literacy_level == "beginner":
-        literacy_instruction = "Beginner (Use simple financial terms. Explain financial terms when they appear in the response.)"
-    elif literacy_level == "professional":
-        literacy_instruction = "Professional (Use professional financial terms freely. No explanation of financial terms necessary.)"
+    is_returning = LongTermMemoryManager.has_prior_session(customer_id)
+    base_key = "greeting_returning" if is_returning else "greeting_new"
+    if nickname:
+        greeting = get_message(language, f"{base_key}_named").format(nickname=nickname)
     else:
-        literacy_instruction = "Intermediate (Use normal financial terms. Explain only complex financial terms when they appear in the response.)"
+        greeting = get_message(language, base_key)
 
-    prompt = f"""
-    You are Horizon, a banking assistant welcoming a customer.
-    Write a warm, concise greeting of at most two sentences. 
-    If conversation context is provided below, frame the prior session as FAQ guidance that
-    Horizon previously explained, and neutrally invite the customer to continue the discussion. 
-    If no conversation context is provided, write a generic, welcoming opening greeting.
+    pending_requests = [
+        record for record in service_request_service.list_registrations(customer_id)
+        if record.get("status") == service_request_service.PENDING
+    ]
+    if pending_requests:
+        intro_key = "service_request_intro_single" if len(pending_requests) == 1 else "service_request_intro_plural"
+        greeting = f"{greeting}\n\n{get_message(language, intro_key)}"
 
-    STYLE & PERSONALIZATION INSTRUCTIONS:
-    - User Nickname: {user_profile.get("nickname") or "Not provided"} (Use naturally where socially appropriate; do not mechanically force it into every response)
-    - Natively generate response in: {user_profile.get("language") or "English"}
-    - Tone: {user_profile.get("tone", "professional")}
-    - Financial Literacy Depth: {literacy_instruction}
-    - Emojis: {user_profile.get("emoji", "enabled")}
+    service_request_actions = []
+    for record in pending_requests:
+        contract = get_service_request_contract(record.get("service_request_id", ""))
+        if contract is None:
+            continue
+        service_request_actions.append({
+            "label": contract.get("action_label", "Complete Form"),
+            "specialId": record.get("special_id"),
+            "serviceRequestId": record.get("service_request_id"),
+            "description": contract.get("description", ""),
+            "formSchema": contract["form_schema"],
+        })
 
-    Important: this is a brand-new session. Do not claim that a workflow,
-    application, transfer, plan, approval, or pending action is still active.
-    Do not ask for age, income, residency, identity, documents, account data,
-    or any other customer information. Do not tell the customer to complete a
-    banking action or imply Horizon can complete one for them. Do not invent
-    facts, provide banking advice, or use markdown.
-
-    Conversation Context:
-    {memory_context or "None"}
-
-    Good style: "Welcome back. Last time, I shared the FAQ steps for applying
-    for a personal loan, including the information needed at the next stage.
-    Would you like to continue that discussion or explore something else?"
-
-    Suggested actions:
-    - Provide zero to two only when the prior context supports a concrete FAQ
-      question that Horizon can answer after retrieval.
-    - Each option MUST be an object with two values: a concise visible `label`
-      (2-6 words) and a complete `message` that will be sent when clicked.
-      The message must be a specific banking FAQ question that names both a
-      concrete product/topic from the prior context and a factual aspect to
-      explain, such as label "Instant Loan application" with message "How do
-      I apply for an Instant Loan?".
-    - Do NOT return generic conversational labels such as "Continue",
-      "Continue discussing...", "Ask another question", "Explore something
-      else", or "Learn more". They are not useful customer inputs.
-    - Do not ask the customer to provide personal data, documents, income,
-      residency, identity, or an application status. Do not invent a product,
-      process, or pending task.
-    - Return an empty array when the prior context does not identify a concrete
-      answerable product/topic and FAQ aspect. An empty array is preferred to a
-      vague suggestion.
-
-    Output JSON only: {{"greeting": "your greeting", "options": [{{"label": "short topic", "message": "complete FAQ question"}}]}}.
-    """
-    try:
-        raw_response = call_groq_lpu(prompt).strip()
-        parsed = _parse_json_robustly(raw_response)
-        greeting = parsed.get("greeting", "").strip()
-        if greeting:
-            raw_options = parsed.get("options", [])
-            if not isinstance(raw_options, list):
-                raw_options = []
-            options = [option for option in _normalize_ui_options(raw_options) if isinstance(option, dict)]
-            return greeting, options
-    except Exception as error:
-        print(f"⚠️ [MEMORY SERVICE] Returning-customer greeting generation failed: {error}")
-
-    return get_message(state.get("user_profile", {}).get("language", "English"), "greeting_fallback"), []
+    return greeting, service_request_actions
 
 
 # --- PHASE 0: INGESTION & INGEST GUARDS ---
@@ -744,23 +690,23 @@ def _generate_returning_customer_greeting(
 def node_00_context_hydrator_and_greeting(state: AgentState):
     print("🟢 [NODE EXECUTING] Node 00: Context Hydrator & Greeting")
     customer_id = state.get("user_id", "USR_999")
-    summary = LongTermMemoryManager.fetch_compact_footprint(customer_id)
-    user_baseline = LongTermMemoryManager.fetch_user_baseline(customer_id)
     user_profile = LongTermMemoryManager.get_user_preferences(customer_id)
 
-    greeting, greeting_options = _generate_returning_customer_greeting(summary, user_baseline, user_profile)
+    greeting, service_request_actions = _build_deterministic_greeting(customer_id, user_profile)
+
+    ui_action_payload = {"uiType": "text", "options": []}
+    if service_request_actions:
+        ui_action_payload["serviceRequestActions"] = service_request_actions
 
     return {
-        # A new login begins a clean graph.  Only this compact, durable
-        # conversation context crosses the session boundary; no plan, task
-        # evidence, retry data, or other execution state does.
+        # A new login begins a clean graph. No plan, task evidence, retry
+        # data, or other execution state crosses the session boundary, and
+        # -- per the project's scope -- no conversation content does either.
         **VOLATILE_STATE_RESET,
         "user_profile": user_profile,
         "chat_history": [],
         "history_sequence_offset": 0,
         "compacted_history_summary": "",
-        "last_session_summary": summary,
-        "user_baseline_summary": user_baseline,
         "active_product_intents": [],
         "active_plan": {},
         "completed_steps": [],
@@ -768,12 +714,9 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         "verified_task_history": [],
         "final_draft": greeting,
         "final_answer": greeting,
+        "final_response": greeting,
         "final_clarification": "",
-        "working_context": summary,
-        "ui_action_payload": {
-            "uiType": "chips" if greeting_options else "text",
-            "options": greeting_options,
-        },
+        "ui_action_payload": ui_action_payload,
         "preflight_status": "initial_greeting",
     }
 
@@ -1625,30 +1568,24 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
             if get_service_request_contract(requested_id) is None:
                 log_event("tool.task.invalid_service_request_id", subquery_id=subquery_id, requested_id=requested_id, raw_input=payload, level="WARNING")
                 continue
-        if tool_name == "deeplink":
-            from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
-            destination_id = task.get("input", {}).get("destination_id")
-            contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
-            if contract:
-                status = "completed"
-                approved_result = {"destination_id": destination_id, "route": contract["route"]}
-                reason = ""
-            else:
-                status = "unavailable"
-                approved_result = {}
-                reason = f"Destination {destination_id} not in registry"
-            task["status"] = status
-            tool_results.append({
-                "tool_task_id": task["tool_task_id"],
-                "subquery_id": task.get("subquery_id"),
-                "tool_name": tool_name,
-                "status": status,
-                "approved_result": approved_result,
-                "customer_safe_summary": "",
-                "availability_reason": reason,
-            })
-            continue
             payload = {"service_request_id": requested_id}
+        elif tool_name == "deeplink":
+            # Same allow-list discipline as service_request above: accept the
+            # registered destination_id under any key, reject anything that
+            # doesn't resolve to a real registry entry. Only the planner
+            # decides whether a destination is worth offering; the actual
+            # dispatch (route lookup, tool_results) happens once in
+            # node_03b_tool_dispatcher, not here.
+            requested_destination = str(payload.get("destination_id", "")).strip()
+            if requested_destination not in DEEPLINK_DESTINATION_REGISTRY:
+                requested_destination = next(
+                    (str(value).strip() for value in payload.values() if str(value).strip() in DEEPLINK_DESTINATION_REGISTRY),
+                    "",
+                )
+            if requested_destination not in DEEPLINK_DESTINATION_REGISTRY:
+                log_event("tool.task.invalid_deeplink_destination", subquery_id=subquery_id, requested_destination=requested_destination, raw_input=payload, level="WARNING")
+                continue
+            payload = {"destination_id": requested_destination}
         fingerprint = _tool_task_fingerprint(tool_name, operation, subquery_id, payload)
         if fingerprint in existing_fingerprints:
             log_event("tool.task.deduplicated", subquery_id=subquery_id, tool_name=tool_name, operation=operation)
@@ -1767,6 +1704,27 @@ def _unavailable_service_requests(state: AgentState) -> list[dict]:
     ]
 
 
+def _resolved_deeplink_destinations(state: AgentState) -> list[str]:
+    """Completed deeplink tool_results for this turn only.
+
+    This is the sole authorization for a `{{deeplink-<destination_id>}}`
+    token: the destination must have actually been resolved by a real tool
+    call this turn, not merely exist somewhere in the static registry. Both
+    the response generator's prompt and the outbound evidence audit read
+    this same list, and node_07 re-checks it before ever attaching a
+    navigation button, so a hallucinated destination_id can't produce a
+    working button even if the model invents a syntactically valid token.
+    """
+    return [
+        result.get("approved_result", {}).get("destination_id")
+        for result in state.get("tool_results", [])
+        if isinstance(result, dict)
+        and result.get("tool_name") == "deeplink"
+        and result.get("status") == "completed"
+        and result.get("approved_result", {}).get("destination_id")
+    ]
+
+
 def node_03b_tool_dispatcher(state: AgentState):
     """Dispatch pending registered tasks without hard-coding graph fan-out.
 
@@ -1809,7 +1767,6 @@ def node_03b_tool_dispatcher(state: AgentState):
             )
             continue
         if tool_name == "deeplink":
-            from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
             destination_id = task.get("input", {}).get("destination_id")
             contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
             if contract:
@@ -1830,34 +1787,11 @@ def node_03b_tool_dispatcher(state: AgentState):
                 "customer_safe_summary": "",
                 "availability_reason": reason,
             })
-            continue
-        if tool_name == "deeplink":
-            from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
-            destination_id = task.get("input", {}).get("destination_id")
-            contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
-            if contract:
-                status = "completed"
-                approved_result = {"destination_id": destination_id, "route": contract["route"]}
-                reason = ""
-            else:
-                status = "unavailable"
-                approved_result = {}
-                reason = f"Destination {destination_id} not in registry"
-            task["status"] = status
-            tool_results.append({
-                "tool_task_id": task["tool_task_id"],
-                "subquery_id": task.get("subquery_id"),
-                "tool_name": tool_name,
-                "status": outcome["status"],
-                "approved_result": outcome.get("approved_result", {}),
-                "customer_safe_summary": "",
-                "availability_reason": outcome.get("reason", ""),
-            })
             log_event(
-                "tool.result.service_request",
+                "tool.result.deeplink",
                 tool_task_id=task["tool_task_id"], subquery_id=task.get("subquery_id"),
-                status=outcome["status"],
-                special_id=outcome.get("approved_result", {}).get("special_id"),
+                status=status,
+                destination_id=destination_id,
             )
             continue
         task["status"] = "unavailable"
@@ -3114,11 +3048,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # citation, invented key); removing the ask removes the failure mode.
     pending_service_request_count = len(_pending_service_requests(state))
     unavailable_service_requests = _unavailable_service_requests(state)
-    deeplink_results = [
-        {"destination_id": r.get("approved_result", {}).get("destination_id")}
-        for r in state.get("tool_results", [])
-        if r.get("tool_name") == "deeplink" and r.get("status") == "completed"
-    ]
+    resolved_deeplink_destinations = _resolved_deeplink_destinations(state)
     # This is deliberately separate from evidence and tool inputs.  It carries
     # only small internal attention cues from an otherwise valid mixed turn
     # (for example, a preference or feeling). The original user_input—not this
@@ -3172,8 +3102,12 @@ def _generate_response_blocks(state: AgentState) -> dict:
     Intent clarification inputs: {json.dumps(intent_clarifications, ensure_ascii=False)}
     Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
     Decline inputs: {json.dumps(decline_context, ensure_ascii=False)}
-    Available deeplinks for this turn: {json.dumps(deeplink_results, ensure_ascii=False)}
-    (If a deeplink destination_id is provided above, you MUST insert a placeholder exactly like {{deeplink-<destination_id>}} in your text where you want to show a button for the user to navigate to that screen.)
+    Available deeplinks for this turn: {json.dumps(resolved_deeplink_destinations, ensure_ascii=False)}
+    (If a destination_id is listed above, you MUST insert a placeholder exactly
+    like {{deeplink-<destination_id>}} -- double curly braces, exact id -- in
+    your text where you want to show a button for the user to navigate to that
+    screen. Never insert a {{deeplink-*}} token for a destination_id that is
+    not listed above.)
     Pending service request forms registered this turn: {pending_service_request_count}
     (forms are attached automatically; you do not know and must not invent
     what any of them ask for)
@@ -3972,14 +3906,6 @@ def _outbound_response_content(state: AgentState) -> tuple[str, str, str]:
     return answer_text, clarification, json.dumps(rendered_payload, ensure_ascii=False)
 
 
-def _is_initial_greeting(state: AgentState) -> bool:
-    """Identify greeting events without asking an LLM to infer the event type."""
-    return (
-        state.get("user_input") in {"__INIT__", "**INIT**"}
-        or state.get("preflight_status") == "initial_greeting"
-    )
-
-
 def _normal_outbound_grounding_context(state: AgentState) -> dict:
     """Return only evidence sources permitted for a non-greeting audit.
 
@@ -4038,6 +3964,7 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
         "decline_inputs": decline_context,
         "pending_service_request_count": len(_pending_service_requests(state)),
         "unavailable_service_requests": _unavailable_service_requests(state),
+        "resolved_deeplink_destinations": _resolved_deeplink_destinations(state),
     }
 
 
@@ -4144,7 +4071,6 @@ def node_06_outbound_groundedness_gate(state: AgentState):
     """Groundedness v2.0 evidence axis: audit only the evidence permitted for this response event."""
     print("🟢 [NODE 06b] Executing Outbound Groundedness Audit")
     answer, clarification, rendered_payload = _outbound_response_content(state)
-    is_initial_greeting = _is_initial_greeting(state)
     is_non_financial_response = state.get("triage_status") == "NON_FINANCIAL"
 
     audit_feedback_rules = """
@@ -4174,37 +4100,7 @@ def node_06_outbound_groundedness_gate(state: AgentState):
     """
     recovery_strategy_field = ', "response_recovery_strategy":"NO_STRATEGY" | "REMOVE_UNSUPPORTED_CONTENT" | "NARROW_TO_EVIDENCE_SCOPE" | "CLARIFY_FROM_ALLOWED_CONTEXT"'
 
-    if is_initial_greeting:
-        greeting_memory = _build_greeting_memory_context(
-            state.get("last_session_summary", state.get("working_context", "")),
-            state.get("user_baseline_summary", ""),
-        )
-        content_block = f"""
-        Customer-Facing Greeting:
-        "{answer}"
-
-        Complete Customer-Facing UI Payload:
-        "{rendered_payload}"
-        """
-        route_specific_rules = f"""
-        - Every recalled statement and suggested chip must be supported by the
-          Permitted Evidence (Greeting Memory) above.
-        - A generic first-time greeting with no recalled facts or chips is grounded.
-        - Addressing the user by their preferred nickname, name, or speaking in a specific language/tone does not require evidence support.
-        - Do not assess banking-answer factuality, compliance, helpfulness, or a normal-turn clarification.
-        - Every visible field in the greeting payload is in scope.
-
-        {audit_feedback_rules}
-        """
-        result = check_evidence_groundedness(
-            content_block,
-            evidence_bundle=greeting_memory,
-            evidence_description="Greeting Memory",
-            route_specific_rules=route_specific_rules,
-            extra_output_fields=f', "clarification_grounded": true, "clarification_connected": true{recovery_strategy_field}',
-        )
-        audit_scope = "greeting"
-    elif is_non_financial_response:
+    if is_non_financial_response:
         content_block = f"""
         Original Customer Message (courtesy-context only; never a source for a banking fact):
         {json.dumps(state.get("user_input", ""), ensure_ascii=False)}
@@ -4370,6 +4266,15 @@ def node_06_outbound_groundedness_gate(state: AgentState):
           for a brief sentence stating that part of the request could not be
           started, using only the supplied reason. Any different explanation
           is unsupported.
+        - A `{{deeplink-<destination_id>}}` token is supported only when its
+          exact destination_id appears in "resolved_deeplink_destinations".
+          Such a token is not a factual claim needing separate evidence -- it
+          is a pre-approved navigation reference the backend substitutes into
+          a UI button after this audit passes -- so do not reject it as
+          unsupported, fabricated, or missing evidence merely because it is a
+          placeholder. Reject it only if its destination_id is absent from
+          "resolved_deeplink_destinations", or if it appears as literal
+          visible text anywhere other than inside the placeholder itself.
         """
         result = check_evidence_groundedness(
             content_block,
@@ -4377,8 +4282,9 @@ def node_06_outbound_groundedness_gate(state: AgentState):
                 "approved_by_task": grounding_context["approved_by_task"],
                 "pending_service_request_count": grounding_context["pending_service_request_count"],
                 "unavailable_service_requests": grounding_context["unavailable_service_requests"],
+                "resolved_deeplink_destinations": grounding_context["resolved_deeplink_destinations"],
             },
-            evidence_description="Task-Level Approved Evidence, Pending Service Request Count, and Unavailable Service Requests — the only factual sources for answers and answer UI",
+            evidence_description="Task-Level Approved Evidence, Pending Service Request Count, Unavailable Service Requests, and Resolved Deeplink Destinations — the only factual sources for answers and answer UI",
             route_specific_rules=route_specific_rules,
             extra_output_fields=f', "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false{recovery_strategy_field}, "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]',
         )
@@ -4442,23 +4348,7 @@ def node_06_outbound_audit_join(state: AgentState):
         or not groundedness.get("clarification_connected", False)
         or not bool(compliance.get("clarification_compliant", False))
     )
-    is_initial_greeting = (
-        state.get("user_input") in {"__INIT__", "**INIT__"}
-        or state.get("preflight_status") == "initial_greeting"
-    )
-
     if not (compliance_passed and groundedness_passed):
-        if is_initial_greeting:
-            print("   🚫 [GREETING AUDIT VETO]: Falling back to generic greeting without suggested actions.")
-            generic_greeting = "Hello! I am Horizon. How can I assist you today?"
-            return {
-                "preflight_status": "pass",
-                "final_draft": generic_greeting,
-                "final_answer": generic_greeting,
-                "final_clarification": "",
-                "ui_action_payload": {"uiType": "text", "options": []},
-                "pending_advance": False,
-            }
         count = state.get("safety_retry_count", 0) + 1
         if state.get("triage_status") == "NON_FINANCIAL" and count >= 3:
             fallback = get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_retry")
@@ -4582,21 +4472,47 @@ def node_07_precision_substitution(state: AgentState):
     placeholders_in_draft = list(set(re.findall(r"\{\{(.*?)\}\}", combined_text)))
     precision_substituted = False
     
-    # Check for deeplink placeholders
-    deeplink_matches = re.findall(r"\{\{deeplink-([^}]+)\}\}", combined_text)
+    # Check for deeplink placeholders. A destination_id is trusted only when
+    # it was actually resolved by a completed deeplink tool call this turn --
+    # checking the static registry alone would let a syntactically valid but
+    # hallucinated token still render a working navigation button. Whatever
+    # the outcome, the raw placeholder text is always stripped so a rejected
+    # token never leaks to the customer as literal {{deeplink-...}} syntax.
+    deeplink_matches = re.findall(r"\{{1,2}deeplink-([^}]+)\}{1,2}", combined_text)
     if deeplink_matches:
-        from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
+        resolved_destinations = set(_resolved_deeplink_destinations(state))
         destination_id = deeplink_matches[0]
         contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
-        if contract:
+        if contract and destination_id in resolved_destinations:
             payload["navigationAction"] = {
                 "label": contract["label"],
                 "destinationId": destination_id,
                 "route": contract["route"]
             }
-            draft = draft.replace(f"{{{{deeplink-{destination_id}}}}}", "").strip()
             print(f"   🔗 [DEEPLINK SUB]: Replaced deeplink-{destination_id} -> navigationAction")
             precision_substituted = True
+        else:
+            print(f"   🚫 [DEEPLINK VETO]: '{destination_id}' was not resolved this turn -- stripping placeholder without a button.")
+        
+        # Clean both single and double bracket forms from ALL text fields globally
+        def _strip_deeplink(obj):
+            if isinstance(obj, str):
+                return re.sub(f"\\{{1,2}}deeplink-{destination_id}\\}}{{1,2}}", "", obj).strip()
+            if isinstance(obj, list):
+                return [_strip_deeplink(item) for item in obj]
+            if isinstance(obj, dict):
+                return {k: _strip_deeplink(v) for k, v in obj.items()}
+            return obj
+            
+        draft = _strip_deeplink(draft)
+        options = _strip_deeplink(options)
+        step_details = _strip_deeplink(step_details)
+        list_items = _strip_deeplink(list_items)
+        list_title = _strip_deeplink(list_title)
+        list_intro = _strip_deeplink(list_intro)
+        extended_text = _strip_deeplink(extended_text)
+        list_clarification = _strip_deeplink(list_clarification)
+        response_blocks = _strip_deeplink(response_blocks)
 
     if placeholders_in_draft:
         valid_map = fetch_placeholders_from_db(placeholders_in_draft)

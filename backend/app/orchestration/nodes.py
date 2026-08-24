@@ -21,6 +21,8 @@ from backend.app.core.compliance import REGULATORY_LICENSING_CONTEXT, PRECISION_
 from backend.app.core.translations import get_message
 from backend.app.core.system_logger import log_event
 from backend.app.orchestration.tool_registry import enabled_tool_capabilities, is_registered_operation, TOOL_REGISTRY
+from backend.app.orchestration.service_request_registry import get_service_request_contract
+from backend.app.services import service_request_service
 
 # Define the DB Path (adjust relative path if necessary based on your working directory)
 SQLITE_DB_PATH = "backend/data/knowledge_base.db"
@@ -64,6 +66,7 @@ VOLATILE_STATE_RESET = {
     "outbound_groundedness_result": {},
     "active_tool_routes": [],
     "pending_advance": False,
+    "service_request_event": {},
 }
 
 MAX_VERIFIED_TASK_HISTORY_TURNS = 10
@@ -1560,6 +1563,21 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         - RAG's internal retries are not outer tool tasks. Add RAG only when
           no RAG task for that subquery has already reached a terminal state.
         - Return no task if no registered enabled capability can close a gap.
+        - For tool_name "service_request", input must use the literal key
+          "service_request_id" -- NOT "customer_component" (that key belongs
+          only to rag tasks; do not copy it here even though it appears
+          elsewhere in this prompt). Example of the exact shape required:
+          {{"service_request_id": "profile-address-update"}}. Choose the
+          single best-fitting id from that tool's available_requests in the
+          enabled tool registry; never invent an id, and never include form
+          field values (the customer has not filled anything in yet).
+        - Read the full description of each available_requests entry before
+          choosing one -- a description can scope out specific reasons, not
+          just name a general topic. "Request a replacement physical card
+          for a non-fraud reason (worn or damaged)" does not cover a lost or
+          stolen card, even though both are card replacement in general
+          terms. If the customer's actual situation falls outside every
+          candidate's stated scope, do not create a task for it at all.
 
         Output JSON only:
         {{"tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}}}}]}}
@@ -1586,6 +1604,24 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         payload = candidate.get("input", {}) if isinstance(candidate.get("input"), dict) else {}
         if tool_name == "rag":
             payload = {"customer_component": known_subqueries[subquery_id]["customer_component"]}
+        elif tool_name == "service_request":
+            # The planner is told to key this "service_request_id", but the
+            # prompt also shows customer_component under Financial subqueries
+            # and rag tasks -- in practice the model sometimes copies that
+            # key by pattern-matching instead. The registered id is a closed,
+            # validated set, so accept the correct value under any key rather
+            # than silently dropping an otherwise-correct choice for a
+            # cosmetic key mismatch.
+            requested_id = str(payload.get("service_request_id", "")).strip()
+            if get_service_request_contract(requested_id) is None:
+                requested_id = next(
+                    (str(value).strip() for value in payload.values() if get_service_request_contract(str(value).strip()) is not None),
+                    "",
+                )
+            if get_service_request_contract(requested_id) is None:
+                log_event("tool.task.invalid_service_request_id", subquery_id=subquery_id, requested_id=requested_id, raw_input=payload, level="WARNING")
+                continue
+            payload = {"service_request_id": requested_id}
         fingerprint = _tool_task_fingerprint(tool_name, operation, subquery_id, payload)
         if fingerprint in existing_fingerprints:
             log_event("tool.task.deduplicated", subquery_id=subquery_id, tool_name=tool_name, operation=operation)
@@ -1622,11 +1658,96 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
     }
 
 
+def _dispatch_service_request_task(state: AgentState, task: dict) -> dict:
+    """Register a service_request form synchronously -- a deterministic DB
+    write, no LLM call. Mirrors deeplink's allow-list discipline: the task's
+    service_request_id was already validated against the registry when the
+    task was created (node_03a); this function re-validates defensively and
+    is the only place a registration row actually gets created.
+    """
+    service_request_id = str(task.get("input", {}).get("service_request_id", "")).strip()
+    contract = get_service_request_contract(service_request_id)
+    subquery_id = task.get("subquery_id")
+    resolved_component = next(
+        (item.get("customer_component", "") for item in state.get("financial_subqueries", []) if item.get("subquery_id") == subquery_id),
+        "",
+    )
+    session_id = state.get("session_id", "")
+
+    if contract is None:
+        return {"status": "unavailable", "reason": "That service request is not registered."}
+
+    record = service_request_service.register(
+        session_id=session_id,
+        user_id=state.get("user_id", ""),
+        service_request_id=service_request_id,
+        resolved_customer_component=resolved_component,
+        product_tags=contract.get("allowed_products", []),
+        intent_tags=contract.get("allowed_intents", []),
+        risk_level=contract["risk_level"],
+        requires_step_up=contract["requires_step_up"],
+    )
+    return {
+        "status": "completed",
+        "approved_result": {
+            "special_id": record["special_id"],
+            "service_request_id": service_request_id,
+            "description": contract["description"],
+            "form_schema": contract["form_schema"],
+        },
+    }
+
+
+def _pending_service_requests(state: AgentState) -> list[dict]:
+    """Completed service_request tool_results for this turn only.
+
+    Exposes only special_id, service_request_id, and description -- never
+    the form_schema. The LLM's job is to write one honest sentence inviting
+    the customer to complete a form it cannot see the fields of; the actual
+    form-opening UI action is attached deterministically in node_07, not by
+    anything the model generates.
+    """
+    return [
+        {
+            "special_id": result.get("approved_result", {}).get("special_id"),
+            "service_request_id": result.get("approved_result", {}).get("service_request_id"),
+            "description": result.get("approved_result", {}).get("description"),
+        }
+        for result in state.get("tool_results", [])
+        if isinstance(result, dict)
+        and result.get("tool_name") == "service_request"
+        and result.get("status") == "completed"
+        and result.get("approved_result", {}).get("special_id")
+    ]
+
+
+def _unavailable_service_requests(state: AgentState) -> list[dict]:
+    """service_request tool_results this turn that could not be registered.
+
+    Without this, a blocked attempt (e.g. the one-active-request-per-session
+    guard) silently disappears from the response with no acknowledgment at
+    all -- the customer's second request vanishes and nothing explains why.
+    Only the deterministic reason recorded at dispatch time is exposed; nothing
+    here is model-authored.
+    """
+    return [
+        {"reason": result.get("availability_reason", "")}
+        for result in state.get("tool_results", [])
+        if isinstance(result, dict)
+        and result.get("tool_name") == "service_request"
+        and result.get("status") == "unavailable"
+        and result.get("availability_reason")
+    ]
+
+
 def node_03b_tool_dispatcher(state: AgentState):
     """Dispatch pending registered tasks without hard-coding graph fan-out.
 
-    RAG is handed to its existing internal retrieval subgraph. Tools without a
-    enabled executor terminate as unavailable and cannot block the turn.
+    RAG is handed to its existing internal retrieval subgraph -- it needs
+    retries and stays async. service_request is a one-shot, synchronous,
+    LLM-free DB write, so it resolves inline here rather than needing its
+    own graph node. Tools without an enabled executor terminate as
+    unavailable and cannot block the turn.
     """
     print("🟢 [NODE 03b] Executing Generic Tool Dispatcher")
     pending_ids = set(state.get("pending_tool_task_ids", []))
@@ -1640,6 +1761,25 @@ def node_03b_tool_dispatcher(state: AgentState):
             task["status"] = "running"
             rag_task_ids.append(task["tool_task_id"])
             log_event("tool.dispatch.started", tool_task_id=task["tool_task_id"], subquery_id=task.get("subquery_id"), tool_name=tool_name)
+            continue
+        if tool_name == "service_request":
+            outcome = _dispatch_service_request_task(state, task)
+            task["status"] = outcome["status"]
+            tool_results.append({
+                "tool_task_id": task["tool_task_id"],
+                "subquery_id": task.get("subquery_id"),
+                "tool_name": tool_name,
+                "status": outcome["status"],
+                "approved_result": outcome.get("approved_result", {}),
+                "customer_safe_summary": "",
+                "availability_reason": outcome.get("reason", ""),
+            })
+            log_event(
+                "tool.result.service_request",
+                tool_task_id=task["tool_task_id"], subquery_id=task.get("subquery_id"),
+                status=outcome["status"],
+                special_id=outcome.get("approved_result", {}).get("special_id"),
+            )
             continue
         task["status"] = "unavailable"
         tool_results.append({
@@ -1658,6 +1798,119 @@ def node_03b_tool_dispatcher(state: AgentState):
         "tool_tasks": tasks,
         "tool_results": tool_results,
         "pending_tool_task_ids": rag_task_ids,
+    }
+
+
+_SERVICE_REQUEST_RESULT_TEMPLATES = {
+    "profile-address-update": lambda result: f"Your address has been updated to {result.get('new_address', 'the address you provided')}.",
+    "card-replacement-request": lambda result: f"Your replacement card has been ordered and will arrive by mail. Reference: {result.get('reference', 'unavailable')}.",
+    "kyc-document-resubmission": lambda result: (
+        f"Your updated identification document has been received. Reference: {result.get('reference', 'unavailable')}. "
+        f"Verification will be completed within {result.get('business_days', 'a few')} business days."
+    ),
+}
+# Every clause a template above states must have an explicit, matching
+# counterpart here -- not just the raw data field it was built from. Two
+# separate live-trace failures (an "our compliance team will..." claim, then
+# a denial saying "identity" when the evidence only said "denied") were both
+# the auditor correctly rejecting a template whose wording outran what a
+# bare data field actually asserts. Spelling out the same claims as explicit
+# facts closes that gap by construction instead of guessing what phrasing
+# the auditor will accept next time.
+_SERVICE_REQUEST_RESULT_FACTS = {
+    "profile-address-update": lambda result: [
+        f"The customer's profile address was updated to: {result.get('new_address', 'the address provided')}.",
+    ],
+    "card-replacement-request": lambda result: [
+        "A replacement card was ordered for the customer.",
+        "The replacement card will be sent to the customer by mail.",
+        f"The reference number for this replacement request is {result.get('reference', 'unavailable')}.",
+    ],
+    "kyc-document-resubmission": lambda result: [
+        "The customer's updated identification document was received.",
+        f"The reference number for this submission is {result.get('reference', 'unavailable')}.",
+        f"Verification of the submitted document is expected to be completed within {result.get('business_days', 'a few')} business days.",
+    ],
+}
+_SERVICE_REQUEST_DENIAL_MESSAGE = (
+    "We weren't able to verify your identity for this request. Please try again or visit a branch."
+)
+_SERVICE_REQUEST_DENIAL_FACTS = [
+    "The identity verification check for this request was not successful.",
+    "The customer may retry the request, or visit a branch for assistance.",
+]
+
+
+def node_svc_service_request_resolver(state: AgentState):
+    """The WP-7 'special route': turns a form-submission or credential-check
+    outcome into an audited chat response, without going through node_02d
+    triage. See docs/SERVICE_REQUEST_DESIGN_v1.0.md Section 8.
+
+    Deterministic templates, not LLM generation, produce the customer-facing
+    text -- the facts here (an address, a reference number) come directly
+    from the mocked downstream result, never from a model's own wording of
+    them. The templates still pass through the same evidence-groundedness
+    and conduct-compliance gates as any other customer-facing content, per
+    this project's "everything that reaches a customer goes through the same
+    checks" principle, even though nothing here was generated.
+    """
+    print("🟢 [NODE SVC] Executing Service Request Result Resolver")
+    event = state.get("service_request_event", {}) or {}
+    outcome = event.get("outcome")
+    service_request_id = event.get("service_request_id", "")
+    description = event.get("description", "this request")
+
+    if outcome == "denied":
+        content_block = _SERVICE_REQUEST_DENIAL_MESSAGE
+        evidence_bundle = {"outcome": "denied", "facts": _SERVICE_REQUEST_DENIAL_FACTS}
+    else:
+        template = _SERVICE_REQUEST_RESULT_TEMPLATES.get(service_request_id)
+        facts_fn = _SERVICE_REQUEST_RESULT_FACTS.get(service_request_id)
+        result_payload = event.get("result_payload", {}) or {}
+        content_block = template(result_payload) if template else "Your request has been received."
+        evidence_bundle = {
+            "outcome": "completed",
+            "facts": facts_fn(result_payload) if facts_fn else [],
+        }
+
+    evidence_audit = check_evidence_groundedness(
+        content_block,
+        evidence_bundle=evidence_bundle,
+        evidence_description="Service Request Downstream Result",
+        route_specific_rules=(
+            "The \"facts\" list is a set of pre-verified statements about "
+            "this specific request's outcome; the content may state any of "
+            "them directly, in its own natural phrasing, without needing "
+            "further support. The content must not state or imply anything "
+            "beyond what the facts list says -- no approval, no guarantee, "
+            "no outcome or actor the facts do not name."
+        ),
+    )
+    conduct_audit = check_conduct_compliance(content_block)
+    if not (evidence_audit.get("evidence_grounded") and conduct_audit.get("conduct_compliant")):
+        log_event(
+            "service_request.result_response.rejected",
+            level="WARNING",
+            special_id=event.get("special_id"),
+            evidence_reason=evidence_audit.get("reason"),
+            conduct_reason=conduct_audit.get("reason"),
+        )
+        content_block = (
+            "There has been an update to your request, but we can't display the details right now. "
+            "Please check back shortly or contact support."
+        )
+
+    history = list(state.get("chat_history", []))
+    history.append(HumanMessage(content=f"[Completed: {description}]"))
+    history.append(AIMessage(content=content_block))
+
+    return {
+        "final_response": content_block,
+        "final_draft": content_block,
+        "final_answer": content_block,
+        "ui_action_payload": {"uiType": "none", "options": []},
+        "chat_history": history,
+        "service_request_event": {},
     }
 
 
@@ -2252,9 +2505,42 @@ def node_04a_resolution_planner(state: AgentState):
       duplicate a completed, unavailable, failed, blocked, pending, or running
       tool task. RAG internal retries are already complete at this point; do
       not request RAG again for a terminal RAG result.
+    - A capability's own description can scope out specific reasons or
+      situations, not just name a general topic -- match on the whole
+      description, not the nearest keyword. For example, a capability
+      described as covering card replacement "for a non-fraud reason (worn
+      or damaged)" does not cover a lost or stolen card, even though both
+      are "card replacement" in general terms; do not propose a tool_gap for
+      a capability whose stated scope excludes the customer's actual
+      situation. When every registered capability's scope excludes the
+      situation, that is EXHAUSTED for this need, not NEEDS_TOOLS -- approved
+      RAG evidence, if any, may still answer it on its own.
     - Return RESOLVED when current approved evidence and safe clarification
       anchors are enough to form the response. Return EXHAUSTED when a gap
       remains but no enabled non-duplicate capability can address it.
+    - RAG evidence and a registered capability are independent coverage
+      decisions for the same subquery, not alternatives to choose between.
+      Decide each on its own merits: does approved evidence precisely and
+      completely answer what the customer asked, and, separately, does a
+      registered enabled capability's own description precisely match the
+      action the customer is asking to take? Answering yes to the
+      capability question always adds that tool_gap — with no exception,
+      including when RAG evidence is itself a complete, well-grounded,
+      directly-on-topic answer (for example, FAQ steps that correctly
+      explain how to update an address manually in the app). Being able to
+      explain how a customer could perform an action themselves is never a
+      substitute for being able to perform that same action for them
+      through a registered capability — the capability is strictly more
+      valuable, not an alternative path to the same outcome, so its
+      existence is never a reason to omit the tool_gap. Include both
+      `validated_task_ids` and the `tool_gaps` entry in that case; the
+      response generator can present the RAG evidence as useful reference
+      alongside the offered capability. Evidence that describes a related
+      but different action (for example, general personal-details updates
+      when the customer asked specifically about resubmitting an identity
+      document) is adjacent context, an even weaker case than a precise
+      answer, and must never be the reason a matching capability is left
+      out either.
     - A tool gap is an internal capability description, never a customer
       answer, evidence claim, instruction, or UI recommendation.
     - Search tasks are evidence-retrieval units, never mandatory visible
@@ -2740,6 +3026,15 @@ def _generate_response_blocks(state: AgentState) -> dict:
         for task in state.get("decline_tasks", [])
         if task.get("subquery", "")
     ]
+    # The LLM is deliberately told nothing about *which* forms are pending or
+    # their special_ids -- only whether the list is non-empty -- because the
+    # actual form button is attached later by node_07 straight from
+    # tool_results, unconditionally and independent of anything generated
+    # here. Asking the model to cite a specific id for coverage-tracking was
+    # tried and repeatedly failed in three different ways (wrong key, dropped
+    # citation, invented key); removing the ask removes the failure mode.
+    pending_service_request_count = len(_pending_service_requests(state))
+    unavailable_service_requests = _unavailable_service_requests(state)
     # This is deliberately separate from evidence and tool inputs.  It carries
     # only small internal attention cues from an otherwise valid mixed turn
     # (for example, a preference or feeling). The original user_input—not this
@@ -2793,6 +3088,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
     Intent clarification inputs: {json.dumps(intent_clarifications, ensure_ascii=False)}
     Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
     Decline inputs: {json.dumps(decline_context, ensure_ascii=False)}
+    Pending service request forms registered this turn: {pending_service_request_count}
+    (forms are attached automatically; you do not know and must not invent
+    what any of them ask for)
+    Unavailable service requests (could not be registered this turn; state
+    only the supplied reason, never guess why): {json.dumps(unavailable_service_requests, ensure_ascii=False)}
     Failed outbound-audit feedback (constraints only, never evidence). Each
     entry identifies one specific claim or instruction to remove — it is
     never permission to abandon the topic it came from. After removing
@@ -2848,6 +3148,34 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - Respond as one considered conversation, not as a retrieval report or a
       sequence of task answers. Search tasks are internal evidence units, not
       required visible sections.
+    - Never mention a form, service request, or link yourself, regardless of
+      "Pending service request forms registered this turn" -- do not write
+      "I've included a form below," do not invite the customer to a form,
+      do not say anything implying one exists. This is not something you
+      have information to state accurately: whether a form appears is
+      decided after your response is already approved, so any claim you make
+      about it cannot be verified against what you were given and will be
+      rejected. A separate, deterministic line introduces any registered
+      form automatically; your only job regarding it is to not undermine or
+      duplicate that line.
+    - When "Pending service request forms registered this turn" is greater
+      than zero, do not open with an apology, a statement that guidance is
+      unavailable, or other decline-style framing -- lead with whatever
+      answer you do have, written as a complete, confident response on its
+      own terms. A registered form being added afterward is not a reason to
+      write your own answer as if it were incomplete, and this holds even
+      when approved evidence also fully and correctly explains how to
+      perform the same action manually (for example, in-app navigation
+      steps) -- explaining the manual steps is still a genuine, complete
+      answer.
+    - For each entry in Unavailable service requests, include one brief,
+      honest sentence telling the customer that part of their request could
+      not be started right now, using only the supplied reason. Never invent
+      a different explanation, and never silently drop that part of the
+      request from the response merely because no form could be attached to
+      it -- an unavailable capability still deserves an acknowledgment, the
+      same as a decline or a terminal unresolved topic does elsewhere in
+      this response.
     - Start with the information that most directly helps the customer. Group
       related facts when doing so reduces cognitive load; preserve distinctions
       when combining them would confuse the customer.
@@ -2869,9 +3197,27 @@ def _generate_response_blocks(state: AgentState) -> dict:
       does not fit the customer's stated situation. When useful, provide a
       short, accurately scoped reference in text instead. Do not name task IDs
       or expose internal organization to the customer.
+    - When one element's answer or extended_text draws on more than one task
+      or pending service request -- a natural way to combine related facts --
+      list every one of their ids in that element's source_task_ids, not just
+      the one the element is primarily about. This is not cosmetic: an id
+      left out of source_task_ids is treated as never addressed, and a
+      contradictory duplicate (a fallback apology, or a second invitation to
+      a form already offered) gets appended right beside content that already
+      covered it. Crediting every id a passage actually draws on is what
+      prevents that.
     - Every factual claim, instruction, item, title, option, and detail must
       be supported by approved evidence. A response element may use evidence
-      from multiple tasks only when those facts are naturally related.
+      from multiple tasks only when those facts are naturally related --
+      arriving in the same customer message is not relatedness. A lost card
+      and an address change are two separate needs; each deserves its own
+      element with whatever structure best fits it (a sequential procedure
+      as PROGRESS, a scannable set as LIST, otherwise TEXT), not one shared
+      paragraph merely because both were mentioned together. This still
+      applies when redrafting after audit feedback: removing one flagged
+      sentence is never a reason to keep an earlier draft's structure
+      unexamined -- re-decide the best presentation for each need fresh,
+      the same as if writing the first draft.
     - The complete Customer request is the sole authoritative wording and
       meaning of every customer statement. The non-financial attention cues
       merely signal that a relevant aside exists. When acknowledging a
@@ -3019,6 +3365,17 @@ def _generate_response_blocks(state: AgentState) -> dict:
         })
         answer_parts.append(fallback_text)
         element_sources.append([task_id])
+
+    # No equivalent fallback is needed for a pending service request: unlike
+    # a RAG task's answer, node_07 attaches every registered form's button
+    # unconditionally and independently of this draft, and each button is
+    # now self-labeled with the action it performs ("Change Address",
+    # "Replace Card", ...). A missing or imperfect generic framing sentence
+    # here is a minor style miss, not a lost capability -- the customer
+    # still sees a clearly-named, actionable button regardless. This is the
+    # deliberate trade this design made: no LLM-side coverage tracking for
+    # service requests at all, since every prior attempt at it (citing a
+    # special_id for detection) became its own source of bugs.
 
     clarification = _llm_text(generated, "clarification")
     # A decline is not a clarification request. Preserve its deterministic
@@ -3593,6 +3950,8 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
         "terminal_clarifications": terminal_context,
         "intent_clarifications": intent_context,
         "decline_inputs": decline_context,
+        "pending_service_request_count": len(_pending_service_requests(state)),
+        "unavailable_service_requests": _unavailable_service_requests(state),
     }
 
 
@@ -3914,11 +4273,26 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         - Do not fail a response because it omits information from any available
           source. Assess whether visible claims use a permitted source only.
         - Every visible field in the payload is in scope.
+        - "pending_service_request_count" is not a permitted source for any
+          customer-facing statement at all -- it exists only to tell the
+          response whether to avoid apology/decline framing, per the route
+          rules above. Any mention of a form, service request, or link,
+          in any wording, is unsupported regardless of the count's value,
+          because whether a form actually appears is decided after this
+          audit runs.
+        - "unavailable_service_requests" entries are a permitted source only
+          for a brief sentence stating that part of the request could not be
+          started, using only the supplied reason. Any different explanation
+          is unsupported.
         """
         result = check_evidence_groundedness(
             content_block,
-            evidence_bundle=grounding_context["approved_by_task"],
-            evidence_description="Task-Level Approved Evidence — the only factual source for answers and answer UI",
+            evidence_bundle={
+                "approved_by_task": grounding_context["approved_by_task"],
+                "pending_service_request_count": grounding_context["pending_service_request_count"],
+                "unavailable_service_requests": grounding_context["unavailable_service_requests"],
+            },
+            evidence_description="Task-Level Approved Evidence, Pending Service Request Count, and Unavailable Service Requests — the only factual sources for answers and answer UI",
             route_specific_rules=route_specific_rules,
             extra_output_fields=f', "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false{recovery_strategy_field}, "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]',
         )
@@ -4189,6 +4563,50 @@ def node_07_precision_substitution(state: AgentState):
         payload["responseBlocks"] = substitute_nested(response_blocks)
 
     payload["precisionSubstituted"] = precision_substituted
+
+    # Deterministic, never model-authored: attach the real form-opening
+    # action for any service_request registered this turn. This runs
+    # regardless of how (or whether) the LLM's prose mentioned it -- the
+    # actual actionable UI element must never depend on generation quality.
+    # Every registered request gets a button, not just the first -- multiple
+    # service_request registrations in one turn are fully supported (the
+    # planner already loops across rounds to create them; see
+    # SERVICE_REQUEST_DESIGN_v1.0.md Section 9). This list is built straight
+    # from tool_results, independent of the draft text entirely.
+    service_request_actions = []
+    for pending_request in _pending_service_requests(state):
+        contract = get_service_request_contract(pending_request.get("service_request_id", ""))
+        if contract is None:
+            continue
+        service_request_actions.append({
+            "label": contract.get("action_label", "Complete Form"),
+            "specialId": pending_request.get("special_id"),
+            "serviceRequestId": pending_request.get("service_request_id"),
+            "description": pending_request.get("description"),
+            "formSchema": contract["form_schema"],
+        })
+    if service_request_actions:
+        payload["serviceRequestActions"] = service_request_actions
+        # The intro line lives here, not in the LLM's draft: it runs after
+        # node_06's audit gates, so it is never subject to an evidence check
+        # that (correctly) cannot verify a UI element attached after it ran.
+        # Appended to both the visible blocks (what renders) and the stored
+        # draft (what a future turn's conversation context will see), so the
+        # transcript stays an accurate record of what the customer was shown.
+        language = state.get("user_profile", {}).get("language") or "English"
+        intro_key = "service_request_intro_single" if len(service_request_actions) == 1 else "service_request_intro_plural"
+        intro_text = get_message(language, intro_key)
+        if payload.get("uiType") == "blocks":
+            response_blocks = payload.get("responseBlocks", [])
+            response_blocks.append({
+                "blockId": "service_request_intro", "sourceTaskIds": [],
+                "type": "text", "contextText": "", "text": intro_text,
+                "items": [], "options": [], "progressTitle": "", "stepDetails": [],
+                "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
+            })
+            payload["responseBlocks"] = response_blocks
+        draft = "\n\n".join(part for part in [draft, intro_text] if part)
+
     return {"final_response": draft, "ui_action_payload": payload}
 
 

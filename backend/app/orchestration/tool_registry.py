@@ -17,6 +17,17 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "read_only": True,
         "description": "Retrieve and verify Horizon FAQ and policy evidence.",
     },
+    "service_request": {
+        "operations": {"register_service_request"},
+        "enabled": True,
+        "read_only": False,
+        "description": (
+            "Register a guided, multi-step form for an approved low- or "
+            "intermediate-risk service request (e.g. address update, card "
+            "replacement, KYC document resubmission). Never used for money "
+            "movement or high-risk actions -- those are deeplink's job."
+        ),
+    },
     # These contracts intentionally exist before their real integrations. They
     # remain unavailable until an executor and validation contract are enabled.
     "api": {
@@ -35,17 +46,28 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
 
 
 def enabled_tool_capabilities() -> list[dict[str, Any]]:
-    """Return only capabilities safe to plan in the current deployment."""
-    return [
-        {
+    """Return only capabilities safe to plan in the current deployment.
+
+    service_request additionally exposes its registered forms (id,
+    description, risk) so the planner can choose which one fits -- never the
+    form's actual fields, which stay invisible to every LLM at every stage.
+    """
+    from backend.app.orchestration.service_request_registry import available_service_requests
+
+    capabilities = []
+    for name, contract in TOOL_REGISTRY.items():
+        if not contract.get("enabled"):
+            continue
+        capability = {
             "tool_name": name,
             "operations": sorted(contract["operations"]),
             "description": contract["description"],
             "read_only": contract["read_only"],
         }
-        for name, contract in TOOL_REGISTRY.items()
-        if contract.get("enabled")
-    ]
+        if name == "service_request":
+            capability["available_requests"] = available_service_requests()
+        capabilities.append(capability)
+    return capabilities
 
 
 def is_registered_operation(tool_name: str, operation: str) -> bool:

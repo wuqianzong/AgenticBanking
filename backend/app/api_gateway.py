@@ -12,6 +12,9 @@ import asyncio
 from backend.app.orchestration.graph import app_graph
 from backend.app.services.memory_service import LongTermMemoryManager, ShortTermMemoryManager
 from backend.app.core.system_logger import log_event, reset_request_context, set_request_context
+from backend.app.services import service_request_service
+from backend.app.services.service_request_mock_api import run_downstream_service, run_mock_credential_check
+from backend.app.orchestration.service_request_registry import get_service_request_contract
 
 app = FastAPI(title="Production Horizon Core Gateway")
 
@@ -49,6 +52,18 @@ class UserPreferencesPayload(BaseModel):
     tone: str = "professional"
     emoji: str = "enabled"
     financial_literacy: str = "intermediate"
+
+class ServiceRequestSubmitPayload(BaseModel):
+    special_id: str
+    user_id: str
+    session_id: str
+    submitted_data: dict = {}
+
+class ServiceRequestCredentialCheckPayload(BaseModel):
+    special_id: str
+    user_id: str
+    session_id: str
+    passed: bool
 
 
 async def archive_session_history(payload: CloseSessionPayload, archive_reason: str, compact: bool = False):
@@ -151,6 +166,152 @@ async def update_preferences(payload: UserPreferencesPayload):
         return {"status": "success", "updated": True}
     except Exception as error:
         return {"status": "error", "message": str(error)}
+
+async def _run_service_request_turn(session_id: str, user_id: str, service_request_event: dict) -> dict:
+    """Invoke the WP-7 special route (node_svc_service_request_resolver) as
+    its own turn on the customer's existing graph thread, then persist and
+    return the same shape /api/chat's final payload uses so the frontend can
+    render it identically to an ordinary assistant message.
+    """
+    config = {"configurable": {"thread_id": session_id}}
+    token = set_request_context(session_id=session_id, user_id=user_id)
+    try:
+        previous_snapshot = app_graph.get_state(config)
+        previous_turn_count = previous_snapshot.values.get("turn_count", 0) if previous_snapshot.values else 0
+        await app_graph.ainvoke(
+            {
+                "user_id": user_id,
+                "session_id": session_id,
+                "service_request_event": service_request_event,
+                "turn_count": previous_turn_count + 1,
+            },
+            config=config,
+        )
+        state_snapshot = app_graph.get_state(config)
+        execution_result = state_snapshot.values
+
+        await archive_session_history(
+            CloseSessionPayload(session_id=session_id, user_id=user_id, reason="turn_complete"),
+            archive_reason="turn_complete",
+        )
+        active_history = execution_result.get("chat_history", [])
+        if active_history:
+            history_sequence_offset = execution_result.get("history_sequence_offset", 0)
+            await asyncio.to_thread(
+                LongTermMemoryManager.persist_message_ui_payload,
+                user_id, session_id,
+                history_sequence_offset + len(active_history) - 1,
+                execution_result.get("ui_action_payload", {}),
+            )
+        return {
+            "type": "complete",
+            "text": execution_result.get("final_response", ""),
+            "uiType": execution_result.get("ui_action_payload", {}).get("uiType", "none"),
+            "options": execution_result.get("ui_action_payload", {}).get("options", []),
+        }
+    finally:
+        reset_request_context(token)
+
+
+@app.get("/api/service-request/list/{user_id}")
+async def list_service_requests(user_id: str):
+    """The customer's full service-request to-do list -- pending, completed,
+    and expired -- scoped by user_id so it stays visible across sessions."""
+    records = await asyncio.to_thread(service_request_service.list_registrations, user_id)
+    return {
+        "items": [
+            {
+                "special_id": record["special_id"],
+                "service_request_id": record["service_request_id"],
+                "action_label": (get_service_request_contract(record["service_request_id"]) or {}).get("action_label", ""),
+                "description": (get_service_request_contract(record["service_request_id"]) or {}).get("description", ""),
+                "status": record["status"],
+                "created_at": record["created_at"],
+                "expires_at": record["expires_at"],
+            }
+            for record in records
+        ]
+    }
+
+
+@app.get("/api/service-request/{special_id}")
+async def get_service_request(special_id: str):
+    """Deterministic lookup used both to open a form the first time and to
+    reopen a still-valid one later from old chat history."""
+    record = await asyncio.to_thread(service_request_service.get, special_id)
+    if record is None:
+        return {"status": "error", "message": "Unknown service request."}
+    response = {"status": record["status"], "special_id": special_id, "service_request_id": record["service_request_id"]}
+    if record["status"] == "registered":
+        contract = get_service_request_contract(record["service_request_id"])
+        response["form_schema"] = contract["form_schema"] if contract else {}
+        response["description"] = contract["description"] if contract else ""
+    return response
+
+
+@app.post("/api/service-request/submit")
+async def submit_service_request(payload: ServiceRequestSubmitPayload):
+    record = await asyncio.to_thread(service_request_service.get, payload.special_id)
+    if record is None or record["user_id"] != payload.user_id or record["session_id"] != payload.session_id:
+        return {"status": "error", "message": "This request could not be found or has expired."}
+    if record["status"] == "expired":
+        return {"status": "error", "message": "This request has expired. Please ask again."}
+    if record["status"] != "registered":
+        return {"status": "error", "message": "This request has already been submitted."}
+
+    record = await asyncio.to_thread(service_request_service.mark_submitted, payload.special_id, payload.submitted_data)
+    contract = get_service_request_contract(record["service_request_id"])
+    log_event("service_request.submit.received", special_id=payload.special_id, service_request_id=record["service_request_id"])
+
+    if record["requires_step_up"]:
+        await asyncio.to_thread(service_request_service.begin_credential_check, payload.special_id)
+        return {"status": "credential_check_required", "special_id": payload.special_id}
+
+    result_payload = run_downstream_service(record["service_request_id"], record["submitted_data"])
+    await asyncio.to_thread(service_request_service.complete_with_result, payload.special_id, result_payload)
+    return await _run_service_request_turn(
+        payload.session_id, payload.user_id,
+        {
+            "special_id": payload.special_id, "outcome": "completed",
+            "service_request_id": record["service_request_id"], "result_payload": result_payload,
+            "description": contract["description"] if contract else "",
+        },
+    )
+
+
+@app.post("/api/service-request/credential-check")
+async def credential_check_service_request(payload: ServiceRequestCredentialCheckPayload):
+    record = await asyncio.to_thread(service_request_service.get, payload.special_id)
+    if record is None or record["user_id"] != payload.user_id or record["session_id"] != payload.session_id:
+        return {"status": "error", "message": "This request could not be found or has expired."}
+    if record["status"] != "credential_check_pending":
+        return {"status": "error", "message": "This request is not awaiting a credential check."}
+
+    contract = get_service_request_contract(record["service_request_id"])
+    passed = run_mock_credential_check(payload.passed)
+    record = await asyncio.to_thread(service_request_service.resolve_credential_check, payload.special_id, passed)
+
+    if not passed:
+        return await _run_service_request_turn(
+            payload.session_id, payload.user_id,
+            {
+                "special_id": payload.special_id, "outcome": "denied",
+                "service_request_id": record["service_request_id"],
+                "description": contract["description"] if contract else "",
+            },
+        )
+
+    result_payload = run_downstream_service(record["service_request_id"], record["submitted_data"])
+    await asyncio.to_thread(service_request_service.complete_with_result, payload.special_id, result_payload)
+    return await _run_service_request_turn(
+        payload.session_id, payload.user_id,
+        {
+            "special_id": payload.special_id, "outcome": "completed",
+            "service_request_id": record["service_request_id"], "result_payload": result_payload,
+            "description": contract["description"] if contract else "",
+        },
+    )
+
 
 @app.post("/api/session/checkout")
 async def close_and_compact_session(payload: CloseSessionPayload):
@@ -263,6 +424,7 @@ async def process_chat(payload: ChatPayload):
         previous_turn_count = previous_snapshot.values.get("turn_count", 0) if previous_snapshot.values else 0
         initial_turn_state = {
             "user_id": payload.user_id,
+            "session_id": payload.session_id,
             "user_input": "__INIT__" if is_initialization else payload.message,
             "turn_count": previous_turn_count if is_initialization else previous_turn_count + 1,
         }
@@ -346,6 +508,7 @@ async def process_chat(payload: ChatPayload):
                 "precisionSubstituted": execution_result.get("ui_action_payload", {}).get("precisionSubstituted", False),
                 "currentStep": execution_result.get("ui_action_payload", {}).get("currentStep"),
                 "totalSteps": execution_result.get("ui_action_payload", {}).get("totalSteps"),
+                "serviceRequestActions": execution_result.get("ui_action_payload", {}).get("serviceRequestActions", []),
             }
             yield json.dumps(final_payload) + "\n"
             log_event("chat.response", ui_type=final_payload["uiType"], response_length=len(final_payload["text"]))

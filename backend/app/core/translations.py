@@ -19,6 +19,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "non_compliant": "I’m unable to help with that request.",
         "non_financial_rejection": "I’m Horizon, and I can help with Horizon Bank questions whenever you need.",
         "fail": "Sorry, I’m unable to respond to that right now. Please try again or rephrase your question.",
+        "service_request_intro_single": "You can fulfil your request using the form below.",
+        "service_request_intro_plural": "You can fulfil these requests using the forms below.",
     },
     "Mandarin": {
         "greeting_fallback": "欢迎回来。我可以根据我们之前的对话继续为您服务,或者您也可以提出新的问题。",
@@ -32,6 +34,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "non_compliant": "很抱歉,我无法协助处理该请求。",
         "non_financial_rejection": "我是 Horizon,随时为您解答 Horizon 银行相关的问题。",
         "fail": "抱歉,我目前无法回应。请重试或重新表述您的问题。",
+        "service_request_intro_single": "您可以通过下方的表单完成您的请求。",
+        "service_request_intro_plural": "您可以通过下方的表单完成这些请求。",
     },
     "Spanish": {
         "greeting_fallback": "Bienvenido de nuevo. Puedo usar nuestra conversación anterior para ayudarle a continuar, o podemos comenzar con una nueva pregunta.",
@@ -45,6 +49,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "non_compliant": "No puedo ayudar con esa solicitud.",
         "non_financial_rejection": "Soy Horizon y puedo ayudarle con preguntas de Horizon Bank cuando lo necesite.",
         "fail": "Lo siento, no puedo responder en este momento. Intente nuevamente o reformule su pregunta.",
+        "service_request_intro_single": "Puede completar su solicitud usando el formulario a continuación.",
+        "service_request_intro_plural": "Puede completar estas solicitudes usando los formularios a continuación.",
     },
 }
 

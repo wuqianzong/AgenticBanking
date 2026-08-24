@@ -19,8 +19,10 @@ class AgentState(TypedDict):
     
     # --- VOLATILE TURN STATE (Reset per turn) ---
     user_id: str
+    session_id: str
     user_profile: Dict[str, Any]
     user_input: str
+    service_request_event: Dict[str, Any]        # Non-chat entry point payload for the WP-7 special route (see node_svc_service_request_resolver)
     preflight_status: str                        # Maps edge routing conditions
     knowledge_blueprint: Dict[str, Any] 
     target_path: str

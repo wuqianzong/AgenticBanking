@@ -34,6 +34,7 @@ def build_agent_graph():
     workflow.add_node("n5", nodes.node_10_standard_rejection)
     workflow.add_node("n25", nodes.node_11_deterministic_clarification_fallback)
     workflow.add_node("n26", nodes.node_12_non_financial_response)
+    workflow.add_node("n_svc", nodes.node_svc_service_request_resolver)
 
     def route_start(state: AgentState):
         history = state.get("chat_history", [])
@@ -41,6 +42,10 @@ def build_agent_graph():
         print("🚦 [ROUTER GATE] Initializing Graph Edge")
         print(f"📦 [STATE CHECK] chat_history length: {len(history)}")
         print(f"🗣️  [INPUT] user_input: '{state.get('user_input', '')}'")
+        if state.get("service_request_event"):
+            print("🔀 [ROUTE] Service request event present -> Routing to n_svc (Special Route)")
+            print("=" * 50 + "\n")
+            return "n_svc"
         if not history and state.get("user_input") in {"__INIT__", "**INIT__"}:
             print("🔀 [ROUTE] History empty -> Routing to n00 (Greeting/Init)")
             print("=" * 50 + "\n")
@@ -111,7 +116,8 @@ def build_agent_graph():
             return "n25"
         return "n8" if count < 3 else "n23"
 
-    workflow.set_conditional_entry_point(route_start, {"n00": "n00", "n3": "n3"})
+    workflow.set_conditional_entry_point(route_start, {"n00": "n00", "n3": "n3", "n_svc": "n_svc"})
+    workflow.add_edge("n_svc", END)
     workflow.add_edge("n00", "n20")
     workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n23": "n23", "n5": "n5"})
     workflow.add_conditional_edges("n16", route_n16, {"n1b": "n1b", "n5": "n5"})

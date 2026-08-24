@@ -99,6 +99,31 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
             schema_version INTEGER NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Service_Request_Registration (
+            special_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            service_request_id TEXT NOT NULL,
+            resolved_customer_component TEXT,
+            product_tags TEXT,
+            intent_tags TEXT,
+            risk_level TEXT NOT NULL,
+            requires_step_up INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL,
+            submitted_data TEXT,
+            submitted_data_hash TEXT,
+            grant_id TEXT,
+            grant_consumed INTEGER NOT NULL DEFAULT 0,
+            result_payload TEXT,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_service_request_session
+        ON Service_Request_Registration(session_id, status)
+    """)
     # Backward-compatible migration for databases created before structured UI
     # payloads were persisted with each assistant message.
     existing_columns = {

@@ -32,7 +32,12 @@ BANK_CONDUCT_CONTEXT = """
    future financial outcome, rate movement, or investment return.
 4. No Fabricated Authority: Never speak as though executing a banking action,
    accessing a live account, or acting with authority the assistant does not
-   have. Never invent a policy, timeline, or capability.
+   have. Never invent a policy, timeline, or capability. Inviting a customer
+   to complete a registered, gated service-request form is not fabricated
+   authority: the assistant is not executing anything itself, and the form
+   is a separate, controlled process the customer completes on their own
+   authorization. Directing a customer to it is a compliant hand-off, not an
+   unauthorized action or a claim of live account access.
 5. Neutral, Non-Persuasive Tone: Never use persuasive, urgent, or sales-style
    language. Present information for the customer's own decision-making, not
    to induce a specific choice.

@@ -154,10 +154,17 @@ WP-1 (foundational: api tool)
 
 ## WP-7: `service_request` Tool — Low/Intermediate-Risk Service Workflows
 
-**Detailed design:** see `docs/SERVICE_REQUEST_DESIGN_v1.0.md` — the full
-registry contract, registration state machine, form JSON schema, mocked
-credential-check/grant mechanism, and the no-suspended-turns resumption
-model. That document is the authoritative detail layer for this WP.
+**Status: IMPLEMENTED.** All three build targets (address update, card
+replacement, KYC document resubmission) are live and verified end-to-end at
+the HTTP layer. **Detailed design and implementation notes:** see
+`docs/SERVICE_REQUEST_DESIGN_v1.0.md` — the full registry contract,
+registration state machine, form JSON schema, mocked credential-check/grant
+mechanism, the no-suspended-turns resumption model, and a dedicated
+"Implementation notes" section (end of that document) covering the handful
+of things that turned out to need a small addition beyond the original
+design (the planner's `available_service_requests` exposure, the new
+`session_id`/`service_request_event` state fields, and the new `n_svc`
+graph node for the special route).
 
 ### Problem
 
@@ -186,14 +193,16 @@ downstream write.
 
 ### Acceptance criteria
 
-See `docs/SERVICE_REQUEST_DESIGN_v1.0.md` Section 10 for the specific open
-decisions to resolve first; broadly, an agent picking this up should verify
-a low-risk request (e.g. `profile-address-update`) completes end-to-end
-without any credential step, an intermediate-risk request correctly gates
-on the mocked check before the downstream call fires, a closed-without-
-submitting form remains reopenable from old chat history, and a second
-service request in the same turn is deferred rather than registered
-concurrently.
+See `docs/SERVICE_REQUEST_DESIGN_v1.0.md` Section 12 for the specific open
+decisions to resolve first, and Section 11 for full worked step sequences of
+the three chosen build targets (address update, card replacement, KYC
+document resubmission as flagship). Broadly, an agent picking this up
+should verify a low-risk request (e.g. `profile-address-update`) completes
+end-to-end without any credential step, an intermediate-risk request
+correctly gates on the mocked check before the downstream call fires, a
+closed-without-submitting form remains reopenable from old chat history,
+and multiple concurrent pending requests coexist correctly and all appear in
+the service-request to-do list (Section 9) rather than blocking each other.
 
 ### Files
 

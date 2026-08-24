@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { t } from './translations';
-import { 
-  Send, Bot, ChevronRight, CheckCircle2, 
-  CreditCard, Wallet, Landmark, ShieldCheck, 
+import {
+  Send, Bot, ChevronRight, CheckCircle2,
+  CreditCard, Wallet, Landmark, ShieldCheck,
   FileText, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
-  Loader2, Settings // <-- ADDED for the Agentic Processing Tracker
+  Loader2, Settings, ClipboardList, Clock, XCircle // <-- ADDED for the Agentic Processing Tracker
 } from 'lucide-react';
 
 // 1. THE NODE CAPTION DICTIONARY
@@ -72,6 +72,23 @@ export default function BankingBotUI() {
     financial_literacy: "intermediate"
   });
 
+  // --- WP-7: Service Request (form-gated, risk-tiered) state ---
+  // activeServiceRequest holds the open form's schema + in-progress answers.
+  // activeCredentialCheck holds only the special_id awaiting the mocked
+  // "Bank Centralized Credential Check" gate. Only one can be open at a
+  // time, and opening either blocks the main chat input (a UX choice for
+  // focus, not a correctness mechanism -- see SERVICE_REQUEST_DESIGN_v1.0.md).
+  const [activeServiceRequest, setActiveServiceRequest] = useState(null);
+  const [activeCredentialCheck, setActiveCredentialCheck] = useState(null);
+  const [serviceRequestNotice, setServiceRequestNotice] = useState('');
+  const [isSubmittingServiceRequest, setIsSubmittingServiceRequest] = useState(false);
+  // The to-do list: every service request the customer has ever made,
+  // scoped by user_id so it persists across sessions -- pending ones are
+  // reopenable, completed/expired ones are shown for reference only.
+  const [serviceRequestList, setServiceRequestList] = useState([]);
+  const [showServiceRequestList, setShowServiceRequestList] = useState(false);
+  const PENDING_SERVICE_REQUEST_STATUSES = ['registered', 'submitted', 'credential_check_pending'];
+
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -107,6 +124,7 @@ export default function BankingBotUI() {
       precisionSubstituted: payload.precisionSubstituted || false,
       currentStep: payload.currentStep,
       totalSteps: payload.totalSteps,
+      serviceRequestActions: payload.serviceRequestActions || [],
       createdAt: message.created_at
     };
   };
@@ -300,6 +318,16 @@ export default function BankingBotUI() {
     }
   };
 
+  const fetchServiceRequestList = async () => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/service-request/list/${MOCK_PROFILE.userId}`);
+      const data = await res.json();
+      setServiceRequestList(data.items || []);
+    } catch (error) {
+      console.error('Failed to load service request list', error);
+    }
+  };
+
   const savePreferences = async (newPrefs) => {
     try {
       setPreferences(newPrefs);
@@ -314,12 +342,144 @@ export default function BankingBotUI() {
     }
   };
 
+  // A completed/denied service_request response arrives from its own
+  // endpoint, not /api/chat, but must render identically to an ordinary
+  // assistant turn -- same message shape, same transcript.
+  const appendServiceRequestResultMessage = (finalBotData) => {
+    if (!finalBotData || !finalBotData.text) return;
+    shouldAutoScrollRef.current = true;
+    setMessages(prev => [...prev, {
+      id: Date.now() + 2,
+      sender: 'bot',
+      text: finalBotData.text,
+      type: finalBotData.uiType || 'text',
+      options: finalBotData.options || [],
+      createdAt: new Date().toISOString()
+    }]);
+  };
+
+  // Opening a form is always a fresh, deterministic lookup by special_id --
+  // whether it's being shown for the first time or reopened from old chat
+  // history, so a stale/expired/already-completed link degrades safely
+  // instead of reopening data that no longer applies.
+  const openServiceRequestForm = async (action) => {
+    if (!action?.specialId) return;
+    setServiceRequestNotice('');
+    try {
+      const res = await fetch(`http://localhost:8000/api/service-request/${action.specialId}`);
+      const data = await res.json();
+      if (data.status === 'registered') {
+        setActiveServiceRequest({
+          specialId: action.specialId,
+          serviceRequestId: data.service_request_id,
+          description: data.description || action.description,
+          formSchema: data.form_schema || action.formSchema,
+          stepIndex: 0,
+          values: {}
+        });
+      } else if (data.status === 'completed') {
+        setServiceRequestNotice(t(preferences.language, 'serviceRequest.alreadyCompleted'));
+      } else if (data.status === 'expired') {
+        setServiceRequestNotice(t(preferences.language, 'serviceRequest.expired'));
+      } else {
+        setServiceRequestNotice(t(preferences.language, 'serviceRequest.unavailable'));
+      }
+    } catch (error) {
+      console.error('Failed to open service request form', error);
+      setServiceRequestNotice(t(preferences.language, 'serviceRequest.unavailable'));
+    }
+  };
+
+  const updateServiceRequestField = (fieldId, value) => {
+    setActiveServiceRequest(prev => prev ? { ...prev, values: { ...prev.values, [fieldId]: value } } : prev);
+  };
+
+  const goToServiceRequestStep = (delta) => {
+    setActiveServiceRequest(prev => {
+      if (!prev) return prev;
+      const totalSteps = prev.formSchema?.steps?.length || 1;
+      const nextIndex = Math.min(Math.max(prev.stepIndex + delta, 0), totalSteps - 1);
+      return { ...prev, stepIndex: nextIndex };
+    });
+  };
+
+  const submitServiceRequestForm = async () => {
+    if (!activeServiceRequest) return;
+    setIsSubmittingServiceRequest(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/service-request/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          special_id: activeServiceRequest.specialId,
+          user_id: MOCK_PROFILE.userId,
+          session_id: sessionId,
+          submitted_data: activeServiceRequest.values
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'credential_check_required') {
+        setActiveServiceRequest(null);
+        setActiveCredentialCheck({ specialId: data.special_id });
+      } else if (data.status === 'error') {
+        setServiceRequestNotice(data.message || t(preferences.language, 'serviceRequest.unavailable'));
+        setActiveServiceRequest(null);
+      } else {
+        setActiveServiceRequest(null);
+        appendServiceRequestResultMessage(data);
+      }
+    } catch (error) {
+      console.error('Service request submission failed', error);
+      setServiceRequestNotice(t(preferences.language, 'serviceRequest.unavailable'));
+      setActiveServiceRequest(null);
+    } finally {
+      setIsSubmittingServiceRequest(false);
+      void fetchServiceRequestList();
+    }
+  };
+
+  // The mocked "Bank Centralized Credential Check" -- a real integration
+  // would perform an actual re-authentication challenge and report only
+  // pass/fail here; this MVP lets the demo choose the outcome directly so
+  // both the granted and denied paths can be shown.
+  const resolveCredentialCheck = async (passed) => {
+    if (!activeCredentialCheck) return;
+    setIsSubmittingServiceRequest(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/service-request/credential-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          special_id: activeCredentialCheck.specialId,
+          user_id: MOCK_PROFILE.userId,
+          session_id: sessionId,
+          passed
+        })
+      });
+      const data = await res.json();
+      setActiveCredentialCheck(null);
+      if (data.status === 'error') {
+        setServiceRequestNotice(data.message || t(preferences.language, 'serviceRequest.unavailable'));
+      } else {
+        appendServiceRequestResultMessage(data);
+      }
+    } catch (error) {
+      console.error('Credential check failed', error);
+      setActiveCredentialCheck(null);
+      setServiceRequestNotice(t(preferences.language, 'serviceRequest.unavailable'));
+    } finally {
+      setIsSubmittingServiceRequest(false);
+      void fetchServiceRequestList();
+    }
+  };
+
   useEffect(() => {
     if (sessionId) {
       void loadHistoryPage(sessionId, null, true);
       scheduleSessionTimeout();
     }
     fetchPreferences();
+    void fetchServiceRequestList();
 
     return () => window.clearTimeout(sessionTimeoutRef.current);
   }, []);
@@ -465,6 +625,7 @@ export default function BankingBotUI() {
             precisionSubstituted: finalBotData.precisionSubstituted || false,
             currentStep: finalBotData.currentStep,
             totalSteps: finalBotData.totalSteps,
+            serviceRequestActions: finalBotData.serviceRequestActions || [],
             createdAt: new Date().toISOString()
           };
           if (botResponse.type === 'stepper') {
@@ -493,6 +654,7 @@ export default function BankingBotUI() {
       setIsCompactingMemory(false);
       setIsTyping(false);
       scheduleSessionTimeout();
+      void fetchServiceRequestList();
     }
   };
 
@@ -763,6 +925,255 @@ export default function BankingBotUI() {
     </div>
   );
 
+  // The button attached to a message that registered a service_request.
+  // Deterministic props (specialId/formSchema/description) came straight
+  // from the backend's ui_action_payload -- never model-authored.
+  const renderServiceRequestAction = (action) => (
+    <button
+      type="button"
+      onClick={() => openServiceRequestForm(action)}
+      disabled={isTyping || isCompactingMemory}
+      className="mt-3 flex w-full max-w-sm items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <FileText size={16} />
+      {action.label || t(preferences.language, "serviceRequest.completeForm")}
+    </button>
+  );
+
+  const renderServiceRequestField = (field) => {
+    const value = activeServiceRequest?.values?.[field.field_id];
+    if (field.field_type === "text") {
+      return (
+        <input
+          type="text"
+          className="w-full border border-slate-200 rounded-lg p-2 text-sm"
+          value={value ?? field.default ?? ""}
+          onChange={(e) => updateServiceRequestField(field.field_id, e.target.value)}
+        />
+      );
+    }
+    if (field.field_type === "options") {
+      return (
+        <select
+          className="w-full border border-slate-200 rounded-lg p-2 text-sm"
+          value={value ?? field.default ?? ""}
+          onChange={(e) => updateServiceRequestField(field.field_id, e.target.value)}
+        >
+          <option value="" disabled>—</option>
+          {(field.options || []).map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      );
+    }
+    if (field.field_type === "checkbox") {
+      return (
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={Boolean(value ?? field.default ?? false)}
+            onChange={(e) => updateServiceRequestField(field.field_id, e.target.checked)}
+          />
+          {field.label}
+        </label>
+      );
+    }
+    if (field.field_type === "document_reference") {
+      const uploaded = Boolean(value);
+      return (
+        <div className="flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={() => updateServiceRequestField(field.field_id, `mock-doc-ref-${Date.now()}`)}
+            className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              uploaded
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+            }`}
+          >
+            {uploaded ? <CheckCircle2 size={16} /> : <FileText size={16} />}
+            {uploaded ? t(preferences.language, "serviceRequest.uploaded") : t(preferences.language, "serviceRequest.simulateUpload")}
+          </button>
+          <span className="text-[11px] text-slate-400">{t(preferences.language, "serviceRequest.mockDemoNotice")}</span>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const renderServiceRequestFormModal = () => {
+    if (!activeServiceRequest) return null;
+    const steps = activeServiceRequest.formSchema?.steps || [];
+    const currentStep = steps[activeServiceRequest.stepIndex];
+    if (!currentStep) return null;
+    const isLastStep = activeServiceRequest.stepIndex === steps.length - 1;
+    const isFirstStep = activeServiceRequest.stepIndex === 0;
+    return (
+      <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
+        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl flex flex-col max-h-[80vh] overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-slate-800">{currentStep.caption}</h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {t(preferences.language, "serviceRequest.step")} {activeServiceRequest.stepIndex + 1} {t(preferences.language, "serviceRequest.of")} {steps.length}
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveServiceRequest(null)}
+              className="text-slate-400 hover:text-slate-600"
+              title={t(preferences.language, "serviceRequest.cancel")}
+            >×</button>
+          </div>
+          <div className="p-4 overflow-y-auto flex flex-col gap-4 text-sm">
+            {(currentStep.fields || []).map((field) => (
+              <div key={field.field_id}>
+                {field.field_type !== "checkbox" && (
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{field.label}</label>
+                )}
+                {renderServiceRequestField(field)}
+                {field.notice && <p className="mt-1 text-[11px] text-slate-400">{field.notice}</p>}
+              </div>
+            ))}
+          </div>
+          <div className="p-4 border-t border-slate-100 flex justify-between gap-2">
+            <button
+              onClick={() => goToServiceRequestStep(-1)}
+              disabled={isFirstStep || isSubmittingServiceRequest}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+            >
+              {t(preferences.language, "serviceRequest.back")}
+            </button>
+            {isLastStep ? (
+              <button
+                onClick={submitServiceRequestForm}
+                disabled={isSubmittingServiceRequest}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isSubmittingServiceRequest ? t(preferences.language, "serviceRequest.submitting") : t(preferences.language, "serviceRequest.submit")}
+              </button>
+            ) : (
+              <button
+                onClick={() => goToServiceRequestStep(1)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                {t(preferences.language, "serviceRequest.next")}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCredentialCheckModal = () => {
+    if (!activeCredentialCheck) return null;
+    return (
+      <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
+        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex items-center gap-2">
+            <ShieldCheck size={18} className="text-blue-600" />
+            <h3 className="font-bold text-slate-800 text-sm">{t(preferences.language, "serviceRequest.credentialCheckTitle")}</h3>
+          </div>
+          <div className="p-4 text-sm text-slate-600 leading-relaxed">
+            {t(preferences.language, "serviceRequest.credentialCheckBody")}
+          </div>
+          <div className="p-4 border-t border-slate-100 flex flex-col gap-2">
+            <button
+              onClick={() => resolveCredentialCheck(true)}
+              disabled={isSubmittingServiceRequest}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {t(preferences.language, "serviceRequest.simulatePass")}
+            </button>
+            <button
+              onClick={() => resolveCredentialCheck(false)}
+              disabled={isSubmittingServiceRequest}
+              className="border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {t(preferences.language, "serviceRequest.simulateFail")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderServiceRequestNotice = () => {
+    if (!serviceRequestNotice) return null;
+    return (
+      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 max-w-[85%] rounded-lg bg-slate-800 text-white text-xs px-4 py-2.5 shadow-lg flex items-center gap-2">
+        <AlertCircle size={14} />
+        <span>{serviceRequestNotice}</span>
+        <button onClick={() => setServiceRequestNotice('')} className="ml-2 text-slate-300 hover:text-white">×</button>
+      </div>
+    );
+  };
+
+  const serviceRequestStatusMeta = (status) => {
+    if (PENDING_SERVICE_REQUEST_STATUSES.includes(status)) {
+      return { label: t(preferences.language, 'serviceRequest.statusPending'), icon: <Clock size={14} />, className: 'text-amber-700 bg-amber-50 border-amber-200' };
+    }
+    if (status === 'completed') {
+      return { label: t(preferences.language, 'serviceRequest.statusCompleted'), icon: <CheckCircle2 size={14} />, className: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+    }
+    if (status === 'denied') {
+      return { label: t(preferences.language, 'serviceRequest.statusDenied'), icon: <XCircle size={14} />, className: 'text-red-700 bg-red-50 border-red-200' };
+    }
+    return { label: t(preferences.language, 'serviceRequest.statusExpired'), icon: <XCircle size={14} />, className: 'text-slate-500 bg-slate-50 border-slate-200' };
+  };
+
+  const renderServiceRequestListModal = () => {
+    if (!showServiceRequestList) return null;
+    return (
+      <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
+        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl flex flex-col max-h-[80vh] overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-bold text-slate-800">{t(preferences.language, 'serviceRequest.listTitle')}</h3>
+            <button onClick={() => setShowServiceRequestList(false)} className="text-slate-400 hover:text-slate-600">×</button>
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {serviceRequestList.length === 0 && (
+              <p className="p-4 text-sm text-slate-400 text-center">{t(preferences.language, 'serviceRequest.listEmpty')}</p>
+            )}
+            <ul className="divide-y divide-slate-100">
+              {serviceRequestList.map((item) => {
+                const meta = serviceRequestStatusMeta(item.status);
+                const isPending = PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
+                return (
+                  <li key={item.special_id}>
+                    <button
+                      type="button"
+                      disabled={!isPending}
+                      onClick={() => {
+                        setShowServiceRequestList(false);
+                        openServiceRequestForm({ specialId: item.special_id, description: item.description });
+                      }}
+                      className={`w-full text-left p-4 flex flex-col gap-1.5 ${isPending ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default'}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-slate-800">{item.action_label || item.description}</span>
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0 ${meta.className}`}>
+                          {meta.icon}
+                          {meta.label}
+                        </span>
+                      </div>
+                      {item.action_label && item.description && (
+                        <span className="text-xs text-slate-500">{item.description}</span>
+                      )}
+                      {isPending && (
+                        <span className="text-[11px] text-blue-600 font-medium">{t(preferences.language, 'serviceRequest.tapToComplete')}</span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderPreferencesModal = () => {
     if (!showPreferences) return null;
     return (
@@ -842,6 +1253,20 @@ export default function BankingBotUI() {
             </div>
             {/* Action Toggles */}
             <div className="flex items-center gap-1">
+              {isLoggedIn && (
+                <button
+                  onClick={() => { void fetchServiceRequestList(); setShowServiceRequestList(true); }}
+                  className="relative p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"
+                  title={t(preferences.language, "serviceRequest.listTitle")}
+                >
+                  <ClipboardList size={18}/>
+                  {serviceRequestList.filter(item => PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)).length > 0 && (
+                    <span className="absolute top-0.5 right-0.5 bg-blue-600 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1">
+                      {serviceRequestList.filter(item => PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)).length}
+                    </span>
+                  )}
+                </button>
+              )}
               {isLoggedIn && (
                 <button onClick={() => setShowPreferences(true)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors" title={t(preferences.language, "header.preferences")}>
                   <Settings size={18}/>
@@ -949,6 +1374,11 @@ export default function BankingBotUI() {
                     {msg.type === 'blocks' && msg.responseBlocks?.map((block, blockIndex) =>
                       renderResponseBlock(block, msg.id, blockIndex, msg.precisionSubstituted)
                     )}
+                    {msg.serviceRequestActions?.map((action) => (
+                      <React.Fragment key={action.specialId}>
+                        {renderServiceRequestAction(action)}
+                      </React.Fragment>
+                    ))}
                     {msg.type === 'stepper' && renderStepper(
                       msg.items,
                       msg.progressTitle,
@@ -1020,11 +1450,11 @@ export default function BankingBotUI() {
               onKeyDown={(e) => e.key === 'Enter' && handleSend(inputValue)}
               placeholder={t(preferences.language, "chat.placeholder")}
               className="w-full bg-slate-100 text-slate-800 text-[15px] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-400"
-              disabled={isTyping || !isLoggedIn}
+              disabled={isTyping || !isLoggedIn || Boolean(activeServiceRequest || activeCredentialCheck)}
             />
             <button
               onClick={() => handleSend(inputValue)}
-              disabled={!inputValue.trim() || isTyping || !isLoggedIn}
+              disabled={!inputValue.trim() || isTyping || !isLoggedIn || Boolean(activeServiceRequest || activeCredentialCheck)}
               className="absolute right-1.5 bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-50 disabled:bg-slate-300 hover:bg-blue-700 transition-colors shadow-sm"
             >
               <Send size={18} className="ml-0.5" />
@@ -1036,6 +1466,10 @@ export default function BankingBotUI() {
           </div>
         </div>
         {renderPreferencesModal()}
+        {renderServiceRequestFormModal()}
+        {renderCredentialCheckModal()}
+        {renderServiceRequestListModal()}
+        {renderServiceRequestNotice()}
       </div>
       
       {/* Hide Scrollbars CSS */}

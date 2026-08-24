@@ -9,8 +9,9 @@ from pydantic import BaseModel, Field
 from backend.app.core.system_logger import log_event
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
-model_A="openai/gpt-oss-120b"  # For response generation
-model_B="gemini-3.5-flash-lite"  # For sufficiency, gourndedness, and compliance audits
+#model_A="openai/gpt-oss-120b"  # For response generation
+model_A="gemini-3.5-flash-lite"  # For response generation
+model_B="gemini-3.1-flash-lite"  # For sufficiency, gourndedness, and compliance audits
 model_C="gemini-3.1-flash-lite"  # For triage, decomposition, and journey planning
 MODEL_A_GENERATOR = model_A       # Groq: Conversational Engine
 MODEL_B_AUDITOR = model_B            # Google: Safety & Sufficiency Judge

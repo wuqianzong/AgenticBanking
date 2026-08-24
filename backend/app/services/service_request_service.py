@@ -3,6 +3,16 @@
 See docs/SERVICE_REQUEST_DESIGN_v1.0.md Section 5 for the state machine this
 implements. All persistence lives in Service_Request_Registration inside
 simulated_ledger.db, alongside the other durable customer-scoped tables.
+
+Deliberately only three externally-visible statuses: "pending", "expired",
+"completed". This registry tracks that a submission was made, not whether
+the underlying banking action ultimately succeeded in whatever legacy
+system processes it -- that would require integrating with systems this
+project has no visibility into. A customer checking whether a change
+actually took effect does so through a read path (api/deeplink/the bank
+app), not through this table. A failed credential check is therefore not a
+terminal outcome: the registration simply stays "pending" and is
+resubmittable until it expires, the same as one that was never submitted.
 """
 
 from __future__ import annotations
@@ -17,8 +27,11 @@ from typing import Any
 from backend.app.services.memory_service import DB_PATH, ensure_memory_schema
 from backend.app.core.system_logger import log_event
 
-NON_TERMINAL_STATUSES = {"registered", "submitted", "credential_check_pending"}
-TERMINAL_STATUSES = {"completed", "denied", "expired", "unavailable"}
+PENDING = "pending"
+EXPIRED = "expired"
+COMPLETED = "completed"
+NON_TERMINAL_STATUSES = {PENDING}
+TERMINAL_STATUSES = {COMPLETED, EXPIRED}
 REGISTRATION_TTL_HOURS = 72
 
 
@@ -46,11 +59,11 @@ def _connect() -> sqlite3.Connection:
 def _expire_if_due(conn: sqlite3.Connection, record: dict[str, Any]) -> dict[str, Any]:
     if record["status"] in NON_TERMINAL_STATUSES and record["expires_at"] < _now():
         conn.execute(
-            "UPDATE Service_Request_Registration SET status = 'expired' WHERE special_id = ?",
-            (record["special_id"],),
+            "UPDATE Service_Request_Registration SET status = ? WHERE special_id = ?",
+            (EXPIRED, record["special_id"]),
         )
         conn.commit()
-        record["status"] = "expired"
+        record["status"] = EXPIRED
         log_event("service_request.expired", special_id=record["special_id"])
     return record
 
@@ -93,12 +106,12 @@ def register(
              product_tags, intent_tags, risk_level, requires_step_up, status,
              submitted_data, submitted_data_hash, grant_id, grant_consumed, result_payload,
              created_at, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'registered', NULL, NULL, NULL, 0, NULL, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
             """,
             (
                 special_id, session_id, user_id, service_request_id, resolved_customer_component,
                 json.dumps(product_tags or []), json.dumps(intent_tags or []),
-                risk_level, int(bool(requires_step_up)), created_at, expires_at,
+                risk_level, int(bool(requires_step_up)), PENDING, created_at, expires_at,
             ),
         )
         conn.commit()
@@ -123,15 +136,22 @@ def get(special_id: str) -> dict[str, Any] | None:
 
 
 def mark_submitted(special_id: str, submitted_data: dict[str, Any]) -> dict[str, Any] | None:
-    """Idempotent: a registration already past 'registered' is returned unchanged."""
+    """Record a submission (or a resubmission after a failed credential check).
+
+    Valid whenever the registration is still "pending" -- that covers both
+    a fresh, never-submitted form and one that was submitted before but
+    reset by a failed credential check (see resolve_credential_check).
+    Overwrites any prior submission and clears a stale grant, since a new
+    submission is a new payload to authorize from scratch.
+    """
     record = get(special_id)
-    if record is None or record["status"] != "registered":
+    if record is None or record["status"] != PENDING:
         return record
     canonical = json.dumps(submitted_data or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     data_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     with _connect() as conn:
         conn.execute(
-            "UPDATE Service_Request_Registration SET status = 'submitted', submitted_data = ?, submitted_data_hash = ? WHERE special_id = ?",
+            "UPDATE Service_Request_Registration SET submitted_data = ?, submitted_data_hash = ?, grant_id = NULL WHERE special_id = ?",
             (canonical, data_hash, special_id),
         )
         conn.commit()
@@ -139,29 +159,20 @@ def mark_submitted(special_id: str, submitted_data: dict[str, Any]) -> dict[str,
     return get(special_id)
 
 
-def begin_credential_check(special_id: str) -> dict[str, Any] | None:
-    record = get(special_id)
-    if record is None or record["status"] != "submitted" or not record["requires_step_up"]:
-        return record
-    with _connect() as conn:
-        conn.execute(
-            "UPDATE Service_Request_Registration SET status = 'credential_check_pending' WHERE special_id = ?",
-            (special_id,),
-        )
-        conn.commit()
-    log_event("service_request.credential_check.started", special_id=special_id)
-    return get(special_id)
-
-
 def resolve_credential_check(special_id: str, passed: bool) -> dict[str, Any] | None:
+    """On pass, issues a grant (status stays "pending" until complete_with_result
+    runs). On fail, resets the submission entirely and status stays "pending"
+    -- a failed check is not terminal; the customer can resubmit until this
+    registration expires.
+    """
     record = get(special_id)
-    if record is None or record["status"] != "credential_check_pending":
+    if record is None or record["status"] != PENDING or not record.get("submitted_data"):
         return record
     if passed:
         grant_id = secrets.token_urlsafe(24)
         with _connect() as conn:
             conn.execute(
-                "UPDATE Service_Request_Registration SET status = 'granted', grant_id = ? WHERE special_id = ?",
+                "UPDATE Service_Request_Registration SET grant_id = ? WHERE special_id = ?",
                 (grant_id, special_id),
             )
             conn.commit()
@@ -169,7 +180,7 @@ def resolve_credential_check(special_id: str, passed: bool) -> dict[str, Any] | 
     else:
         with _connect() as conn:
             conn.execute(
-                "UPDATE Service_Request_Registration SET status = 'denied' WHERE special_id = ?",
+                "UPDATE Service_Request_Registration SET submitted_data = NULL, submitted_data_hash = NULL, grant_id = NULL WHERE special_id = ?",
                 (special_id,),
             )
             conn.commit()
@@ -180,16 +191,20 @@ def resolve_credential_check(special_id: str, passed: bool) -> dict[str, Any] | 
 def complete_with_result(special_id: str, result_payload: dict[str, Any]) -> dict[str, Any] | None:
     """Consumes any grant and records the downstream mock API's result.
 
-    Valid from 'submitted' (low risk, no gate) or 'granted' (intermediate
-    risk, gate passed) -- both are "cleared to call downstream" states.
+    Valid only while "pending", and only once a grant exists for any
+    registration that required step-up -- a low-risk registration completes
+    straight from a submission, an intermediate-risk one only after
+    resolve_credential_check has issued a grant.
     """
     record = get(special_id)
-    if record is None or record["status"] not in {"submitted", "granted"}:
+    if record is None or record["status"] != PENDING:
+        return record
+    if record["requires_step_up"] and not record.get("grant_id"):
         return record
     with _connect() as conn:
         conn.execute(
-            "UPDATE Service_Request_Registration SET status = 'completed', result_payload = ?, grant_consumed = 1 WHERE special_id = ?",
-            (json.dumps(result_payload or {}, ensure_ascii=False), special_id),
+            "UPDATE Service_Request_Registration SET status = ?, result_payload = ?, grant_consumed = 1 WHERE special_id = ?",
+            (COMPLETED, json.dumps(result_payload or {}, ensure_ascii=False), special_id),
         )
         conn.commit()
     log_event("service_request.completed", special_id=special_id)

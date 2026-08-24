@@ -1,5 +1,13 @@
 # Horizon Memory Architecture Specification v1.0
 
+**Status: SUPERSEDED.** This document is kept as a historical record of the
+system as it originally ran. Cross-session memory (last-session summary and
+user baseline, both described below) has been removed entirely and replaced
+by on-demand deterministic checks at login. See
+`MEMORY_ARCHITECTURE_v3.0.md` for the system actually running now. The
+in-session rolling summarizer described in Section 5-6 is unaffected and
+still runs as documented here.
+
 ## 1. Purpose and scope
 
 This specification describes the memory system implemented by the Horizon banking FAQ assistant. The design provides conversational continuity and user-scoped personalization while keeping each login a new LangGraph execution session.

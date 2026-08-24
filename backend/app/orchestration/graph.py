@@ -118,7 +118,10 @@ def build_agent_graph():
 
     workflow.set_conditional_entry_point(route_start, {"n00": "n00", "n3": "n3", "n_svc": "n_svc"})
     workflow.add_edge("n_svc", END)
-    workflow.add_edge("n00", "n20")
+    # The greeting is now fully deterministic (no LLM call, no generated
+    # claim), so it skips the outbound audit/precision/escalation chain
+    # entirely -- there is nothing there for it to check.
+    workflow.add_edge("n00", END)
     workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n23": "n23", "n5": "n5"})
     workflow.add_conditional_edges("n16", route_n16, {"n1b": "n1b", "n5": "n5"})
     workflow.add_edge("n1b", "n2d")

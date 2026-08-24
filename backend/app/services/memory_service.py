@@ -14,8 +14,6 @@ DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "d
 MAX_SHORT_TERM_TURNS = 10
 MAX_SHORT_TERM_MESSAGES = MAX_SHORT_TERM_TURNS * 2
 TARGET_SUMMARY_TOKENS = 100
-USER_BASELINE_SESSION_LIMIT = 5
-USER_BASELINE_TARGET_TOKENS = 150
 MEMORY_VALIDATION_MAX_ATTEMPTS = 3
 
 
@@ -54,18 +52,6 @@ def ensure_db_dir_exists():
 def ensure_memory_schema(conn: sqlite3.Connection) -> None:
     """Create the durable, user-scoped conversation history tables."""
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS Persistent_Customer_Dialogue_Registry (
-            history_id TEXT PRIMARY KEY,
-            customer_id TEXT,
-            session_id TEXT,
-            session_start_timestamp TEXT,
-            session_end_timestamp TEXT,
-            raw_chat_transcript TEXT,
-            compact_summary_footprint TEXT,
-            session_exit_status TEXT
-        )
-    """)
-    conn.execute("""
         CREATE TABLE IF NOT EXISTS Persistent_Chat_Message (
             message_id TEXT PRIMARY KEY,
             customer_id TEXT NOT NULL,
@@ -88,15 +74,6 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
             tone TEXT,
             emoji TEXT,
             financial_literacy TEXT
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS Persistent_User_Baseline_Memory (
-            customer_id TEXT PRIMARY KEY,
-            baseline_summary TEXT NOT NULL,
-            source_session_ids TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            schema_version INTEGER NOT NULL
         )
     """)
     conn.execute("""
@@ -233,21 +210,10 @@ class LongTermMemoryManager:
             return False, reason
 
         # Groundedness v2.0: a stored memory summary will eventually shape a
-        # future greeting or baseline context shown to the customer, so it is
-        # held to the same evidence-groundedness and conduct-compliance
-        # checks as any other customer-facing content, plus one
-        # memory-specific retention rule (clarification-dependency) that
-        # doesn't belong to either universal axis.
-        excludes_clarification_dependencies = memory_type in {"last-session", "five-session baseline"}
+        # future assistant turn within this same session, so it is held to
+        # the same evidence-groundedness and conduct-compliance checks as any
+        # other customer-facing content.
         clarification_policy = """
-        CLARIFICATION-DEPENDENCY EXCLUSION (REQUIRED):
-        This durable memory must not retain an unresolved, ambiguous,
-        clarification-dependent, or incomplete issue. Do not retain missing
-        product identification, unanswered questions, stated bottlenecks,
-        pending next steps, requests for more information, or a record that
-        Horizon could not answer something. Set
-        `has_clarification_dependent_content` true if any such content appears.
-        """ if excludes_clarification_dependencies else """
         Clarification-dependent content may be retained only for the active
         session's rolling context. Set
         `has_clarification_dependent_content` false unless the candidate itself
@@ -292,11 +258,7 @@ class LongTermMemoryManager:
             is_grounded = bool(evidence_audit.get("evidence_grounded"))
             has_clarification_dependent_content = bool(evidence_audit.get("has_clarification_dependent_content", False))
             has_non_compliant_content = not bool(conduct_audit.get("conduct_compliant"))
-            passed = (
-                is_grounded
-                and not has_non_compliant_content
-                and (not excludes_clarification_dependencies or not has_clarification_dependent_content)
-            )
+            passed = is_grounded and not has_non_compliant_content
             reason = evidence_audit.get("reason", "") if not is_grounded else conduct_audit.get("reason", "Memory validation failed.")
             log_event(
                 "memory.validation.completed" if passed else "memory.validation.failed",
@@ -373,139 +335,27 @@ class LongTermMemoryManager:
         return message.additional_kwargs.get("trust_status", "untrusted")
 
     @staticmethod
-    def fetch_user_baseline(customer_id: str) -> str:
-        """Fetch optional advisory baseline; a missing record is normal."""
+    def has_prior_session(customer_id: str) -> bool:
+        """Deterministic, on-demand check: has this customer chatted before?
+
+        No cross-session content (summary or baseline) is carried forward --
+        the project does not require continuity of conversation content
+        across logins. This existence check only distinguishes a returning
+        customer from a first-time one for greeting tone; it never becomes a
+        factual claim and needs no LLM call or audit.
+        """
         ensure_db_dir_exists()
         try:
             with sqlite3.connect(DB_PATH) as conn:
                 ensure_memory_schema(conn)
-                row = conn.execute("""
-                    SELECT baseline_summary
-                    FROM Persistent_User_Baseline_Memory
-                    WHERE customer_id = ?
-                """, (customer_id,)).fetchone()
-            return row[0].strip() if row and row[0] else ""
+                row = conn.execute(
+                    "SELECT 1 FROM Persistent_Chat_Message WHERE customer_id = ? LIMIT 1",
+                    (customer_id,),
+                ).fetchone()
+            return row is not None
         except Exception as error:
-            print(f"⚠️ [MEMORY SERVICE] User baseline read failed: {error}")
-            return ""
-
-    @staticmethod
-    def refresh_user_baseline(customer_id: str) -> str:
-        """Consolidate up to five completed session summaries into user context."""
-        ensure_db_dir_exists()
-        try:
-            with sqlite3.connect(DB_PATH) as conn:
-                ensure_memory_schema(conn)
-                rows = conn.execute("""
-                    SELECT session_id, compact_summary_footprint
-                    FROM Persistent_Customer_Dialogue_Registry
-                    WHERE customer_id = ?
-                      AND compact_summary_footprint IS NOT NULL
-                      AND TRIM(compact_summary_footprint) != ''
-                      AND compact_summary_footprint NOT LIKE 'Error packing%'
-                    GROUP BY session_id
-                    ORDER BY MAX(session_end_timestamp) DESC
-                    LIMIT ?
-                """, (customer_id, USER_BASELINE_SESSION_LIMIT)).fetchall()
-
-            # No eligible summary means no durable baseline should survive to
-            # influence a later greeting or chip. Clear any stale record.
-            if not rows:
-                with sqlite3.connect(DB_PATH) as conn:
-                    ensure_memory_schema(conn)
-                    conn.execute(
-                        "DELETE FROM Persistent_User_Baseline_Memory WHERE customer_id = ?",
-                        (customer_id,),
-                    )
-                    conn.commit()
-                log_event("memory.baseline.cleared", customer_id=customer_id, reason="no_valid_session_summaries")
-                log_event("memory.baseline.skipped", customer_id=customer_id, reason="no_valid_session_summaries")
-                return ""
-
-            source_session_ids = [row[0] for row in rows]
-            session_summaries = "\n".join(
-                f"Session {index + 1} (newest first): {row[1]}"
-                for index, row in enumerate(rows)
-            )
-            prompt = f"""
-            Build a read-only customer baseline from up to {USER_BASELINE_SESSION_LIMIT}
-            completed banking-chat session summaries. Keep it under
-            {USER_BASELINE_TARGET_TOKENS} tokens.
-
-            Preserve only stable, useful context: recurring banking topics that
-            were answered, explicit communication preferences, and explicitly
-            stated facts. Prefer newer explicit information if sessions
-            conflict. Do not infer financial preferences or make decisions for
-            the customer.
-
-            BANKING-ONLY AND ANTI-HALLUCINATION RULES:
-            - Retain only information relevant to banking FAQ assistance.
-            - Omit small talk, unrelated topics, model speculation, and vague
-              or unsupported claims.
-            - Never infer, embellish, combine assumptions, or fill gaps. If a
-              fact is not explicitly supported by the session summaries, omit
-              it rather than guessing.
-            - EXCLUDE clarification-dependent material: unresolved themes,
-              ambiguous product names, unanswered questions, failed retrievals,
-              missing details, pending next steps, and any request for customer
-              clarification. Do not turn these into a user preference or a
-              future suggested action.
-
-            STRICT UI EXCLUSION: Never include chips, buttons, checkbox labels,
-            stepper items, suggested replies, or UI payloads. They are not user
-            choices. Do not claim any workflow or application remains active.
-
-            Completed session summaries:
-            {session_summaries}
-
-            Output JSON only: {{"baseline": "concise user baseline"}}.
-            """
-            baseline = LongTermMemoryManager._generate_validated_memory(
-                prompt,
-                "baseline",
-                session_summaries,
-                "five-session baseline",
-                allow_empty=True,
-            )
-            with sqlite3.connect(DB_PATH) as conn:
-                ensure_memory_schema(conn)
-                if not baseline:
-                    conn.execute(
-                        "DELETE FROM Persistent_User_Baseline_Memory WHERE customer_id = ?",
-                        (customer_id,),
-                    )
-                    conn.commit()
-                    log_event("memory.baseline.cleared", customer_id=customer_id, reason="no_stable_context")
-                    return ""
-                conn.execute("""
-                    INSERT INTO Persistent_User_Baseline_Memory
-                    (customer_id, baseline_summary, source_session_ids, updated_at, schema_version)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(customer_id) DO UPDATE SET
-                        baseline_summary = excluded.baseline_summary,
-                        source_session_ids = excluded.source_session_ids,
-                        updated_at = excluded.updated_at,
-                        schema_version = excluded.schema_version
-                """, (
-                    customer_id,
-                    baseline,
-                    json.dumps(source_session_ids),
-                    datetime.now().isoformat(timespec="seconds"),
-                    1,
-                ))
-                conn.commit()
-            print(
-                f"🧠 [MEMORY SERVICE] Refreshed user baseline for '{customer_id}' "
-                f"from {len(source_session_ids)} completed session(s)."
-            )
-            log_event("memory.baseline.refreshed", customer_id=customer_id, source_session_count=len(source_session_ids))
-            return baseline
-        except Exception as error:
-            # A baseline is optional personalization. Preserve the previous
-            # version if this refresh fails, rather than breaking checkout.
-            print(f"⚠️ [MEMORY SERVICE] User baseline refresh skipped: {error}")
-            log_event("memory.baseline.failed", level="WARNING", customer_id=customer_id, error=str(error))
-            return LongTermMemoryManager.fetch_user_baseline(customer_id)
+            print(f"⚠️ [MEMORY SERVICE] Prior-session check failed: {error}")
+            return False
 
     @staticmethod
     def summarize_trimmed_history(existing_summary: str, messages: List[BaseMessage]) -> str:
@@ -554,42 +404,6 @@ class LongTermMemoryManager:
             f"Existing compact memory:\n{existing_summary or 'None'}\n\nNewly evicted conversation:\n{transcript}",
             "rolling compact",
         )
-    @staticmethod
-    def fetch_compact_footprint(customer_id: str) -> str:
-        """
-        Executes a localized relational query against Table B to hydrate 
-        the session turn initialization node on Turn 1.
-        """
-        # Enforce directory path verification before database interaction
-        ensure_db_dir_exists()
-        
-        query = """
-            SELECT compact_summary_footprint 
-            FROM Persistent_Customer_Dialogue_Registry 
-            WHERE customer_id = ?
-              AND compact_summary_footprint IS NOT NULL
-              AND compact_summary_footprint NOT LIKE 'Error packing%'
-            ORDER BY session_end_timestamp DESC LIMIT 1
-        """
-        try:
-            with sqlite3.connect(DB_PATH) as conn:
-                cursor = conn.cursor()
-                ensure_memory_schema(conn)
-                conn.commit()
-                
-                cursor.execute(query, (customer_id,))
-                row = cursor.fetchone()
-                if row:
-                    summary = row[0].strip() if isinstance(row[0], str) else ""
-                    if summary:
-                        print(f"💾 [MEMORY SERVICE] Hydrated long-term summary for {customer_id}: '{summary}'")
-                    else:
-                        print(f"💾 [MEMORY SERVICE] Latest session for {customer_id} has no recallable summary.")
-                    return summary
-        except Exception as e:
-            print(f"⚠️ [MEMORY SERVICE Warning] SQLite read failed: {e}")
-            
-        return ""
 
     @staticmethod
     def persist_chat_history(
@@ -797,110 +611,3 @@ class LongTermMemoryManager:
             """, (json.dumps(ui_payload), customer_id, session_id, message_sequence))
             conn.commit()
 
-    @staticmethod
-    def compile_and_archive_session(
-        customer_id: str,
-        session_id: str,
-        messages: List[BaseMessage],
-        starting_sequence: int = 0,
-    ) -> str:
-        """
-        Asymmetric State Compaction: Triggered at session checkout/timeout.
-        """
-        if not messages:
-            return "Empty session thread discarded."
-            
-        ensure_db_dir_exists()
-        LongTermMemoryManager.persist_chat_history(
-            customer_id=customer_id,
-            session_id=session_id,
-            messages=messages,
-            archive_reason="session_checkout",
-            starting_sequence=starting_sequence,
-        )
-
-        persisted_messages = LongTermMemoryManager.fetch_chat_history(
-            customer_id,
-            session_id,
-            trusted_user_messages_only=True,
-        )
-        serialized_transcript = "".join(
-            f"{'Customer' if message['role'] == 'user' else 'Horizon Bot'}: {message['content']}\n"
-            for message in persisted_messages
-        )
-            
-        compaction_prompt = f"""
-        You are an enterprise banking context-compaction utility module.
-        Compress this raw banking chat log into a single high-density summary footprint block.
-        Target scale: exactly under {TARGET_SUMMARY_TOKENS} tokens.
-        
-        CRITICAL FOCUS FIELDS:
-        - What specific banking product or FAQ topic was substantively discussed?
-        - What factual information or completed guidance was established?
-
-        BANKING-ONLY AND ANTI-HALLUCINATION RULES:
-        Retain only information relevant to banking FAQ assistance. Omit small
-        talk, unrelated topics, model speculation, and unsupported claims.
-        Never infer, embellish, combine assumptions, or fill gaps. If a detail
-        is not explicitly present in the raw log, omit it rather than guessing.
-        EXCLUDE CLARIFICATION-DEPENDENT MATERIAL:
-        Do not retain an unresolved or ambiguous request, a missing product or
-        detail, a failed retrieval, an unanswered question, a stated bottleneck,
-        a pending next step, or a request for customer clarification. The next
-        login begins a fresh graph session, so this material must not become a
-        recalled instruction, greeting claim, or suggested action. Retain only
-        completed, factual FAQ discussion that can stand alone.
-
-        STRICT UI EXCLUSION:
-        Do not include chips, buttons, checkbox labels, stepper entries,
-        suggested replies, UI actions, or any other payload options in this
-        summary. They are not user choices and must not influence the recalled
-        context. Preserve only explicit customer messages and the assistant's
-        substantive textual answer.
-        
-        Raw Log to Compact:
-        \"\"\"
-        {serialized_transcript}
-        \"\"\"
-        
-        Output JSON only: {{"summary": "concise high-density summary"}}.
-        Do not include an introduction or chat markers in the summary value.
-        """
-        
-        try:
-            print(f"🔄 [MEMORY SERVICE] Launching out-of-band summary compilation pass via LLM...")
-            log_event("memory.session_summary.started", customer_id=customer_id, session_id=session_id)
-            compact_summary = LongTermMemoryManager._generate_validated_memory(
-                compaction_prompt,
-                "summary",
-                serialized_transcript,
-                "last-session",
-                allow_empty=True,
-            )
-            
-            with sqlite3.connect(DB_PATH) as conn:
-                cursor = conn.cursor()
-                ensure_memory_schema(conn)
-                cursor.execute("""
-                    INSERT INTO Persistent_Customer_Dialogue_Registry 
-                    (history_id, customer_id, session_id, session_start_timestamp, session_end_timestamp, raw_chat_transcript, compact_summary_footprint, session_exit_status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    str(uuid.uuid4()),
-                    customer_id,
-                    session_id,
-                    str(datetime.now()),
-                    str(datetime.now()),
-                    serialized_transcript,
-                    compact_summary,
-                    "CHECKOUT"
-                ))
-                conn.commit()
-            LongTermMemoryManager.refresh_user_baseline(customer_id)
-            print(f"✅ [MEMORY SERVICE] Successfully archived compiled summary to database for {customer_id}.")
-            log_event("memory.session_summary.persisted", customer_id=customer_id, session_id=session_id)
-            return compact_summary
-        except Exception as e:
-            print(f"🚨 [MEMORY SERVICE CRITICAL ERROR] Compaction archiving pass failed: {e}")
-            log_event("memory.session_summary.failed", level="ERROR", customer_id=customer_id, session_id=session_id, error=str(e))
-            return "Error packing state tracking variables."

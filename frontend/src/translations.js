@@ -97,6 +97,11 @@ export const TRANSLATIONS = {
     "serviceRequest.prevPage": "Previous",
     "serviceRequest.nextPage": "Next",
     "serviceRequest.pageInfo": "Page {current} of {total}",
+    "deeplink.mockScreenTitle": "Mock Screen Overlay",
+    "deeplink.navigatedTo": "You have successfully navigated to the {route} screen.",
+    "deeplink.destinationData": "Destination Data",
+    "deeplink.destinationId": "Destination ID",
+    "deeplink.route": "Route",
   },
   Mandarin: {
     "header.title": "Horizon AI客服助理",
@@ -189,6 +194,11 @@ export const TRANSLATIONS = {
     "serviceRequest.prevPage": "上一页",
     "serviceRequest.nextPage": "下一页",
     "serviceRequest.pageInfo": "第 {current} 页，共 {total} 页",
+    "deeplink.mockScreenTitle": "模拟画面",
+    "deeplink.navigatedTo": "您已成功导航至{route}画面。",
+    "deeplink.destinationData": "目的地信息",
+    "deeplink.destinationId": "目的地 ID",
+    "deeplink.route": "路径",
   },
   Spanish: {
     "header.title": "Asistente Horizon",
@@ -281,6 +291,11 @@ export const TRANSLATIONS = {
     "serviceRequest.prevPage": "Anterior",
     "serviceRequest.nextPage": "Siguiente",
     "serviceRequest.pageInfo": "Página {current} de {total}",
+    "deeplink.mockScreenTitle": "Pantalla Simulada",
+    "deeplink.navigatedTo": "Ha navegado correctamente a la pantalla de {route}.",
+    "deeplink.destinationData": "Datos del Destino",
+    "deeplink.destinationId": "ID de Destino",
+    "deeplink.route": "Ruta",
   },
 };
 

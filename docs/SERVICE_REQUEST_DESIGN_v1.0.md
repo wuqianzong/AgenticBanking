@@ -57,7 +57,7 @@ The turn-completes-normally model has no such invariant to violate:
 - Customer abandons the form entirely: nothing is blocked or waiting; the
   registration record sits until it expires.
 - Customer closes the form without submitting: **not a terminal state** —
-  the registration stays exactly as it was (`registered`), and the link
+  the registration stays exactly as it was (`pending`), and the link
   left in that turn's chat history stays clickable, reopening the same form
   against the same `special_id` whenever the customer chooses to.
 - Customer comes back and submits the form many messages later: the
@@ -188,22 +188,39 @@ service_request_registration
     created_at, expires_at }
 ```
 
-State machine — deliberately with no "cancelled by closing" state, since
-closing the form without submitting is simply "not yet submitted," not a
-terminal outcome:
+**Revised state machine — only three externally-visible statuses:
+`pending`, `expired`, `completed`.** No "cancelled by closing" state (closing
+the form without submitting is simply "not yet submitted"), and no "denied"
+state either, on the same principle applied more broadly: this registry
+tracks that a submission was *made*, not whether the underlying banking
+action succeeded in whatever legacy system actually processes it. Tracking
+real transaction outcomes here would mean integrating with every system a
+given service_request eventually touches, which this registry deliberately
+has no visibility into and isn't meant to. If a customer wants to know
+whether their address actually changed, that's a read-path question —
+answered through `api` (WP-1) or `deeplink` or the bank app itself, never
+through this table's `status` field.
 
 ```text
-registered  ──(submit)──>  submitted
-  low risk:          submitted ──> processing ──> completed
-  intermediate risk:  submitted ──> credential_check_pending
-                          ──(pass)──> granted ──> processing ──> completed
-                          ──(fail)──> denied            # genuine terminal negative outcome
-any non-terminal state ──(expires_at reached)──> expired
+pending  ──(submit)──>  pending  [submitted_data set]
+  low risk:          ──> completed  [result_payload set]
+  intermediate risk:  ──(credential check pass)──> completed  [grant_id + result_payload set]
+                       ──(credential check fail)──> pending   [submitted_data cleared -- resubmittable]
+any pending row past expires_at ──> expired
 ```
 
-`registered` and `submitted-but-not-yet-processed` links remain clickable
-and reopenable from old chat history for as long as the record hasn't
-reached `expired` or a terminal outcome (`completed`/`denied`).
+A failed credential check is **not terminal**. It resets the submission
+(clearing `submitted_data`, `submitted_data_hash`, `grant_id`) and leaves
+`status` exactly as it was: `pending`. The customer sees an honest denial
+message for that attempt (Section 8), but the registration itself remains
+open, and `GET /api/service-request/{special_id}` returns the same
+`pending` + form_schema response whether this is a first attempt or a
+resubmission after a failure — the frontend never needs to know which. This
+means every `pending` row is always resubmittable up to `expires_at`,
+regardless of how many prior attempts failed.
+
+Any `pending` link remains clickable and reopenable from old chat history
+for as long as the record hasn't reached `expired` or `completed`.
 
 ## 6. Form JSON schema (frontend-rendered, LLM-invisible)
 
@@ -250,9 +267,10 @@ Credential Check" — but the architecture around it is real and should be
 built so a genuine credential service is a drop-in replacement later, not a
 rewrite:
 
-1. After submit, if `requires_step_up`, the registration moves to
-   `credential_check_pending` and the mocked check surface is invoked with
-   only the `special_id` as context — never the submitted form data itself.
+1. After submit, if `requires_step_up`, the mocked check surface is invoked
+   with only the `special_id` as context — never the submitted form data
+   itself. `status` stays `pending` throughout; nothing about invoking the
+   check changes it.
 2. The mock returns pass/fail through the same interface contract a real
    check would use.
 3. On pass, a **grant** is issued: a short-lived, single-use record scoped
@@ -261,10 +279,14 @@ rewrite:
    different from the one actually checked, even though the mock doesn't
    need to verify the hash today.
 4. Only a valid, unexpired, unconsumed grant permits the downstream central
-   API call. The grant is consumed the moment that call happens.
-5. On fail, the registration moves to `denied` — a genuine terminal outcome
-   requiring an honest, audited decline response (Section 8), not a dead
-   end.
+   API call. The grant is consumed the moment that call happens, and only
+   then does `status` move to `completed`.
+5. On fail, the registration is **reset, not failed**: `submitted_data`,
+   `submitted_data_hash`, and any `grant_id` are cleared, and `status`
+   stays `pending` — there is no `denied` status. The customer still
+   receives an honest, audited decline response for that specific attempt
+   (Section 8), but the registration itself remains open for a resubmission
+   up to `expires_at`, per the revised state machine in Section 5.
 
 The step-up interaction itself must never be a text field collecting a raw
 credential inside the generic form renderer — see the design-rationale
@@ -325,18 +347,21 @@ it persists across sessions, not tied to whichever session happened to
 register a given item.
 
 - **`GET /api/service-request/list/{user_id}`** returns every registration
-  for that customer — pending, completed, denied, and expired — newest
-  first. `service_request_service.list_registrations` is the backing query;
-  it applies the same lazy-expiry check as a single-item `get`.
+  for that customer — pending, completed, and expired, newest first.
+  `service_request_service.list_registrations` is the backing query; it
+  applies the same lazy-expiry check as a single-item `get`.
 - The header shows a badge with the count of currently-pending items
-  (`registered`, `submitted`, or `credential_check_pending`), refreshed
-  after every chat turn and after every submit/credential-check resolution.
+  (`status == "pending"`), refreshed after every chat turn and after every
+  submit/credential-check resolution. A registration that just had a failed
+  credential check still counts as pending here — it's resubmittable, not
+  gone.
 - Tapping the badge opens the full list. Each item shows its description and
-  a status chip (pending / completed / denied / expired). Only pending items
-  are tappable; tapping one re-opens the form through the exact same
-  `GET /api/service-request/{special_id}` → open-if-still-registered path
-  used for reopening a link from old chat history — no separate code path
-  for "opened from the list" vs. "opened from a chat message."
+  a status chip (pending / completed / expired). Only pending items are
+  tappable; tapping one re-opens the form through the exact same
+  `GET /api/service-request/{special_id}` → open-if-still-pending path used
+  for reopening a link from old chat history — no separate code path for
+  "opened from the list," "opened from a chat message," or "resubmitting
+  after a failed check." They're all the same lookup.
 - Registering a new form for the same subquery never conflicts with an
   existing one for a *different* need — `profile-address-update` and
   `kyc-document-resubmission` can both sit pending at once, each shown as
@@ -422,9 +447,12 @@ credential check:
   is only `{reference, business_days}`, and naming a department was an
   unsupported addition the evidence-groundedness audit correctly rejected
   during live testing (see Implementation notes).
-- **Fail** → `denied` → an honest, audited decline through the same special
-  route (Section 8), not a dead end — e.g. *"We weren't able to verify your
-  identity for this request. Please try again or visit a branch."*
+- **Fail** → registration resets and stays `pending` (Section 5) → an
+  honest, audited decline through the same special route (Section 8) for
+  this specific attempt, not a dead end — e.g. *"We weren't able to verify
+  your identity for this request. Please try again or visit a branch."*
+  "Please try again" is literal here: the same `special_id` is still open
+  for a resubmission, not a new registration.
 
 ## 12. Open decisions — resolved during implementation
 
@@ -449,6 +477,73 @@ credential check:
    placeholder, `mock-doc-ref-<timestamp>` (frontend-generated on the
    "Simulate Upload" click), not a fixed string — makes it visibly obvious
    in logs/testing which submission a token came from.
+
+## 13. Future direction: closing the loop with `api` (WP-1) — design idea only, not implemented
+
+Directly follows from the status-model redesign above: this registry
+deliberately stops at "submission completed," never claiming to know the
+real-world outcome. The natural next question a customer asks is "so did it
+actually happen?" — and the answer to *that* should come from a read, not
+from this table. This section records the intended shape of that read
+before it's built, the same way `MEMORY_ARCHITECTURE_v2.0.md` records a
+design ahead of its implementation.
+
+**The idea:** each entry in `SERVICE_REQUEST_REGISTRY` (the static, per-type
+contract in `service_request_registry.py` — not a per-instance field on
+`Service_Request_Registration`) can declare a deterministic pointer to the
+`api` field that answers "what's the current value of the thing I just
+submitted" — for example, `profile-address-update` would point at whatever
+`api` field later exposes the customer's current on-file address. This
+lives beside `action_label`/`description`/`form_schema` in the registry,
+looked up fresh by `service_request_id` exactly the same way those already
+are, rather than duplicated onto every registration row.
+
+**The flow once `api` (WP-1) exists:** a `completed` item in the
+service-request to-do list — and only a `completed` one, since there is
+nothing to check before that — shows an additional button (something like
+"Check Current Status"). Tapping it does not reopen a form or touch this
+registry's `status` at all; it triggers a normal turn that resolves through
+the `api` tool, using the field the registry declared, and the bot reports
+back whatever the (as-yet-unbuilt) live read actually returns. This is
+deliberately the same trigger-a-turn shape the "special route" already
+established for form results (Section 8) — a deterministic, code-driven
+action attached to a customer-facing button, not something an LLM decides
+to fetch on its own.
+
+**Why this belongs to `api`, not to an extension of this registry:** it
+keeps the separation of concerns from Section 1 intact — `service_request`
+writes, `api` reads, and this registry's own `status` field never has to
+carry a claim about a real-world outcome it can't actually verify. Building
+it depends on WP-1 existing first; nothing here should be started before
+that.
+
+## Status model redesign: three statuses, no "denied," failure means resubmit
+
+**Supersedes the original five/six-status state machine described in
+Sections 5 and 7 above where they haven't already been updated in place.**
+The original design treated a failed credential check as a genuine terminal
+outcome (`denied`), on the same footing as `completed`. That conflated two
+different things this registry was never meant to conflate: whether a
+*submission* happened, and whether the *underlying banking action*
+ultimately succeeded — the second is a question for whatever legacy system
+actually processes the request, which this registry has no visibility into
+and was never designed to track. Modeling `denied` as terminal also meant a
+customer who mistyped a PIN once lost their entire request and had to start
+over from a fresh registration, which doesn't match how a real
+re-authentication failure should behave.
+
+**Current design:** exactly three externally-visible statuses —
+`pending`, `expired`, `completed` — full detail in Sections 5 and 7. A
+failed credential check resets the submission and leaves the registration
+`pending`, resubmittable up to the same `expires_at` it already had. The
+customer still gets an honest per-attempt decline message; the registration
+itself just doesn't die because of it. This also simplified the code:
+`service_request_service.py` no longer needs separate `registered` /
+`submitted` / `credential_check_pending` / `granted` status values to track
+internal progress — "is there submitted_data," "is there a grant_id," and
+"is status still pending" are together sufficient to know exactly where a
+registration stands, without a proliferating status enum to keep in sync
+across the service layer, the API endpoints, and the frontend.
 
 ## Response-generation redesign: no LLM citation, multiple forms supported
 
@@ -947,3 +1042,11 @@ current behavior.
   concrete example after a redraft collapsed two unrelated topics (a lost
   card and an address change) into one undifferentiated paragraph, losing
   a `PROGRESS` structure the first draft had used correctly.
+- v1.5: collapsed the status model to three values — `pending`, `expired`,
+  `completed` — removing `denied` entirely (see "Status model redesign"
+  above). A failed credential check no longer terminates a registration;
+  it resets the submission and leaves the registration `pending` and
+  resubmittable up to its existing `expires_at`. This registry's job is
+  now stated explicitly as tracking submissions, not transaction outcomes,
+  which stay a read-path concern (`api`/`deeplink`/the bank app), not this
+  table's.

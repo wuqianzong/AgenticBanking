@@ -8,7 +8,10 @@ the language set and fallback behavior of frontend/src/translations.js.
 
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "English": {
-        "greeting_fallback": "Welcome back. I can use our previous conversation to help you continue, or we can start with a new question.",
+        "greeting_new": "Welcome to Horizon! How can I help with your banking today?",
+        "greeting_new_named": "Welcome to Horizon, {nickname}! How can I help with your banking today?",
+        "greeting_returning": "Welcome back! How can I help with your banking today?",
+        "greeting_returning_named": "Welcome back, {nickname}! How can I help with your banking today?",
         "non_financial_fallback": "I’m here if you have a banking question.",
         "non_financial_retry": "Thanks for sharing that. I’m here whenever you have a Horizon Bank question.",
         "esc_fallback_desc": "The current banking conversation.",
@@ -23,7 +26,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "service_request_intro_plural": "You can fulfil these requests using the forms below.",
     },
     "Mandarin": {
-        "greeting_fallback": "欢迎回来。我可以根据我们之前的对话继续为您服务,或者您也可以提出新的问题。",
+        "greeting_new": "欢迎来到 Horizon!请问今天有什么银行业务需要我协助的吗?",
+        "greeting_new_named": "欢迎来到 Horizon,{nickname}!请问今天有什么银行业务需要我协助的吗?",
+        "greeting_returning": "欢迎回来!请问今天有什么银行业务需要我协助的吗?",
+        "greeting_returning_named": "欢迎回来,{nickname}!请问今天有什么银行业务需要我协助的吗?",
         "non_financial_fallback": "如果您有银行相关的问题,我随时为您解答。",
         "non_financial_retry": "感谢您的分享。如果您有 Horizon 银行相关的问题,我随时在这里为您解答。",
         "esc_fallback_desc": "当前的银行对话。",
@@ -38,7 +44,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "service_request_intro_plural": "您可以通过下方的表单完成这些请求。",
     },
     "Spanish": {
-        "greeting_fallback": "Bienvenido de nuevo. Puedo usar nuestra conversación anterior para ayudarle a continuar, o podemos comenzar con una nueva pregunta.",
+        "greeting_new": "¡Bienvenido a Horizon! ¿Cómo puedo ayudarle hoy con su banca?",
+        "greeting_new_named": "¡Bienvenido a Horizon, {nickname}! ¿Cómo puedo ayudarle hoy con su banca?",
+        "greeting_returning": "¡Bienvenido de nuevo! ¿Cómo puedo ayudarle hoy con su banca?",
+        "greeting_returning_named": "¡Bienvenido de nuevo, {nickname}! ¿Cómo puedo ayudarle hoy con su banca?",
         "non_financial_fallback": "Estoy aquí si tiene alguna pregunta bancaria.",
         "non_financial_retry": "Gracias por compartir eso. Estoy aquí siempre que tenga una pregunta sobre Horizon Bank.",
         "esc_fallback_desc": "La conversación bancaria actual.",

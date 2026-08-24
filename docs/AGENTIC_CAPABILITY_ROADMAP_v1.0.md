@@ -17,10 +17,13 @@ code. They are FAQ-authoring work, not an engineering ticket.
 
 Also explicitly out of scope for this roadmap (do not assign, do not fold
 into any WP below):
-- Cross-session Memory v2.0 (`docs/MEMORY_ARCHITECTURE_v2.0.md`) — documented
-  as a design proposal only, and separately concluded to sit outside the
-  project's stated MVP scope (every memory/context requirement in the
-  requirements document is scoped to "the same session").
+- Cross-session Memory — concluded to sit outside the project's stated MVP
+  scope (every memory/context requirement in the requirements document is
+  scoped to "the same session"). The v1.0 last-session-summary/user-baseline
+  mechanism has since been removed entirely (not merely left unreplaced) and
+  the v2.0 richer-memory proposal was superseded before implementation; see
+  `docs/MEMORY_ARCHITECTURE_v3.0.md` for the on-demand deterministic login
+  check that replaced both.
 - The chitchat unfulfilled-promise bug in `_generate_conversational_response`
   (e.g. "Sure, I can give you a quick overview!" followed by no overview) —
   known, root-caused, explicitly deferred by product decision.
@@ -220,6 +223,13 @@ build after at least one of them exists as a working reference.
 ---
 
 ## WP-1: `api` Tool — Registry Wiring and Read-Only Executor
+
+**Related, not required:** once this exists, `docs/SERVICE_REQUEST_DESIGN_v1.0.md`
+Section 13 describes closing the loop with WP-7 — a `completed` service
+request's to-do item getting a "Check Current Status" button that reads the
+real outcome through `api`, since `service_request` deliberately never
+tracks anything beyond "a submission was made." Design idea only, not
+scheduled, and not a prerequisite for either WP.
 
 ### Problem
 

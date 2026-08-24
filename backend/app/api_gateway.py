@@ -66,8 +66,14 @@ class ServiceRequestCredentialCheckPayload(BaseModel):
     passed: bool
 
 
-async def archive_session_history(payload: CloseSessionPayload, archive_reason: str, compact: bool = False):
-    """Write the complete in-memory transcript to SQLite before a session boundary."""
+async def archive_session_history(payload: CloseSessionPayload, archive_reason: str):
+    """Write the complete in-memory transcript to SQLite before a session boundary.
+
+    Only the raw transcript is archived. No cross-session summary or
+    baseline is generated here -- the project does not require carrying
+    conversation content across logins, so a session boundary is a pure
+    durability write, not an LLM call.
+    """
     config = {"configurable": {"thread_id": payload.session_id}}
     state_snapshot = app_graph.get_state(config)
     active_history = state_snapshot.values.get("chat_history", []) if state_snapshot.values else []
@@ -75,7 +81,7 @@ async def archive_session_history(payload: CloseSessionPayload, archive_reason: 
 
     if not active_history:
         # MemorySaver is intentionally ephemeral.  A server restart must not
-        # prevent logout/timeout from compacting the durable per-turn
+        # prevent logout/timeout from archiving the durable per-turn
         # transcript that was already written to SQLite.
         persisted_messages = await asyncio.to_thread(
             LongTermMemoryManager.fetch_chat_history,
@@ -92,16 +98,6 @@ async def archive_session_history(payload: CloseSessionPayload, archive_reason: 
 
     if not active_history:
         return {"status": "ignored", "reason": "No conversation history found for this session."}
-
-    if compact:
-        summary = await asyncio.to_thread(
-            LongTermMemoryManager.compile_and_archive_session,
-            payload.user_id,
-            payload.session_id,
-            active_history,
-            history_sequence_offset,
-        )
-        return {"status": "archived", "message_count": len(active_history), "summary": summary}
 
     inserted_count = await asyncio.to_thread(
         LongTermMemoryManager.persist_chat_history,
@@ -242,7 +238,10 @@ async def get_service_request(special_id: str):
     if record is None:
         return {"status": "error", "message": "Unknown service request."}
     response = {"status": record["status"], "special_id": special_id, "service_request_id": record["service_request_id"]}
-    if record["status"] == "registered":
+    if record["status"] == "pending":
+        # Covers both a never-submitted form and one reset by a failed
+        # credential check -- either way, "pending" means the form is open
+        # for (re)submission until this registration expires.
         contract = get_service_request_contract(record["service_request_id"])
         response["form_schema"] = contract["form_schema"] if contract else {}
         response["description"] = contract["description"] if contract else ""
@@ -256,15 +255,14 @@ async def submit_service_request(payload: ServiceRequestSubmitPayload):
         return {"status": "error", "message": "This request could not be found or has expired."}
     if record["status"] == "expired":
         return {"status": "error", "message": "This request has expired. Please ask again."}
-    if record["status"] != "registered":
-        return {"status": "error", "message": "This request has already been submitted."}
+    if record["status"] != "pending":
+        return {"status": "error", "message": "This request has already been completed."}
 
     record = await asyncio.to_thread(service_request_service.mark_submitted, payload.special_id, payload.submitted_data)
     contract = get_service_request_contract(record["service_request_id"])
     log_event("service_request.submit.received", special_id=payload.special_id, service_request_id=record["service_request_id"])
 
     if record["requires_step_up"]:
-        await asyncio.to_thread(service_request_service.begin_credential_check, payload.special_id)
         return {"status": "credential_check_required", "special_id": payload.special_id}
 
     result_payload = run_downstream_service(record["service_request_id"], record["submitted_data"])
@@ -284,7 +282,7 @@ async def credential_check_service_request(payload: ServiceRequestCredentialChec
     record = await asyncio.to_thread(service_request_service.get, payload.special_id)
     if record is None or record["user_id"] != payload.user_id or record["session_id"] != payload.session_id:
         return {"status": "error", "message": "This request could not be found or has expired."}
-    if record["status"] != "credential_check_pending":
+    if record["status"] != "pending" or not record.get("submitted_data"):
         return {"status": "error", "message": "This request is not awaiting a credential check."}
 
     contract = get_service_request_contract(record["service_request_id"])
@@ -322,7 +320,7 @@ async def close_and_compact_session(payload: CloseSessionPayload):
     token = set_request_context(session_id=payload.session_id, user_id=payload.user_id)
     try:
         log_event("session.checkout", reason=payload.reason)
-        result = await archive_session_history(payload, payload.reason, compact=True)
+        result = await archive_session_history(payload, payload.reason)
         result["session_id"] = payload.session_id
         # Checkout is the lifecycle boundary for ephemeral LangGraph state.
         # Durable transcript and memory summaries have already been archived
@@ -509,6 +507,7 @@ async def process_chat(payload: ChatPayload):
                 "currentStep": execution_result.get("ui_action_payload", {}).get("currentStep"),
                 "totalSteps": execution_result.get("ui_action_payload", {}).get("totalSteps"),
                 "serviceRequestActions": execution_result.get("ui_action_payload", {}).get("serviceRequestActions", []),
+                "navigationActions": execution_result.get("ui_action_payload", {}).get("navigationActions", []),
             }
             yield json.dumps(final_payload) + "\n"
             log_event("chat.response", ui_type=final_payload["uiType"], response_length=len(final_payload["text"]))

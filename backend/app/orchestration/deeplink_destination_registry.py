@@ -15,13 +15,6 @@ DEEPLINK_DESTINATION_REGISTRY: dict[str, dict[str, Any]] = {
         "description": "Statements screen — view and download past monthly statements.",
         "label": "View Statements",
     },
-    "profile-personal-details": {
-        "route": "/app/profile/personal-details",
-        "allowed_products": ["Horizon_APP"],
-        "allowed_intents": ["Customer Profile"],
-        "description": "Profile -> Personal Details screen — view and edit name, address, phone, email.",
-        "label": "Update Profile",
-    },
     "security-settings": {
         "route": "/app/profile/security",
         "allowed_products": ["Horizon_APP"],

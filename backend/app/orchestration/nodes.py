@@ -1707,13 +1707,11 @@ def _unavailable_service_requests(state: AgentState) -> list[dict]:
 def _resolved_deeplink_destinations(state: AgentState) -> list[str]:
     """Completed deeplink tool_results for this turn only.
 
-    This is the sole authorization for a `{{deeplink-<destination_id>}}`
-    token: the destination must have actually been resolved by a real tool
-    call this turn, not merely exist somewhere in the static registry. Both
-    the response generator's prompt and the outbound evidence audit read
-    this same list, and node_07 re-checks it before ever attaching a
-    navigation button, so a hallucinated destination_id can't produce a
-    working button even if the model invents a syntactically valid token.
+    This is the sole source of truth for which destinations actually
+    resolved this turn, independent of anything the LLM writes. node_07
+    builds every navigation button straight from this list -- a
+    hallucinated destination_id can never produce a working button, and a
+    real one is never dropped because the model's prose omitted it.
     """
     return [
         result.get("approved_result", {}).get("destination_id")
@@ -1723,6 +1721,63 @@ def _resolved_deeplink_destinations(state: AgentState) -> list[str]:
         and result.get("status") == "completed"
         and result.get("approved_result", {}).get("destination_id")
     ]
+
+
+def _available_response_shortcuts(state: AgentState) -> list[dict]:
+    """Sanitized, non-identifying view of this turn's shortcuts.
+
+    Combines completed service_request registrations and resolved deeplink
+    destinations into one list carrying a `kind`, a customer-facing `label`,
+    a short `topic` description, and `for_request` -- the customer's own
+    subquery text this shortcut was registered to address, verbatim from
+    triage. Never a special_id, service_request_id, destination_id, route,
+    or form_schema. `for_request` exists so the generator can recognize,
+    by literal text match rather than inference, when a subquery it has zero
+    RAG evidence for is nonetheless fully covered by a shortcut -- without
+    it, the model has no way to know a given shortcut answers the exact
+    question it just found no FAQ evidence for, and defaults to an apology
+    before belatedly mentioning the shortcut as an afterthought. The
+    response generator may use this only to write natural text; it is never
+    asked to identify, place, or attach a button itself. The actual
+    button(s) are built separately and deterministically in node_07 straight
+    from tool_results, regardless of whether the generated text mentions
+    them at all -- so unlike the id-based approaches tried before, nothing
+    here is load-bearing for correctness, only for how natural the response
+    reads.
+    """
+    subquery_text_by_id = {
+        item.get("subquery_id"): item.get("customer_component", "")
+        for item in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(item, dict)
+    }
+    shortcuts = []
+    for result in state.get("tool_results", []):
+        if not isinstance(result, dict) or result.get("status") != "completed":
+            continue
+        for_request = subquery_text_by_id.get(result.get("subquery_id"), "")
+        if result.get("tool_name") == "service_request":
+            service_request_id = result.get("approved_result", {}).get("service_request_id", "")
+            contract = get_service_request_contract(service_request_id)
+            if contract is None:
+                continue
+            shortcuts.append({
+                "kind": "form",
+                "label": contract.get("action_label", "Complete Form"),
+                "topic": contract.get("description", ""),
+                "for_request": for_request,
+            })
+        elif result.get("tool_name") == "deeplink":
+            destination_id = result.get("approved_result", {}).get("destination_id", "")
+            contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
+            if contract is None:
+                continue
+            shortcuts.append({
+                "kind": "navigation",
+                "label": contract.get("label", "Open"),
+                "topic": contract.get("description", ""),
+                "for_request": for_request,
+            })
+    return shortcuts
 
 
 def node_03b_tool_dispatcher(state: AgentState):
@@ -3039,16 +3094,19 @@ def _generate_response_blocks(state: AgentState) -> dict:
         for task in state.get("decline_tasks", [])
         if task.get("subquery", "")
     ]
-    # The LLM is deliberately told nothing about *which* forms are pending or
-    # their special_ids -- only whether the list is non-empty -- because the
-    # actual form button is attached later by node_07 straight from
-    # tool_results, unconditionally and independent of anything generated
-    # here. Asking the model to cite a specific id for coverage-tracking was
-    # tried and repeatedly failed in three different ways (wrong key, dropped
-    # citation, invented key); removing the ask removes the failure mode.
-    pending_service_request_count = len(_pending_service_requests(state))
+    # The LLM never sees a special_id, service_request_id, destination_id,
+    # route, or form_schema -- only a sanitized label/topic per shortcut, via
+    # _available_response_shortcuts. Citing an id for coverage-tracking or an
+    # exact placeholder token was tried and repeatedly failed (wrong key,
+    # dropped citation, invented key, malformed/missing token); the button
+    # itself is attached later by node_07 straight from tool_results,
+    # unconditionally and independent of anything generated here, so nothing
+    # about *whether* or *how* a shortcut appears depends on this text. The
+    # model's only remaining job is the natural language connecting the FAQ
+    # answer to the shortcut's existence -- language is exactly what an LLM
+    # is reliable at, unlike exact id/token reproduction.
+    available_shortcuts = _available_response_shortcuts(state)
     unavailable_service_requests = _unavailable_service_requests(state)
-    resolved_deeplink_destinations = _resolved_deeplink_destinations(state)
     # This is deliberately separate from evidence and tool inputs.  It carries
     # only small internal attention cues from an otherwise valid mixed turn
     # (for example, a preference or feeling). The original user_input—not this
@@ -3102,15 +3160,12 @@ def _generate_response_blocks(state: AgentState) -> dict:
     Intent clarification inputs: {json.dumps(intent_clarifications, ensure_ascii=False)}
     Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
     Decline inputs: {json.dumps(decline_context, ensure_ascii=False)}
-    Available deeplinks for this turn: {json.dumps(resolved_deeplink_destinations, ensure_ascii=False)}
-    (If a destination_id is listed above, you MUST insert a placeholder exactly
-    like {{deeplink-<destination_id>}} -- double curly braces, exact id -- in
-    your text where you want to show a button for the user to navigate to that
-    screen. Never insert a {{deeplink-*}} token for a destination_id that is
-    not listed above.)
-    Pending service request forms registered this turn: {pending_service_request_count}
-    (forms are attached automatically; you do not know and must not invent
-    what any of them ask for)
+    Available shortcuts this turn (each is either a "form" -- a guided
+    service request the customer could complete instead of the manual FAQ
+    steps -- or "navigation" -- a direct in-app link to the relevant screen.
+    Each button is attached automatically and unconditionally; you do not
+    control whether it appears, only whether your text acknowledges it):
+    {json.dumps(available_shortcuts, ensure_ascii=False)}
     Unavailable service requests (could not be registered this turn; state
     only the supplied reason, never guess why): {json.dumps(unavailable_service_requests, ensure_ascii=False)}
     Failed outbound-audit feedback (constraints only, never evidence). Each
@@ -3168,26 +3223,53 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - Respond as one considered conversation, not as a retrieval report or a
       sequence of task answers. Search tasks are internal evidence units, not
       required visible sections.
-    - Never mention a form, service request, or link yourself, regardless of
-      "Pending service request forms registered this turn" -- do not write
-      "I've included a form below," do not invite the customer to a form,
-      do not say anything implying one exists. This is not something you
-      have information to state accurately: whether a form appears is
-      decided after your response is already approved, so any claim you make
-      about it cannot be verified against what you were given and will be
-      rejected. A separate, deterministic line introduces any registered
-      form automatically; your only job regarding it is to not undermine or
-      duplicate that line.
-    - When "Pending service request forms registered this turn" is greater
-      than zero, do not open with an apology, a statement that guidance is
-      unavailable, or other decline-style framing -- lead with whatever
-      answer you do have, written as a complete, confident response on its
-      own terms. A registered form being added afterward is not a reason to
-      write your own answer as if it were incomplete, and this holds even
-      when approved evidence also fully and correctly explains how to
-      perform the same action manually (for example, in-app navigation
-      steps) -- explaining the manual steps is still a genuine, complete
-      answer.
+    - First give the complete, faithful answer from approved evidence,
+      written as a confident response on its own terms -- never open with an
+      apology or decline-style framing merely because a shortcut is also
+      available. When approved evidence fully explains how to do something
+      manually (for example, in-app navigation steps), state those steps in
+      full; a shortcut existing does not make the manual explanation
+      incomplete or something to abbreviate.
+    - A shortcut's `for_request` names, in the customer's own words, exactly
+      which request it was registered to address. When a subquery has no
+      approved evidence to answer it at all, check whether any shortcut's
+      `for_request` matches that same subquery (the Customer request and
+      that subquery's own wording, not a loose topic guess). If one does,
+      do not write "I don't have information," an apology, or any
+      decline-style framing for that subquery -- present the shortcut
+      itself, confidently, as the direct answer (for example: "You can
+      update your residential address directly using the option below.").
+      Reserve apology/decline framing only for a subquery that neither
+      approved evidence nor any shortcut's `for_request` addresses.
+    - If "Available shortcuts this turn" is non-empty, you MUST end your
+      response with one short closing statement acknowledging every
+      shortcut in the list, not just the first. Treat this the same as
+      answering every task: covering multiple topics, fixing a flagged
+      issue on a retry, running out of room, or the response already
+      feeling complete is never a reason to drop it -- it is a required
+      closing element whenever the list is non-empty, not an optional
+      addition. Use only each shortcut's supplied `label`/`topic`. Good
+      style, one shortcut: "If you'd rather skip these steps, you can also
+      do this directly using the shortcut below." Good style, multiple
+      shortcuts: "If you'd like to skip the manual steps, you can also
+      update your address or jump straight to your statements using the
+      shortcuts below." The statement must:
+      * Make clear the approved-evidence method you just described still
+        works -- each shortcut is an alternative or faster path, never a
+        replacement or a claim that the manual method no longer applies.
+      * Refer to a shortcut only by its given label/topic. Never invent a
+        step, field, screen layout, count, url, or any detail beyond what
+        was supplied.
+      * Never claim you are attaching, opening, sending, starting, or
+        completing anything yourself -- the button is attached separately
+        and automatically regardless of this sentence; you are only
+        introducing that it exists.
+      * Never fabricate a shortcut that is not in the list, and never
+        mention one when the list is empty.
+    - Do not let a closing shortcut sentence replace the substantive answer
+      for a task with no shortcut. Every task in "Approved evidence by
+      retrieval task" still needs its own real answer regardless of whether
+      any shortcut exists for it.
     - For each entry in Unavailable service requests, include one brief,
       honest sentence telling the customer that part of their request could
       not be started right now, using only the supplied reason. Never invent
@@ -3218,14 +3300,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
       short, accurately scoped reference in text instead. Do not name task IDs
       or expose internal organization to the customer.
     - When one element's answer or extended_text draws on more than one task
-      or pending service request -- a natural way to combine related facts --
-      list every one of their ids in that element's source_task_ids, not just
-      the one the element is primarily about. This is not cosmetic: an id
-      left out of source_task_ids is treated as never addressed, and a
-      contradictory duplicate (a fallback apology, or a second invitation to
-      a form already offered) gets appended right beside content that already
-      covered it. Crediting every id a passage actually draws on is what
-      prevents that.
+      -- a natural way to combine related facts -- list every one of their
+      ids in that element's source_task_ids, not just the one the element is
+      primarily about. This is not cosmetic: an id left out of
+      source_task_ids is treated as never addressed, and a contradictory
+      duplicate (a fallback apology) gets appended right beside content that
+      already covered it. Crediting every id a passage actually draws on is
+      what prevents that.
     - Every factual claim, instruction, item, title, option, and detail must
       be supported by approved evidence. A response element may use evidence
       from multiple tasks only when those facts are naturally related --
@@ -3962,9 +4043,8 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
         "terminal_clarifications": terminal_context,
         "intent_clarifications": intent_context,
         "decline_inputs": decline_context,
-        "pending_service_request_count": len(_pending_service_requests(state)),
+        "available_shortcuts": _available_response_shortcuts(state),
         "unavailable_service_requests": _unavailable_service_requests(state),
-        "resolved_deeplink_destinations": _resolved_deeplink_destinations(state),
     }
 
 
@@ -4255,36 +4335,42 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         - Do not fail a response because it omits information from any available
           source. Assess whether visible claims use a permitted source only.
         - Every visible field in the payload is in scope.
-        - "pending_service_request_count" is not a permitted source for any
-          customer-facing statement at all -- it exists only to tell the
-          response whether to avoid apology/decline framing, per the route
-          rules above. Any mention of a form, service request, or link,
-          in any wording, is unsupported regardless of the count's value,
-          because whether a form actually appears is decided after this
-          audit runs.
+        - "available_shortcuts" entries are a permitted source for a
+          statement, in either of two roles, that: names a shortcut solely
+          by its supplied `label`/`topic`; and never claims the assistant is
+          executing, attaching, opening, or completing anything itself
+          (whether a button actually appears is decided after this audit
+          runs, but the statement itself only asserts that an option
+          exists, which the supplied entry does support).
+          * Closing role: a brief sentence, alongside an evidence-based
+            answer, framing the shortcut as an alternative or faster path
+            that does not replace or invalidate that answer.
+          * Primary-answer role: when a task/subquery has no approved
+            evidence at all, a shortcut whose supplied `for_request` matches
+            that same subquery may be presented as the direct, confident
+            answer to it -- this is not required to be brief or closing, and
+            is not a decline needing apology framing.
+          Reject a statement only if it names a shortcut not present in
+          "available_shortcuts", invents a detail beyond the supplied
+          label/topic/for_request (a step, field, screen layout, url, count,
+          or id), claims a shortcut replaces or invalidates a *different*
+          evidence-based answer than the one its own for_request names, or
+          claims execution/completion. Do not reject a compliant statement
+          merely for existing, and do not require decline/apology framing
+          for a subquery whose only coverage is a matching shortcut.
         - "unavailable_service_requests" entries are a permitted source only
           for a brief sentence stating that part of the request could not be
           started, using only the supplied reason. Any different explanation
           is unsupported.
-        - A `{{deeplink-<destination_id>}}` token is supported only when its
-          exact destination_id appears in "resolved_deeplink_destinations".
-          Such a token is not a factual claim needing separate evidence -- it
-          is a pre-approved navigation reference the backend substitutes into
-          a UI button after this audit passes -- so do not reject it as
-          unsupported, fabricated, or missing evidence merely because it is a
-          placeholder. Reject it only if its destination_id is absent from
-          "resolved_deeplink_destinations", or if it appears as literal
-          visible text anywhere other than inside the placeholder itself.
         """
         result = check_evidence_groundedness(
             content_block,
             evidence_bundle={
                 "approved_by_task": grounding_context["approved_by_task"],
-                "pending_service_request_count": grounding_context["pending_service_request_count"],
+                "available_shortcuts": grounding_context["available_shortcuts"],
                 "unavailable_service_requests": grounding_context["unavailable_service_requests"],
-                "resolved_deeplink_destinations": grounding_context["resolved_deeplink_destinations"],
             },
-            evidence_description="Task-Level Approved Evidence, Pending Service Request Count, Unavailable Service Requests, and Resolved Deeplink Destinations — the only factual sources for answers and answer UI",
+            evidence_description="Task-Level Approved Evidence, Available Shortcuts, and Unavailable Service Requests — the only factual sources for answers and answer UI",
             route_specific_rules=route_specific_rules,
             extra_output_fields=f', "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false{recovery_strategy_field}, "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]',
         )
@@ -4472,28 +4558,19 @@ def node_07_precision_substitution(state: AgentState):
     placeholders_in_draft = list(set(re.findall(r"\{\{(.*?)\}\}", combined_text)))
     precision_substituted = False
     
-    # Check for deeplink placeholders. A destination_id is trusted only when
-    # it was actually resolved by a completed deeplink tool call this turn --
-    # checking the static registry alone would let a syntactically valid but
-    # hallucinated token still render a working navigation button. Whatever
-    # the outcome, the raw placeholder text is always stripped so a rejected
-    # token never leaks to the customer as literal {{deeplink-...}} syntax.
+    # Deeplink navigation is no longer placeholder-driven: the button is
+    # built deterministically further below, straight from tool_results,
+    # exactly like serviceRequestActions, regardless of the draft text. This
+    # block is only a defensive cleanup for a stray {{deeplink-*}} /
+    # {deeplink-*} token that should no longer be generated at all (the
+    # response-generator prompt no longer asks for one) but historically
+    # leaked to the customer when it appeared -- it is never trusted for
+    # anything and is stripped unconditionally rather than substituted.
     deeplink_matches = re.findall(r"\{{1,2}deeplink-([^}]+)\}{1,2}", combined_text)
     if deeplink_matches:
-        resolved_destinations = set(_resolved_deeplink_destinations(state))
         destination_id = deeplink_matches[0]
-        contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
-        if contract and destination_id in resolved_destinations:
-            payload["navigationAction"] = {
-                "label": contract["label"],
-                "destinationId": destination_id,
-                "route": contract["route"]
-            }
-            print(f"   🔗 [DEEPLINK SUB]: Replaced deeplink-{destination_id} -> navigationAction")
-            precision_substituted = True
-        else:
-            print(f"   🚫 [DEEPLINK VETO]: '{destination_id}' was not resolved this turn -- stripping placeholder without a button.")
-        
+        print(f"   🚫 [STRAY DEEPLINK TOKEN]: '{destination_id}' found in generated text -- stripping (navigation buttons are attached deterministically, not via this token).")
+
         # Clean both single and double bracket forms from ALL text fields globally
         def _strip_deeplink(obj):
             if isinstance(obj, str):
@@ -4513,6 +4590,24 @@ def node_07_precision_substitution(state: AgentState):
         extended_text = _strip_deeplink(extended_text)
         list_clarification = _strip_deeplink(list_clarification)
         response_blocks = _strip_deeplink(response_blocks)
+
+        # Commit immediately -- this must not depend on the unrelated
+        # {{faq_*}} substitution branch below ever running. A deeplink-only
+        # response (the common case: no precise numeric value in the same
+        # answer) has no faq_* placeholder, so that branch is skipped
+        # entirely, and payload["responseBlocks"] (what a "blocks" UI type
+        # actually renders) would otherwise keep the raw, unstripped text
+        # while only the separately-returned `draft`/final_response got
+        # cleaned -- exactly the "generated but directly exposed" symptom.
+        payload["options"] = options
+        payload["stepDetails"] = step_details
+        if payload.get("uiType") == "checklist":
+            payload["items"] = list_items
+        payload["listTitle"] = list_title
+        payload["listIntro"] = list_intro
+        payload["extendedText"] = extended_text
+        payload["listClarificationText"] = list_clarification
+        payload["responseBlocks"] = response_blocks
 
     if placeholders_in_draft:
         valid_map = fetch_placeholders_from_db(placeholders_in_draft)
@@ -4583,14 +4678,18 @@ def node_07_precision_substitution(state: AgentState):
     payload["precisionSubstituted"] = precision_substituted
 
     # Deterministic, never model-authored: attach the real form-opening
-    # action for any service_request registered this turn. This runs
-    # regardless of how (or whether) the LLM's prose mentioned it -- the
+    # action for any service_request registered this turn, and the real
+    # navigation action for any deeplink resolved this turn. Both run
+    # regardless of how (or whether) the LLM's prose mentioned them -- the
     # actual actionable UI element must never depend on generation quality.
-    # Every registered request gets a button, not just the first -- multiple
-    # service_request registrations in one turn are fully supported (the
+    # Every registered request / resolved destination gets its own button,
+    # not just the first -- multiple in one turn are fully supported (the
     # planner already loops across rounds to create them; see
-    # SERVICE_REQUEST_DESIGN_v1.0.md Section 9). This list is built straight
-    # from tool_results, independent of the draft text entirely.
+    # SERVICE_REQUEST_DESIGN_v1.0.md Section 9). Built straight from
+    # tool_results, independent of the draft text entirely. Any natural
+    # closing sentence connecting the answer to a shortcut is the model's
+    # job (see the response generator's "Available shortcuts" instruction);
+    # this block never writes customer-facing text, only attaches buttons.
     service_request_actions = []
     for pending_request in _pending_service_requests(state):
         contract = get_service_request_contract(pending_request.get("service_request_id", ""))
@@ -4605,25 +4704,19 @@ def node_07_precision_substitution(state: AgentState):
         })
     if service_request_actions:
         payload["serviceRequestActions"] = service_request_actions
-        # The intro line lives here, not in the LLM's draft: it runs after
-        # node_06's audit gates, so it is never subject to an evidence check
-        # that (correctly) cannot verify a UI element attached after it ran.
-        # Appended to both the visible blocks (what renders) and the stored
-        # draft (what a future turn's conversation context will see), so the
-        # transcript stays an accurate record of what the customer was shown.
-        language = state.get("user_profile", {}).get("language") or "English"
-        intro_key = "service_request_intro_single" if len(service_request_actions) == 1 else "service_request_intro_plural"
-        intro_text = get_message(language, intro_key)
-        if payload.get("uiType") == "blocks":
-            response_blocks = payload.get("responseBlocks", [])
-            response_blocks.append({
-                "blockId": "service_request_intro", "sourceTaskIds": [],
-                "type": "text", "contextText": "", "text": intro_text,
-                "items": [], "options": [], "progressTitle": "", "stepDetails": [],
-                "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
-            })
-            payload["responseBlocks"] = response_blocks
-        draft = "\n\n".join(part for part in [draft, intro_text] if part)
+
+    navigation_actions = []
+    for destination_id in _resolved_deeplink_destinations(state):
+        contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
+        if contract is None:
+            continue
+        navigation_actions.append({
+            "label": contract["label"],
+            "destinationId": destination_id,
+            "route": contract["route"],
+        })
+    if navigation_actions:
+        payload["navigationActions"] = navigation_actions
 
     return {"final_response": draft, "ui_action_payload": payload}
 

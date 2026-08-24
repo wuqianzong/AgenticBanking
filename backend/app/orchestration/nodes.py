@@ -18,6 +18,7 @@ from backend.app.core.llm_service import (
 )
 from backend.app.core.groundedness import check_evidence_groundedness, check_conduct_compliance
 from backend.app.core.compliance import REGULATORY_LICENSING_CONTEXT, PRECISION_REFERENCE_CONTRACT
+from backend.app.core.translations import get_message
 from backend.app.core.system_logger import log_event
 from backend.app.orchestration.tool_registry import enabled_tool_capabilities, is_registered_operation, TOOL_REGISTRY
 
@@ -649,6 +650,7 @@ def _build_greeting_memory_context(last_session_summary: str, user_baseline: str
 def _generate_returning_customer_greeting(
     last_session_summary: str,
     user_baseline: str,
+    user_profile: dict = None,
 ) -> tuple[str, list[str]]:
     """Create a concise welcome and optional, memory-grounded continuation chips.
 
@@ -656,19 +658,32 @@ def _generate_returning_customer_greeting(
     graph workflow. First-time customers see a clean greeting with no
     artificial suggested prompts.
     """
-    if not last_session_summary.strip() and not user_baseline.strip():
-        return "Hello! I am Horizon. How can I assist you today?", []
+    memory_context = ""
+    if last_session_summary.strip() or user_baseline.strip():
+        memory_context = _build_greeting_memory_context(last_session_summary, user_baseline)
 
-    memory_context = _build_greeting_memory_context(last_session_summary, user_baseline)
+    user_profile = user_profile or {}
+    literacy_level = user_profile.get("financial_literacy", "intermediate")
+    if literacy_level == "beginner":
+        literacy_instruction = "Beginner (Use simple financial terms. Explain financial terms when they appear in the response.)"
+    elif literacy_level == "professional":
+        literacy_instruction = "Professional (Use professional financial terms freely. No explanation of financial terms necessary.)"
+    else:
+        literacy_instruction = "Intermediate (Use normal financial terms. Explain only complex financial terms when they appear in the response.)"
 
     prompt = f"""
-    You are Horizon, a banking assistant welcoming a returning customer.
-    Write a warm, concise greeting of at most two sentences based only on the
-    conversation context below. Frame the prior session as FAQ guidance that
-    Horizon previously explained, not as an application or banking process
-    Horizon is carrying out. If the context identifies a particular explained
-    step or topic, you may mention it as a reminder. Then neutrally invite the
-    customer to continue the discussion or ask about something new.
+    You are Horizon, a banking assistant welcoming a customer.
+    Write a warm, concise greeting of at most two sentences. 
+    If conversation context is provided below, frame the prior session as FAQ guidance that
+    Horizon previously explained, and neutrally invite the customer to continue the discussion. 
+    If no conversation context is provided, write a generic, welcoming opening greeting.
+
+    STYLE & PERSONALIZATION INSTRUCTIONS:
+    - User Nickname: {user_profile.get("nickname") or "Not provided"} (Use naturally where socially appropriate; do not mechanically force it into every response)
+    - Natively generate response in: {user_profile.get("language") or "English"}
+    - Tone: {user_profile.get("tone", "professional")}
+    - Financial Literacy Depth: {literacy_instruction}
+    - Emojis: {user_profile.get("emoji", "enabled")}
 
     Important: this is a brand-new session. Do not claim that a workflow,
     application, transfer, plan, approval, or pending action is still active.
@@ -677,12 +692,12 @@ def _generate_returning_customer_greeting(
     banking action or imply Horizon can complete one for them. Do not invent
     facts, provide banking advice, or use markdown.
 
+    Conversation Context:
+    {memory_context or "None"}
+
     Good style: "Welcome back. Last time, I shared the FAQ steps for applying
     for a personal loan, including the information needed at the next stage.
     Would you like to continue that discussion or explore something else?"
-
-    Durable memory context:
-    {memory_context}
 
     Suggested actions:
     - Provide zero to two only when the prior context supports a concrete FAQ
@@ -718,7 +733,7 @@ def _generate_returning_customer_greeting(
     except Exception as error:
         print(f"⚠️ [MEMORY SERVICE] Returning-customer greeting generation failed: {error}")
 
-    return "Welcome back. I can use our previous conversation to help you continue, or we can start with a new question.", []
+    return get_message(state.get("user_profile", {}).get("language", "English"), "greeting_fallback"), []
 
 
 # --- PHASE 0: INGESTION & INGEST GUARDS ---
@@ -728,13 +743,16 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
     customer_id = state.get("user_id", "USR_999")
     summary = LongTermMemoryManager.fetch_compact_footprint(customer_id)
     user_baseline = LongTermMemoryManager.fetch_user_baseline(customer_id)
-    greeting, greeting_options = _generate_returning_customer_greeting(summary, user_baseline)
+    user_profile = LongTermMemoryManager.get_user_preferences(customer_id)
+
+    greeting, greeting_options = _generate_returning_customer_greeting(summary, user_baseline, user_profile)
 
     return {
         # A new login begins a clean graph.  Only this compact, durable
         # conversation context crosses the session boundary; no plan, task
         # evidence, retry data, or other execution state does.
         **VOLATILE_STATE_RESET,
+        "user_profile": user_profile,
         "chat_history": [],
         "history_sequence_offset": 0,
         "compacted_history_summary": "",
@@ -805,6 +823,21 @@ def node_01_deterministic_ingest_gate(state: AgentState):
         "chat_history": history,
     }
 
+
+def node_01b_load_user_profile(state: AgentState):
+    print("🟢 [NODE 01b] Loading User Preferences")
+    user_id = state.get("user_id")
+    if not user_id:
+        return {"user_profile": {}}
+    
+    try:
+        from backend.app.services.memory_service import LongTermMemoryManager
+        profile = LongTermMemoryManager.get_user_preferences(user_id)
+        print(f"   👤 [PROFILE]: Loaded preferences for {user_id}")
+        return {"user_profile": profile}
+    except Exception as e:
+        print(f"⚠️ [PROFILE ERROR]: {str(e)}")
+        return {"user_profile": {}}
 
 # --- PHASE 1: INBOUND SAFETY, TRIAGE, AND TASK DECOMPOSITION ---
 def node_02c_inbound_semantic_gate(state: AgentState):
@@ -908,6 +941,9 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     3. VALID_REQUEST — Only if compliant and not escalation: if the resolved
        TRUE REQUEST contains at least one financial/banking need, decompose
        that meaning into distinct components. Emit ONLY FINANCIAL components.
+       IMPORTANT LANGUAGE RULE: You MUST translate the semantic meaning of each
+       financial component into English, regardless of the language the user
+       typed in. This ensures downstream retrieval matches our English knowledge base.
        A continuation of a preceding financial request remains financial even
        when the latest wording supplies only its reason, preference, or
        correction. Omit any genuinely casual or unrelated wording, set
@@ -2412,6 +2448,16 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
         if task.get("subquery", "")
     ]
     audit_feedback = state.get("draft_feedback_history", [])[-4:]
+    user_profile = state.get("user_profile", {})
+
+    literacy_level = user_profile.get("financial_literacy", "intermediate")
+    if literacy_level == "beginner":
+        literacy_instruction = "Beginner (Use simple financial terms. Explain financial terms when they appear in the response.)"
+    elif literacy_level == "professional":
+        literacy_instruction = "Professional (Use professional financial terms freely. No explanation of financial terms necessary.)"
+    else:
+        literacy_instruction = "Intermediate (Use normal financial terms. Explain only complex financial terms when they appear in the response.)"
+
     prompt = f"""
     RESPONSE GENERATION V2.0
     You are Horizon, a digital customer service representative for Horizon
@@ -2421,6 +2467,13 @@ def _generate_task_bound_response_blocks(state: AgentState) -> dict:
     blocks. Each block renders separately, but together they must read as one
     considered response to the customer's complete request — never as
     disconnected mini-answers.
+
+    STYLE & PERSONALIZATION INSTRUCTIONS:
+    (These are phrasing instructions only; do not invent banking facts)
+    - Natively generate response in: {user_profile.get("language") or "English"}
+    - Tone: {user_profile.get("tone", "professional")}
+    - Financial Literacy Depth: {literacy_instruction}
+    - Emojis: {user_profile.get("emoji", "enabled")}
 
     Customer's complete request: {state.get("user_input", "")}
     Planned response blocks and their approved evidence: {json.dumps(block_inputs, ensure_ascii=False)}
@@ -2699,12 +2752,29 @@ def _generate_response_blocks(state: AgentState) -> dict:
     conversation_context = _build_conversation_context(state)
     user_baseline = _build_user_baseline_context(state)
     audit_feedback = state.get("draft_feedback_history", [])[-4:]
+    user_profile = state.get("user_profile", {})
+    
+    literacy_level = user_profile.get("financial_literacy", "intermediate")
+    if literacy_level == "beginner":
+        literacy_instruction = "Beginner (Use simple financial terms. Explain financial terms when they appear in the response.)"
+    elif literacy_level == "professional":
+        literacy_instruction = "Professional (Use professional financial terms freely. No explanation of financial terms necessary.)"
+    else:
+        literacy_instruction = "Intermediate (Use normal financial terms. Explain only complex financial terms when they appear in the response.)"
+
     prompt = f"""
     FLEXIBLE RESPONSE GENERATION
     You are Horizon, a helpful, natural, read-only Horizon Bank customer
     service representative. Write one coherent conversational response using
     only approved evidence. Do not perform banking actions, imply account
     access, or invent facts, procedures, products, or policies.
+
+    STYLE & PERSONALIZATION INSTRUCTIONS:
+    (These are phrasing instructions only; do not invent banking facts)
+    - Natively generate response in: {user_profile.get("language") or "English"}
+    - Tone: {user_profile.get("tone", "professional")}
+    - Financial Literacy Depth: {literacy_instruction}
+    - Emojis: {user_profile.get("emoji", "enabled")}
 
     Customer request: {state.get("user_input", "")}
     Trusted conversation context (use only to understand the customer's current
@@ -2991,8 +3061,14 @@ def _generate_conversational_response(state: AgentState) -> dict:
     """
     user_message = str(state.get("user_input", "")).strip()
     prior_assistant_message = _latest_assistant_message(state)
+    user_profile = state.get("user_profile", {})
     prompt = f"""
     You are Horizon, a concise banking-assistant conversational partner.
+
+    STYLE & PERSONALIZATION INSTRUCTIONS:
+    - Natively generate response in: {user_profile.get("language") or "English"}
+    - Tone: {user_profile.get("tone", "professional")}
+    - Emojis: {user_profile.get("emoji", "enabled")}
 
     Latest customer message: {json.dumps(user_message, ensure_ascii=False)}
     Previous assistant message for conversational tone only (not factual evidence):
@@ -3024,10 +3100,10 @@ def _generate_conversational_response(state: AgentState) -> dict:
         text = _llm_text(generated, "text")
     except Exception as error:
         print(f"🚨 [CONVERSATIONAL RESPONSE ERROR]: {error}")
-        text = "I’m here if you have a banking question."
+        text = get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_fallback")
 
     if not text:
-        text = "I’m here if you have a banking question."
+        text = get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_fallback")
     print(f"   💬 [CONVERSATIONAL RESPONSE]: {text}")
     return {
         "final_draft": text,
@@ -3048,7 +3124,7 @@ def node_12_non_financial_response(state: AgentState):
     """
     print("🟢 [NODE 12] Executing Non-Financial Conversational Response")
     if int(state.get("safety_retry_count", 0)) >= 3:
-        fallback = "Thanks for sharing that. I’m here whenever you have a Horizon Bank question."
+        fallback = get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_retry")
         print("   🛟 [NON-FINANCIAL FALLBACK]: Returning deterministic conversational reply")
         log_event("non_financial.response.fallback", retry_count=state.get("safety_retry_count", 0))
         return {
@@ -3669,6 +3745,7 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         - Every recalled statement and suggested chip must be supported by the
           Permitted Evidence (Greeting Memory) above.
         - A generic first-time greeting with no recalled facts or chips is grounded.
+        - Addressing the user by their preferred nickname, name, or speaking in a specific language/tone does not require evidence support.
         - Do not assess banking-answer factuality, compliance, helpfulness, or a normal-turn clarification.
         - Every visible field in the greeting payload is in scope.
 
@@ -3924,7 +4001,7 @@ def node_06_outbound_audit_join(state: AgentState):
             }
         count = state.get("safety_retry_count", 0) + 1
         if state.get("triage_status") == "NON_FINANCIAL" and count >= 3:
-            fallback = "Thanks for sharing that. I’m here whenever you have a Horizon Bank question."
+            fallback = get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_retry")
             print("   🛟 [NON-FINANCIAL AUDIT FALLBACK]: Returning deterministic conversational reply")
             log_event(
                 "non_financial.response.audit_fallback",
@@ -4141,16 +4218,16 @@ def _escalation_case_request(state: AgentState) -> str:
         content = str(message.content or "").strip()
         if content and content.casefold() != ESCALATION_CONFIRMATION_MESSAGE.casefold():
             return content[:280]
-    return "The current banking conversation."
+    return get_message(state.get("user_profile", {}).get("language", "English"), "esc_fallback_desc")
 
 
 def _escalation_case_problem(state: AgentState) -> str:
     """Provide a concise deterministic handoff reason without exposing diagnostics."""
     if state.get("triage_status") == "ESCALATION":
-        return "You asked to continue with a human agent."
+        return get_message(state.get("user_profile", {}).get("language", "English"), "esc_user_asked")
     if state.get("safety_retry_count", 0) >= 3:
-        return "The assistant could not safely complete the request after its validation checks."
-    return "A human review has been requested for this conversation."
+        return get_message(state.get("user_profile", {}).get("language", "English"), "esc_safety_retry")
+    return get_message(state.get("user_profile", {}).get("language", "English"), "esc_default_review")
 
 
 def _build_current_session_escalation_context(state: AgentState) -> str:
@@ -4189,11 +4266,16 @@ def _build_escalation_case_summary(state: AgentState) -> dict:
             if isinstance(item, dict) and str(item.get("reason", "")).strip()
         ],
     }
+    user_profile = state.get("user_profile", {})
+    preferred_language = user_profile.get("language") or "English"
+
     prompt = f"""
     CURRENT SESSION ESCALATION CASE SUMMARY
     You create a concise handoff brief that saves a human banking agent time
     understanding the customer's unresolved case. This is NOT a chronological
     recap of the session.
+
+    IMPORTANT LANGUAGE RULE: You MUST output the case summary strictly in {preferred_language}, as this summary will be presented directly to the user in the frontend UI.
 
     Source material (use only this material):
     {_build_current_session_escalation_context(state)}
@@ -4331,14 +4413,10 @@ def node_09_hard_escalation_broker(state: AgentState):
             "responseBlocks": [{
                 "blockId": "escalation-confirmation",
                 "type": "escalation_confirmation",
-                "title": "Confirm transfer to a human agent",
-                "caseTitle": "Current case summary",
                 "request": case_summary["request"],
                 "problem": case_summary["problem"],
                 "unresolvedIssues": case_summary["unresolvedIssues"],
-                "notice": "This AI-generated summary helps a human agent quickly understand your case.",
                 "confirmation": {
-                    "label": "Confirm transfer",
                     "message": ESCALATION_CONFIRMATION_MESSAGE,
                 },
             }],
@@ -4352,10 +4430,10 @@ def node_10_standard_rejection(state: AgentState):
     
     # MAS-Approved Deterministic Message Dictionary
     MESSAGE_MAP = {
-        "error_malicious": "We cannot process your request. Please try rephrasing or ask another question.",
-        "non_compliant": "I’m unable to help with that request.",
-        "non_financial": "I’m Horizon, and I can help with Horizon Bank questions whenever you need.",
-        "fail": "Sorry, I’m unable to respond to that right now. Please try again or rephrase your question.",
+        "error_malicious": get_message(state.get("user_profile", {}).get("language", "English"), "error_malicious"),
+        "non_compliant": get_message(state.get("user_profile", {}).get("language", "English"), "non_compliant"),
+        "non_financial": get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_rejection"),
+        "fail": get_message(state.get("user_profile", {}).get("language", "English"), "fail"),
     }
 
     # Fetch the mapped message, default to "fail" if the code isn't explicitly defined

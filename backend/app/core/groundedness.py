@@ -107,13 +107,18 @@ def check_conduct_compliance(
     Regulatory Context:
     {REGULATORY_LICENSING_CONTEXT}
 
+    Language and emoji usage are outside the scope of this conduct audit.
+    Evaluate only the semantic meaning and behavioral intent of the content,
+    regardless of what language it is written in.
+
+    {route_specific_rules}
+
     Customer-Facing Content:
     {content_block}
 
     TASK: Assess CONDUCT & COMPLIANCE ONLY. Do not assess whether facts are
     supported by evidence — a separate auditor handles that.
 
-    {route_specific_rules}
 
     Output JSON only:
     {{"conduct_compliant": true/false, "reason": "...", "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "violation": "...", "unsupported_content": ["verbatim phrase"]}}]{extra_output_fields}}}

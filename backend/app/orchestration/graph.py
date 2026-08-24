@@ -14,6 +14,7 @@ def build_agent_graph():
 
     workflow.add_node("n00", nodes.node_00_context_hydrator_and_greeting)
     workflow.add_node("n3", nodes.node_01_deterministic_ingest_gate)
+    workflow.add_node("n1b", nodes.node_01b_load_user_profile)
     workflow.add_node("n16", nodes.node_02c_inbound_semantic_gate)
     workflow.add_node("n2d", nodes.node_02d_user_journey_classifier_and_triage)
     workflow.add_node("n2e", nodes.node_02e_intent_classifier_and_query_formulator)
@@ -54,7 +55,7 @@ def build_agent_graph():
         return "n16" if state.get("preflight_status") == "pass" else "n5"
 
     def route_n16(state: AgentState):
-        return "n2d" if state.get("preflight_status") == "pass" else "n5"
+        return "n1b" if state.get("preflight_status") == "pass" else "n5"
 
     def route_n2d(state: AgentState):
         status = state.get("triage_status")
@@ -113,7 +114,8 @@ def build_agent_graph():
     workflow.set_conditional_entry_point(route_start, {"n00": "n00", "n3": "n3"})
     workflow.add_edge("n00", "n20")
     workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n23": "n23", "n5": "n5"})
-    workflow.add_conditional_edges("n16", route_n16, {"n2d": "n2d", "n5": "n5"})
+    workflow.add_conditional_edges("n16", route_n16, {"n1b": "n1b", "n5": "n5"})
+    workflow.add_edge("n1b", "n2d")
     workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n14": "n14", "n5": "n5", "n26": "n26"})
     workflow.add_conditional_edges("n2e", route_n2e, {"n17_rag": "n17_rag", "n19": "n19", "n8": "n8", "n5": "n5"})
     workflow.add_conditional_edges("n14", route_tool_planner, {"n17_dispatch": "n17_dispatch", "n19": "n19"})

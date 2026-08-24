@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
+import { t } from '../translations';
 import { UserCheck, ChevronRight } from 'lucide-react';
 
-export default function CaseSummaryWidget({ details }) {
+export default function CaseSummaryWidget({ details, language = 'English' }) {
   const [isChecked, setIsChecked] = useState(false);
 
   return (
     <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 mt-2 shadow-sm w-full max-w-sm">
       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-200">
         <UserCheck size={18} className="text-slate-600" />
-        <h4 className="font-semibold text-slate-800 text-sm">Mobile-Side Case Summary</h4>
+        <h4 className="font-semibold text-slate-800 text-sm">{t(language, "case.title")}</h4>
       </div>
       <div className="space-y-2 mb-4 bg-white p-3 rounded-lg border border-slate-100 shadow-sm">
         {Object.entries(details).map(([k, v], idx) => (
@@ -26,7 +27,7 @@ export default function CaseSummaryWidget({ details }) {
           onChange={(e) => setIsChecked(e.target.checked)}
         />
         <span className="text-xs text-slate-600 leading-tight">
-          I confirm the case summary details above are accurate for agent hand-off.
+          {t(language, "case.confirmLabel")}
         </span>
       </label>
       <button 
@@ -35,7 +36,7 @@ export default function CaseSummaryWidget({ details }) {
           isChecked ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
         }`}
       >
-        Talk to Agent <ChevronRight size={16} />
+        {t(language, "case.talkBtn")} <ChevronRight size={16} />
       </button>
     </div>
   );

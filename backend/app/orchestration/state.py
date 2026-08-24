@@ -19,6 +19,7 @@ class AgentState(TypedDict):
     
     # --- VOLATILE TURN STATE (Reset per turn) ---
     user_id: str
+    user_profile: Dict[str, Any]
     user_input: str
     preflight_status: str                        # Maps edge routing conditions
     knowledge_blueprint: Dict[str, Any] 

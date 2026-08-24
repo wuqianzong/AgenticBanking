@@ -42,6 +42,14 @@ class CloseSessionPayload(BaseModel):
     user_id: str
     reason: str = "logout"
 
+class UserPreferencesPayload(BaseModel):
+    user_id: str
+    nickname: str = ""
+    language: str = "English"
+    tone: str = "professional"
+    emoji: str = "enabled"
+    financial_literacy: str = "intermediate"
+
 
 async def archive_session_history(payload: CloseSessionPayload, archive_reason: str, compact: bool = False):
     """Write the complete in-memory transcript to SQLite before a session boundary."""
@@ -124,6 +132,25 @@ async def compact_working_history(config: dict) -> dict:
         # must never affect an already-completed customer response.
         print(f"⚠️ [MEMORY SERVICE] Background history compaction skipped: {error}")
         return {"compacted": False, "discarded_messages": 0, "error": str(error)}
+
+@app.get("/api/preferences/{user_id}")
+async def get_preferences(user_id: str):
+    try:
+        profile = await asyncio.to_thread(LongTermMemoryManager.get_user_preferences, user_id)
+        return profile or {}
+    except Exception as error:
+        return {"status": "error", "message": str(error)}
+
+@app.put("/api/preferences")
+async def update_preferences(payload: UserPreferencesPayload):
+    try:
+        await asyncio.to_thread(
+            LongTermMemoryManager.update_user_preferences,
+            payload.dict()
+        )
+        return {"status": "success", "updated": True}
+    except Exception as error:
+        return {"status": "error", "message": str(error)}
 
 @app.post("/api/session/checkout")
 async def close_and_compact_session(payload: CloseSessionPayload):

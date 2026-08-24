@@ -81,6 +81,16 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
         )
     """)
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS Persistent_Customer_Profile (
+            customer_id TEXT PRIMARY KEY,
+            nickname TEXT,
+            language TEXT,
+            tone TEXT,
+            emoji TEXT,
+            financial_literacy TEXT
+        )
+    """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS Persistent_User_Baseline_Memory (
             customer_id TEXT PRIMARY KEY,
             baseline_summary TEXT NOT NULL,
@@ -124,6 +134,52 @@ class ShortTermMemoryManager:
 
 
 class LongTermMemoryManager:
+    @staticmethod
+    def get_user_preferences(customer_id: str) -> Dict[str, Any]:
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT nickname, language, tone, emoji, financial_literacy FROM Persistent_Customer_Profile WHERE customer_id = ?",
+                    (customer_id,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    return dict(row)
+                return {}
+        except Exception as e:
+            log_event("memory.preferences.get.error", error=str(e), customer_id=customer_id)
+            return {}
+
+    @staticmethod
+    def update_user_preferences(payload: dict) -> None:
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO Persistent_Customer_Profile (customer_id, nickname, language, tone, emoji, financial_literacy)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(customer_id) DO UPDATE SET
+                        nickname = excluded.nickname,
+                        language = excluded.language,
+                        tone = excluded.tone,
+                        emoji = excluded.emoji,
+                        financial_literacy = excluded.financial_literacy
+                    """,
+                    (
+                        payload["user_id"],
+                        payload.get("nickname", ""),
+                        payload.get("language", "English"),
+                        payload.get("tone", "professional"),
+                        payload.get("emoji", "enabled"),
+                        payload.get("financial_literacy", "intermediate")
+                    )
+                )
+        except Exception as e:
+            log_event("memory.preferences.update.error", error=str(e), customer_id=payload.get("user_id"))
+
     @staticmethod
     def node_memory_summary_validator(candidate: str, source: str, memory_type: str) -> tuple[bool, str]:
         """Dedicated safety node for rolling, session, and baseline memory.

@@ -1,31 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { t } from './translations';
 import { 
   Send, Bot, ChevronRight, CheckCircle2, 
   CreditCard, Wallet, Landmark, ShieldCheck, 
   FileText, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
-  Loader2 // <-- ADDED for the Agentic Processing Tracker
+  Loader2, Settings // <-- ADDED for the Agentic Processing Tracker
 } from 'lucide-react';
 
 // 1. THE NODE CAPTION DICTIONARY
 const NODE_CAPTIONS = {
-  "memory_compaction": "Preparing your conversation context...",
-  "memory_validation": "Checking saved conversation context...",
-  "n00": "Preparing your Horizon experience...",
-  "n3": "Preparing this conversation...",
-  "n16": "Checking your request is safe...",
-  "n2d": "Understanding what you need...",
-  "n2e": "Identifying the topics to look up...",
-  "n14": "Preparing the information search...",
-  "n17_rag": "Looking up relevant information...",
-  "n18": "Checking the information found...",
-  "n19": "Organizing the best way to present the answer...",
-  "n8": "Preparing your response...",
-  "n20": "Checking response details...",
-  "n21_compliance": "Checking banking guidelines...",
-  "n21_groundedness": "Verifying the information is accurate...",
-  "n21": "Finalizing your response...",
-  "n22": "Confirming the latest figures...",
-  "n24": "Almost ready..."
+  "memory_compaction": "caption.memory_compaction",
+  "memory_validation": "caption.memory_validation",
+  "n00": "caption.n00",
+  "n3": "caption.n3",
+  "n16": "caption.n16",
+  "n2d": "caption.n2d",
+  "n2e": "caption.n2e",
+  "n14": "caption.n14",
+  "n17_rag": "caption.n17_rag",
+  "n18": "caption.n18",
+  "n19": "caption.n19",
+  "n8": "caption.n8",
+  "n20": "caption.n20",
+  "n21_compliance": "caption.n21_compliance",
+  "n21_groundedness": "caption.n21_groundedness",
+  "n21": "caption.n21",
+  "n22": "caption.n22",
+  "n24": "caption.n24"
 };
 
 const MOCK_PROFILE = {
@@ -59,9 +60,17 @@ export default function BankingBotUI() {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isCompactingMemory, setIsCompactingMemory] = useState(false);
-  const [loadingCaption, setLoadingCaption] = useState('Processing...'); // <-- NEW STATE FOR TRACKER
+  const [loadingCaption, setLoadingCaption] = useState(t("English", "caption.processing")); // <-- NEW STATE FOR TRACKER
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [expandedProgressSteps, setExpandedProgressSteps] = useState({});
+  const [showPreferences, setShowPreferences] = useState(false);
+  const [preferences, setPreferences] = useState({
+    nickname: "",
+    language: "English",
+    tone: "professional",
+    emoji: "enabled",
+    financial_literacy: "intermediate"
+  });
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -279,11 +288,38 @@ export default function BankingBotUI() {
     }
   }, [isTyping]);
 
+  const fetchPreferences = async () => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/preferences/${MOCK_PROFILE.userId}`);
+      const data = await res.json();
+      if (!data.error && Object.keys(data).length > 0) {
+        setPreferences(prev => ({ ...prev, ...data }));
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const savePreferences = async (newPrefs) => {
+    try {
+      setPreferences(newPrefs);
+      await fetch('http://localhost:8000/api/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: MOCK_PROFILE.userId, ...newPrefs })
+      });
+      setShowPreferences(false);
+    } catch (error) {
+      console.error("Failed to save preferences", error);
+    }
+  };
+
   useEffect(() => {
     if (sessionId) {
       void loadHistoryPage(sessionId, null, true);
       scheduleSessionTimeout();
     }
+    fetchPreferences();
 
     return () => window.clearTimeout(sessionTimeoutRef.current);
   }, []);
@@ -307,7 +343,7 @@ export default function BankingBotUI() {
       setInputValue('');
     }
     setIsTyping(true);
-    setLoadingCaption('Understanding your question...');
+    setLoadingCaption(t(preferences.language, "caption.understanding"));
 
     try {
       const response = await fetch("http://localhost:8000/api/chat", {
@@ -371,8 +407,8 @@ export default function BankingBotUI() {
               setIsCompactingMemory(isStarting);
               setLoadingCaption(
                 isStarting
-                  ? NODE_CAPTIONS.memory_compaction
-                  : 'Conversation context is ready.'
+                  ? t(preferences.language, NODE_CAPTIONS.memory_compaction)
+                  : t(preferences.language, "caption.contextReady")
               );
               continue;
             }
@@ -380,9 +416,10 @@ export default function BankingBotUI() {
             // Check if the payload is a node transition update
             if (parsedData.node) {
               // Use the dictionary if it exists, otherwise show a generic processing message
-              const caption = NODE_CAPTIONS[parsedData.node] || 'Continuing to prepare your response...';
-              console.log("🔄 [UPDATING UI STATE TO]:", caption);
-              setLoadingCaption(caption);
+              const captionKey = NODE_CAPTIONS[parsedData.node] || "caption.continuing";
+              const translatedCaption = t(preferences.language, captionKey);
+              console.log("🔄 [UPDATING UI STATE TO]:", translatedCaption);
+              setLoadingCaption(translatedCaption);
             }
 
             // Check if the payload contains the final response
@@ -449,7 +486,7 @@ export default function BankingBotUI() {
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
         sender: 'bot',
-        text: "⚠️ Connection Error: Cannot reach the LangGraph backend. Please ensure uvicorn is running on port 8000.",
+        text: t(preferences.language, "escalation.networkError"),
         type: 'escalation'
       }]);
     } finally {
@@ -498,7 +535,7 @@ export default function BankingBotUI() {
   const renderChips = (options) => (
     <div className="flex flex-wrap gap-2 mt-2">
       {options?.map((opt, idx) => {
-        const label = typeof opt === 'string' ? opt : (opt?.label || opt?.message || 'Continue');
+        const label = typeof opt === 'string' ? opt : (opt?.label || opt?.message || t(preferences.language, "misc.continue"));
         const message = typeof opt === 'string' ? opt : (opt?.message || opt?.label || '');
         return (
           <button
@@ -527,7 +564,7 @@ export default function BankingBotUI() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-blue-900">
             <FileText size={16} className="text-blue-600" />
-            <span className="text-sm font-semibold">{progressTitle || 'Horizon Bank guided process'}</span>
+            <span className="text-sm font-semibold">{progressTitle || t(preferences.language, "misc.guidedProcess")}</span>
           </div>
           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-blue-700 shadow-sm">
             {expandedStepNumber}/{totalSteps}
@@ -596,7 +633,7 @@ export default function BankingBotUI() {
     <div className="bg-white rounded-xl border border-slate-200 p-4 mt-2 shadow-sm w-full max-w-sm">
       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100">
         <FileText size={18} className="text-blue-600" />
-        <h4 className="font-semibold text-slate-800 text-sm">{title || 'Key information'}</h4>
+        <h4 className="font-semibold text-slate-800 text-sm">{title || t(preferences.language, "misc.keyInfo")}</h4>
       </div>
       <ul className="space-y-3">
         {items?.map((item, idx) => (
@@ -618,14 +655,14 @@ export default function BankingBotUI() {
         <div className="border-b border-blue-100 bg-blue-50 px-4 py-3">
           <div className="flex items-center gap-2 text-blue-900">
             <UserCheck size={18} className="text-blue-600" />
-            <h4 className="text-sm font-semibold">{block.title || 'Confirm transfer to a human agent'}</h4>
+            <h4 className="text-sm font-semibold">{block.title || t(preferences.language, "escalation.confirmTitle")}</h4>
           </div>
         </div>
         <div className="space-y-3 px-4 py-3.5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{block.caseTitle || 'Current case summary'}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{block.caseTitle || t(preferences.language, "escalation.caseTitle")}</p>
             <p className="mt-2 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
-              {block.request || 'The current banking conversation.'}
+              {block.request || t(preferences.language, "escalation.fallbackDesc")}
             </p>
             <dl className="mt-2 space-y-2 text-sm leading-relaxed text-slate-700">
               {block.unresolvedIssues?.length > 0 && (
@@ -646,7 +683,7 @@ export default function BankingBotUI() {
             </dl>
           </div>
           <p className="border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-500">
-            {block.notice || 'This AI-generated summary helps a human agent quickly understand your case.'}
+            {block.notice || t(preferences.language, "escalation.notice")}
           </p>
           <button
             type="button"
@@ -655,7 +692,7 @@ export default function BankingBotUI() {
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <UserCheck size={16} />
-            {confirmation.label || 'Confirm transfer'}
+            {confirmation.label || t(preferences.language, "escalation.confirmBtn")}
           </button>
         </div>
       </section>
@@ -668,7 +705,7 @@ export default function BankingBotUI() {
     return (
       <div key={blockId} className={index > 0 ? 'mt-5' : ''}>
         <div className="mb-1.5 ml-1 flex items-end gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          <span>Horizon</span>
+          <span>{t(preferences.language, "chat.botName")}</span>
           {index === 0 && precisionSubstituted && renderPrecisionBadge()}
         </div>
         {block.type === 'text' && (
@@ -715,16 +752,72 @@ export default function BankingBotUI() {
     <div className="bg-red-50 rounded-xl border border-red-200 p-4 mt-2 shadow-sm w-full max-w-sm">
       <div className="flex items-center gap-2 mb-2 text-red-600">
         <AlertCircle size={18} />
-        <h4 className="font-semibold text-sm">Guardrail Triggered</h4>
+        <h4 className="font-semibold text-sm">{t(preferences.language, "escalation.guardrailTitle")}</h4>
       </div>
       <p className="text-xs text-red-700 mb-3 leading-relaxed">
-        To comply with MAS regulations, I cannot provide financial advice or execute unauthorized transactions. I am preserving your session context and transferring you to a human specialist.
+        {t(preferences.language, "escalation.guardrailBody")}
       </p>
       <button className="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2 rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-sm">
-        <UserCheck size={16} /> Connect to Live Agent
+        <UserCheck size={16} /> {t(preferences.language, "escalation.guardrailBtn")}
       </button>
     </div>
   );
+
+  const renderPreferencesModal = () => {
+    if (!showPreferences) return null;
+    return (
+      <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
+        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl flex flex-col max-h-[80vh] overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-bold text-slate-800">{t(preferences.language, "prefs.title")}</h3>
+            <button onClick={() => setShowPreferences(false)} className="text-slate-400 hover:text-slate-600">×</button>
+          </div>
+          <div className="p-4 overflow-y-auto flex flex-col gap-4 text-sm">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{t(preferences.language, "prefs.nickname")}</label>
+              <input type="text" className="w-full border border-slate-200 rounded-lg p-2" value={preferences.nickname} onChange={(e) => setPreferences({...preferences, nickname: e.target.value})} placeholder={t(preferences.language, "prefs.nicknamePlaceholder")} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{t(preferences.language, "prefs.language")}</label>
+              <select className="w-full border border-slate-200 rounded-lg p-2" value={preferences.language} onChange={(e) => setPreferences({...preferences, language: e.target.value})}>
+                <option value="English">English</option>
+                <option value="Mandarin">简体中文</option>
+                <option value="Spanish">Español</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{t(preferences.language, "prefs.tone")}</label>
+              <select className="w-full border border-slate-200 rounded-lg p-2" value={preferences.tone} onChange={(e) => setPreferences({...preferences, tone: e.target.value})}>
+                <option value="professional">{t(preferences.language, "prefs.toneProfessional")}</option>
+                <option value="friendly">{t(preferences.language, "prefs.toneFriendly")}</option>
+                <option value="concise">{t(preferences.language, "prefs.toneConcise")}</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{t(preferences.language, "prefs.literacy")}</label>
+              <select className="w-full border border-slate-200 rounded-lg p-2" value={preferences.financial_literacy} onChange={(e) => setPreferences({...preferences, financial_literacy: e.target.value})}>
+                <option value="beginner">{t(preferences.language, "prefs.literacyBeginner")}</option>
+                <option value="intermediate">{t(preferences.language, "prefs.literacyIntermediate")}</option>
+                <option value="professional">{t(preferences.language, "prefs.literacyProfessional")}</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{t(preferences.language, "prefs.emoji")}</label>
+              <select className="w-full border border-slate-200 rounded-lg p-2" value={preferences.emoji} onChange={(e) => setPreferences({...preferences, emoji: e.target.value})}>
+                <option value="enabled">{t(preferences.language, "prefs.emojiEnabled")}</option>
+                <option value="disabled">{t(preferences.language, "prefs.emojiDisabled")}</option>
+              </select>
+            </div>
+          </div>
+          <div className="p-4 border-t border-slate-100 flex justify-end">
+            <button onClick={() => savePreferences(preferences)} className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+              Save Preferences
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
@@ -740,17 +833,24 @@ export default function BankingBotUI() {
                 <Bot className="text-white" size={24} />
               </div>
               <div>
-                <h1 className="font-bold text-slate-800 text-lg leading-tight">Horizon Assistant</h1>
+                <h1 className="font-bold text-slate-800 text-lg leading-tight">{t(preferences.language, "header.title")}</h1>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">Secure Session</span>
+                  <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">{t(preferences.language, "header.secureSession")}</span>
                 </div>
               </div>
             </div>
-            {/* Login Toggle */}
-            <button onClick={handleLoginToggle} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors" title="Toggle User State">
-              {isLoggedIn ? <LogOut size={18}/> : <LogIn size={18}/>}
-            </button>
+            {/* Action Toggles */}
+            <div className="flex items-center gap-1">
+              {isLoggedIn && (
+                <button onClick={() => setShowPreferences(true)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors" title={t(preferences.language, "header.preferences")}>
+                  <Settings size={18}/>
+                </button>
+              )}
+              <button onClick={handleLoginToggle} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors" title={t(preferences.language, "header.toggleUser")}>
+                {isLoggedIn ? <LogOut size={18}/> : <LogIn size={18}/>}
+              </button>
+            </div>
           </div>
 
           {/* User Status Bar */}
@@ -764,11 +864,11 @@ export default function BankingBotUI() {
                ) : (
                  <>
                    <AlertCircle size={14} className="text-slate-500"/>
-                   <span className="text-xs font-medium text-slate-600">Guest User</span>
+                   <span className="text-xs font-medium text-slate-600">{t(preferences.language, "misc.guestUser")}</span>
                  </>
                )}
              </div>
-             {isLoggedIn && <span className="text-[10px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">ACC: •••• 1234</span>}
+             {isLoggedIn && <span className="text-[10px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{t(preferences.language, "misc.maskedAcc")}</span>}
           </div>
         </div>
 
@@ -781,7 +881,7 @@ export default function BankingBotUI() {
           
           <div className="bg-white/80 backdrop-blur-sm text-slate-600 text-[11px] p-3 rounded-xl border border-slate-200 flex items-start gap-2 mb-4 shadow-sm">
              <ShieldCheck size={16} className="text-blue-600 shrink-0 mt-0.5" />
-             <p><b>MVP Mode:</b> No static menus. Use natural language to navigate. Try asking <i>"How do I open an account?"</i></p>
+             <p><span dangerouslySetInnerHTML={{ __html: t(preferences.language, "chat.mvpTip") }} /></p>
           </div>
 
           {isLoggedIn && hasMoreHistory && (
@@ -822,7 +922,7 @@ export default function BankingBotUI() {
                   <div className="max-w-[88%]">
                     {msg.sender === 'bot' && msg.type !== 'blocks' && (
                       <div className="flex items-end gap-2 mb-1.5 ml-1">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Horizon</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t(preferences.language, "chat.botName")}</span>
                         {msg.precisionSubstituted && renderPrecisionBadge()}
                       </div>
                     )}
@@ -918,7 +1018,7 @@ export default function BankingBotUI() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend(inputValue)}
-              placeholder="Type your message..."
+              placeholder={t(preferences.language, "chat.placeholder")}
               className="w-full bg-slate-100 text-slate-800 text-[15px] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-400"
               disabled={isTyping || !isLoggedIn}
             />
@@ -932,9 +1032,10 @@ export default function BankingBotUI() {
           </div>
           <div className="flex items-center justify-center gap-1 mt-3 mb-1">
              <LockIcon size={10} className="text-slate-400"/>
-             <span className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">Secured by 256-bit encryption (Out of scope)</span>
+             <span className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">{t(preferences.language, "chat.footer")}</span>
           </div>
         </div>
+        {renderPreferencesModal()}
       </div>
       
       {/* Hide Scrollbars CSS */}

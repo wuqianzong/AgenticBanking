@@ -135,18 +135,78 @@ covers the other:
 
 ## What's actually in scope
 
-Six work packages. WP-6 has no dependencies and is the cheapest to hand out
-first. WP-1 is foundational — WP-2, WP-3, and WP-5 all build on the pattern
-or the data it produces.
+Seven work packages. WP-6 has no dependencies and is the cheapest to hand
+out first. WP-1 is foundational — WP-2, WP-3, and WP-5 all build on the
+pattern or the data it produces. WP-7 is independent of WP-1/WP-2's code but
+shares their allow-list/registry philosophy.
 
 ```text
 WP-6 (independent, trivial)
+WP-7 (independent: service_request tool, own registry)
 WP-1 (foundational: api tool)
  ├── WP-2 (mirrors WP-1's pattern for deeplink; independent of WP-1's output)
  ├── WP-4 (independent of WP-1; separate subsystem)
  ├── WP-3 (needs WP-1's placeholder/direct-value split)
  └── WP-5 (needs WP-1's tool_result shape)
 ```
+
+---
+
+## WP-7: `service_request` Tool — Low/Intermediate-Risk Service Workflows
+
+**Detailed design:** see `docs/SERVICE_REQUEST_DESIGN_v1.0.md` — the full
+registry contract, registration state machine, form JSON schema, mocked
+credential-check/grant mechanism, and the no-suspended-turns resumption
+model. That document is the authoritative detail layer for this WP.
+
+### Problem
+
+The requirements document explicitly anticipates this capability — page 6's
+Agentic AI section lists *"invoke backend tools or APIs for approved service
+requests"* and *"execute a service workflow"* as intended orchestration
+outcomes, and the taxonomy table names *"Profile → Contact update, address
+update status"* directly. Neither `api` (WP-1, read-only) nor `deeplink`
+(WP-2, high-risk/money-movement, no data access) covers this: a third
+category exists for low/intermediate-risk requests that actually write
+data, gated by risk-tiered authorization rather than either "just read it"
+or "just point at an existing screen."
+
+### Solution
+
+A new `service_request` tool, registry, and registration record, summarized
+in the detailed design doc: a deterministic registry maps a
+`service_request_id` to a risk level, a step-up requirement, and a form
+schema; registering a form always lets the current turn complete normally
+(no suspended graph state); the eventual form submission is a
+self-contained, non-chat entry point keyed by a `special_id` that resolves
+independently of whatever else happened in the conversation since; and
+intermediate-risk submissions pass through a mocked (but real-interface)
+credential check before a short-lived, payload-bound grant permits the
+downstream write.
+
+### Acceptance criteria
+
+See `docs/SERVICE_REQUEST_DESIGN_v1.0.md` Section 10 for the specific open
+decisions to resolve first; broadly, an agent picking this up should verify
+a low-risk request (e.g. `profile-address-update`) completes end-to-end
+without any credential step, an intermediate-risk request correctly gates
+on the mocked check before the downstream call fires, a closed-without-
+submitting form remains reopenable from old chat history, and a second
+service request in the same turn is deferred rather than registered
+concurrently.
+
+### Files
+
+New `backend/app/orchestration/service_request_registry.py`, a new
+registration-record store, a new non-chat form-submission entry point, and
+`backend/app/orchestration/tool_registry.py` / `node_03a` / `node_03b` for
+the new tool's planning and dispatch branches — full detail in the design
+doc.
+
+### Dependency
+
+None on WP-1/WP-2's code, but shares their registry/allow-list pattern —
+build after at least one of them exists as a working reference.
 
 ---
 
@@ -292,6 +352,11 @@ built, not just the registry flag.
 ---
 
 ## WP-2: `deeplink` Tool — Executor and Validated Destination Registry
+
+**Detailed design:** see `docs/DEEPLINK_DESIGN_v1.0.md` — full end-to-end
+flow, destination registry contract, UI payload contract, and the mock-page
+scope for this MVP. That document is the authoritative detail layer for this
+WP; the summary below is kept only for the roadmap's dependency overview.
 
 ### Problem
 

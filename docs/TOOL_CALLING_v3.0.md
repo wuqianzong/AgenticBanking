@@ -1,13 +1,53 @@
 # Tool Calling v3.0 — Subquery-Owned Attempt Schema
 
-**Status:** Design finalized, not yet implemented. This document is the
-locked reference for the redesign; it supersedes the data-model portion of
-`docs/TOOL_CALLING_v2.0.md` (that document's turn-boundary and triage
-sections, and its Runtime Flow through Node 02d, remain accurate — only the
-`tool_task` / `tool_result` / `search_task` / `task_result` schema and the
-Node 04a resolution step change). Implementation is expected to touch Node
-02e, Node 03a, Node 03b, Node 03c/18, Node 04a, Node 04b, and both outbound
-audits; no code has been written against this design yet.
+**Status: IMPLEMENTED**, with two deliberate deviations from the original
+design below, both agreed before implementation to minimize risk against a
+system with no automated test coverage. This document supersedes the
+data-model portion of `docs/TOOL_CALLING_v2.0.md` (that document's
+turn-boundary and triage sections, and its Runtime Flow through Node 02d,
+remain accurate — only the `tool_task` / `tool_result` / `search_task` /
+`task_result` schema and the Node 04a resolution step changed).
+
+**Implementation notes:**
+
+1. **RAG's internal retry machinery was left untouched ("boundary-only"
+   migration), not rebuilt around `result.steps`.** `node_02e`,
+   `node_03b_rag_worker`, and `node_03c_sufficiency_auditor` still operate
+   entirely on `search_tasks` / `task_results` / `task_retry_counts` /
+   `task_rejected_parent_ids` / `task_partial_evidence` /
+   `task_sufficiency_history` / `task_feedback` / `deferred_retry_task_ids`
+   / `task_resolution_instructions` -- all still real `AgentState` fields,
+   exactly as before this migration. Rebuilding that intricate, proven
+   multi-stage retry state machine (angle/product/intent expansion, retry
+   barriers) to read/write a nested `result.steps` array was judged higher
+   risk than the reconciliation-gap bug this migration exists to fix,
+   with no test suite to catch a subtle regression. Instead, a single new
+   function, `_finalize_rag_attempts` (replacing the old
+   `_finalize_rag_tool_results`), is the one integration point: once RAG's
+   internal loop reaches a terminal per-subquery outcome, it projects that
+   outcome onto the owning subquery's `rag` tool_attempt (`status` via the
+   verdict table below, `result: {retrieval_state, approved_parent_ids}`).
+   **Consequence**: a `rag` attempt's `result` never actually contains a
+   `steps` array in this implementation -- the round-by-round history
+   this document describes below stays exactly where it always lived,
+   inside RAG's own internal state, not nested in the attempt. If RAG's
+   retry engine is ever rebuilt, `result.steps` remains the intended target
+   shape.
+2. **`node_04a`'s LLM-driven capability-matching call was fully removed**
+   (the more invasive of the two options considered), not preserved
+   alongside an additive deterministic status. `resolution_status` is now
+   computed purely by `_compute_subquery_status`, and the "does an untried
+   capability's scope match this subquery" judgment -- previously a second,
+   independent LLM call in `node_04a` -- is not re-derived anywhere. It is
+   `node_03a`'s own planning call, invoked every round for every subquery
+   whose rollup is `OPEN` (not gated behind a separately-computed
+   `tool_gaps` object anymore, which is retired entirely).
+
+Verified live end-to-end: the exact query that previously caused a
+contradictory apology and forced escalation now resolves and answers
+cleanly (both the `api`-covered and RAG-covered subqueries correctly
+combined, zero contradiction); a plain RAG-only query and a
+`service_request` flow both regression-tested clean with zero errors.
 
 ## Why this exists
 

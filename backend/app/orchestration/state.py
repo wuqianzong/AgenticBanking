@@ -40,18 +40,23 @@ class AgentState(TypedDict):
     deeplink_payload: str                        # Buffer for Deeplink agent
     triage_status: str                           # 'NON_COMPLIANT', 'ESCALATION', 'NON_FINANCIAL', or 'VALID_REQUEST'
 
-    # Tool Calling v2.0: financial-only triage and generic task/result ledgers
+    # Tool Calling v3.0: financial-only triage, each subquery owning its own
+    # tool attempts. See docs/TOOL_CALLING_v3.0.md. financial_subqueries
+    # entries are {subquery_id, customer_component, resolution_status,
+    # tool_attempts: [{attempt_id, subquery_id, tool_name, operation,
+    # planning_round, status, input, result, availability_reason}]} --
+    # resolution_status (PENDING|RESOLVED|OPEN) is computed deterministically
+    # by _compute_subquery_status in node_04a, never asserted by an LLM. The
+    # flat tool_tasks/tool_results/pending_tool_task_ids/tool_task_fingerprints/
+    # tool_gaps ledgers this superseded are gone; a `rag` attempt's `result`
+    # is a terminal-only projection of RAG's own internal search_tasks/
+    # task_results world below, written once by _finalize_rag_attempts.
     triaged_subqueries: List[Dict[str, Any]]     # Legacy alias for financial_subqueries during in-flight sessions
-    financial_subqueries: List[Dict[str, Any]]   # n2d-resolved, compliant banking components only
+    financial_subqueries: List[Dict[str, Any]]   # n2d-resolved, compliant banking components; see the schema note above
     has_non_financial_content: bool              # Triage marker; never carries discarded wording downstream
     non_financial_context: List[str]             # Safe conversational asides; never a tool input or factual evidence source
-    tool_tasks: List[Dict[str, Any]]             # Append-only tool-task ledger
-    tool_results: List[Dict[str, Any]]           # Validated terminal tool-result ledger
-    pending_tool_task_ids: List[str]             # Tasks eligible for the next generic dispatch
-    tool_task_fingerprints: List[str]            # Terminal/pending duplicate-prevention keys
     tool_planning_round: int                     # Bounded outer orchestration-loop count
     tool_plan_status: str                        # continue | resolved | exhausted
-    tool_gaps: List[Dict[str, Any]]              # Non-factual capability gaps returned by resolution planning
     decline_tasks: List[Dict[str, Any]]          # Legacy downstream scope-decline compatibility only
 
     # Search strategy v2.6 tasks: stable direct subquery plus optional angle groups

@@ -164,24 +164,6 @@ class VisualHint(BaseModel):
     type: str = Field(description="Optional visual type: LIST, PROGRESS, or OPTIONS.")
     purpose: str = Field(description="Why this visual would materially help the customer understand the response.")
 
-class ToolGap(BaseModel):
-    subquery_id: str = Field(description="Exact supplied financial subquery identifier.")
-    tool_name: str = Field(description="Registered tool name that could address the gap.")
-    operation: str = Field(description="Registered operation for the tool.")
-    unresolved_need: str = Field(description="Internal non-factual capability gap.")
-
-class UserJourneyPlan(BaseModel):
-    resolution_status: str = Field(default="RESOLVED", description="Must be RESOLVED, NEEDS_TOOLS, or EXHAUSTED.")
-    tool_gaps: List[ToolGap] = Field(default_factory=list, description="Internal capability gaps only.")
-    validated_task_ids: List[str] = Field(
-        default_factory=list,
-        description="Only supplied answerable task IDs whose validated results contribute to global resolution."
-    )
-    unresolved_topics: List[str] = Field(
-        default_factory=list,
-        description="Concise unresolved customer topics used only as internal scope anchors, never as facts or response wording."
-    )
-
 # 5. SUPERVISOR TOOL ROUTER (Node 03a)
 class SupervisorRouting(BaseModel):
     active_tool_routes: List[str] = Field(description="Array of selected tools (e.g., 'n17_rag', 'n17_api').")
@@ -248,9 +230,6 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
                 active_schema = TriageEvaluation
             elif "Act as a Decoupled Database Search Architect" in prompt:
                 active_schema = QueryFormulation
-            elif ("GLOBAL RESPONSE SUFFICIENCY" in prompt or "FLEXIBLE USER EXPERIENCE PLANNER" in prompt
-                  or "USER JOURNEY V2.0 PRESENTATION PLANNER" in prompt):
-                active_schema = UserJourneyPlan
             elif "INCREMENTAL TOOL-CALLING PLANNER" in prompt:
                 active_schema = ToolCallingPlan
             elif "Determine which retrieval tools are necessary" in prompt:

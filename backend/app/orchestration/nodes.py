@@ -41,13 +41,8 @@ VOLATILE_STATE_RESET = {
     "financial_subqueries": [],
     "has_non_financial_content": False,
     "non_financial_context": [],
-    "tool_tasks": [],
-    "tool_results": [],
-    "pending_tool_task_ids": [],
-    "tool_task_fingerprints": [],
     "tool_planning_round": 0,
     "tool_plan_status": "continue",
-    "tool_gaps": [],
     "decline_tasks": [],
     "search_tasks": [],
     "task_results": [],
@@ -83,6 +78,50 @@ ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "PARTIALLY_SUFFICIENT"}
 MAX_RAG_ATTEMPTS = 4
 MAX_TOOL_PLANNING_ROUNDS = 3
 MAX_TOOL_TASKS_PER_TURN = 8
+
+
+# --- 🔧 TOOL CALLING v3.0: SUBQUERY-OWNED ATTEMPT SCHEMA PRIMITIVES ---
+# See docs/TOOL_CALLING_v3.0.md. Every financial_subquery entry owns a
+# `tool_attempts` list; these are the only primitives allowed to interpret
+# an attempt's status. No other code should re-derive these judgments.
+
+def _build_attempt_id(subquery_id: str, tool_name: str, round_num: int, sequence: int) -> str:
+    return f"{subquery_id}::{tool_name}::r{round_num}::{sequence}"
+
+
+def _fully_covers(attempt: dict) -> bool:
+    """Whether one attempt, on its own, fully answers its owning subquery.
+
+    `api`/`deeplink`/`service_request` are atomic and binary by construction
+    -- `completed` always means fully resolved. `rag` is the one tool whose
+    `completed` is coarser than that: it only means "the retry loop ended
+    with some approved evidence," which may be SUFFICIENT or merely
+    PARTIALLY_SUFFICIENT. Only SUFFICIENT counts as full coverage here.
+    """
+    if not isinstance(attempt, dict):
+        return False
+    if attempt.get("tool_name") == "rag":
+        return attempt.get("result", {}).get("retrieval_state") == "SUFFICIENT"
+    return attempt.get("status") == "completed"
+
+
+def _compute_subquery_status(subquery: dict) -> str:
+    """Deterministic rollup -- never a second LLM judgment.
+
+    PENDING: at least one attempt is still pending/running this turn.
+    RESOLVED: at least one attempt fully covers the subquery on its own.
+    OPEN: every attempt is terminal, but none fully covers it. By the time
+    response generation runs, the tool-planning loop has already ended, so
+    OPEN at that point functionally means "exhausted" -- there is no
+    separate stored EXHAUSTED value, since nothing would ever read it
+    differently from OPEN once the loop is over.
+    """
+    attempts = subquery.get("tool_attempts", []) if isinstance(subquery, dict) else []
+    if any(isinstance(a, dict) and a.get("status") in {"pending", "running"} for a in attempts):
+        return "PENDING"
+    if any(_fully_covers(a) for a in attempts):
+        return "RESOLVED"
+    return "OPEN"
 
 
 def _normalized_product_tags(product_value: Any) -> list[str]:
@@ -1121,11 +1160,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     user_msg = state.get("user_input", "")
     all_financial_subqueries = state.get("financial_subqueries", state.get("triaged_subqueries", []))
     active_rag_subquery_ids = {
-        task.get("subquery_id")
-        for task in state.get("tool_tasks", [])
-        if isinstance(task, dict)
-        and task.get("tool_name") == "rag"
-        and task.get("status") in {"pending", "running"}
+        subquery.get("subquery_id")
+        for subquery in all_financial_subqueries
+        if isinstance(subquery, dict)
+        for attempt in subquery.get("tool_attempts", [])
+        if isinstance(attempt, dict) and attempt.get("tool_name") == "rag" and attempt.get("status") in {"pending", "running"}
     }
     # Node 02e is now internal to the RAG executor. It receives only the
     # financial components assigned to a live RAG tool task.
@@ -1489,7 +1528,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         # formulator could not safely create a retrieval task. Close those
         # generic RAG tasks rather than leaving a running ledger entry while
         # clarification proceeds directly to resolution planning.
-        terminal_tool_tasks, terminal_tool_results = _finalize_rag_tool_results(state, [])
+        terminal_financial_subqueries = _finalize_rag_attempts(state, [])
         if not intent_clarification_tasks and decline_tasks:
             # Every component the formulator received resolved to DECLINE
             # (out-of-scope product). Nothing valid remains for this turn.
@@ -1499,9 +1538,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 "intent_clarification_tasks": [],
                 "task_results": [],
                 "decline_tasks": decline_tasks,
-                "tool_tasks": terminal_tool_tasks,
-                "tool_results": terminal_tool_results,
-                "pending_tool_task_ids": [],
+                "financial_subqueries": terminal_financial_subqueries,
             }
         if not intent_clarification_tasks and not (active_plan.get("steps") or has_retrieved_knowledge):
             # A valid request reached the formulator but no usable structured
@@ -1520,13 +1557,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 "intent_clarification_tasks": intent_clarification_tasks,
                 "task_results": [],
                 "decline_tasks": decline_tasks,
-                "tool_tasks": terminal_tool_tasks,
-                "tool_results": terminal_tool_results,
-                "pending_tool_task_ids": [],
+                "financial_subqueries": terminal_financial_subqueries,
             }
         if active_plan.get("steps") or has_retrieved_knowledge:
-            return {"preflight_status": "continue_plan", "search_tasks": [], "decline_tasks": decline_tasks, "tool_tasks": terminal_tool_tasks, "tool_results": terminal_tool_results, "pending_tool_task_ids": []}
-        return {"preflight_status": "intent_clarification_needed", "search_tasks": [], "decline_tasks": decline_tasks, "tool_tasks": terminal_tool_tasks, "tool_results": terminal_tool_results, "pending_tool_task_ids": []}
+            return {"preflight_status": "continue_plan", "search_tasks": [], "decline_tasks": decline_tasks, "financial_subqueries": terminal_financial_subqueries}
+        return {"preflight_status": "intent_clarification_needed", "search_tasks": [], "decline_tasks": decline_tasks, "financial_subqueries": terminal_financial_subqueries}
 
     # Every task enters live direct retrieval. Search Strategy v2.8 may add
     # matching verified-session parents as a separate RRF list, but no broad
@@ -1562,58 +1597,52 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         "decline_tasks": decline_tasks,
     }
 
-# --- PHASE 2: TOOL CALLING v2.0 ---
-
-def _tool_task_fingerprint(tool_name: str, operation: str, subquery_id: str, payload: dict) -> str:
-    """Stable idempotency key for an incremental tool task."""
-    normalized_payload = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return f"{tool_name}|{operation}|{subquery_id}|{normalized_payload}"
-
-
-def _tool_result_by_task_id(results: list[dict]) -> dict[str, dict]:
-    return {
-        result.get("tool_task_id"): result
-        for result in results
-        if isinstance(result, dict) and result.get("tool_task_id")
-    }
-
+# --- PHASE 2: TOOL CALLING v3.0 ---
 
 def node_03a_knowledge_blueprint_planner(state: AgentState):
-    """Create incremental generic tool tasks from clean financial subqueries.
+    """Create incremental tool attempts nested under each financial subquery.
 
-    The first round turns every financial subquery into a registered RAG task.
-    Later rounds may add a task only from a Resolution Planner capability gap.
-    A task ledger and fingerprints prevent duplicate calls across the loop.
+    The first round turns every financial subquery into a registered RAG
+    attempt. Later rounds may add an attempt only for a subquery whose
+    deterministic rollup (_compute_subquery_status) is still OPEN -- this
+    single planner call is also where the "does an untried capability's
+    scope actually match this subquery" semantic judgment happens; nothing
+    downstream re-derives that judgment independently (Tool Calling v3.0).
     """
     print("🟢 [NODE 03a] Executing Tool-Calling Planner")
-    existing_tasks = [dict(task) for task in state.get("tool_tasks", []) if isinstance(task, dict)]
-    existing_fingerprints = set(state.get("tool_task_fingerprints", []))
-    existing_fingerprints.update(
-        str(task.get("fingerprint", "")) for task in existing_tasks if task.get("fingerprint")
-    )
-    result_by_task = _tool_result_by_task_id(state.get("tool_results", []))
-    planning_round = int(state.get("tool_planning_round", 0)) + 1
     financial_subqueries = [
-        item for item in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        {**item, "tool_attempts": [dict(a) for a in item.get("tool_attempts", []) if isinstance(a, dict)]}
+        for item in state.get("financial_subqueries", state.get("triaged_subqueries", []))
         if isinstance(item, dict) and item.get("subquery_id") and item.get("customer_component")
     ]
-    tool_gaps = [item for item in state.get("tool_gaps", []) if isinstance(item, dict)]
+    known_subqueries = {item["subquery_id"]: item for item in financial_subqueries}
+    existing_attempts = [attempt for item in financial_subqueries for attempt in item["tool_attempts"]]
+    existing_keys = {
+        (a.get("subquery_id"), a.get("tool_name"), a.get("operation"), json.dumps(a.get("input", {}), sort_keys=True))
+        for a in existing_attempts
+    }
+    sequence_counter: dict[tuple, int] = {}
+    for attempt in existing_attempts:
+        seq_key = (attempt.get("subquery_id"), attempt.get("tool_name"))
+        sequence_counter[seq_key] = sequence_counter.get(seq_key, 0) + 1
+    planning_round = int(state.get("tool_planning_round", 0)) + 1
+    open_subquery_ids = [
+        item["subquery_id"] for item in financial_subqueries
+        if _compute_subquery_status(item) == "OPEN"
+    ]
 
-    if planning_round > MAX_TOOL_PLANNING_ROUNDS or len(existing_tasks) >= MAX_TOOL_TASKS_PER_TURN:
+    if planning_round > MAX_TOOL_PLANNING_ROUNDS or len(existing_attempts) >= MAX_TOOL_TASKS_PER_TURN:
         print("   ⛔ [TOOL LOOP EXHAUSTED]: Planning budget reached.")
-        log_event("tool.loop.exhausted", planning_round=planning_round, task_count=len(existing_tasks))
+        log_event("tool.loop.exhausted", planning_round=planning_round, task_count=len(existing_attempts))
         return {
             "preflight_status": "tool_results_ready",
             "tool_plan_status": "exhausted",
-            "pending_tool_task_ids": [],
-            "tool_gaps": [],
         }
 
-    known_subqueries = {item["subquery_id"]: item for item in financial_subqueries}
     candidates = []
-    if not existing_tasks or tool_gaps:
+    if not existing_attempts or open_subquery_ids:
         deterministic_rag_candidates = []
-        if not existing_tasks:
+        if not existing_attempts:
             deterministic_rag_candidates = [
                 {
                     "subquery_id": subquery_id,
@@ -1624,26 +1653,50 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
                 for subquery_id, item in known_subqueries.items()
             ]
 
+        validated_attempts_view = [
+            {
+                "subquery_id": a.get("subquery_id"),
+                "tool_name": a.get("tool_name"),
+                "status": a.get("status"),
+                "result": a.get("result", {}),
+                "availability_reason": a.get("availability_reason", ""),
+            }
+            for a in existing_attempts
+            if a.get("status") in {"completed", "unavailable"}
+        ]
+        financial_subqueries_view = [
+            {"subquery_id": item["subquery_id"], "customer_component": item["customer_component"]}
+            for item in financial_subqueries
+        ]
+
         prompt = f"""
         INCREMENTAL TOOL-CALLING PLANNER
         You must plan tool tasks to address the customer's financial subqueries.
         In the first round, we automatically plan RAG tasks for knowledge. You should plan any OTHER simultaneous tools (like deeplink or service_request) that are relevant.
-        In later rounds, you may add tool tasks only when an unresolved capability gap remains.
+        In later rounds, you may add tool tasks only for a subquery listed under "Subqueries with a remaining gap this round" below -- a registered capability's own description must precisely match that subquery's specific situation, not merely its general topic.
 
-        Financial subqueries: {json.dumps(financial_subqueries, ensure_ascii=False)}
-        Validated terminal tool results: {json.dumps(state.get("tool_results", []), ensure_ascii=False)}
-        Resolution capability gaps: {json.dumps(tool_gaps, ensure_ascii=False)}
+        Financial subqueries: {json.dumps(financial_subqueries_view, ensure_ascii=False)}
+        Subqueries with a remaining gap this round: {json.dumps(open_subquery_ids, ensure_ascii=False)}
+        Validated terminal tool results: {json.dumps(validated_attempts_view, ensure_ascii=False)}
         Enabled tool registry: {json.dumps(enabled_tool_capabilities(), ensure_ascii=False)}
 
         Rules:
         - Create only additive tasks. Never recreate a completed, unavailable,
-          failed, blocked, or pending task.
-        - Every task must reference exactly one supplied subquery_id.
+          or pending task.
+        - Every task must reference exactly one supplied subquery_id, and in
+          any round after the first, that subquery_id must appear in
+          "Subqueries with a remaining gap this round".
         - Use only an enabled tool_name and one of its listed operations.
         - Do not create a task merely to restate, search again, or rewrite a
           completed result. Do not invent facts, customer data, or capabilities.
         - RAG's internal retries are not outer tool tasks. Add RAG only when
           no RAG task for that subquery has already reached a terminal state.
+        - A capability's own description can scope out specific reasons or
+          situations, not just name a general topic -- match on the whole
+          description, not the nearest keyword. For example, a capability
+          described as covering card replacement "for a non-fraud reason
+          (worn or damaged)" does not cover a lost or stolen card, even
+          though both are "card replacement" in general terms.
         - Return no task if no registered enabled capability can close a gap.
         - For tool_name "service_request", input must use the literal key
           "service_request_id". Choose the best-fitting id from that tool's
@@ -1673,14 +1726,14 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         except Exception as error:
             print(f"⚠️ [TOOL PLANNER ERROR]: {error}")
             candidates = []
-            
-        if not existing_tasks:
+
+        if not existing_attempts:
             # Combine deterministic RAG with whatever else the LLM decided to run simultaneously.
             # Filter out any duplicate RAG tasks the LLM might have hallucinated.
             llm_candidates = [c for c in candidates if c.get("tool_name") != "rag"]
             candidates = deterministic_rag_candidates + llm_candidates
 
-    new_tasks = []
+    new_attempts_by_subquery: dict[str, list[dict]] = {}
     for candidate in candidates if isinstance(candidates, list) else []:
         if not isinstance(candidate, dict):
             continue
@@ -1719,7 +1772,7 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
             # registered destination_id under any key, reject anything that
             # doesn't resolve to a real registry entry. Only the planner
             # decides whether a destination is worth offering; the actual
-            # dispatch (route lookup, tool_results) happens once in
+            # dispatch (route lookup, attempt result) happens once in
             # node_03b_tool_dispatcher, not here.
             requested_destination = str(payload.get("destination_id", "")).strip()
             if requested_destination not in DEEPLINK_DESTINATION_REGISTRY:
@@ -1747,36 +1800,43 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
                 log_event("tool.task.invalid_api_field", subquery_id=subquery_id, requested_field=requested_field, raw_input=payload, level="WARNING")
                 continue
             payload = {"field_id": requested_field}
-        fingerprint = _tool_task_fingerprint(tool_name, operation, subquery_id, payload)
-        if fingerprint in existing_fingerprints:
+        key = (subquery_id, tool_name, operation, json.dumps(payload, sort_keys=True))
+        if key in existing_keys:
             log_event("tool.task.deduplicated", subquery_id=subquery_id, tool_name=tool_name, operation=operation)
             continue
-        task_id = f"tool_{tool_name}_{len(existing_tasks) + len(new_tasks) + 1}"
-        new_tasks.append({
-            "tool_task_id": task_id,
+        seq_key = (subquery_id, tool_name)
+        sequence_counter[seq_key] = sequence_counter.get(seq_key, 0) + 1
+        attempt_id = _build_attempt_id(subquery_id, tool_name, planning_round, sequence_counter[seq_key])
+        new_attempts_by_subquery.setdefault(subquery_id, []).append({
+            "attempt_id": attempt_id,
             "subquery_id": subquery_id,
             "tool_name": tool_name,
             "operation": operation,
-            "input": payload,
-            "fingerprint": fingerprint,
-            "status": "pending",
             "planning_round": planning_round,
+            "status": "pending",
+            "input": payload,
+            "result": {},
+            "availability_reason": "",
         })
-        existing_fingerprints.add(fingerprint)
+        existing_keys.add(key)
 
-    pending_ids = [task["tool_task_id"] for task in new_tasks]
-    for task in new_tasks:
-        log_event("tool.task.created", **{key: task[key] for key in ("tool_task_id", "subquery_id", "tool_name", "operation", "planning_round")})
-    print(f"   🧰 [TOOL PLAN]: round {planning_round} added {len(new_tasks)} task(s): {pending_ids}")
-    log_event("tool.plan.created", planning_round=planning_round, pending_tool_task_ids=pending_ids, capability_count=len(enabled_tool_capabilities()))
+    total_new = 0
+    for subquery in financial_subqueries:
+        additions = new_attempts_by_subquery.get(subquery["subquery_id"], [])
+        if not additions:
+            continue
+        subquery["tool_attempts"] = subquery["tool_attempts"] + additions
+        total_new += len(additions)
+        for attempt in additions:
+            log_event("tool.task.created", tool_task_id=attempt["attempt_id"], subquery_id=attempt["subquery_id"], tool_name=attempt["tool_name"], operation=attempt["operation"], planning_round=attempt["planning_round"])
+
+    print(f"   🧰 [TOOL PLAN]: round {planning_round} added {total_new} attempt(s)")
+    log_event("tool.plan.created", planning_round=planning_round, capability_count=len(enabled_tool_capabilities()))
     return {
-        "preflight_status": "tool_dispatch" if pending_ids else "tool_results_ready",
-        "tool_tasks": [*existing_tasks, *new_tasks],
-        "pending_tool_task_ids": pending_ids,
-        "tool_task_fingerprints": sorted(existing_fingerprints),
+        "preflight_status": "tool_dispatch" if total_new else "tool_results_ready",
+        "financial_subqueries": financial_subqueries,
         "tool_planning_round": planning_round,
-        "tool_plan_status": "continue" if pending_ids else "exhausted",
-        "tool_gaps": [],
+        "tool_plan_status": "continue" if total_new else "exhausted",
         "rag_payload": "",
         "api_payload": "",
         "deeplink_payload": "",
@@ -1868,8 +1928,22 @@ def _dispatch_service_request_task(state: AgentState, task: dict) -> dict:
     }
 
 
+def _iter_tool_attempts(state: AgentState):
+    """Yield every (attempt, for_request) pair across every subquery's
+    tool_attempts -- `for_request` is that attempt's own owning subquery's
+    customer_component text, free of any separate subquery_id join, since
+    the attempt is already nested under it (Tool Calling v3.0)."""
+    for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", [])):
+        if not isinstance(subquery, dict):
+            continue
+        for_request = subquery.get("customer_component", "")
+        for attempt in subquery.get("tool_attempts", []):
+            if isinstance(attempt, dict):
+                yield attempt, for_request
+
+
 def _pending_service_requests(state: AgentState) -> list[dict]:
-    """Completed service_request tool_results for this turn only.
+    """Completed service_request attempts for this turn only.
 
     Exposes only special_id, service_request_id, and description -- never
     the form_schema. The LLM's job is to write one honest sentence inviting
@@ -1879,20 +1953,19 @@ def _pending_service_requests(state: AgentState) -> list[dict]:
     """
     return [
         {
-            "special_id": result.get("approved_result", {}).get("special_id"),
-            "service_request_id": result.get("approved_result", {}).get("service_request_id"),
-            "description": result.get("approved_result", {}).get("description"),
+            "special_id": attempt.get("result", {}).get("special_id"),
+            "service_request_id": attempt.get("result", {}).get("service_request_id"),
+            "description": attempt.get("result", {}).get("description"),
         }
-        for result in state.get("tool_results", [])
-        if isinstance(result, dict)
-        and result.get("tool_name") == "service_request"
-        and result.get("status") == "completed"
-        and result.get("approved_result", {}).get("special_id")
+        for attempt, _ in _iter_tool_attempts(state)
+        if attempt.get("tool_name") == "service_request"
+        and attempt.get("status") == "completed"
+        and attempt.get("result", {}).get("special_id")
     ]
 
 
 def _unavailable_service_requests(state: AgentState) -> list[dict]:
-    """service_request tool_results this turn that could not be registered.
+    """service_request attempts this turn that could not be registered.
 
     Without this, a blocked attempt (e.g. the one-active-request-per-session
     guard) silently disappears from the response with no acknowledgment at
@@ -1901,17 +1974,16 @@ def _unavailable_service_requests(state: AgentState) -> list[dict]:
     here is model-authored.
     """
     return [
-        {"reason": result.get("availability_reason", "")}
-        for result in state.get("tool_results", [])
-        if isinstance(result, dict)
-        and result.get("tool_name") == "service_request"
-        and result.get("status") == "unavailable"
-        and result.get("availability_reason")
+        {"reason": attempt.get("availability_reason", "")}
+        for attempt, _ in _iter_tool_attempts(state)
+        if attempt.get("tool_name") == "service_request"
+        and attempt.get("status") == "unavailable"
+        and attempt.get("availability_reason")
     ]
 
 
 def _resolved_deeplink_destinations(state: AgentState) -> list[str]:
-    """Completed deeplink tool_results for this turn only.
+    """Completed deeplink attempts for this turn only.
 
     This is the sole source of truth for which destinations actually
     resolved this turn, independent of anything the LLM writes. node_07
@@ -1920,12 +1992,11 @@ def _resolved_deeplink_destinations(state: AgentState) -> list[str]:
     real one is never dropped because the model's prose omitted it.
     """
     return [
-        result.get("approved_result", {}).get("destination_id")
-        for result in state.get("tool_results", [])
-        if isinstance(result, dict)
-        and result.get("tool_name") == "deeplink"
-        and result.get("status") == "completed"
-        and result.get("approved_result", {}).get("destination_id")
+        attempt.get("result", {}).get("destination_id")
+        for attempt, _ in _iter_tool_attempts(state)
+        if attempt.get("tool_name") == "deeplink"
+        and attempt.get("status") == "completed"
+        and attempt.get("result", {}).get("destination_id")
     ]
 
 
@@ -1946,24 +2017,18 @@ def _available_response_shortcuts(state: AgentState) -> list[dict]:
     response generator may use this only to write natural text; it is never
     asked to identify, place, or attach a button itself. The actual
     button(s) are built separately and deterministically in node_07 straight
-    from tool_results, regardless of whether the generated text mentions
+    from tool_attempts, regardless of whether the generated text mentions
     them at all -- so unlike the id-based approaches tried before, nothing
     here is load-bearing for correctness, only for how natural the response
     reads.
     """
-    subquery_text_by_id = {
-        item.get("subquery_id"): item.get("customer_component", "")
-        for item in state.get("financial_subqueries", state.get("triaged_subqueries", []))
-        if isinstance(item, dict)
-    }
     shortcuts = []
-    for result in state.get("tool_results", []):
-        if not isinstance(result, dict) or result.get("status") != "completed":
+    for attempt, for_request in _iter_tool_attempts(state):
+        if attempt.get("status") != "completed":
             continue
-        for_request = subquery_text_by_id.get(result.get("subquery_id"), "")
-        if result.get("tool_name") == "service_request":
-            service_request_id = result.get("approved_result", {}).get("service_request_id", "")
-            contract = get_service_request_contract(service_request_id)
+        result = attempt.get("result", {})
+        if attempt.get("tool_name") == "service_request":
+            contract = get_service_request_contract(result.get("service_request_id", ""))
             if contract is None:
                 continue
             shortcuts.append({
@@ -1972,9 +2037,8 @@ def _available_response_shortcuts(state: AgentState) -> list[dict]:
                 "topic": contract.get("description", ""),
                 "for_request": for_request,
             })
-        elif result.get("tool_name") == "deeplink":
-            destination_id = result.get("approved_result", {}).get("destination_id", "")
-            contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
+        elif attempt.get("tool_name") == "deeplink":
+            contract = DEEPLINK_DESTINATION_REGISTRY.get(result.get("destination_id", ""))
             if contract is None:
                 continue
             shortcuts.append({
@@ -1997,25 +2061,20 @@ def _personal_data_placeholders(state: AgentState) -> list[dict]:
     it -- the frontend does, from the reveal map delivered alongside (never
     inside) this turn's response text.
     """
-    subquery_text_by_id = {
-        item.get("subquery_id"): item.get("customer_component", "")
-        for item in state.get("financial_subqueries", state.get("triaged_subqueries", []))
-        if isinstance(item, dict)
-    }
     placeholders = []
-    for result in state.get("tool_results", []):
-        if not isinstance(result, dict) or result.get("tool_name") != "api" or result.get("status") != "completed":
+    for attempt, for_request in _iter_tool_attempts(state):
+        if attempt.get("tool_name") != "api" or attempt.get("status") != "completed":
             continue
-        approved = result.get("approved_result", {})
-        if approved.get("disclosure_mode") != "placeholder" or not approved.get("placeholder_token"):
+        result = attempt.get("result", {})
+        if result.get("disclosure_mode") != "placeholder" or not result.get("placeholder_token"):
             continue
-        field = API_FIELD_REGISTRY.get(approved.get("field_id", ""))
+        field = API_FIELD_REGISTRY.get(result.get("field_id", ""))
         if field is None:
             continue
         placeholders.append({
-            "for_request": subquery_text_by_id.get(result.get("subquery_id"), ""),
+            "for_request": for_request,
             "field_description": field.get("description", ""),
-            "insert_token": approved["placeholder_token"],
+            "insert_token": result["placeholder_token"],
         })
     return placeholders
 
@@ -2029,27 +2088,22 @@ def _verified_api_context(state: AgentState) -> list[dict]:
     value leak into the model's own generated sentence structure instead of
     staying a fixed, audited token substitution.
     """
-    subquery_text_by_id = {
-        item.get("subquery_id"): item.get("customer_component", "")
-        for item in state.get("financial_subqueries", state.get("triaged_subqueries", []))
-        if isinstance(item, dict)
-    }
     facts = []
-    for result in state.get("tool_results", []):
-        if not isinstance(result, dict) or result.get("tool_name") != "api" or result.get("status") != "completed":
+    for attempt, for_request in _iter_tool_attempts(state):
+        if attempt.get("tool_name") != "api" or attempt.get("status") != "completed":
             continue
-        approved = result.get("approved_result", {})
-        if approved.get("disclosure_mode") != "direct_value" or not approved.get("fact"):
+        result = attempt.get("result", {})
+        if result.get("disclosure_mode") != "direct_value" or not result.get("fact"):
             continue
         facts.append({
-            "for_request": subquery_text_by_id.get(result.get("subquery_id"), ""),
-            "fact": approved["fact"],
+            "for_request": for_request,
+            "fact": result["fact"],
         })
     return facts
 
 
 def node_03b_tool_dispatcher(state: AgentState):
-    """Dispatch pending registered tasks without hard-coding graph fan-out.
+    """Dispatch pending attempts without hard-coding graph fan-out.
 
     RAG is handed to its existing internal retrieval subgraph -- it needs
     retries and stays async. service_request is a one-shot, synchronous,
@@ -2058,105 +2112,76 @@ def node_03b_tool_dispatcher(state: AgentState):
     unavailable and cannot block the turn.
     """
     print("🟢 [NODE 03b] Executing Generic Tool Dispatcher")
-    pending_ids = set(state.get("pending_tool_task_ids", []))
-    tasks = [dict(task) for task in state.get("tool_tasks", []) if isinstance(task, dict)]
-    tool_results = [dict(result) for result in state.get("tool_results", []) if isinstance(result, dict)]
-    pending_tasks = [task for task in tasks if task.get("tool_task_id") in pending_ids and task.get("status") == "pending"]
+    financial_subqueries = [
+        {**item, "tool_attempts": [dict(a) for a in item.get("tool_attempts", []) if isinstance(a, dict)]}
+        for item in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(item, dict)
+    ]
     personal_data_reveal_map = dict(state.get("personal_data_reveal_map", {}))
-    rag_task_ids = []
-    for task in pending_tasks:
-        tool_name = task.get("tool_name")
-        if tool_name == "rag":
-            task["status"] = "running"
-            rag_task_ids.append(task["tool_task_id"])
-            log_event("tool.dispatch.started", tool_task_id=task["tool_task_id"], subquery_id=task.get("subquery_id"), tool_name=tool_name)
-            continue
-        if tool_name == "service_request":
-            outcome = _dispatch_service_request_task(state, task)
-            task["status"] = outcome["status"]
-            tool_results.append({
-                "tool_task_id": task["tool_task_id"],
-                "subquery_id": task.get("subquery_id"),
-                "tool_name": tool_name,
-                "status": outcome["status"],
-                "approved_result": outcome.get("approved_result", {}),
-                "customer_safe_summary": "",
-                "availability_reason": outcome.get("reason", ""),
-            })
-            log_event(
-                "tool.result.service_request",
-                tool_task_id=task["tool_task_id"], subquery_id=task.get("subquery_id"),
-                status=outcome["status"],
-                special_id=outcome.get("approved_result", {}).get("special_id"),
-            )
-            continue
-        if tool_name == "deeplink":
-            destination_id = task.get("input", {}).get("destination_id")
-            contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
-            if contract:
-                status = "completed"
-                approved_result = {"destination_id": destination_id, "route": contract["route"]}
-                reason = ""
-            else:
-                status = "unavailable"
-                approved_result = {}
-                reason = f"Destination {destination_id} not in registry"
-            task["status"] = status
-            tool_results.append({
-                "tool_task_id": task["tool_task_id"],
-                "subquery_id": task.get("subquery_id"),
-                "tool_name": tool_name,
-                "status": status,
-                "approved_result": approved_result,
-                "customer_safe_summary": "",
-                "availability_reason": reason,
-            })
-            log_event(
-                "tool.result.deeplink",
-                tool_task_id=task["tool_task_id"], subquery_id=task.get("subquery_id"),
-                status=status,
-                destination_id=destination_id,
-            )
-            continue
-        if tool_name == "api":
-            outcome, reveal_additions = _dispatch_api_task(state, task)
-            task["status"] = outcome["status"]
-            approved_result = outcome.get("approved_result", {})
-            tool_results.append({
-                "tool_task_id": task["tool_task_id"],
-                "subquery_id": task.get("subquery_id"),
-                "tool_name": tool_name,
-                "status": outcome["status"],
-                "approved_result": approved_result,
-                "customer_safe_summary": "",
-                "availability_reason": outcome.get("reason", ""),
-            })
-            personal_data_reveal_map.update(reveal_additions)
-            log_event(
-                "tool.result.api",
-                tool_task_id=task["tool_task_id"], subquery_id=task.get("subquery_id"),
-                status=outcome["status"],
-                field_id=approved_result.get("field_id", task.get("input", {}).get("field_id")),
-                disclosure_mode=approved_result.get("disclosure_mode"),
-            )
-            continue
-        task["status"] = "unavailable"
-        tool_results.append({
-            "tool_task_id": task["tool_task_id"],
-            "subquery_id": task.get("subquery_id"),
-            "tool_name": tool_name,
-            "status": "unavailable",
-            "approved_result": {},
-            "customer_safe_summary": "",
-            "availability_reason": "This tool is not enabled in the current deployment.",
-        })
-        log_event("tool.result.unavailable", tool_task_id=task["tool_task_id"], subquery_id=task.get("subquery_id"), tool_name=tool_name)
+    has_running_rag = False
+
+    for subquery in financial_subqueries:
+        for attempt in subquery["tool_attempts"]:
+            if attempt.get("status") != "pending":
+                continue
+            tool_name = attempt.get("tool_name")
+            if tool_name == "rag":
+                attempt["status"] = "running"
+                has_running_rag = True
+                log_event("tool.dispatch.started", tool_task_id=attempt["attempt_id"], subquery_id=attempt.get("subquery_id"), tool_name=tool_name)
+                continue
+            if tool_name == "service_request":
+                outcome = _dispatch_service_request_task(state, attempt)
+                attempt["status"] = outcome["status"]
+                attempt["result"] = outcome.get("approved_result", {})
+                attempt["availability_reason"] = outcome.get("reason", "")
+                log_event(
+                    "tool.result.service_request",
+                    tool_task_id=attempt["attempt_id"], subquery_id=attempt.get("subquery_id"),
+                    status=outcome["status"],
+                    special_id=outcome.get("approved_result", {}).get("special_id"),
+                )
+                continue
+            if tool_name == "deeplink":
+                destination_id = attempt.get("input", {}).get("destination_id")
+                contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
+                if contract:
+                    attempt["status"] = "completed"
+                    attempt["result"] = {"destination_id": destination_id, "route": contract["route"]}
+                    attempt["availability_reason"] = ""
+                else:
+                    attempt["status"] = "unavailable"
+                    attempt["result"] = {}
+                    attempt["availability_reason"] = f"Destination {destination_id} not in registry"
+                log_event(
+                    "tool.result.deeplink",
+                    tool_task_id=attempt["attempt_id"], subquery_id=attempt.get("subquery_id"),
+                    status=attempt["status"],
+                    destination_id=destination_id,
+                )
+                continue
+            if tool_name == "api":
+                outcome, reveal_additions = _dispatch_api_task(state, attempt)
+                attempt["status"] = outcome["status"]
+                attempt["result"] = outcome.get("approved_result", {})
+                attempt["availability_reason"] = outcome.get("reason", "")
+                personal_data_reveal_map.update(reveal_additions)
+                log_event(
+                    "tool.result.api",
+                    tool_task_id=attempt["attempt_id"], subquery_id=attempt.get("subquery_id"),
+                    status=outcome["status"],
+                    field_id=attempt["result"].get("field_id", attempt.get("input", {}).get("field_id")),
+                    disclosure_mode=attempt["result"].get("disclosure_mode"),
+                )
+                continue
+            attempt["status"] = "unavailable"
+            attempt["result"] = {}
+            attempt["availability_reason"] = "This tool is not enabled in the current deployment."
+            log_event("tool.result.unavailable", tool_task_id=attempt["attempt_id"], subquery_id=attempt.get("subquery_id"), tool_name=tool_name)
 
     return {
-        "preflight_status": "rag_tool_active" if rag_task_ids else "tool_results_ready",
-        "tool_tasks": tasks,
-        "tool_results": tool_results,
-        "pending_tool_task_ids": rag_task_ids,
+        "preflight_status": "rag_tool_active" if has_running_rag else "tool_results_ready",
+        "financial_subqueries": financial_subqueries,
         "personal_data_reveal_map": personal_data_reveal_map,
     }
 
@@ -2274,57 +2299,76 @@ def node_svc_service_request_resolver(state: AgentState):
     }
 
 
-def _finalize_rag_tool_results(state: AgentState, task_results: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Convert terminal RAG search-task outcomes into generic tool results."""
+def _finalize_rag_attempts(state: AgentState, task_results: list[dict]) -> list[dict]:
+    """Project RAG's terminal, internal search-task outcome onto the owning
+    subquery's `rag` attempt (Tool Calling v3.0's one integration point
+    between RAG's own internal retry machinery -- search_tasks/task_results/
+    task_retry_counts/etc., left entirely untouched by this migration -- and
+    the subquery-owned tool_attempts schema everything else now reads).
+
+    Called with the current turn's terminal `task_results` once every
+    search task has settled, or with an empty list when no search task
+    could even be formed (e.g. every component resolved to CLARIFY/DECLINE)
+    -- either way, every subquery's pending/running `rag` attempt must be
+    closed out so it never sits open forever.
+    """
     search_tasks_by_subquery: dict[str, list[dict]] = {}
     for task in state.get("search_tasks", []):
         if isinstance(task, dict) and task.get("subquery_id"):
             search_tasks_by_subquery.setdefault(task["subquery_id"], []).append(task)
     results_by_task_id = {result.get("task_id"): result for result in task_results if isinstance(result, dict)}
-    tool_tasks = [dict(task) for task in state.get("tool_tasks", []) if isinstance(task, dict)]
-    previous_results = [
-        dict(result) for result in state.get("tool_results", [])
-        if isinstance(result, dict) and result.get("tool_name") != "rag"
-    ]
 
-    for tool_task in tool_tasks:
-        if tool_task.get("tool_name") != "rag" or tool_task.get("status") not in {"pending", "running"}:
+    updated_subqueries = []
+    for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", [])):
+        if not isinstance(subquery, dict):
             continue
-        subquery_id = tool_task.get("subquery_id")
-        linked_results = [
-            results_by_task_id.get(task.get("task_id"), {})
-            for task in search_tasks_by_subquery.get(subquery_id, [])
-        ]
-        approved = [
-            {
-                "task_id": result.get("task_id"),
-                "status": result.get("status"),
-                "approved_parent_ids": list(result.get("approved_parent_ids", [])),
-            }
-            for result in linked_results
-            if result.get("status") in ANSWERABLE_TASK_STATUSES and result.get("approved_parent_ids")
-        ]
-        terminal_status = "completed" if approved else "unavailable"
-        tool_task["status"] = terminal_status
-        tool_result = {
-            "tool_task_id": tool_task.get("tool_task_id"),
-            "subquery_id": subquery_id,
-            "tool_name": "rag",
-            "status": terminal_status,
-            "approved_result": {"search_task_results": approved},
-            "customer_safe_summary": "",
-            "availability_reason": "" if approved else "No approved FAQ evidence resolved this financial subquery.",
-        }
-        previous_results.append(tool_result)
-        log_event(
-            "tool.result.validated",
-            tool_task_id=tool_result["tool_task_id"],
-            subquery_id=subquery_id,
-            tool_name="rag",
-            status=terminal_status,
-            approved_search_task_ids=[item["task_id"] for item in approved],
-        )
-    return tool_tasks, previous_results
+        subquery = dict(subquery)
+        subquery_id = subquery.get("subquery_id")
+        new_attempts = []
+        for attempt in subquery.get("tool_attempts", []):
+            if not isinstance(attempt, dict):
+                continue
+            if attempt.get("tool_name") != "rag" or attempt.get("status") not in {"pending", "running"}:
+                new_attempts.append(attempt)
+                continue
+            attempt = dict(attempt)
+            linked_results = [
+                results_by_task_id.get(task.get("task_id"), {})
+                for task in search_tasks_by_subquery.get(subquery_id, [])
+            ]
+            approved = [
+                {
+                    "task_id": result.get("task_id"),
+                    "status": result.get("status"),
+                    "approved_parent_ids": list(result.get("approved_parent_ids", [])),
+                }
+                for result in linked_results
+                if result.get("status") in ANSWERABLE_TASK_STATUSES and result.get("approved_parent_ids")
+            ]
+            if approved:
+                combined_parent_ids = list(dict.fromkeys(
+                    parent_id for item in approved for parent_id in item["approved_parent_ids"]
+                ))
+                retrieval_state = "SUFFICIENT" if any(item["status"] == "SUFFICIENT" for item in approved) else "PARTIALLY_SUFFICIENT"
+                attempt["status"] = "completed"
+                attempt["result"] = {"retrieval_state": retrieval_state, "approved_parent_ids": combined_parent_ids}
+                attempt["availability_reason"] = ""
+            else:
+                attempt["status"] = "unavailable"
+                attempt["result"] = {}
+                attempt["availability_reason"] = "No approved FAQ evidence resolved this financial subquery."
+            log_event(
+                "tool.result.validated",
+                tool_task_id=attempt.get("attempt_id"),
+                subquery_id=subquery_id,
+                tool_name="rag",
+                status=attempt["status"],
+                approved_search_task_ids=[item["task_id"] for item in approved],
+            )
+            new_attempts.append(attempt)
+        subquery["tool_attempts"] = new_attempts
+        updated_subqueries.append(subquery)
+    return updated_subqueries
 
 async def node_03b_rag_worker(state: AgentState):
     print("🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Direct-First Retrieval)")
@@ -2748,13 +2792,12 @@ def node_03c_sufficiency_auditor(state: AgentState):
         )
         next_stage = next((item for item in retry_expansion if item.get("task_id") == result.get("task_id")), {})
         log_event(event, task_id=result.get("task_id"), status=result.get("status"), approved_parent_ids=result.get("approved_parent_ids", []), reason=result.get("reason", ""), retry_count=retry_counts.get(result.get("task_id"), 0), next_expansion_stage=next_stage.get("stage", ""))
-    # The RAG subgraph is an implementation detail of a generic tool task.
-    # Only terminal, approved IDs cross this boundary; raw candidates and
-    # retry evidence remain inside RAG.
-    tool_tasks = state.get("tool_tasks", [])
-    tool_results = state.get("tool_results", [])
+    # The RAG subgraph is an implementation detail of a generic tool
+    # attempt. Only terminal, approved IDs cross this boundary; raw
+    # candidates and retry evidence remain inside RAG.
+    financial_subqueries = state.get("financial_subqueries", state.get("triaged_subqueries", []))
     if not unresolved:
-        tool_tasks, tool_results = _finalize_rag_tool_results(state, list(current_results.values()))
+        financial_subqueries = _finalize_rag_attempts(state, list(current_results.values()))
     return {
         "preflight_status": "retry_tasks" if unresolved else "task_resolution_ready",
         "task_results": list(current_results.values()),
@@ -2771,268 +2814,64 @@ def node_03c_sufficiency_auditor(state: AgentState):
         "task_partial_evidence": partial_evidence,
         "task_rejected_parent_ids": rejected_parent_ids,
         "task_resolution_instructions": task_resolution_instructions,
-        "tool_tasks": tool_tasks,
-        "tool_results": tool_results,
-        "pending_tool_task_ids": [] if not unresolved else state.get("pending_tool_task_ids", []),
+        "financial_subqueries": financial_subqueries,
     }
 
 
 # --- PHASE 3: RESOLUTION BLUEPRINT & STEP-BY-STEP RESPONSE ---
 
 def node_04a_resolution_planner(state: AgentState):
-    """Assess global resolution after validated tool work, without planning UI."""
-    print("🟢 [NODE 04a] Executing Global Resolution Sufficiency Check")
-    conversation_context = _build_conversation_context(state)
-    user_baseline = _build_user_baseline_context(state)
-    task_results = state.get("task_results", [])
-    answerable_task_ids = [
-        result.get("task_id") for result in task_results
-        if result.get("status") in ANSWERABLE_TASK_STATUSES and result.get("task_id")
-    ]
-    planner_tasks = []
-    for result in task_results:
-        if result.get("status") not in ANSWERABLE_TASK_STATUSES:
-            continue
-        planner_tasks.append({
-            "task_id": result.get("task_id"),
-            "status": result.get("status"),
-            "resolved_request": next((
-                task.get("customer_component", "")
-                for task in state.get("search_tasks", [])
-                if task.get("task_id") == result.get("task_id")
-            ), ""),
-            "approved_parents": _hydrate_parent_ids(result.get("approved_parent_ids", [])),
-        })
-    tasks_by_id = {
-        task.get("task_id"): task
-        for task in state.get("search_tasks", [])
-        if task.get("task_id")
-    }
-    terminal_task_context = [
-        {
-            "task_id": instruction.get("task_id"),
-            "resolved_request": instruction.get("resolved_subquery", "") or tasks_by_id.get(instruction.get("task_id"), {}).get("customer_component", ""),
-            "resolution_status": instruction.get("resolution_status", "CLARIFICATION_REQUIRED"),
-        }
-        for instruction in state.get("task_resolution_instructions", [])
-        if instruction.get("task_id")
-    ]
-    validated_tool_results = [
-        {
-            "tool_task_id": result.get("tool_task_id"),
-            "subquery_id": result.get("subquery_id"),
-            "tool_name": result.get("tool_name"),
-            "status": result.get("status"),
-            "approved_result": result.get("approved_result", {}),
-            "availability_reason": result.get("availability_reason", ""),
-        }
-        for result in state.get("tool_results", [])
-        if isinstance(result, dict)
-    ]
+    """Assess global resolution after validated tool work, without planning UI.
 
-    prompt = f"""
-    GLOBAL RESPONSE SUFFICIENCY & TOOL RESOLUTION
-    You are an internal resolution controller for a read-only Horizon Bank FAQ
-    assistant. Decide only whether the complete validated outcome is ready for
-    customer response generation, requires one further enabled capability, or
-    is exhausted. You do NOT write customer-facing text or plan UI.
-
-    Customer request: {state.get("user_input", "")}
-    Trusted conversation context (use only to understand the customer's current
-    meaning, priority, and references; never as factual banking evidence):
-    {conversation_context}
-    User baseline (advisory communication context only; use only when clearly
-    relevant to the current request and never as factual banking evidence):
-    {user_baseline}
-    Financial subqueries: {json.dumps(state.get("financial_subqueries", []), ensure_ascii=False)}
-    Non-financial conversational attention cues (tone only; never evidence, a banking request, a tool input, or customer-facing source text): {json.dumps(state.get("non_financial_context", []), ensure_ascii=False)}
-    Answerable evidence by retrieval task: {json.dumps(planner_tasks, ensure_ascii=False)}
-    Validated tool results: {json.dumps(validated_tool_results, ensure_ascii=False)}
-    Enabled future capabilities: {json.dumps(enabled_tool_capabilities(), ensure_ascii=False)}
-    Intent clarification inputs: {json.dumps(state.get("intent_clarification_tasks", []), ensure_ascii=False)}
-    Terminal unresolved retrieval tasks (semantic anchors only; NOT answer evidence): {json.dumps(terminal_task_context, ensure_ascii=False)}
-    Declined inputs: {json.dumps(state.get("decline_tasks", []), ensure_ascii=False)}
-
-    {PRECISION_REFERENCE_CONTRACT}
-
-    Rules:
-    - First decide resolution_status. Return NEEDS_TOOLS only when a supplied
-      financial subquery has a concrete unresolved need that an enabled,
-      registered capability could materially address and which does not
-      duplicate a completed, unavailable, failed, blocked, pending, or running
-      tool task. RAG internal retries are already complete at this point; do
-      not request RAG again for a terminal RAG result.
-    - A capability's own description can scope out specific reasons or
-      situations, not just name a general topic -- match on the whole
-      description, not the nearest keyword. For example, a capability
-      described as covering card replacement "for a non-fraud reason (worn
-      or damaged)" does not cover a lost or stolen card, even though both
-      are "card replacement" in general terms; do not propose a tool_gap for
-      a capability whose stated scope excludes the customer's actual
-      situation. When every registered capability's scope excludes the
-      situation, that is EXHAUSTED for this need, not NEEDS_TOOLS -- approved
-      RAG evidence, if any, may still answer it on its own.
-    - Return RESOLVED when current approved evidence and safe clarification
-      anchors are enough to form the response. Return EXHAUSTED when a gap
-      remains but no enabled non-duplicate capability can address it.
-    - RAG evidence and a registered capability are independent coverage
-      decisions for the same subquery, not alternatives to choose between.
-      Decide each on its own merits: does approved evidence precisely and
-      completely answer what the customer asked, and, separately, does a
-      registered enabled capability's own description precisely match the
-      action the customer is asking to take? Answering yes to the
-      capability question always adds that tool_gap — with no exception,
-      including when RAG evidence is itself a complete, well-grounded,
-      directly-on-topic answer (for example, FAQ steps that correctly
-      explain how to update an address manually in the app). Being able to
-      explain how a customer could perform an action themselves is never a
-      substitute for being able to perform that same action for them
-      through a registered capability — the capability is strictly more
-      valuable, not an alternative path to the same outcome, so its
-      existence is never a reason to omit the tool_gap. Include both
-      `validated_task_ids` and the `tool_gaps` entry in that case; the
-      response generator can present the RAG evidence as useful reference
-      alongside the offered capability. Evidence that describes a related
-      but different action (for example, general personal-details updates
-      when the customer asked specifically about resubmitting an identity
-      document) is adjacent context, an even weaker case than a precise
-      answer, and must never be the reason a matching capability is left
-      out either.
-    - A tool gap is an internal capability description, never a customer
-      answer, evidence claim, instruction, or UI recommendation.
-    - Search tasks are evidence-retrieval units, never mandatory visible
-      sections. Do not create a block plan or one UI element per task.
-    - Recommend only optional visual hints. A response may be entirely text,
-      may group several tasks in one explanation, or may use several visuals
-      only when each materially helps comprehension.
-    - Before recommending any presentation, compare the complete current
-      customer situation with the scope and preconditions in approved evidence.
-      Evidence may describe a conditional procedure that does not apply to the
-      customer's stated reason for asking. Never treat that condition as true,
-      ask the customer to assert it, or recommend the procedure as their path.
-      In that case, recommend plain text that briefly scopes the available
-      guidance, or no visual hint. A visual is never proof that a procedure is
-      applicable.
-    - Preserve the customer's priorities and make the most useful information
-      easy to understand first. Group related facts naturally; do not impose
-      headings, introductions, closings, titles, lists, or progress payloads
-      merely because they exist.
-    - The complete Customer request is the authoritative source for what the
-      customer actually said and how they said it. Non-financial attention
-      cues only prevent that part of the original request from being
-      overlooked; do not base wording, interpretation, or a customer-facing
-      acknowledgement on the cue itself.
-    - When non-financial attention cues are supplied, guide the generator to
-      include one brief, natural courtesy acknowledgement of the relevant
-      aside from the original Customer request. This is social tone, not a
-      factual answer. Never recast it as a banking eligibility, availability,
-      policy, or feature claim. If approved evidence does not resolve the
-      customer's stated reason for seeking a banking outcome, guide the
-      generator to give only the relevant verified guidance; never infer that
-      the outcome is available or unavailable for that reason.
-    - Never make `narrative_focus`, `grouping_guidance`, or
-      `clarification_guidance` state or imply that a customer may or may not
-      obtain a banking outcome because of a non-financial preference, feeling,
-      greeting, or other aside. Those fields may refer only to the available
-      verified guidance and to a brief social acknowledgement.
-    - A progress hint is appropriate only for a genuinely sequential process.
-      A list hint is appropriate only for independently scannable items.
-    - Keep clarification outside any suggested process/list and place it after
-      useful supported information when both exist.
-    - For every terminal unresolved retrieval task, treat its
-      `resolved_request` as the authoritative meaning of that unresolved
-      topic, even when the literal latest customer message is short (for
-      example, "appearance") or relies on prior conversational context.
-    - When there is no answerable evidence for a terminal unresolved task,
-      preserve that exact topic in `primary_user_need`, `narrative_focus`, and
-      `clarification_guidance`. Do not reinterpret it as a different product,
-      channel, feature category, UI surface, example, or customer need. Do not
-      introduce possible interpretations, visual hints, or a new ambiguity.
-      The appropriate guidance is a brief inability statement about the
-      resolved request, followed only by a general clarification if genuinely
-      necessary.
-    - Terminal unresolved task context is not evidence. It may preserve the
-      topic for a safe clarification, but must never justify a factual claim,
-      procedure, product capability, policy, or UI option.
-    - coverage_expectation must include every supplied answerable task_id, but
-      it is an internal completeness reminder, not a demand for separate UI.
-    - UI OWNERSHIP EXCLUSION: Node 04b alone chooses all response organisation,
-      text, titles, grouping, and UI. Do not choose, recommend, evaluate, or
-      hint at TEXT, LIST, PROGRESS, OPTIONS, chips, sections, steps, titles,
-      ordering, narrative focus, or clarification wording. Ignore any earlier
-      presentation-oriented instruction in this prompt.
-    - `validated_task_ids` must contain only supplied answerable task IDs. It
-      is an internal completeness record, not a visible-response requirement.
-    - `unresolved_topics` may preserve only the exact customer topic that
-      remains unresolved. It is an internal scope anchor, never evidence,
-      customer wording, product inference, or policy conclusion.
-    - Never invent facts, banking actions, products, steps, or customer text.
-
-    Output JSON only:
-    {{"resolution_status":"RESOLVED" | "NEEDS_TOOLS" | "EXHAUSTED","tool_gaps":[{{"subquery_id":"...","tool_name":"...","operation":"...","unresolved_need":"..."}}],"validated_task_ids":["task_1"],"unresolved_topics":["..."]}}
+    Tool Calling v3.0: resolution_status is a deterministic rollup
+    (_compute_subquery_status) over each subquery's own tool_attempts --
+    never a second, independently-fallible LLM judgment that could disagree
+    with what the attempts themselves already show. The one genuinely
+    semantic decision this node used to also make -- does an untried
+    capability's scope actually match a subquery's specific situation -- is
+    not re-derived here at all: it is node_03a's own planning call, the
+    single place that judgment is made, every round, for every still-OPEN
+    subquery (see node_03a's docstring). A subquery reaching this node still
+    OPEN, with the tool-planning budget spent, is functionally EXHAUSTED --
+    there is no separate stored value for that; OPEN plus "no more rounds
+    will run" is exactly what EXHAUSTED means.
     """
-    try:
-        guidance = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER))
-    except Exception as error:
-        print(f"🚨 [GLOBAL RESOLUTION CHECK ERROR]: {error}")
-        guidance = {}
+    print("🟢 [NODE 04a] Executing Global Resolution Sufficiency Check")
+    financial_subqueries = [
+        dict(item) for item in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(item, dict)
+    ]
+    planning_round = int(state.get("tool_planning_round", 0))
+    total_attempts = sum(len(sq.get("tool_attempts", [])) for sq in financial_subqueries)
+    budget_exhausted = planning_round >= MAX_TOOL_PLANNING_ROUNDS or total_attempts >= MAX_TOOL_TASKS_PER_TURN
 
-    validated_task_ids = [
-        task_id for task_id in guidance.get("validated_task_ids", [])
-        if task_id in answerable_task_ids
-    ] or answerable_task_ids
-    unresolved_topics = [
-        str(topic).strip() for topic in guidance.get("unresolved_topics", [])
-        if isinstance(topic, str) and str(topic).strip()
-    ][:8]
-    resolution_context = {
-        "resolution_status": str(guidance.get("resolution_status", "RESOLVED")).upper(),
-        "validated_task_ids": validated_task_ids,
-        "unresolved_topics": unresolved_topics,
-    }
-    existing_task_keys = {
-        (str(task.get("subquery_id", "")), str(task.get("tool_name", "")).lower(), str(task.get("operation", "")))
-        for task in state.get("tool_tasks", []) if isinstance(task, dict)
-    }
-    valid_gaps = []
-    for gap in guidance.get("tool_gaps", []) if isinstance(guidance.get("tool_gaps"), list) else []:
-        if not isinstance(gap, dict):
-            continue
-        subquery_id = str(gap.get("subquery_id", "")).strip()
-        tool_name = str(gap.get("tool_name", "")).strip().lower()
-        operation = str(gap.get("operation", "")).strip()
-        if (
-            any(item.get("subquery_id") == subquery_id for item in state.get("financial_subqueries", []))
-            and is_registered_operation(tool_name, operation)
-            and TOOL_REGISTRY.get(tool_name, {}).get("enabled", False)
-            and (subquery_id, tool_name, operation) not in existing_task_keys
-        ):
-            valid_gaps.append({
-                "subquery_id": subquery_id,
-                "tool_name": tool_name,
-                "operation": operation,
-                "unresolved_need": str(gap.get("unresolved_need", "")).strip(),
-            })
-    requested_status = str(guidance.get("resolution_status", "RESOLVED")).upper()
-    needs_tools = (
-        requested_status == "NEEDS_TOOLS"
-        and bool(valid_gaps)
-        and int(state.get("tool_planning_round", 0)) < MAX_TOOL_PLANNING_ROUNDS
-    )
-    print(f"   🧭 [GLOBAL RESOLUTION]: {resolution_context['resolution_status']} | Validated: {len(validated_task_ids)} task(s) | Unresolved: {len(unresolved_topics)} topic(s)")
+    open_subquery_ids = []
+    subquery_status = {}
+    for subquery in financial_subqueries:
+        status = _compute_subquery_status(subquery)
+        subquery["resolution_status"] = status
+        subquery_status[subquery.get("subquery_id")] = status
+        if status == "OPEN":
+            open_subquery_ids.append(subquery.get("subquery_id"))
+
+    needs_tools = bool(open_subquery_ids) and not budget_exhausted
+    preflight_status = "needs_tools" if needs_tools else "presentation_ready"
+
+    print(f"   🧭 [GLOBAL RESOLUTION]: {len(open_subquery_ids)} open subquery(ies){' (budget exhausted)' if budget_exhausted and open_subquery_ids else ''} -> {preflight_status}")
     log_event(
         "resolution.planned",
-        requested_status=requested_status,
-        accepted_tool_gap_count=len(valid_gaps),
-        validated_task_ids=validated_task_ids,
-        unresolved_topics=unresolved_topics,
+        open_subquery_ids=open_subquery_ids,
+        subquery_status=subquery_status,
+        needs_tools=needs_tools,
+        budget_exhausted=budget_exhausted,
+        planning_round=planning_round,
     )
     return {
-        "preflight_status": "needs_tools" if needs_tools else "presentation_ready",
-        "tool_plan_status": "continue" if needs_tools else ("exhausted" if requested_status == "EXHAUSTED" else "resolved"),
-        "tool_gaps": valid_gaps if needs_tools else [],
+        "preflight_status": preflight_status,
+        "financial_subqueries": financial_subqueries,
+        "tool_plan_status": "continue" if needs_tools else ("exhausted" if open_subquery_ids else "resolved"),
         "selected_ux_journey": "FLEXIBLE",
-        "presentation_plan": {"resolution_context": resolution_context},
+        "presentation_plan": {"resolution_context": {"subquery_status": subquery_status}},
         "active_plan": {},
         "completed_steps": [],
     }
@@ -3388,7 +3227,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # _available_response_shortcuts. Citing an id for coverage-tracking or an
     # exact placeholder token was tried and repeatedly failed (wrong key,
     # dropped citation, invented key, malformed/missing token); the button
-    # itself is attached later by node_07 straight from tool_results,
+    # itself is attached later by node_07 straight from tool_attempts,
     # unconditionally and independent of anything generated here, so nothing
     # about *whether* or *how* a shortcut appears depends on this text. The
     # model's only remaining job is the natural language connecting the FAQ
@@ -3759,10 +3598,32 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # simply forget to re-emit an already-correct task's element alongside it.
     # Since nothing is left to flag, outbound audits pass on the truncated
     # draft and the omission would otherwise reach the customer silently.
+    #
+    # A RAG task_id going uncited is not automatically an omission, though:
+    # its owning subquery may have been fully RESOLVED by a different tool
+    # attempt (api/deeplink/service_request) whose evidence isn't part of
+    # this task_id-keyed loop at all. Appending an apology in that case would
+    # contradict a sentence that already answered the customer, which is
+    # exactly the bug this per-subquery check exists to prevent (Tool
+    # Calling v3.0) -- resolution_status is the one deterministic source of
+    # truth for "is this subquery actually covered," computed once in
+    # node_04a from every attempt on it, RAG included.
+    subquery_id_by_task_id = {
+        task.get("task_id"): task.get("subquery_id")
+        for task in state.get("search_tasks", [])
+        if task.get("task_id")
+    }
+    resolution_status_by_subquery_id = {
+        subquery.get("subquery_id"): subquery.get("resolution_status") or _compute_subquery_status(subquery)
+        for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(subquery, dict)
+    }
     covered_task_ids = {task_id for ids in element_sources for task_id in ids}
     for entry in evidence_by_task:
         task_id = entry.get("task_id")
         if not task_id or task_id in covered_task_ids:
+            continue
+        if resolution_status_by_subquery_id.get(subquery_id_by_task_id.get(task_id)) == "RESOLVED":
             continue
         component = task_metadata.get(task_id, "").strip()
         fallback_text = (
@@ -4897,7 +4758,7 @@ def node_07_precision_substitution(state: AgentState):
     precision_substituted = False
     
     # Deeplink navigation is no longer placeholder-driven: the button is
-    # built deterministically further below, straight from tool_results,
+    # built deterministically further below, straight from tool_attempts,
     # exactly like serviceRequestActions, regardless of the draft text. This
     # block is only a defensive cleanup for a stray {{deeplink-*}} /
     # {deeplink-*} token that should no longer be generated at all (the
@@ -5024,7 +4885,7 @@ def node_07_precision_substitution(state: AgentState):
     # not just the first -- multiple in one turn are fully supported (the
     # planner already loops across rounds to create them; see
     # SERVICE_REQUEST_DESIGN_v1.0.md Section 9). Built straight from
-    # tool_results, independent of the draft text entirely. Any natural
+    # tool_attempts, independent of the draft text entirely. Any natural
     # closing sentence connecting the answer to a shortcut is the model's
     # job (see the response generator's "Available shortcuts" instruction);
     # this block never writes customer-facing text, only attaches buttons.

@@ -1602,12 +1602,22 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
 def node_03a_knowledge_blueprint_planner(state: AgentState):
     """Create incremental tool attempts nested under each financial subquery.
 
-    The first round turns every financial subquery into a registered RAG
-    attempt. Later rounds may add an attempt only for a subquery whose
-    deterministic rollup (_compute_subquery_status) is still OPEN -- this
-    single planner call is also where the "does an untried capability's
-    scope actually match this subquery" semantic judgment happens; nothing
-    downstream re-derives that judgment independently (Tool Calling v3.0).
+    Every round applies the exact same judgment, whether it's the first or
+    the third: for each subquery still OPEN (_compute_subquery_status),
+    decide which registered, enabled tools are genuinely relevant -- RAG
+    included as an ordinary candidate, not auto-created. This is also the
+    single place the "does an untried capability's scope actually match
+    this subquery" semantic judgment happens; nothing downstream re-derives
+    it (Tool Calling v3.0).
+
+    Relevance is the model's job; cost is not. Every "rag" candidate is
+    tagged needed/complementary/redundant by the model, and a small,
+    deterministic pass afterward decides whether a "redundant" one survives
+    -- it does only when some other subquery already needs a RAG batch
+    this round anyway, since node_02e/node_03c batch every pending rag
+    attempt into one model call per round regardless of count, so riding
+    along on an already-committed batch is nearly free while initiating
+    one solely for a droppable subquery is not.
     """
     print("🟢 [NODE 03a] Executing Tool-Calling Planner")
     financial_subqueries = [
@@ -1641,18 +1651,6 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
 
     candidates = []
     if not existing_attempts or open_subquery_ids:
-        deterministic_rag_candidates = []
-        if not existing_attempts:
-            deterministic_rag_candidates = [
-                {
-                    "subquery_id": subquery_id,
-                    "tool_name": "rag",
-                    "operation": "retrieve_faq_evidence",
-                    "input": {"customer_component": item["customer_component"]},
-                }
-                for subquery_id, item in known_subqueries.items()
-            ]
-
         validated_attempts_view = [
             {
                 "subquery_id": a.get("subquery_id"),
@@ -1672,8 +1670,18 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         prompt = f"""
         INCREMENTAL TOOL-CALLING PLANNER
         You must plan tool tasks to address the customer's financial subqueries.
-        In the first round, we automatically plan RAG tasks for knowledge. You should plan any OTHER simultaneous tools (like deeplink or service_request) that are relevant.
-        In later rounds, you may add tool tasks only for a subquery listed under "Subqueries with a remaining gap this round" below -- a registered capability's own description must precisely match that subquery's specific situation, not merely its general topic.
+        For each subquery listed under "Subqueries with a remaining gap this
+        round" below, decide which registered, enabled tool(s) are
+        genuinely RELEVANT -- whose own description actually matches what
+        the customer needs -- and propose a task for each one that applies.
+        Judge relevance only; do not weigh cost yourself.
+
+        Tool cost characteristics (for the "rag_role" decision below only):
+        - "api", "deeplink", and "service_request" are each a single,
+          deterministic operation -- effectively free once dispatched.
+        - "rag" requires an internal iterative retrieval process that can
+          take several rounds and several model calls to converge -- the
+          only tool with real cost.
 
         Financial subqueries: {json.dumps(financial_subqueries_view, ensure_ascii=False)}
         Subqueries with a remaining gap this round: {json.dumps(open_subquery_ids, ensure_ascii=False)}
@@ -1683,21 +1691,36 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         Rules:
         - Create only additive tasks. Never recreate a completed, unavailable,
           or pending task.
-        - Every task must reference exactly one supplied subquery_id, and in
-          any round after the first, that subquery_id must appear in
-          "Subqueries with a remaining gap this round".
+        - Every task must reference exactly one subquery_id from "Subqueries
+          with a remaining gap this round" -- never any other subquery_id.
         - Use only an enabled tool_name and one of its listed operations.
         - Do not create a task merely to restate, search again, or rewrite a
           completed result. Do not invent facts, customer data, or capabilities.
-        - RAG's internal retries are not outer tool tasks. Add RAG only when
-          no RAG task for that subquery has already reached a terminal state.
+        - RAG's internal retries are not outer tool tasks. Add "rag" only
+          when no RAG task for that subquery has already reached a terminal
+          state.
         - A capability's own description can scope out specific reasons or
           situations, not just name a general topic -- match on the whole
           description, not the nearest keyword. For example, a capability
           described as covering card replacement "for a non-fraud reason
           (worn or damaged)" does not cover a lost or stolen card, even
           though both are "card replacement" in general terms.
-        - Return no task if no registered enabled capability can close a gap.
+        - Return no task for a subquery if no registered enabled capability
+          genuinely applies to it.
+        - For every "rag" task, include the literal key "rag_role" with
+          exactly one of these values:
+          * "needed" -- no other registered tool covers this subquery at all.
+          * "complementary" -- another tool also covers this subquery, but
+            explaining the underlying policy or procedure has independent
+            value to the customer beyond what that tool does -- the manual
+            method is never made obsolete just because a shortcut exists.
+          * "redundant" -- another tool fully covers this subquery, and
+            RAG's evidence would only restate what that tool already
+            provides, with no independent value.
+          Tag honestly -- do not mark something "needed" just to guarantee
+          it survives; the orchestration decides afterward whether a
+          "redundant" tag is still worth including, using information you
+          don't have.
         - For tool_name "service_request", input must use the literal key
           "service_request_id". Choose the best-fitting id from that tool's
           available_requests in the registry. Never invent an id or include form fields.
@@ -1719,19 +1742,13 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
           scope, do not create a task for it at all.
 
         Output JSON only:
-        {{"tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}}}}]}}
+        {{"tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}},"rag_role":"needed"|"complementary"|"redundant"}}]}}
         """
         try:
             candidates = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER)).get("tool_tasks", [])
         except Exception as error:
             print(f"⚠️ [TOOL PLANNER ERROR]: {error}")
             candidates = []
-
-        if not existing_attempts:
-            # Combine deterministic RAG with whatever else the LLM decided to run simultaneously.
-            # Filter out any duplicate RAG tasks the LLM might have hallucinated.
-            llm_candidates = [c for c in candidates if c.get("tool_name") != "rag"]
-            candidates = deterministic_rag_candidates + llm_candidates
 
     new_attempts_by_subquery: dict[str, list[dict]] = {}
     for candidate in candidates if isinstance(candidates, list) else []:
@@ -1747,8 +1764,16 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         ):
             continue
         payload = candidate.get("input", {}) if isinstance(candidate.get("input"), dict) else {}
+        rag_role = None
         if tool_name == "rag":
             payload = {"customer_component": known_subqueries[subquery_id]["customer_component"]}
+            # Missing/malformed tags default to "needed" -- the safest
+            # assumption, since RAG is the catch-all fallback source; an
+            # under-tagged candidate should never be the one that
+            # accidentally gets dropped by the cost tiebreak below.
+            rag_role = str(candidate.get("rag_role", "")).strip().lower()
+            if rag_role not in {"needed", "complementary", "redundant"}:
+                rag_role = "needed"
         elif tool_name == "service_request":
             # The planner is told to key this "service_request_id", but the
             # prompt also shows customer_component under Financial subqueries
@@ -1807,7 +1832,7 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         seq_key = (subquery_id, tool_name)
         sequence_counter[seq_key] = sequence_counter.get(seq_key, 0) + 1
         attempt_id = _build_attempt_id(subquery_id, tool_name, planning_round, sequence_counter[seq_key])
-        new_attempts_by_subquery.setdefault(subquery_id, []).append({
+        new_attempt = {
             "attempt_id": attempt_id,
             "subquery_id": subquery_id,
             "tool_name": tool_name,
@@ -1817,8 +1842,35 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
             "input": payload,
             "result": {},
             "availability_reason": "",
-        })
+        }
+        if tool_name == "rag":
+            new_attempt["rag_role"] = rag_role
+        new_attempts_by_subquery.setdefault(subquery_id, []).append(new_attempt)
         existing_keys.add(key)
+
+    # Deterministic cost tiebreak: a "redundant" rag candidate -- one a
+    # cheaper tool already fully covers -- is only worth including if a RAG
+    # batch is already happening this round anyway for some other "needed"
+    # subquery. node_02e/node_03c batch every currently-pending rag attempt
+    # into one model call per round regardless of how many subqueries are
+    # in it, so riding along on an already-committed batch costs close to
+    # nothing; initiating one solely for a droppable subquery pays the full
+    # cost for no independent value. "complementary" and "needed" tags are
+    # never dropped -- only "redundant" ever is, and only when nothing else
+    # this round needs RAG at all.
+    all_new_attempts = [a for attempts in new_attempts_by_subquery.values() for a in attempts]
+    rag_batch_happening = any(a.get("tool_name") == "rag" and a.get("rag_role") == "needed" for a in all_new_attempts)
+    if not rag_batch_happening:
+        for subquery_id, attempts in new_attempts_by_subquery.items():
+            kept, dropped = [], []
+            for attempt in attempts:
+                if attempt.get("tool_name") == "rag" and attempt.get("rag_role") == "redundant":
+                    dropped.append(attempt)
+                else:
+                    kept.append(attempt)
+            for attempt in dropped:
+                log_event("tool.task.rag_redundant_dropped", tool_task_id=attempt["attempt_id"], subquery_id=subquery_id, planning_round=planning_round)
+            new_attempts_by_subquery[subquery_id] = kept
 
     total_new = 0
     for subquery in financial_subqueries:

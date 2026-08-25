@@ -49,6 +49,17 @@ cleanly (both the `api`-covered and RAG-covered subqueries correctly
 combined, zero contradiction); a plain RAG-only query and a
 `service_request` flow both regression-tested clean with zero errors.
 
+**Follow-up (same status, landed in a second pass)**: problem #2 in "Why
+this exists" below -- the mechanical "RAG always runs" default -- was
+originally left as future work (see the superseded "Explicitly not decided"
+bullet). It has since been closed; see "Relevance-first dispatch" below for
+the design and `node_03a`'s docstring/prompt for the implementation.
+Verified via four targeted unit tests covering the cost-tiebreak's exact
+branches, plus two further live traces (a 2-subquery turn where RAG was
+correctly skipped entirely, and the 5-subquery mixed-tool turn resolving
+`api`/`rag`/`deeplink`/`service_request` together in one round with RAG
+invoked only for the one subquery nothing else covered).
+
 ## Why this exists
 
 Two problems surfaced while tracing a live turn ("what's my address on
@@ -147,6 +158,11 @@ the way it is today.
   (`_verified_api_context`, `_personal_data_placeholders`,
   `_available_response_shortcuts`, RAG's evidence hydration) know how to
   read it.
+- `rag_role` is an extra field present only on `rag`-tool attempts —
+  `"needed" | "complementary" | "redundant"`, assigned by `node_03a`'s
+  planner call at creation time and never changed afterward. It exists
+  purely to drive the deterministic cost tiebreak described in
+  "Relevance-first dispatch" below; nothing else reads it.
 
 ### Per-tool `result` shapes
 
@@ -291,6 +307,71 @@ deterministic read of the attempt list. `node_04a`'s role shrinks
 accordingly; its exact remaining scope (if any) is an open implementation
 question, not decided in this document.
 
+## Relevance-first dispatch: a cost tiebreak, not a procedure
+
+Problem #2 in "Why this exists": `node_03a` used to auto-create a `rag`
+attempt for *every* subquery in round 1, unconditionally, in code, before
+the LLM was even consulted — other tools were only ever additive to that
+default, never a replacement for it. This wasted the most expensive part of
+a turn: a personal-data subquery like "what's my loyalty tier" would get a
+parallel RAG attempt that retried 3–4 internal rounds chasing a tangential
+FAQ chunk, before `api` answered it outright and the RAG evidence was
+discarded unused.
+
+The fix is **not** a fixed procedure ("try cheap tools first, fall back to
+RAG second") — that was considered and rejected during design, because it
+would replace one hardcoded rule (RAG always) with another (a fixed
+priority order) rather than actually letting the model reason. Instead:
+
+- **Every round applies the exact same judgment**, whether it's the first
+  or the third: for each subquery still `OPEN`, decide which registered,
+  enabled tools are genuinely *relevant* — RAG is an ordinary candidate in
+  this same call now, not auto-created beforehand. There is no separate
+  "round 1 wording" vs. "round 2 wording"; the same prompt, re-invoked with
+  updated context each time (what's already been tried, and why it fell
+  short), naturally produces "try what's left" behavior without needing to
+  be told that's what round 2 is for. `MAX_TOOL_PLANNING_ROUNDS` is
+  unchanged — convergence is an emergent property of the relevance
+  judgment, not a designed phase count.
+- **Relevance is the model's job. Cost is not** — with one narrow
+  exception. The model is given each tool's cost characteristic as a plain
+  fact (`api`/`deeplink`/`service_request` are single deterministic
+  operations, effectively free; `rag` requires an internal iterative
+  process and is the only tool with real cost), and for every `rag`
+  candidate it proposes, it must tag `rag_role`:
+  - `needed` — no other registered tool covers this subquery at all.
+  - `complementary` — another tool also covers this subquery, but
+    explaining the underlying policy/procedure has independent value
+    beyond what that tool does (the manual method is never made obsolete
+    just because a shortcut exists — this is the same principle behind
+    `_available_response_shortcuts`'s closing-sentence mechanism).
+  - `redundant` — another tool fully covers this subquery, and RAG's
+    evidence would only restate what that tool already provides.
+- **A small deterministic pass, not the model, decides whether a
+  `redundant` tag survives.** `node_02e`/`node_03c` batch every currently-
+  pending `rag` attempt into one model call per round regardless of how
+  many subqueries are in it (see the cardinality note above) — so once a
+  RAG batch is happening anyway this round because some other subquery is
+  genuinely `needed`, including an additional `redundant` subquery in that
+  same batch costs close to nothing. Initiating a whole batch solely for
+  one droppable subquery does not. Concretely: scan the round's newly
+  proposed attempts once; if any `rag` candidate is tagged `needed`, keep
+  every `redundant` candidate too (they're now free); otherwise, drop every
+  `redundant` candidate. `needed` and `complementary` are never dropped,
+  regardless of batch economics — dropping a `complementary` one would
+  remove genuine, independent value just because it happened to be cheap
+  to skip, which was never the point.
+- **A missing or malformed `rag_role` defaults to `needed`** — the safe
+  direction. Since RAG is the fallback source of last resort, an
+  under-tagged candidate must never be the one the cost tiebreak
+  accidentally cuts.
+
+This keeps the model's job purely semantic (relevance, and — the one place
+real judgment is still required — whether an explanation is independent or
+redundant, which is not a cost question at all) while keeping the
+economics decision fully deterministic and auditable
+(`tool.task.rag_redundant_dropped` is logged whenever the tiebreak fires).
+
 ## What this replaces
 
 - **Removed entirely**: `tool_tasks`, `tool_results` (flat, `AgentState`-level
@@ -310,15 +391,13 @@ question, not decided in this document.
 
 ## Explicitly not decided in this document
 
-- The exact new/narrowed responsibility of `node_04a` once its resolution
-  judgment is replaced by the deterministic rollup plus reading
-  `node_03a`'s own planning output.
-- Whether `node_03a`'s round-1 behavior changes to allow *skipping* RAG for
-  a subquery a tool will clearly and exclusively cover (the "mechanical
-  tool-calling" problem named at the top of this document) — this document
-  only fixes the reconciliation gap the mechanical default exposed, it does
-  not yet make tool selection itself smarter.
+- ~~The exact new/narrowed responsibility of `node_04a`~~ — **resolved**:
+  `node_04a`'s LLM call was removed entirely (see Implementation notes #2).
+- ~~Whether `node_03a`'s round-1 behavior changes to allow skipping RAG~~ —
+  **resolved**: see "Relevance-first dispatch" above.
 - Migration strategy: big-bang replacement of the old state fields vs. an
   incremental path that keeps them alive alongside the new schema during a
-  transition.
-- The `MAX_TOOL_PLANNING_ROUNDS`-vs-mid-retry edge case noted above.
+  transition. (In practice, the implementation went with big-bang — see
+  Implementation notes.)
+- The `MAX_TOOL_PLANNING_ROUNDS`-vs-mid-retry edge case noted above. Still
+  open — the relevance-first dispatch change did not touch this.

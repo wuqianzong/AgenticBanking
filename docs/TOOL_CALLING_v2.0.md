@@ -2,8 +2,12 @@
 
 **Status: PARTIALLY SUPERSEDED.** The Generic Contracts section below
 (`tool_task` / `tool_result`) and Node 04a's resolution role are replaced by
-`docs/TOOL_CALLING_v3.0.md`'s subquery-owned `tool_attempts` schema — not
-yet implemented. The Turn Boundary, Registry State, and Safety Rules
+`docs/TOOL_CALLING_v3.0.md`'s subquery-owned `tool_attempts` schema —
+implemented. The Runtime Flow section's claim that "the initial planner
+deterministically creates one RAG task for each financial subquery" is also
+superseded: RAG is now an ordinary candidate the planner reasons about
+every round, same as any other tool — see v3.0's "Relevance-first
+dispatch" section. The Turn Boundary, Registry State, and Safety Rules
 sections on this page remain accurate.
 
 ## Purpose
@@ -109,8 +113,9 @@ safe, general clarification.
 | Tool | Operation | Status | Contract |
 |---|---|---|---|
 | `rag` | `retrieve_faq_evidence` | Enabled | Retrieves and verifies Horizon FAQ evidence. |
-| `api` | `read_customer_data` | Disabled | Reserved for authorised, read-only customer data. |
-| `deeplink` | `resolve_navigation` | Disabled | Reserved for validated Horizon destinations. |
+| `api` | `read_customer_data` | Enabled | Reads one registered, verified personal data field — see `docs/AGENTIC_CAPABILITY_ROADMAP_v1.0.md` WP-1. |
+| `deeplink` | `resolve_navigation` | Enabled | Resolves a validated Horizon in-app destination — see `docs/DEEPLINK_DESIGN_v1.0.md`. |
+| `service_request` | `register_service_request` | Enabled | Registers a guided form for a low/intermediate-risk request — see `docs/SERVICE_REQUEST_DESIGN_v1.0.md`. |
 
 Disabled tools are not proposed by the planner. If an unavailable executor is
 ever dispatched defensively, the dispatcher records an `unavailable` result

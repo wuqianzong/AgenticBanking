@@ -54,34 +54,10 @@ const formatMessageTime = (timestamp) => new Intl.DateTimeFormat('en-SG', {
 
 // WP-1/WP-3: the backend never resolves a {{data-*}} token into visible
 // text -- it only ever sends the token, plus (separately, this turn only)
-// the token->value pairs revealed this turn. Resolution happens here,
-// recursively over every field of a message object, so it applies equally
-// to this turn's live response and to any earlier chat-history message
-// re-rendered later in the same browser session. A token this session's
-// store has no value for (a fresh page load, or a fabricated token that
-// slipped past the audit) becomes the generic fallback label, never raw
-// braces and never a stale/guessed value.
-const DATA_TOKEN_PATTERN = /\{\{data-[^}]+\}\}/g;
-
-const resolvePersonalDataTokens = (value, store, fallbackLabel) => {
-  if (typeof value === 'string') {
-    if (!value.includes('{{data-')) return value;
-    return value.replace(DATA_TOKEN_PATTERN, (token) => (
-      Object.prototype.hasOwnProperty.call(store, token) ? store[token] : fallbackLabel
-    ));
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => resolvePersonalDataTokens(item, store, fallbackLabel));
-  }
-  if (value && typeof value === 'object') {
-    const resolved = {};
-    for (const [key, item] of Object.entries(value)) {
-      resolved[key] = resolvePersonalDataTokens(item, store, fallbackLabel);
-    }
-    return resolved;
-  }
-  return value;
-};
+// the token->value pairs revealed this turn. The tokens are preserved in
+// message state and rendered dynamically as secure chips by renderTextWithDataChips.
+// Active tokens render as protected data chips with a shield icon and privacy tooltip;
+// expired tokens or missing values render as an expired data chip.
 
 export default function BankingBotUI() {
   const [sessionId, setSessionId] = useState(() => localStorage.getItem(ACTIVE_SESSION_KEY));
@@ -780,40 +756,64 @@ export default function BankingBotUI() {
   );
 
   const renderDataProtectedBadge = () => (
-    <span className="group relative inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700 normal-case tracking-normal">
+    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700 normal-case tracking-normal">
       <ShieldCheck size={10} />
       Data protected
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-2.5 py-1.5 text-[10px] font-normal normal-case leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
-        {t(preferences.language, "misc.dataProtectedTooltip")}
-        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
-      </span>
     </span>
   );
 
-  // A {{data-*}} token this session's store has no value for (a fresh page
-  // load, or a fabricated token) is already swapped for a fixed fallback
-  // label string by resolvePersonalDataTokens. Splitting the already-
-  // resolved text on that exact label -- rather than re-parsing for the
-  // original token -- lets this stay a small, local rendering concern
-  // instead of threading React nodes through the entire message-object
-  // transform.
   const renderExpiredDataChip = (key) => (
-    <span key={key} className="mx-0.5 inline-flex items-center gap-1 rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 align-middle text-[11px] font-semibold text-slate-500">
-      <LockIcon size={10} className="text-slate-400" />
-      <span className="tracking-[0.2em] text-slate-400">••••••</span>
+    <span key={key} className="mx-1 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100/80 px-2 py-0.5 align-middle text-[12px] font-medium text-slate-500 shadow-sm">
+      <LockIcon size={11} className="text-slate-400 shrink-0" />
       <span>{t(preferences.language, "personalData.protectedExpired")}</span>
     </span>
   );
 
-  const renderTextWithExpiredDataChips = (text) => {
+  const renderProtectedDataChip = (key, value) => (
+    <span
+      key={key}
+      className="group relative inline cursor-help rounded px-0.5 underline decoration-dotted decoration-blue-400/80 decoration-1 underline-offset-[3px] transition-all hover:bg-blue-50/80 hover:decoration-blue-600 hover:ring-1 hover:ring-blue-200/70 box-decoration-clone"
+    >
+      <span>{value}</span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-normal normal-case leading-snug text-slate-100 opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100 text-center">
+        {t(preferences.language, "misc.dataProtectedTooltip")}
+        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+      </span>
+    </span>
+  );
+
+  const renderTextWithDataChips = (text) => {
+    if (typeof text !== 'string') return text;
     const fallbackLabel = t(preferences.language, "personalData.protectedExpired");
-    if (typeof text !== 'string' || !text.includes(fallbackLabel)) return text;
-    const segments = text.split(fallbackLabel);
+    const hasTokens = text.includes('{{data-');
+    const hasFallback = Boolean(fallbackLabel && text.includes(fallbackLabel));
+    if (!hasTokens && !hasFallback) return text;
+
+    const tokenPattern = /(\{\{data-[^}]+\}\})/g;
+    const segments = text.split(tokenPattern);
     const nodes = [];
+
     segments.forEach((segment, i) => {
-      if (segment) nodes.push(<React.Fragment key={`text-${i}`}>{segment}</React.Fragment>);
-      if (i < segments.length - 1) nodes.push(renderExpiredDataChip(`chip-${i}`));
+      if (!segment) return;
+      if (segment.startsWith('{{data-') && segment.endsWith('}}')) {
+        if (Object.prototype.hasOwnProperty.call(personalDataStore, segment)) {
+          nodes.push(renderProtectedDataChip(`prot-${i}`, personalDataStore[segment]));
+        } else {
+          nodes.push(renderExpiredDataChip(`exp-${i}`));
+        }
+      } else if (hasFallback && segment.includes(fallbackLabel)) {
+        const subSegments = segment.split(fallbackLabel);
+        subSegments.forEach((sub, j) => {
+          if (sub) nodes.push(<React.Fragment key={`text-${i}-${j}`}>{sub}</React.Fragment>);
+          if (j < subSegments.length - 1) {
+            nodes.push(renderExpiredDataChip(`chip-${i}-${j}`));
+          }
+        });
+      } else {
+        nodes.push(<React.Fragment key={`text-${i}`}>{segment}</React.Fragment>);
+      }
     });
+
     return nodes;
   };
 
@@ -863,13 +863,13 @@ export default function BankingBotUI() {
                   aria-expanded={isExpanded}
                 >
                   <span className={`text-sm leading-snug ${isExpanded ? 'font-semibold text-slate-800' : 'text-slate-500'}`}>
-                    {item.label}
+                    {renderTextWithDataChips(item.label)}
                   </span>
                   <ChevronRight size={16} className={`mt-0.5 shrink-0 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                 </button>
                 {isExpanded && detail && (
                   <p className="mt-1.5 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-2 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
-                    {detail}
+                    {renderTextWithDataChips(detail)}
                   </p>
                 )}
               </div>
@@ -884,7 +884,7 @@ export default function BankingBotUI() {
   const renderClarificationCard = (text) => (
     <div className="mt-3 flex max-w-sm items-start gap-2.5 rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 shadow-sm">
       <AlertCircle size={16} className="mt-1 shrink-0 text-blue-600" aria-hidden="true" />
-      <span className="whitespace-pre-wrap">{text}</span>
+      <span className="whitespace-pre-wrap">{renderTextWithDataChips(text)}</span>
     </div>
   );
 
@@ -898,7 +898,7 @@ export default function BankingBotUI() {
         {items?.map((item, idx) => (
           <li key={idx} className="flex items-start gap-3">
             <CheckCircle2 size={18} className="text-emerald-500 shrink-0 mt-0.5" />
-            <span className="text-sm text-slate-600 leading-snug">{item}</span>
+            <span className="text-sm text-slate-600 leading-snug">{renderTextWithDataChips(item)}</span>
           </li>
         ))}
       </ul>
@@ -971,15 +971,15 @@ export default function BankingBotUI() {
         {block.type === 'text' && (
           <div className="max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white p-3.5 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
             {block.contextText && (
-              <div className="mb-2 text-slate-600">{block.contextText}</div>
+              <div className="mb-2 text-slate-600">{renderTextWithDataChips(block.contextText)}</div>
             )}
-            {renderTextWithExpiredDataChips(block.text)}
+            {renderTextWithDataChips(block.text)}
           </div>
         )}
         {block.type === 'clarification' && renderClarificationCard(block.text)}
         {block.type === 'stepper' && block.contextText && (
           <div className="mb-2 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
-            {block.contextText}
+            {renderTextWithDataChips(block.contextText)}
           </div>
         )}
         {block.type === 'stepper' && renderStepper(
@@ -994,14 +994,14 @@ export default function BankingBotUI() {
         )}
         {block.type === 'checklist' && block.listIntro && (
           <div className="mt-2 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
-            {block.listIntro}
+            {renderTextWithDataChips(block.listIntro)}
           </div>
         )}
         {block.type === 'checklist' && renderChecklist(block.items, block.listTitle, block.options)}
         {block.type === 'escalation_confirmation' && renderEscalationConfirmation(block)}
         {block.extendedText && (
           <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
-            {block.extendedText}
+            {renderTextWithDataChips(block.extendedText)}
           </div>
         )}
       </div>
@@ -1592,17 +1592,9 @@ export default function BankingBotUI() {
     );
   };
 
-  // Re-resolved every time personalDataStore gains a new token, so a
-  // {{data-*}} token in an already-rendered chat-history message resolves
-  // correctly too, not only in the turn that first revealed it.
-  const resolvedMessages = useMemo(
-    () => messages.map((msg) => resolvePersonalDataTokens(
-      msg,
-      personalDataStore,
-      t(preferences.language, "personalData.protectedExpired")
-    )),
-    [messages, personalDataStore, preferences.language]
-  );
+  // Tokens are dynamically rendered into interactive protected / expired chips
+  // via renderTextWithDataChips using personalDataStore and preferences.language.
+  const resolvedMessages = messages;
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
@@ -1735,7 +1727,7 @@ export default function BankingBotUI() {
                             : 'bg-white border border-slate-200 text-slate-700 rounded-2xl rounded-tl-sm'
                           }`}
                         >
-                          {msg.sender === 'bot' ? renderTextWithExpiredDataChips(msg.text) : msg.text}
+                          {msg.sender === 'bot' ? renderTextWithDataChips(msg.text) : msg.text}
                         </div>
                         <div className={`mt-1 text-[10px] tabular-nums text-slate-400 ${msg.sender === 'user' ? 'text-right mr-1' : 'ml-1'}`}>
                           {formatMessageTime(timestamp)}
@@ -1774,7 +1766,7 @@ export default function BankingBotUI() {
                     )}
                     {msg.type === 'stepper' && msg.extendedText && (
                       <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
-                        {msg.extendedText}
+                        {renderTextWithDataChips(msg.extendedText)}
                       </div>
                     )}
                     {msg.type === 'stepper' && msg.clarificationText && (
@@ -1782,7 +1774,7 @@ export default function BankingBotUI() {
                     )}
                     {msg.type === 'checklist' && msg.listIntro && (
                       <div className="mt-2 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
-                        {msg.listIntro}
+                        {renderTextWithDataChips(msg.listIntro)}
                       </div>
                     )}
                     {msg.type === 'checklist' && renderChecklist(msg.items, msg.listTitle, msg.options)}

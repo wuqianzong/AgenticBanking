@@ -1,5 +1,11 @@
 # Tool Calling v2.0
 
+**Status: PARTIALLY SUPERSEDED.** The Generic Contracts section below
+(`tool_task` / `tool_result`) and Node 04a's resolution role are replaced by
+`docs/TOOL_CALLING_v3.0.md`'s subquery-owned `tool_attempts` schema — not
+yet implemented. The Turn Boundary, Registry State, and Safety Rules
+sections on this page remain accurate.
+
 ## Purpose
 
 Tool Calling v2.0 separates financial request decomposition, generic tool

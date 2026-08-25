@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { t } from './translations';
 import {
   Send, Bot, ChevronRight, CheckCircle2,
@@ -52,10 +52,49 @@ const formatMessageTime = (timestamp) => new Intl.DateTimeFormat('en-SG', {
   hour12: false
 }).format(new Date(timestamp));
 
+// WP-1/WP-3: the backend never resolves a {{data-*}} token into visible
+// text -- it only ever sends the token, plus (separately, this turn only)
+// the token->value pairs revealed this turn. Resolution happens here,
+// recursively over every field of a message object, so it applies equally
+// to this turn's live response and to any earlier chat-history message
+// re-rendered later in the same browser session. A token this session's
+// store has no value for (a fresh page load, or a fabricated token that
+// slipped past the audit) becomes the generic fallback label, never raw
+// braces and never a stale/guessed value.
+const DATA_TOKEN_PATTERN = /\{\{data-[^}]+\}\}/g;
+
+const resolvePersonalDataTokens = (value, store, fallbackLabel) => {
+  if (typeof value === 'string') {
+    if (!value.includes('{{data-')) return value;
+    return value.replace(DATA_TOKEN_PATTERN, (token) => (
+      Object.prototype.hasOwnProperty.call(store, token) ? store[token] : fallbackLabel
+    ));
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => resolvePersonalDataTokens(item, store, fallbackLabel));
+  }
+  if (value && typeof value === 'object') {
+    const resolved = {};
+    for (const [key, item] of Object.entries(value)) {
+      resolved[key] = resolvePersonalDataTokens(item, store, fallbackLabel);
+    }
+    return resolved;
+  }
+  return value;
+};
+
 export default function BankingBotUI() {
   const [sessionId, setSessionId] = useState(() => localStorage.getItem(ACTIVE_SESSION_KEY));
   const [isLoggedIn, setIsLoggedIn] = useState(() => Boolean(localStorage.getItem(ACTIVE_SESSION_KEY)));
   const [messages, setMessages] = useState([]);
+  // In-memory, session-scoped {{data-*}} token -> real value map (WP-1/WP-3).
+  // Deliberately plain useState, not persisted to localStorage or any
+  // backend store: the backend never resolves this token into chat text, so
+  // a page reload losing this map is the correct behavior -- any
+  // {{data-*}} token this map no longer has a value for renders the generic
+  // "protected, no longer available" fallback instead of raw braces or a
+  // stale value. See resolvePersonalDataTokens below.
+  const [personalDataStore, setPersonalDataStore] = useState({});
 
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -129,6 +168,7 @@ export default function BankingBotUI() {
       responseBlocks: payload.responseBlocks || [],
       listClarificationText: payload.listClarificationText || '',
       precisionSubstituted: payload.precisionSubstituted || false,
+      personalDataSubstituted: payload.personalDataSubstituted || false,
       currentStep: payload.currentStep,
       totalSteps: payload.totalSteps,
       serviceRequestActions: payload.serviceRequestActions || [],
@@ -602,6 +642,15 @@ export default function BankingBotUI() {
 
       // 4. Map the final backend data to our React UI state
       if (finalBotData) {
+        if (finalBotData.personalDataReveals?.length) {
+          setPersonalDataStore(prev => {
+            const next = { ...prev };
+            for (const reveal of finalBotData.personalDataReveals) {
+              next[reveal.token] = reveal.value;
+            }
+            return next;
+          });
+        }
         if (finalBotData.uiType === 'history_sync') {
           setMessages(finalBotData.items.map((message, index) => ({
             id: `history-${index}`,
@@ -631,6 +680,7 @@ export default function BankingBotUI() {
             responseBlocks: finalBotData.responseBlocks || [],
             listClarificationText: finalBotData.listClarificationText || '',
             precisionSubstituted: finalBotData.precisionSubstituted || false,
+            personalDataSubstituted: finalBotData.personalDataSubstituted || false,
             currentStep: finalBotData.currentStep,
             totalSteps: finalBotData.totalSteps,
             serviceRequestActions: finalBotData.serviceRequestActions || [],
@@ -728,6 +778,44 @@ export default function BankingBotUI() {
       Number accurate
     </span>
   );
+
+  const renderDataProtectedBadge = () => (
+    <span className="group relative inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700 normal-case tracking-normal">
+      <ShieldCheck size={10} />
+      Data protected
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-2.5 py-1.5 text-[10px] font-normal normal-case leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+        {t(preferences.language, "misc.dataProtectedTooltip")}
+        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+      </span>
+    </span>
+  );
+
+  // A {{data-*}} token this session's store has no value for (a fresh page
+  // load, or a fabricated token) is already swapped for a fixed fallback
+  // label string by resolvePersonalDataTokens. Splitting the already-
+  // resolved text on that exact label -- rather than re-parsing for the
+  // original token -- lets this stay a small, local rendering concern
+  // instead of threading React nodes through the entire message-object
+  // transform.
+  const renderExpiredDataChip = (key) => (
+    <span key={key} className="mx-0.5 inline-flex items-center gap-1 rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 align-middle text-[11px] font-semibold text-slate-500">
+      <LockIcon size={10} className="text-slate-400" />
+      <span className="tracking-[0.2em] text-slate-400">••••••</span>
+      <span>{t(preferences.language, "personalData.protectedExpired")}</span>
+    </span>
+  );
+
+  const renderTextWithExpiredDataChips = (text) => {
+    const fallbackLabel = t(preferences.language, "personalData.protectedExpired");
+    if (typeof text !== 'string' || !text.includes(fallbackLabel)) return text;
+    const segments = text.split(fallbackLabel);
+    const nodes = [];
+    segments.forEach((segment, i) => {
+      if (segment) nodes.push(<React.Fragment key={`text-${i}`}>{segment}</React.Fragment>);
+      if (i < segments.length - 1) nodes.push(renderExpiredDataChip(`chip-${i}`));
+    });
+    return nodes;
+  };
 
   const renderStepper = (items, progressTitle, totalSteps, options, stepDetail, stepDetails, expandedStepNumber, onToggleStep) => (
     <div className="mt-3 w-full max-w-sm overflow-hidden rounded-xl border border-blue-100 bg-white shadow-sm">
@@ -870,7 +958,7 @@ export default function BankingBotUI() {
     );
   };
 
-  const renderResponseBlock = (block, messageId, index, precisionSubstituted = false) => {
+  const renderResponseBlock = (block, messageId, index, precisionSubstituted = false, personalDataSubstituted = false) => {
     const blockId = `${messageId}-${block.blockId || index}`;
     const expandedStep = expandedProgressSteps[blockId] ?? 1;
     return (
@@ -878,13 +966,14 @@ export default function BankingBotUI() {
         <div className="mb-1.5 ml-1 flex items-end gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
           <span>{t(preferences.language, "chat.botName")}</span>
           {index === 0 && precisionSubstituted && renderPrecisionBadge()}
+          {index === 0 && personalDataSubstituted && renderDataProtectedBadge()}
         </div>
         {block.type === 'text' && (
           <div className="max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white p-3.5 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
             {block.contextText && (
               <div className="mb-2 text-slate-600">{block.contextText}</div>
             )}
-            {block.text}
+            {renderTextWithExpiredDataChips(block.text)}
           </div>
         )}
         {block.type === 'clarification' && renderClarificationCard(block.text)}
@@ -1503,6 +1592,18 @@ export default function BankingBotUI() {
     );
   };
 
+  // Re-resolved every time personalDataStore gains a new token, so a
+  // {{data-*}} token in an already-rendered chat-history message resolves
+  // correctly too, not only in the turn that first revealed it.
+  const resolvedMessages = useMemo(
+    () => messages.map((msg) => resolvePersonalDataTokens(
+      msg,
+      personalDataStore,
+      t(preferences.language, "personalData.protectedExpired")
+    )),
+    [messages, personalDataStore, preferences.language]
+  );
+
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
       
@@ -1600,11 +1701,11 @@ export default function BankingBotUI() {
             </div>
           )}
 
-          {messages.map((msg, index) => {
+          {resolvedMessages.map((msg, index) => {
             const timestamp = msg.createdAt || new Date().toISOString();
             const dateLabel = formatMessageDate(timestamp);
             const previousDateLabel = index > 0
-              ? formatMessageDate(messages[index - 1].createdAt || timestamp)
+              ? formatMessageDate(resolvedMessages[index - 1].createdAt || timestamp)
               : null;
 
             return (
@@ -1622,6 +1723,7 @@ export default function BankingBotUI() {
                       <div className="flex items-end gap-2 mb-1.5 ml-1">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t(preferences.language, "chat.botName")}</span>
                         {msg.precisionSubstituted && renderPrecisionBadge()}
+                        {msg.personalDataSubstituted && renderDataProtectedBadge()}
                       </div>
                     )}
 
@@ -1633,7 +1735,7 @@ export default function BankingBotUI() {
                             : 'bg-white border border-slate-200 text-slate-700 rounded-2xl rounded-tl-sm'
                           }`}
                         >
-                          {msg.text}
+                          {msg.sender === 'bot' ? renderTextWithExpiredDataChips(msg.text) : msg.text}
                         </div>
                         <div className={`mt-1 text-[10px] tabular-nums text-slate-400 ${msg.sender === 'user' ? 'text-right mr-1' : 'ml-1'}`}>
                           {formatMessageTime(timestamp)}
@@ -1645,7 +1747,7 @@ export default function BankingBotUI() {
                     {msg.type === 'carousel' && renderCarousel(msg.options)}
                     {msg.type === 'chips' && renderChips(msg.options)}
                     {msg.type === 'blocks' && msg.responseBlocks?.map((block, blockIndex) =>
-                      renderResponseBlock(block, msg.id, blockIndex, msg.precisionSubstituted)
+                      renderResponseBlock(block, msg.id, blockIndex, msg.precisionSubstituted, msg.personalDataSubstituted)
                     )}
                     {msg.serviceRequestActions?.map((action) => (
                       <React.Fragment key={action.specialId}>

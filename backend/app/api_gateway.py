@@ -508,6 +508,8 @@ async def process_chat(payload: ChatPayload):
                 "totalSteps": execution_result.get("ui_action_payload", {}).get("totalSteps"),
                 "serviceRequestActions": execution_result.get("ui_action_payload", {}).get("serviceRequestActions", []),
                 "navigationActions": execution_result.get("ui_action_payload", {}).get("navigationActions", []),
+                "personalDataReveals": execution_result.get("ui_action_payload", {}).get("personalDataReveals", []),
+                "personalDataSubstituted": execution_result.get("ui_action_payload", {}).get("personalDataSubstituted", False),
             }
             yield json.dumps(final_payload) + "\n"
             log_event("chat.response", ui_type=final_payload["uiType"], response_length=len(final_payload["text"]))

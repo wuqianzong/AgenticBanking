@@ -32,9 +32,14 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
     # remain unavailable until an executor and validation contract are enabled.
     "api": {
         "operations": {"read_customer_data"},
-        "enabled": False,
+        "enabled": True,
         "read_only": True,
-        "description": "Read validated, customer-authorized live banking data.",
+        "description": (
+            "Read one specific, verified piece of the customer's own banking "
+            "data on file (e.g. their address, their loyalty tier). Use this "
+            "for a request about the customer's actual personal data value, "
+            "not a general policy or procedure question -- that is RAG's job."
+        ),
     },
     "deeplink": {
         "operations": {"resolve_navigation"},
@@ -54,6 +59,7 @@ def enabled_tool_capabilities() -> list[dict[str, Any]]:
     """
     from backend.app.orchestration.service_request_registry import available_service_requests
     from backend.app.orchestration.deeplink_destination_registry import available_deeplink_destinations
+    from backend.app.orchestration.api_field_registry import available_api_fields
 
     capabilities = []
     for name, contract in TOOL_REGISTRY.items():
@@ -69,6 +75,8 @@ def enabled_tool_capabilities() -> list[dict[str, Any]]:
             capability["available_requests"] = available_service_requests()
         if name == "deeplink":
             capability["available_destinations"] = available_deeplink_destinations()
+        if name == "api":
+            capability["available_fields"] = available_api_fields()
         capabilities.append(capability)
     return capabilities
 

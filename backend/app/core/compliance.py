@@ -63,3 +63,31 @@ PRECISION REFERENCE CONTRACT:
   exceed that value. It does not, by itself, support claims about applications,
   approvals, denials, exceptions, or who controls the limit.
 """
+
+
+# Shared verbatim contract for the WP-1 `api` tool's placeholder-mode fields
+# (e.g. `{{data-a1b2c3d4}}`). Deliberately distinct from
+# PRECISION_REFERENCE_CONTRACT above: unlike a `{{faq_*}}` token, this one is
+# never resolved into the visible text by the backend at all -- resolution
+# happens only in the customer's own browser, from a per-turn value the
+# backend sends alongside (never inside) the response text. Conflating the
+# two would wrongly imply node_07 substitutes this token the way it does
+# `{{faq_*}}`.
+PERSONAL_DATA_REFERENCE_CONTRACT = """
+PERSONAL DATA REFERENCE CONTRACT:
+- A token matching `{{data-*}}` represents one specific piece of this
+  specific customer's personal data, already fetched and authorized for
+  display to them this turn. You are never shown the real value -- only this
+  opaque token.
+- Preserve the token exactly, character for character, in any draft. Never
+  invent, alter, abbreviate, or guess a `{{data-*}}` token that was not
+  explicitly supplied to you.
+- Never state, paraphrase, or guess the real value the token represents --
+  you do not have it and must not imply otherwise.
+- Never claim the requested personal data is unavailable, inaccessible, or
+  something the customer must look up elsewhere when a matching token was
+  supplied to you for that exact request.
+- Unlike a `{{faq_*}}` token, this one is never substituted into the visible
+  text by the backend. It is resolved only in the customer's own browser,
+  from a value delivered separately alongside this turn's response.
+"""

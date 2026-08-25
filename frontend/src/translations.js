@@ -102,6 +102,8 @@ export const TRANSLATIONS = {
     "deeplink.destinationData": "Destination Data",
     "deeplink.destinationId": "Destination ID",
     "deeplink.route": "Route",
+    "personalData.protectedExpired": "Data expired",
+    "misc.dataProtectedTooltip": "This data is secure. It is shown only once for this session, is never stored in chat history, and is never visible to the AI.",
   },
   Mandarin: {
     "header.title": "Horizon AI客服助理",
@@ -199,6 +201,8 @@ export const TRANSLATIONS = {
     "deeplink.destinationData": "目的地信息",
     "deeplink.destinationId": "目的地 ID",
     "deeplink.route": "路径",
+    "personalData.protectedExpired": "数据已过期",
+    "misc.dataProtectedTooltip": "此数据受到安全保护，仅在本次会话中显示一次，不会存储在聊天记录中，也不会被 AI 看到。",
   },
   Spanish: {
     "header.title": "Asistente Horizon",
@@ -296,6 +300,8 @@ export const TRANSLATIONS = {
     "deeplink.destinationData": "Datos del Destino",
     "deeplink.destinationId": "ID de Destino",
     "deeplink.route": "Ruta",
+    "personalData.protectedExpired": "Datos caducados",
+    "misc.dataProtectedTooltip": "Estos datos están protegidos. Se muestran una sola vez para esta sesión, nunca se guardan en el historial de chat y la IA nunca los ve.",
   },
 };
 

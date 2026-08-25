@@ -9,6 +9,7 @@ class AgentState(TypedDict):
     last_session_summary: str                    # Dead field: no cross-session summary is generated or stored (see MEMORY_ARCHITECTURE_v3.0.md)
     user_baseline_summary: str                   # Dead field: no cross-session baseline is generated or stored (see MEMORY_ARCHITECTURE_v3.0.md)
     last_session_transcript: List[Dict[str, Any]]  # On-demand, unstored raw read of the prior session's trusted messages, for the login follow-up check only
+    personal_data_reveal_map: Dict[str, str]      # Per-turn {{data-*}} token -> real value for completed placeholder-mode `api` fetches. No LLM prompt-building function may ever read this field -- only the tool dispatcher (writes it) and node_07 (reads it to build the outbound payload) may touch it. See docs/AGENTIC_CAPABILITY_ROADMAP_v1.0.md WP-1/WP-3.
     
     # V2.1: The 2D Relational Matrix (Noun + Verbs)
     active_product_intents: List[Dict[str, Any]] # e.g., [{"product": "Credit_Card", "intents": ["Dispute_Transaction"]}]

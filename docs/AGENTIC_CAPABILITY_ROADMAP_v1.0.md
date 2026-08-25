@@ -224,6 +224,10 @@ build after at least one of them exists as a working reference.
 
 ## WP-1: `api` Tool — Registry Wiring and Read-Only Executor
 
+**Status: IMPLEMENTED**, together with WP-3 and WP-5 below (all three were
+built in one pass rather than staged separately — see "Implementation
+notes" at the end of this section for what changed from the design below).
+
 **Related, not required:** once this exists, `docs/SERVICE_REQUEST_DESIGN_v1.0.md`
 Section 13 describes closing the loop with WP-7 — a `completed` service
 request's to-do item getting a "Check Current Status" button that reads the
@@ -368,6 +372,46 @@ built, not just the registry flag.
 `_finalize_api_tool_results`, `node_03b_tool_dispatcher`),
 `backend/app/orchestration/graph.py`.
 
+### Implementation notes
+
+Two things changed from the design above once the actual codebase was
+checked (not just this doc), plus a real leak the design above didn't
+anticipate:
+
+1. **No `n17_api` graph node.** By the time this WP was built, `deeplink`
+   (WP-2) and `service_request` (WP-7) had both already landed resolving
+   synchronously *inline* in `node_03b_tool_dispatcher`, not through a
+   separate graph node. `api`'s mock fetch is equally synchronous, so it
+   follows that working precedent instead. `node_03b_api_worker` (the stub
+   this doc describes "replacing") was deleted rather than replaced — it
+   is genuinely dead once dispatch goes inline, the same way
+   `node_03b_deeplink_worker` already was for WP-2. `graph.py` was not
+   touched.
+2. **A live PDPA leak this doc didn't flag.** `node_04a_resolution_planner`
+   already dumps every tool_result's `approved_result` verbatim into an LLM
+   prompt (`validated_tool_results`). Putting a placeholder-mode field's
+   real value in `approved_result`, as originally sketched above, would
+   have put a customer's real address straight into that prompt the moment
+   the tool was enabled — not a future WP-3/WP-5 concern, a live one. Fixed
+   by construction: the dispatcher never puts the real value in
+   `approved_result` at all (only `field_id`/`disclosure_mode`/an opaque
+   `placeholder_token`); the real value lives only in a new, narrowly-scoped
+   state field, `personal_data_reveal_map`, that no prompt-building function
+   reads — only the dispatcher (writes it) and `node_07` (reads it to build
+   the outbound payload).
+3. **WP-3 landed as something simpler than the `final_response_display`
+   proposal below.** Rather than a second server-side response field,
+   `node_07` never resolves a `{{data-*}}` token into the visible text at
+   all. It sends this turn's token→value pairs alongside the response
+   (`ui_action_payload.personalDataReveals`); the frontend keeps an
+   in-memory, session-scoped token→value map and resolves any `{{data-*}}`
+   token when rendering *any* message — this turn's or chat history's
+   alike — falling back to a generic "protected, no longer available" label
+   for a token it has no value for. `chat_history` and the DB therefore only
+   ever store the opaque token, never the real value, without a second
+   response field or a transcript-rendering redaction rule. See WP-3's
+   section below for what this superseded.
+
 ---
 
 ## WP-2: `deeplink` Tool — Executor and Validated Destination Registry
@@ -447,6 +491,16 @@ graph-wiring pattern this WP repeats.
 ---
 
 ## WP-3: Personal-Data Display-vs-Storage Divergence
+
+**Status: IMPLEMENTED, but via a simpler mechanism than described below.**
+Built together with WP-1 — see WP-1's "Implementation notes" for what
+actually shipped: no `final_response_display` state field, no
+transcript-rendering redaction rule. `node_07` never resolves a
+`{{data-*}}` token server-side at all; the frontend resolves it, from a
+per-turn value delivered alongside (never inside) the response text, and
+falls back to a generic label for any token it has no value for (a past
+session's chat history, or a fresh page load). The rest of this section is
+kept for the problem statement, which is still accurate.
 
 ### Problem
 
@@ -594,6 +648,12 @@ None.
 ---
 
 ## WP-5: Direct-Value API Context as Recognized Evidence
+
+**Status: IMPLEMENTED**, together with WP-1 — see WP-1's "Implementation
+notes". `_normal_outbound_grounding_context` builds `verified_api_context`
+from `disclosure_mode == "direct_value"` results exactly as described
+below; the response generator and both outbound audits were extended to
+treat it as a permitted factual source alongside task-approved evidence.
 
 ### Problem
 

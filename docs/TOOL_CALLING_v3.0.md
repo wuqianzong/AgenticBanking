@@ -1,0 +1,284 @@
+# Tool Calling v3.0 — Subquery-Owned Attempt Schema
+
+**Status:** Design finalized, not yet implemented. This document is the
+locked reference for the redesign; it supersedes the data-model portion of
+`docs/TOOL_CALLING_v2.0.md` (that document's turn-boundary and triage
+sections, and its Runtime Flow through Node 02d, remain accurate — only the
+`tool_task` / `tool_result` / `search_task` / `task_result` schema and the
+Node 04a resolution step change). Implementation is expected to touch Node
+02e, Node 03a, Node 03b, Node 03c/18, Node 04a, Node 04b, and both outbound
+audits; no code has been written against this design yet.
+
+## Why this exists
+
+Two problems surfaced while tracing a live turn ("what's my address on
+file, and what loyalty tier am I on, and what's the interest rate for my
+savings account"):
+
+1. **A reconciliation gap, not a generation bug.** The response generator
+   correctly answered the loyalty-tier subquery using the `api` tool's
+   verified fact, and correctly judged RAG's parallel evidence for that same
+   subquery too weak to cite. But the coverage-tracking safety net in
+   `_generate_response_blocks` only understands RAG's own `search_tasks`
+   world (a `task_id` either got cited in `source_task_ids` or it didn't) —
+   it has no visibility into the tool world (`_verified_api_context`,
+   `_personal_data_placeholders`), which is keyed by subquery text
+   (`for_request`), not `task_id`. The net saw an "uncited" RAG task and
+   force-appended a contradicting "sorry, I don't have an answer for your
+   loyalty tier" sentence right after a sentence that already answered it —
+   which the outbound audits correctly caught and rejected, three times,
+   until the turn escalated.
+2. **A mechanical, not smart, tool-selection default.** `node_03a`
+   unconditionally creates a RAG task for *every* financial subquery in
+   round 1, regardless of whether another registered tool will end up being
+   the actual, exclusive answer. Other tools are only ever *additive* to
+   that default, never a replacement for it. This is what put a RAG task
+   and an `api` task on the same subquery in the first place, and is the
+   root reason the two coverage systems could ever disagree about the same
+   subquery.
+
+The underlying design flaw both problems trace back to: `financial_subquery`
+is the true atomic unit of customer need, but nothing downstream of triage
+actually models it that way. RAG's evidence and every other tool's results
+sit in parallel, independently-keyed ledgers (`search_tasks`/`task_results`
+vs. `tool_tasks`/`tool_results`), correlated only by an incidentally-shared
+`subquery_id` field that nothing ever uses to reconcile "is this subquery
+actually covered."
+
+## The core model: the subquery owns its attempts
+
+```json
+{
+  "subquery_id": "subquery_2",
+  "customer_component": "What is my current loyalty tier?",
+  "resolution_status": "RESOLVED",
+  "tool_attempts": [ /* see below */ ]
+}
+```
+
+`financial_subqueries` becomes the sole aggregation root. Each subquery owns
+a list of every tool attempt made on its behalf, across every planning
+round of the current turn. `resolution_status`
+(`PENDING | RESOLVED | NEEDS_TOOLS | EXHAUSTED`) is a new field, computed
+deterministically (see below) — never separately asserted by an LLM call
+the way it is today.
+
+### Cardinality
+
+- `subquery_id → search_task` (RAG): one-to-one. One logical retrieval unit
+  per subquery, however many internal retries it takes.
+- `subquery_id → tool_attempts`: one-to-many, and can grow across planning
+  rounds. A subquery may pick up `rag` in round 1, `api` alongside it in
+  the same round, and another tool in round 2+ if a gap remains.
+
+## The attempt envelope — identical shape for every tool
+
+```json
+{
+  "attempt_id": "subquery_2::rag::r1::1",
+  "tool_name": "rag",
+  "operation": "retrieve_faq_evidence",
+  "planning_round": 1,
+  "status": "completed",
+  "input": {"customer_component": "What is my current loyalty tier?"},
+  "result": { /* tool-specific, opaque to everything outside that tool's own code */ },
+  "availability_reason": ""
+}
+```
+
+- `attempt_id` = `{subquery_id}::{tool_name}::r{round}::{sequence}` —
+  self-describing in logs (unlike today's `tool_rag_1`, which tells you
+  nothing about which subquery or round it belongs to), and collision-proof
+  across rounds without a global counter.
+- `input` is the **stable, original assignment** from the planner — one
+  key, validated against the tool's registry, never mutated afterward. This
+  is true for every tool, including `rag` (`customer_component` never
+  changes across its internal retries — only `result.steps[i].input` does;
+  see below).
+- `status` is one of `pending | running | completed | unavailable`, set
+  exactly once per transition, by the tool's own dispatch code — never
+  inferred by an LLM. `pending` → created by `node_03a`. `running` → RAG
+  only, while its internal retry loop continues (the other three tools are
+  synchronous one-shot and skip this state entirely). `completed` /
+  `unavailable` are terminal.
+- `result`'s *contents* are entirely tool-defined and opaque to every other
+  tool's code and to the generic aggregation logic below — only that
+  tool's own dispatcher and its own consumer-facing sanitized views
+  (`_verified_api_context`, `_personal_data_placeholders`,
+  `_available_response_shortcuts`, RAG's evidence hydration) know how to
+  read it.
+
+### Per-tool `result` shapes
+
+| tool | `result` contents | notes |
+|---|---|---|
+| `api` (placeholder mode) | `{"disclosure_mode": "placeholder", "placeholder_token": "{{data-fe8700b3}}"}` | never the real value — see `docs/AGENTIC_CAPABILITY_ROADMAP_v1.0.md` WP-1/WP-3 |
+| `api` (direct-value mode) | `{"disclosure_mode": "direct_value", "value": "Gold", "fact": "The customer's current loyalty tier is Gold."}` | safe to expose everywhere — WP-5 |
+| `deeplink` | `{"route": "/app/cards/manage"}` | destination_id already lives in `attempt.input` |
+| `service_request` | `{"special_id": "svc_8f2a...", "description": "...", "form_schema": {...}}` | |
+| `rag` | `{"retrieval_state": "PARTIALLY_SUFFICIENT", "approved_parent_ids": [...], "steps": [...]}` | the only tool whose terminal state comes from more than one internal try — see next section |
+
+An `unavailable` attempt of any tool has an empty `result` and a filled
+`availability_reason` (e.g. `"Destination 'atm-locator' not in registry"`)
+instead.
+
+## RAG's internal multi-round retrieval: one attempt, not three
+
+RAG's three internal rounds (direct search, then up to `MAX_RAG_ATTEMPTS -
+1` refinement stages: intent expansion, product expansion, angle expansion)
+are **not** separate attempts. The test: an attempt is created by the
+*planner* (`node_03a`) assigning a tool to a subquery — an external,
+planning-driven event. RAG's own retry loop (`node_18`'s sufficiency
+auditor returning `RETRY`) never goes back to the planner; it's the same
+tool continuing to work the one job it was already given, with a refined
+query. Modeling each round as its own attempt would reintroduce the exact
+problem this redesign removes: several same-tool records for one subquery,
+needing a new "which one is authoritative" reconciliation rule layered back
+on top.
+
+Instead, the round history is nested **inside** `result`, as an optional,
+generic `steps` array — available to any tool whose terminal state takes
+more than one internal try (only RAG uses it today):
+
+```json
+{
+  "attempt_id": "subquery_2::rag::r1::1",
+  "tool_name": "rag",
+  "planning_round": 1,
+  "status": "completed",
+  "input": {"customer_component": "What is my current loyalty tier?"},
+  "result": {
+    "retrieval_state": "PARTIALLY_SUFFICIENT",
+    "approved_parent_ids": ["faq_da866599"],
+    "steps": [
+      {"step": 1, "input": {"retrieval_mode": "DIRECT", "direct_query": "What is my current loyalty tier?"}, "output": {"candidate_parent_ids": ["faq_112233"]}, "verdict": "RETRY"},
+      {"step": 2, "input": {"retrieval_mode": "MULTI_ANGLE", "angle_groups": [{"group_id": "base"}]}, "output": {"candidate_parent_ids": ["faq_998877"]}, "verdict": "RETRY"},
+      {"step": 3, "input": {"retrieval_mode": "MULTI_ANGLE", "angle_groups": [{"group_id": "base"}, {"group_id": "retry_2"}]}, "output": {"candidate_parent_ids": ["faq_da866599"]}, "verdict": "PARTIALLY_SUFFICIENT"}
+    ]
+  }
+}
+```
+
+Two fields resolve what would otherwise be a real ambiguity ("the input
+varies per round, but `attempt.input` is supposed to be stable"):
+`attempt.input` is the original, unchanging assignment; `result.steps[i].
+input` is the refined, per-try input (retrieval mode, angle groups,
+product/intent) that genuinely does change round to round.
+
+`steps` is deliberately **not** promoted to sit beside `result` as a
+top-level, always-present field on every attempt. Two reasons: (1) it would
+create two competing sources of truth for "the outcome" (`attempt.result`
+vs. `attempt.steps[-1].output`) for the three tools that never need it, and
+drift between them is exactly the class of bug this whole redesign removes;
+(2) it would permanently tax three atomic, one-shot tools with a nesting
+layer they'll never populate. `result`'s own top-level fields remain the
+single, canonical contract every consumer reads, regardless of how many
+internal tries produced them.
+
+## Status-consistency rule for RAG (the one tool where drift is possible)
+
+Because `api`/`deeplink`/`service_request` set `status` exactly once, at
+their single one-shot outcome, they can never drift. RAG is the only tool
+where "the last thing that happened" (a step's verdict) and "the attempt's
+outward status" are two different pieces of state — so the mapping from one
+to the other must be a fixed table, applied by exactly one writer:
+
+| latest step's `verdict` | `attempt.status` | meaning |
+|---|---|---|
+| `RETRY` | `running` | budget not exhausted, another step follows |
+| `SUFFICIENT` | `completed` | terminal, full coverage |
+| `PARTIALLY_SUFFICIENT` | `completed` | terminal, partial coverage — the *degree* lives in `result.retrieval_state`, not in `status` |
+| `CLARIFICATION_REQUIRED` | `unavailable` | terminal, budget exhausted, zero evidence ever found |
+
+**Enforcement rule**: whatever code appends a new entry to `result.steps` is
+the *only* code permitted to write `attempt.status`, and it does so purely
+by running the new step's verdict through this table — never by a second,
+independent judgment. Any other code that needs to know "is this attempt
+done" reads `attempt.status`; it never re-derives an opinion from
+`result.steps` itself. One writer, many readers.
+
+**Known open edge case, deferred as a minor detail**: what `attempt.status`
+should be if `MAX_TOOL_PLANNING_ROUNDS` (the *outer* tool-planning loop
+budget) is reached while a RAG attempt is still internally mid-retry (i.e.
+`RETRY` but the RAG-specific `MAX_RAG_ATTEMPTS` budget hasn't separately run
+out). Not resolved in this document; likely resolution is to force the
+attempt terminal (`unavailable` if no partial evidence, `completed` if
+partial evidence exists) using the same table's `CLARIFICATION_REQUIRED`
+row, but this needs confirming against the outer loop's actual budget
+interaction before implementation.
+
+## Subquery-level `resolution_status`: deterministic rollup, not a second LLM opinion
+
+```
+per-attempt "does this fully cover the subquery" predicate:
+  rag:                            result.retrieval_state == "SUFFICIENT"
+  api / deeplink / service_request:  status == "completed"   (binary by construction)
+
+compute_subquery_status(subquery):
+  attempts = subquery.tool_attempts
+
+  if any(a.status in {"pending", "running"} for a in attempts):
+      return "PENDING"
+
+  if any(fully_covers(a) for a in attempts):
+      return "RESOLVED"
+
+  return "OPEN"   # all attempts terminal, none fully covers it
+```
+
+This alone is airtight and needs no LLM: it's a direct read of data our own
+deterministic tool code already produced. Applied to `subquery_2` from the
+traced turn: `rag` → `PARTIALLY_SUFFICIENT` (doesn't satisfy the
+predicate), `api` → `completed` (does) → `RESOLVED`. No separate judgment
+call is asked to reconcile these — there is nothing left to reconcile.
+
+### `OPEN` still splits into `NEEDS_TOOLS` vs. `EXHAUSTED` — and that decision already exists elsewhere
+
+Distinguishing "try another capability" from "nothing more can help"
+requires matching a tool's scope description against the subquery's actual
+need — genuine semantic judgment. But `node_03a`'s planner call already
+makes exactly this judgment, every round, when it decides whether to
+propose a new candidate task for an `OPEN` subquery. Rather than a second,
+independently-fallible LLM call (today's `node_04a`) re-deriving the same
+judgment and risking disagreement with the first, `NEEDS_TOOLS` /
+`EXHAUSTED` should be **read off of `node_03a`'s own output**: `OPEN` +
+"the planner proposed a new attempt this round" = `NEEDS_TOOLS`; `OPEN` +
+"the planner proposed nothing new, or the round/task budget is spent" =
+`EXHAUSTED`. This means exactly one place in the whole pipeline ever makes
+a "does this capability apply" judgment call — everything downstream of it
+(resolved-or-not, which attempts to cite, whether to apologize) is a
+deterministic read of the attempt list. `node_04a`'s role shrinks
+accordingly; its exact remaining scope (if any) is an open implementation
+question, not decided in this document.
+
+## What this replaces
+
+- **Removed entirely**: `tool_tasks`, `tool_results` (flat, `AgentState`-level
+  lists) — folded into `financial_subqueries[].tool_attempts`.
+- **Removed entirely**: `search_tasks`, `task_results`, `task_retry_counts`,
+  `task_rejected_parent_ids`, `task_partial_evidence`,
+  `task_sufficiency_history`, `task_feedback` — folded into the owning
+  RAG attempt's `result` (steps, retry state, rejected/partial parent ids
+  all become fields of that one record instead of five separately-keyed
+  top-level state lists).
+- **Extended, not replaced**: `financial_subqueries` — same identity
+  (`subquery_id`, `customer_component`), now also the owner of
+  `resolution_status` and `tool_attempts`.
+- **Possibly derived rather than stored**: `pending_tool_task_ids` — could
+  become "attempts with `status == pending`" computed at dispatch time
+  instead of a separately tracked list. Not decided.
+
+## Explicitly not decided in this document
+
+- The exact new/narrowed responsibility of `node_04a` once its resolution
+  judgment is replaced by the deterministic rollup plus reading
+  `node_03a`'s own planning output.
+- Whether `node_03a`'s round-1 behavior changes to allow *skipping* RAG for
+  a subquery a tool will clearly and exclusively cover (the "mechanical
+  tool-calling" problem named at the top of this document) — this document
+  only fixes the reconciliation gap the mechanical default exposed, it does
+  not yet make tool selection itself smarter.
+- Migration strategy: big-bang replacement of the old state fields vs. an
+  incremental path that keeps them alive alongside the new schema during a
+  transition.
+- The `MAX_TOOL_PLANNING_ROUNDS`-vs-mid-retry edge case noted above.

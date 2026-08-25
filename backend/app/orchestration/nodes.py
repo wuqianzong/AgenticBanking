@@ -1,5 +1,6 @@
 import json
 import re
+import secrets
 import sqlite3
 import os
 import asyncio
@@ -17,12 +18,13 @@ from backend.app.core.llm_service import (
     MODEL_E_TRIAGE,
 )
 from backend.app.core.groundedness import check_evidence_groundedness, check_conduct_compliance
-from backend.app.core.compliance import REGULATORY_LICENSING_CONTEXT, PRECISION_REFERENCE_CONTRACT
+from backend.app.core.compliance import REGULATORY_LICENSING_CONTEXT, PRECISION_REFERENCE_CONTRACT, PERSONAL_DATA_REFERENCE_CONTRACT
 from backend.app.core.translations import get_message
 from backend.app.core.system_logger import log_event
 from backend.app.orchestration.tool_registry import enabled_tool_capabilities, is_registered_operation, TOOL_REGISTRY
 from backend.app.orchestration.service_request_registry import get_service_request_contract
 from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
+from backend.app.orchestration.api_field_registry import API_FIELD_REGISTRY
 from backend.app.services import service_request_service
 
 # Define the DB Path (adjust relative path if necessary based on your working directory)
@@ -69,6 +71,7 @@ VOLATILE_STATE_RESET = {
     "pending_advance": False,
     "service_request_event": {},
     "last_session_transcript": [],
+    "personal_data_reveal_map": {},
 }
 
 MAX_VERIFIED_TASK_HISTORY_TURNS = 10
@@ -1651,6 +1654,13 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
           (e.g., manage card, view statements) based on the available_destinations
           in the registry. A deeplink will be substituted into a button for the
           user to click.
+        - For tool_name "api", input must use the literal key "field_id".
+          Example: {{"field_id": "profile-address"}}. Choose only from the
+          available_fields listed for "api" in the registry. Use "api" only
+          when the customer is asking for one specific, personal,
+          account-linked data value of their own on file (e.g. "what's my
+          address on file", "what's my loyalty tier") -- never for a general
+          policy, procedure, or "how do I..." question, which is RAG's job.
         - Read the full description of each registry entry before choosing one.
           If the customer's actual situation falls outside every candidate's stated
           scope, do not create a task for it at all.
@@ -1721,6 +1731,22 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
                 log_event("tool.task.invalid_deeplink_destination", subquery_id=subquery_id, requested_destination=requested_destination, raw_input=payload, level="WARNING")
                 continue
             payload = {"destination_id": requested_destination}
+        elif tool_name == "api":
+            # Same allow-list discipline as service_request/deeplink above:
+            # accept the registered field_id under any key, reject anything
+            # that doesn't resolve to a real registry entry. The actual fetch
+            # (and the placeholder/direct-value split) happens once in
+            # node_03b_tool_dispatcher, not here.
+            requested_field = str(payload.get("field_id", "")).strip()
+            if requested_field not in API_FIELD_REGISTRY:
+                requested_field = next(
+                    (str(value).strip() for value in payload.values() if str(value).strip() in API_FIELD_REGISTRY),
+                    "",
+                )
+            if requested_field not in API_FIELD_REGISTRY:
+                log_event("tool.task.invalid_api_field", subquery_id=subquery_id, requested_field=requested_field, raw_input=payload, level="WARNING")
+                continue
+            payload = {"field_id": requested_field}
         fingerprint = _tool_task_fingerprint(tool_name, operation, subquery_id, payload)
         if fingerprint in existing_fingerprints:
             log_event("tool.task.deduplicated", subquery_id=subquery_id, tool_name=tool_name, operation=operation)
@@ -1755,6 +1781,51 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         "api_payload": "",
         "deeplink_payload": "",
     }
+
+
+def _dispatch_api_task(state: AgentState, task: dict) -> tuple[dict, dict]:
+    """Fetch one registered `api` field synchronously -- a deterministic,
+    LLM-free read. A placeholder-mode field's real value is never placed in
+    the returned tool_result (which later gets dumped verbatim into more
+    than one LLM prompt, e.g. node_04a's resolution planner) -- only a
+    freshly minted, single-turn opaque token is. The real value is returned
+    separately, keyed by that same token, for the caller to fold into the
+    turn's personal_data_reveal_map, which no LLM prompt ever reads; only
+    node_07 consumes it, to hand the value to the frontend alongside (never
+    inside) the customer-facing text. A direct-value field has no such
+    restriction -- it is not identity-exposing, so its value and a stated
+    fact sentence go straight into the tool_result.
+
+    Returns (outcome, reveal_map_additions).
+    """
+    field_id = str(task.get("input", {}).get("field_id", "")).strip()
+    field = API_FIELD_REGISTRY.get(field_id)
+    if field is None:
+        return {"status": "unavailable", "reason": f"The field '{field_id}' is not registered."}, {}
+
+    value = field["fetch"](state.get("user_id", ""))
+    if field["disclosure_mode"] == "placeholder":
+        token = f"{{{{data-{secrets.token_hex(4)}}}}}"
+        return {
+            "status": "completed",
+            "approved_result": {
+                "field_id": field_id,
+                "disclosure_mode": "placeholder",
+                "placeholder_token": token,
+            },
+        }, {token: str(value)}
+
+    fact_template = field.get("fact_template")
+    fact = fact_template(value) if fact_template else f"The customer's {field_id} is {value}."
+    return {
+        "status": "completed",
+        "approved_result": {
+            "field_id": field_id,
+            "disclosure_mode": "direct_value",
+            "value": value,
+            "fact": fact,
+        },
+    }, {}
 
 
 def _dispatch_service_request_task(state: AgentState, task: dict) -> dict:
@@ -1915,6 +1986,68 @@ def _available_response_shortcuts(state: AgentState) -> list[dict]:
     return shortcuts
 
 
+def _personal_data_placeholders(state: AgentState) -> list[dict]:
+    """Sanitized view of this turn's completed placeholder-mode `api` fetches.
+
+    Exposes only a field description, the customer's own subquery text this
+    fetch was for, and the opaque insert_token -- never the real value,
+    which lives only in personal_data_reveal_map, a state field no LLM
+    prompt ever reads. The generator's only job is deciding whether and how
+    to weave insert_token into a natural sentence; node_07 never resolves
+    it -- the frontend does, from the reveal map delivered alongside (never
+    inside) this turn's response text.
+    """
+    subquery_text_by_id = {
+        item.get("subquery_id"): item.get("customer_component", "")
+        for item in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(item, dict)
+    }
+    placeholders = []
+    for result in state.get("tool_results", []):
+        if not isinstance(result, dict) or result.get("tool_name") != "api" or result.get("status") != "completed":
+            continue
+        approved = result.get("approved_result", {})
+        if approved.get("disclosure_mode") != "placeholder" or not approved.get("placeholder_token"):
+            continue
+        field = API_FIELD_REGISTRY.get(approved.get("field_id", ""))
+        if field is None:
+            continue
+        placeholders.append({
+            "for_request": subquery_text_by_id.get(result.get("subquery_id"), ""),
+            "field_description": field.get("description", ""),
+            "insert_token": approved["placeholder_token"],
+        })
+    return placeholders
+
+
+def _verified_api_context(state: AgentState) -> list[dict]:
+    """Direct-value `api` facts safe to state directly (WP-5).
+
+    Only disclosure_mode == "direct_value" entries qualify -- placeholder-mode
+    facts stay confined to _personal_data_placeholders and are never treated
+    as narratable evidence text, since that would let a raw personal-data
+    value leak into the model's own generated sentence structure instead of
+    staying a fixed, audited token substitution.
+    """
+    subquery_text_by_id = {
+        item.get("subquery_id"): item.get("customer_component", "")
+        for item in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(item, dict)
+    }
+    facts = []
+    for result in state.get("tool_results", []):
+        if not isinstance(result, dict) or result.get("tool_name") != "api" or result.get("status") != "completed":
+            continue
+        approved = result.get("approved_result", {})
+        if approved.get("disclosure_mode") != "direct_value" or not approved.get("fact"):
+            continue
+        facts.append({
+            "for_request": subquery_text_by_id.get(result.get("subquery_id"), ""),
+            "fact": approved["fact"],
+        })
+    return facts
+
+
 def node_03b_tool_dispatcher(state: AgentState):
     """Dispatch pending registered tasks without hard-coding graph fan-out.
 
@@ -1929,6 +2062,7 @@ def node_03b_tool_dispatcher(state: AgentState):
     tasks = [dict(task) for task in state.get("tool_tasks", []) if isinstance(task, dict)]
     tool_results = [dict(result) for result in state.get("tool_results", []) if isinstance(result, dict)]
     pending_tasks = [task for task in tasks if task.get("tool_task_id") in pending_ids and task.get("status") == "pending"]
+    personal_data_reveal_map = dict(state.get("personal_data_reveal_map", {}))
     rag_task_ids = []
     for task in pending_tasks:
         tool_name = task.get("tool_name")
@@ -1984,6 +2118,28 @@ def node_03b_tool_dispatcher(state: AgentState):
                 destination_id=destination_id,
             )
             continue
+        if tool_name == "api":
+            outcome, reveal_additions = _dispatch_api_task(state, task)
+            task["status"] = outcome["status"]
+            approved_result = outcome.get("approved_result", {})
+            tool_results.append({
+                "tool_task_id": task["tool_task_id"],
+                "subquery_id": task.get("subquery_id"),
+                "tool_name": tool_name,
+                "status": outcome["status"],
+                "approved_result": approved_result,
+                "customer_safe_summary": "",
+                "availability_reason": outcome.get("reason", ""),
+            })
+            personal_data_reveal_map.update(reveal_additions)
+            log_event(
+                "tool.result.api",
+                tool_task_id=task["tool_task_id"], subquery_id=task.get("subquery_id"),
+                status=outcome["status"],
+                field_id=approved_result.get("field_id", task.get("input", {}).get("field_id")),
+                disclosure_mode=approved_result.get("disclosure_mode"),
+            )
+            continue
         task["status"] = "unavailable"
         tool_results.append({
             "tool_task_id": task["tool_task_id"],
@@ -2001,6 +2157,7 @@ def node_03b_tool_dispatcher(state: AgentState):
         "tool_tasks": tasks,
         "tool_results": tool_results,
         "pending_tool_task_ids": rag_task_ids,
+        "personal_data_reveal_map": personal_data_reveal_map,
     }
 
 
@@ -2246,9 +2403,6 @@ async def node_03b_rag_worker(state: AgentState):
         },
     )
     return {"rag_payload": "", "task_results": list(merged_results.values())}
-
-def node_03b_api_worker(state: AgentState):
-    return {"api_payload": "[API DATA]:\nNo API data requested for this MVP."}
 
 def node_03b_deeplink_worker(state: AgentState):
     return {"deeplink_payload": "[DEEPLINK DATA]:\nNo Deep-links requested for this MVP."}
@@ -3242,6 +3396,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # is reliable at, unlike exact id/token reproduction.
     available_shortcuts = _available_response_shortcuts(state)
     unavailable_service_requests = _unavailable_service_requests(state)
+    personal_data_placeholders = _personal_data_placeholders(state)
+    verified_api_context = _verified_api_context(state)
     # This is deliberately separate from evidence and tool inputs.  It carries
     # only small internal attention cues from an otherwise valid mixed turn
     # (for example, a preference or feeling). The original user_input—not this
@@ -3303,6 +3459,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
     {json.dumps(available_shortcuts, ensure_ascii=False)}
     Unavailable service requests (could not be registered this turn; state
     only the supplied reason, never guess why): {json.dumps(unavailable_service_requests, ensure_ascii=False)}
+    Verified customer-specific facts (each is a pre-verified fact about this
+    specific customer, safe to state directly and confidently, on the same
+    footing as approved evidence): {json.dumps(verified_api_context, ensure_ascii=False)}
+    Personal data references (each is a specific personal-data value already
+    fetched and authorized for this customer this turn; you never see the
+    real value, only an opaque insert_token):
+    {json.dumps(personal_data_placeholders, ensure_ascii=False)}
     Failed outbound-audit feedback (constraints only, never evidence). Each
     entry identifies one specific claim or instruction to remove — it is
     never permission to abandon the topic it came from. After removing
@@ -3312,6 +3475,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
     {json.dumps(audit_feedback, ensure_ascii=False)}
 
     {PRECISION_REFERENCE_CONTRACT}
+
+    {PERSONAL_DATA_REFERENCE_CONTRACT}
 
     Design principles:
     - Core job: first understand the whole current customer situation from the
@@ -3405,6 +3570,20 @@ def _generate_response_blocks(state: AgentState) -> dict:
       for a task with no shortcut. Every task in "Approved evidence by
       retrieval task" still needs its own real answer regardless of whether
       any shortcut exists for it.
+    - A "Verified customer-specific facts" entry may be stated directly and
+      confidently, exactly like approved retrieval evidence -- it is already
+      verified for this specific customer. State only what its `fact` text
+      says; do not extrapolate beyond it.
+    - A "Personal data references" entry's `for_request` names, in the
+      customer's own words, exactly which request its data was fetched for.
+      When a subquery matches, weave that entry's `insert_token` verbatim
+      into one natural sentence (for example: "Your address on file is
+      {{data-a1b2c3d4}}."). Never alter, abbreviate, translate, or omit any
+      character of the token. Never guess, paraphrase, or state the real
+      value yourself -- you are never shown it. Never claim this information
+      is unavailable, inaccessible, or something the customer must look up
+      elsewhere when a matching entry exists. Never fabricate a token not
+      present in the list.
     - For each entry in Unavailable service requests, include one brief,
       honest sentence telling the customer that part of their request could
       not be started right now, using only the supplied reason. Never invent
@@ -4058,15 +4237,24 @@ def node_05_outbound_deterministic_gate(state: AgentState):
     # 1. Combine draft text AND UI options to sweep globally
     combined_text = " ".join([draft, *_ui_option_texts(options), *step_details, *list_items, list_title, list_intro, extended_text, list_clarification, json.dumps(response_blocks, ensure_ascii=False)])
     placeholders_in_draft = re.findall(r"\{\{(.*?)\}\}", combined_text)
+    # `{{data-*}}` tokens (WP-1/WP-3) are deliberately never rows in
+    # Precision_Reference_Table -- unlike `{{faq_*}}`, the backend never
+    # resolves them at all; the frontend does, from a per-turn value sent
+    # separately. Checking them against fetch_placeholders_from_db would
+    # always fail them as "invalid", vetoing every draft that correctly
+    # includes one. Legitimacy of a `{{data-*}}` token (does it match an
+    # entry actually offered to the generator this turn) is the
+    # groundedness audit's job, not this deterministic gate's.
+    faq_style_placeholders = [p for p in placeholders_in_draft if not p.startswith("data-")]
     # Parent IDs identify internal FAQ records. They are allowed inside a
     # placeholder until Node 07 substitutes its exact value, but must never
     # appear as customer-facing citations or prose.
     exposed_parent_ids = re.findall(r"(?<!\{)faq_[0-9a-f]{8}(?![_}])", combined_text, flags=re.IGNORECASE)
-    
+
     illegal_detected = []
-    if placeholders_in_draft:
-        valid_map = fetch_placeholders_from_db(placeholders_in_draft)
-        for p in placeholders_in_draft:
+    if faq_style_placeholders:
+        valid_map = fetch_placeholders_from_db(faq_style_placeholders)
+        for p in faq_style_placeholders:
             if p not in valid_map:
                 illegal_detected.append(p)
     
@@ -4180,6 +4368,8 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
         "decline_inputs": decline_context,
         "available_shortcuts": _available_response_shortcuts(state),
         "unavailable_service_requests": _unavailable_service_requests(state),
+        "verified_api_context": _verified_api_context(state),
+        "personal_data_placeholders": _personal_data_placeholders(state),
     }
 
 
@@ -4497,6 +4687,17 @@ def node_06_outbound_groundedness_gate(state: AgentState):
           for a brief sentence stating that part of the request could not be
           started, using only the supplied reason. Any different explanation
           is unsupported.
+        - "verified_api_context" entries are a permitted factual source, on
+          the same footing as Task-Level Approved Evidence, but each entry
+          supports only the exact statement in its own `fact` text -- no
+          extrapolation beyond it.
+        - "personal_data_placeholders" entries permit a customer-facing
+          sentence to include an entry's `insert_token` verbatim when the
+          sentence addresses that same entry's `for_request`. The sentence
+          must never state, paraphrase, or guess the real value the token
+          represents (it is never disclosed to the assistant, so it can
+          never legitimately appear as prose) and must never use a
+          `{{data-*}}` token that is not present in this list.
         """
         result = check_evidence_groundedness(
             content_block,
@@ -4504,8 +4705,10 @@ def node_06_outbound_groundedness_gate(state: AgentState):
                 "approved_by_task": grounding_context["approved_by_task"],
                 "available_shortcuts": grounding_context["available_shortcuts"],
                 "unavailable_service_requests": grounding_context["unavailable_service_requests"],
+                "verified_api_context": grounding_context["verified_api_context"],
+                "personal_data_placeholders": grounding_context["personal_data_placeholders"],
             },
-            evidence_description="Task-Level Approved Evidence, Available Shortcuts, and Unavailable Service Requests — the only factual sources for answers and answer UI",
+            evidence_description="Task-Level Approved Evidence, Available Shortcuts, Unavailable Service Requests, Verified Customer-Specific Facts, and Personal Data References — the only factual sources for answers and answer UI",
             route_specific_rules=route_specific_rules,
             extra_output_fields=f', "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false{recovery_strategy_field}, "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]',
         )
@@ -4852,6 +5055,32 @@ def node_07_precision_substitution(state: AgentState):
         })
     if navigation_actions:
         payload["navigationActions"] = navigation_actions
+
+    # Personal-data tokens (WP-1/WP-3) are deliberately NOT resolved here,
+    # unlike {{faq_*}} above -- the real value never touches chat_history or
+    # the DB. Instead this turn's token->value pairs are sent alongside the
+    # response text; the customer's own browser resolves any {{data-*}} token
+    # it finds, in this message and in chat history alike, falling back to a
+    # generic "protected, no longer available" label for a token it has no
+    # value for. No backend-side stripping of an unmatched token is needed:
+    # the frontend's scan-and-replace-or-placeholder rendering already turns
+    # any {{data-*}} token, matched or not, into either a real value or that
+    # fallback label -- never raw braces.
+    reveal_map = state.get("personal_data_reveal_map", {})
+    if reveal_map:
+        payload["personalDataReveals"] = [
+            {"token": token, "value": value} for token, value in reveal_map.items()
+        ]
+        # Mirrors precisionSubstituted's shape: a plain boolean, safe to
+        # persist to chat_history like any other UI flag (it carries no
+        # token or value, just "this response contained personal data"),
+        # driving the frontend's "Data protected" badge. True only when a
+        # revealed token actually appears in the visible text, the same
+        # "did this response actually cite it" standard precisionSubstituted
+        # already uses -- not merely that a fetch happened this turn.
+        payload["personalDataSubstituted"] = any(
+            token.strip("{}") in placeholders_in_draft for token in reveal_map
+        )
 
     return {"final_response": draft, "ui_action_payload": payload}
 

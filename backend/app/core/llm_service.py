@@ -120,6 +120,7 @@ class TriageEvaluation(BaseModel):
     financial_subqueries: List[FinancialSubquery] = Field(default_factory=list, description="For VALID_REQUEST only: financial banking components. Empty otherwise.")
     has_non_financial_content: bool = Field(default=False, description="True only when a VALID_REQUEST also contained unrelated wording that was omitted from financial_subqueries.")
     non_financial_context: List[str] = Field(default_factory=list, description="For VALID_REQUEST only: short internal attention cues for non-factual conversational asides omitted from financial_subqueries. Empty otherwise; never customer-facing source text.")
+    repetitive_issue_detected: bool = Field(default=False, description="True only when the Trusted Conversation Context shows the customer repeatedly raising substantially the same underlying banking need or issue across multiple recent turns, especially if it still appears unresolved. Judge by meaning, not wording. Independent of triage_status.")
 
 # 4. 2D MATRIX QUERY FORMULATOR (Node 02e) -> NESTED SCHEMA
 class SearchTask(BaseModel):

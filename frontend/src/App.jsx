@@ -1741,6 +1741,7 @@ export default function BankingBotUI() {
                     {msg.type === 'blocks' && msg.responseBlocks?.map((block, blockIndex) =>
                       renderResponseBlock(block, msg.id, blockIndex, msg.precisionSubstituted, msg.personalDataSubstituted)
                     )}
+                    {msg.type === 'blocks' && msg.options?.length > 0 && renderChips(msg.options)}
                     {msg.serviceRequestActions?.map((action) => (
                       <React.Fragment key={action.specialId}>
                         {renderServiceRequestAction(action)}

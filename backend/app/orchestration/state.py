@@ -18,7 +18,14 @@ class AgentState(TypedDict):
     completed_steps: List[str]                   # Stateful Milestone Tracker for Anti-Amnesia
     process_slots: Dict[str, Any]                # Verified data (e.g., {"age": 25})
     verified_task_history: List[Dict[str, Any]]  # Latest verified turn records: existing search-task snapshots plus approved parent IDs
-    
+
+    # Soft escalation (node_08): session-scoped signals, reset only at a new
+    # login, never per-turn. See node_08_soft_escalation_analyzer's
+    # docstring for the four independent trigger rules these feed.
+    session_started_at: str                      # ISO timestamp, set once at login; used for the long-session duration signal
+    same_intent_streak_count: int                 # Consecutive turns with an unchanged active_product_intents set
+    turn_escalation_history: List[Dict[str, Any]]  # Rolling window (last MAX_ESCALATION_HISTORY_TURNS turns) of {"turn_number", "had_repeated_need", "subqueries": [{"text", "score"}]} -- feeds the confidence and repeated-need signals
+
     # --- VOLATILE TURN STATE (Reset per turn) ---
     user_id: str
     session_id: str
@@ -39,6 +46,7 @@ class AgentState(TypedDict):
     api_payload: str                             # Buffer for API agent
     deeplink_payload: str                        # Buffer for Deeplink agent
     triage_status: str                           # 'NON_COMPLIANT', 'ESCALATION', 'NON_FINANCIAL', or 'VALID_REQUEST'
+    repeated_need_detected_this_turn: bool       # Set by node_02d/triage: true when any of this turn's financial subqueries substantially repeats a recent prior one. Consumed only by node_08's soft-escalation rollup.
 
     # Tool Calling v3.0: financial-only triage, each subquery owning its own
     # tool attempts. See docs/TOOL_CALLING_v3.0.md. financial_subqueries

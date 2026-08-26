@@ -4,6 +4,7 @@ import secrets
 import sqlite3
 import os
 import asyncio
+from datetime import datetime, timezone
 from typing import Any
 from langchain_core.messages import HumanMessage, AIMessage
 from backend.app.orchestration.state import AgentState
@@ -67,9 +68,19 @@ VOLATILE_STATE_RESET = {
     "service_request_event": {},
     "last_session_transcript": [],
     "personal_data_reveal_map": {},
+    "repeated_need_detected_this_turn": False,
 }
 
 MAX_VERIFIED_TASK_HISTORY_TURNS = 10
+# Soft escalation (node_08): rolling window for the confidence and
+# repeated-need signals. Deliberately the same size as
+# MAX_VERIFIED_TASK_HISTORY_TURNS -- a repeat or a confidence dip that
+# hasn't recurred within this many turns is no longer an active pattern.
+MAX_ESCALATION_HISTORY_TURNS = 10
+SOFT_ESCALATION_SESSION_DURATION_SECONDS = 10 * 60
+SOFT_ESCALATION_SAME_INTENT_STREAK = 20
+SOFT_ESCALATION_CONFIDENCE_THRESHOLD = 0.5
+SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT = 3
 ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "PARTIALLY_SUFFICIENT"}
 # One initial attempt plus three refinement stages (INTENT_EXPANSION,
 # PRODUCT_EXPANSION, ANGLE_EXPANSION — see _retry_expansion_plan). Must stay
@@ -708,22 +719,21 @@ def _build_deterministic_greeting(customer_id: str, user_profile: dict) -> tuple
         record for record in service_request_service.list_registrations(customer_id)
         if record.get("status") == service_request_service.PENDING
     ]
-    if pending_requests:
-        intro_key = "service_request_intro_single" if len(pending_requests) == 1 else "service_request_intro_plural"
-        greeting = f"{greeting}\n\n{get_message(language, intro_key)}"
-
+    # For each greeting, only follow the single most recent pending service request (if any).
+    # (list_registrations returns newest-first by created_at DESC)
     service_request_actions = []
-    for record in pending_requests:
-        contract = get_service_request_contract(record.get("service_request_id", ""))
-        if contract is None:
-            continue
-        service_request_actions.append({
-            "label": contract.get("action_label", "Complete Form"),
-            "specialId": record.get("special_id"),
-            "serviceRequestId": record.get("service_request_id"),
-            "description": contract.get("description", ""),
-            "formSchema": contract["form_schema"],
-        })
+    if pending_requests:
+        latest_record = pending_requests[0]
+        contract = get_service_request_contract(latest_record.get("service_request_id", ""))
+        if contract is not None:
+            greeting = f"{greeting}\n\n{get_message(language, 'service_request_intro_single')}"
+            service_request_actions.append({
+                "label": contract.get("action_label", "Complete Form"),
+                "specialId": latest_record.get("special_id"),
+                "serviceRequestId": latest_record.get("service_request_id"),
+                "description": contract.get("description", ""),
+                "formSchema": contract["form_schema"],
+            })
 
     return greeting, service_request_actions
 
@@ -770,6 +780,11 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         "completed_steps": [],
         "process_slots": {},
         "verified_task_history": [],
+        # Soft escalation (node_08): session-scoped, reset only here, never
+        # per-turn -- see node_08_soft_escalation_analyzer's docstring.
+        "session_started_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+        "same_intent_streak_count": 0,
+        "turn_escalation_history": [],
         "final_draft": greeting,
         "final_answer": greeting,
         "final_response": greeting,
@@ -1091,8 +1106,23 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     - Do not determine product, intent, availability, or a tool. Those are
       downstream responsibilities.
 
+    5. REPETITIVE ISSUE SIGNAL — Independent of triage_status above: look at
+       the Trusted Conversation Context's recent turns (not just the Latest
+       User Input) and set repetitive_issue_detected=true only when the
+       customer has been repeatedly raising substantially the same
+       underlying banking need or issue across multiple recent turns,
+       especially if it still appears unresolved. Judge by meaning, not
+       wording -- phrasing may differ completely between turns. For example,
+       "what's my address on file", "can you confirm the address you have
+       for me", and "just to double check, is my address up to date" raised
+       across separate turns are the same recurring need; a customer who
+       asks about their address once and later, separately, asks how to
+       update it is not repeating -- those are different needs about the
+       same topic. A single occurrence, even worded differently from the
+       Latest User Input, is never enough on its own.
+
     Output JSON only:
-    {{"triage_status":"NON_COMPLIANT" | "ESCALATION" | "VALID_REQUEST" | "NON_FINANCIAL", "financial_subqueries":[{{"subquery_id":"subquery_1","customer_component":"..."}}], "has_non_financial_content":true | false, "non_financial_context":["short internal attention cue"]}}
+    {{"triage_status":"NON_COMPLIANT" | "ESCALATION" | "VALID_REQUEST" | "NON_FINANCIAL", "financial_subqueries":[{{"subquery_id":"subquery_1","customer_component":"..."}}], "has_non_financial_content":true | false, "non_financial_context":["short internal attention cue"], "repetitive_issue_detected":true | false}}
     """
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
@@ -1103,10 +1133,12 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
             str(item).strip() for item in res.get("non_financial_context", [])
             if isinstance(item, str) and str(item).strip()
         ][:3]
+        repeated_need_detected_this_turn = bool(res.get("repetitive_issue_detected", False))
     except Exception as e:
         print(f"🚨 [NODE 02d EXCEPTION]: {e}")
         triage_status = "NON_FINANCIAL"
         components = []
+        repeated_need_detected_this_turn = False
         has_non_financial_content = False
         non_financial_context = []
     if triage_status not in {"NON_COMPLIANT", "ESCALATION", "VALID_REQUEST", "NON_FINANCIAL"}:
@@ -1140,6 +1172,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
         financial_subquery_ids=[item["subquery_id"] for item in financial_subqueries],
         has_non_financial_content=has_non_financial_content,
         non_financial_context=non_financial_context,
+        repeated_need_detected_this_turn=repeated_need_detected_this_turn,
     )
 
     return {
@@ -1150,6 +1183,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
         "has_non_financial_content": has_non_financial_content,
         "non_financial_context": non_financial_context,
         "decline_tasks": [],
+        "repeated_need_detected_this_turn": repeated_need_detected_this_turn,
     }
 
 def node_02e_intent_classifier_and_query_formulator(state: AgentState):
@@ -1519,7 +1553,30 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         if isinstance(ints, str): ints = [ints]
         if prod and ints:
             new_matrix.append({"product": prod, "intents": ints})
-            
+
+    # Soft escalation (node_08): the same-product-intent-streak signal. This
+    # is the one place that already sees both the prior turn's active_matrix
+    # and this turn's freshly computed new_matrix, so it owns the transition
+    # rather than a shadow field elsewhere. A turn that resolves no
+    # product/intent at all (pure CLARIFY or DECLINE) doesn't confirm any
+    # topic, so it neither extends nor breaks an existing streak.
+    def _matrix_signature(matrix):
+        # target_commercial_product may be a single product or, during a
+        # PRODUCT_EXPANSION retry, a list of products -- normalize both
+        # forms the same way the rest of this module does before hashing,
+        # otherwise a list entry here raises "unhashable type: 'list'".
+        return frozenset(
+            (tuple(sorted(_normalized_product_tags(item.get("product")))), tuple(sorted(item.get("intents", []))))
+            for item in matrix if isinstance(item, dict) and item.get("product")
+        )
+    new_signature = _matrix_signature(new_matrix)
+    if not new_signature:
+        same_intent_streak_count = state.get("same_intent_streak_count", 0)
+    elif new_signature == _matrix_signature(active_matrix):
+        same_intent_streak_count = state.get("same_intent_streak_count", 0) + 1
+    else:
+        same_intent_streak_count = 1
+
     print(f"   🔎 [SEARCH TASKS]: {len(search_tasks)} tasks | Matrix: {new_matrix} | Intent clarifications: {len(intent_clarification_tasks)}")
     log_event("task.formulated", task_ids=[task.get("task_id") for task in search_tasks], task_count=len(search_tasks), intent_clarification_count=len(intent_clarification_tasks), retry_mode=bool(retry_tasks))
 
@@ -1539,6 +1596,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 "task_results": [],
                 "decline_tasks": decline_tasks,
                 "financial_subqueries": terminal_financial_subqueries,
+                "same_intent_streak_count": same_intent_streak_count,
             }
         if not intent_clarification_tasks and not (active_plan.get("steps") or has_retrieved_knowledge):
             # A valid request reached the formulator but no usable structured
@@ -1558,10 +1616,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 "task_results": [],
                 "decline_tasks": decline_tasks,
                 "financial_subqueries": terminal_financial_subqueries,
+                "same_intent_streak_count": same_intent_streak_count,
             }
         if active_plan.get("steps") or has_retrieved_knowledge:
-            return {"preflight_status": "continue_plan", "search_tasks": [], "decline_tasks": decline_tasks, "financial_subqueries": terminal_financial_subqueries}
-        return {"preflight_status": "intent_clarification_needed", "search_tasks": [], "decline_tasks": decline_tasks, "financial_subqueries": terminal_financial_subqueries}
+            return {"preflight_status": "continue_plan", "search_tasks": [], "decline_tasks": decline_tasks, "financial_subqueries": terminal_financial_subqueries, "same_intent_streak_count": same_intent_streak_count}
+        return {"preflight_status": "intent_clarification_needed", "search_tasks": [], "decline_tasks": decline_tasks, "financial_subqueries": terminal_financial_subqueries, "same_intent_streak_count": same_intent_streak_count}
 
     # Every task enters live direct retrieval. Search Strategy v2.8 may add
     # matching verified-session parents as a separate RRF list, but no broad
@@ -1592,6 +1651,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         "task_retry_counts": new_retry_counts if retry_tasks else {},
         "deferred_retry_task_ids": fast_forward_task_ids,
         "active_product_intents": new_matrix,
+        "same_intent_streak_count": same_intent_streak_count,
         "active_plan": {} if not retry_tasks else active_plan,
         "completed_steps": [] if not retry_tasks else state.get("completed_steps", []),
         "decline_tasks": decline_tasks,
@@ -4998,18 +5058,127 @@ def node_07_precision_substitution(state: AgentState):
     return {"final_response": draft, "ui_action_payload": payload}
 
 
+def _score_subquery(subquery: dict) -> float:
+    """Bot-confidence contribution of one financial subquery.
+
+    RESOLVED -> 1.0. OPEN with real partial RAG evidence (a `rag` attempt
+    whose retrieval_state is PARTIALLY_SUFFICIENT) -> 0.5, so a genuinely
+    partial answer isn't scored as a full failure. Everything else -> 0.0.
+    Reuses _compute_subquery_status's rollup rather than re-deriving it.
+    """
+    status = subquery.get("resolution_status") or _compute_subquery_status(subquery)
+    if status == "RESOLVED":
+        return 1.0
+    attempts = subquery.get("tool_attempts", []) if isinstance(subquery, dict) else []
+    has_partial_rag_evidence = any(
+        isinstance(a, dict) and a.get("tool_name") == "rag"
+        and a.get("result", {}).get("retrieval_state") == "PARTIALLY_SUFFICIENT"
+        for a in attempts
+    )
+    return 0.5 if has_partial_rag_evidence else 0.0
+
+
 def node_08_soft_escalation_analyzer(state: AgentState):
+    """Offers the non-blocking "Talk to Agent" chip on evidence of a
+    customer possibly struggling, even though nothing explicit demands it
+    (an explicit request is the separate, hard node_09 path). Four
+    independent, deterministically-evaluated signals, each individually
+    logged so the reason a chip appeared is always inspectable:
+
+    1. Long session: elapsed time since login.
+    2. Same product/intent dwelt on for many consecutive turns
+       (same_intent_streak_count, maintained by node_02e).
+    3. Rolling bot-confidence, averaged over the last
+       MAX_ESCALATION_HISTORY_TURNS turns, drops below threshold. Tool
+       Calling v3.0's schema already tracks resolution at a finer grain than
+       resolved/not (see _score_subquery), so this is a continuous average,
+       not a binary unresolved-turn count.
+    4. The same underlying need recurring across several turns. Detected by
+       node_02d/triage's own LLM call (repetitive_issue_detected), which
+       judges directly from the conversation history it already sees --
+       not a separately-injected list of prior subqueries (that was tried
+       and dropped: it forced an artificial cross-turn identity match this
+       codebase has no reliable way to key, and diluted triage's primary
+       decomposition task) and not a separate embedding/cosine-similarity
+       pass either -- that was tried and empirically rejected (see
+       docs/TOOL_CALLING_v3.0.md history): short banking questions about the
+       same topic but a different need score too similarly to genuine
+       repeats to threshold reliably. Folding it into triage's existing call
+       also adds zero new Groq/Gemini rate-limit
+       exposure.
+
+    None of these are separately persisted as a sticky "escalation active"
+    flag -- all four are recomputed fresh every turn from live/windowed
+    state, so a pattern that stops recurring naturally stops offering the
+    chip once it ages out of the window.
+    """
     print("🟢 [NODE 08] Executing Soft Escalation Analyzer")
     payload = state.get("ui_action_payload", {})
-    # Clarification responses intentionally have no UI actions. Do not let the
-    # generic soft-escalation chip reintroduce one after Node 04b removed it.
-    if state.get("turn_count", 0) >= 5 and not state.get("final_clarification", "").strip():
-        payload["options"].append("Talk to Agent")
 
-    history = list(state.get("chat_history", []))
+    financial_subqueries = state.get("financial_subqueries", state.get("triaged_subqueries", []))
+    turn_subqueries = [
+        {"text": sq.get("customer_component", ""), "score": _score_subquery(sq)}
+        for sq in financial_subqueries
+        if isinstance(sq, dict) and sq.get("customer_component")
+    ]
+    history = list(state.get("turn_escalation_history", []))
+    history.append({
+        "turn_number": state.get("turn_count", 0),
+        "had_repeated_need": bool(state.get("repeated_need_detected_this_turn", False)),
+        "subqueries": turn_subqueries,
+    })
+    history = history[-MAX_ESCALATION_HISTORY_TURNS:]
+
+    duration_triggered = False
+    elapsed_seconds = None
+    session_started_at = state.get("session_started_at", "")
+    if session_started_at:
+        try:
+            started = datetime.fromisoformat(session_started_at)
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            elapsed_seconds = (datetime.now(timezone.utc) - started).total_seconds()
+            duration_triggered = elapsed_seconds >= SOFT_ESCALATION_SESSION_DURATION_SECONDS
+        except ValueError:
+            pass
+
+    same_intent_streak_count = state.get("same_intent_streak_count", 0)
+    same_intent_triggered = same_intent_streak_count > SOFT_ESCALATION_SAME_INTENT_STREAK
+
+    all_scores = [sq["score"] for entry in history for sq in entry.get("subqueries", [])]
+    confidence = sum(all_scores) / len(all_scores) if all_scores else None
+    confidence_triggered = confidence is not None and confidence < SOFT_ESCALATION_CONFIDENCE_THRESHOLD
+
+    repeated_need_turns = sum(1 for entry in history if entry.get("had_repeated_need"))
+    repeated_need_triggered = repeated_need_turns >= SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT
+
+    triggered_rules = []
+    if duration_triggered:
+        triggered_rules.append("long_session")
+    if same_intent_triggered:
+        triggered_rules.append("same_intent_streak")
+    if confidence_triggered:
+        triggered_rules.append("low_confidence")
+    if repeated_need_triggered:
+        triggered_rules.append("repeated_need")
+
+    # Clarification responses intentionally have no UI actions. Do not let the
+    # soft-escalation chip reintroduce one after Node 04b removed it.
+    if triggered_rules and not state.get("final_clarification", "").strip():
+        payload["options"].append("Talk to Agent")
+        log_event(
+            "escalation.soft.triggered",
+            rules=triggered_rules,
+            elapsed_seconds=elapsed_seconds,
+            same_intent_streak_count=same_intent_streak_count,
+            confidence=confidence,
+            repeated_need_turns=repeated_need_turns,
+        )
+
+    chat_history = list(state.get("chat_history", []))
     if state.get("final_response", ""):
-        history.append(AIMessage(content=state.get("final_response", "")))
-    return {"ui_action_payload": payload, "chat_history": history}
+        chat_history.append(AIMessage(content=state.get("final_response", "")))
+    return {"ui_action_payload": payload, "chat_history": chat_history, "turn_escalation_history": history}
 
 
 def _escalation_case_request(state: AgentState) -> str:

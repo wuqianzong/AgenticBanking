@@ -135,9 +135,12 @@ class IntentClarificationTask(BaseModel):
     clarification_id: str = Field(description="Stable identifier, e.g. intent_clarification_1.")
     unresolved_request: str = Field(description="The exact ambiguous product, service, or request component from the user's wording.")
     reason: str = Field(description="A concise internal explanation of why a valid search task cannot be formed without clarification.")
+    customer_facing_question: str = Field(description="One short, natural question to ask the customer, referencing only unresolved_request. Must not assert a product, policy, or fact, and must not attempt to answer anything.")
 
 class DeclineTask(BaseModel):
-    reason: str = Field(description="A short, factual statement naming the product or service Horizon does not offer.")
+    reason: str = Field(description="A short, factual statement for the decline.")
+    category: str = Field(default="out_of_scope_product", description="Must be exactly 'out_of_scope_product' when the base product family has no Matrix entry at all, or 'individual_customers_only' when the base product exists but the component names a non-individual customer segment (business, corporate, institutional) rather than an individual retail customer.")
+    customer_facing_message: str = Field(description="One short, natural, honest sentence explaining the decline. For category 'out_of_scope_product', state the product/service isn't offered. For category 'individual_customers_only', state that this assistant's information covers individual/personal banking only -- never assert whether Horizon does or doesn't actually serve the other segment in reality.")
 
 class RequestComponentResolution(BaseModel):
     component_id: str = Field(description="Stable identifier for one distinct component of the latest user input, e.g. component_1.")

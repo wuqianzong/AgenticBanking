@@ -125,7 +125,7 @@ This multi-tier verification layer checks outbound responses to maintain accurac
   * **Routing:** Routes to **Node 08**.
 
 * **Node 08: Soft Escalation Analyzer (Deterministic Telemetry Monitor)**  
-  * **Logic:** When turn\_count \>= 5, it appends a non-blocking 'Talk to Agent' option to the response payload.  
+  * **Logic:** Superseded — no longer a flat turn\_count \>= 5 threshold. Four independent, individually-logged signals (long session duration, a same-product-intent streak, a rolling bot-confidence average, and a recurring-need signal detected by triage) each independently append the non-blocking 'Talk to Agent' option. The same rolling confidence also gates an optional thumbs-up/down quality prompt on the response. See `docs/SOFT_ESCALATION_v1.0.md` for the full design.
   * **Routing:** Concludes the cycle and transfers control to the client interface waiting state (**Node 15**).
 
 * **Node 09: Escalation Confirmation Broker**
@@ -136,13 +136,13 @@ This multi-tier verification layer checks outbound responses to maintain accurac
   * **Logic:** Returns a safe deterministic rejection for inbound safety failures, routing failures, or non-recoverable deterministic errors.  
   * **Routing:** End turn.  
 * **Node 11: Deterministic Clarification Fallback**  
-  * **Logic:** Runs only after three failed semantic rewrites of an intent or terminal retrieval clarification. Retains any answer that has independently passed approved-evidence safety, answer groundedness, and advice checks. For partial success, it preserves the answer and appends a neutral clarification. If no valid retrieval task could be formed, it uses a distinct full-intent fallback asking for the product or service and the information the customer wants.
+  * **Logic:** Reached either after three failed semantic rewrites of an intent or terminal retrieval clarification, or directly from Node 04a/19 when a pending intent clarification has no search tasks at all to fall back on (nothing else to say). Retains any answer that has independently passed approved-evidence safety, answer groundedness, and advice checks as its own response block. Each clarification and each decline is rendered as its own independent response block — never stitched into one paragraph — using Node 02e's own customer-facing wording (produced in the same call that decided CLARIFY/DECLINE), audited in one combined compliance-and-groundedness pass across every such block, with a fixed deterministic sentence as the fallback for anything left empty or that fails that audit. See `docs/DECLINE_CLARIFICATION_DESIGN_v1.0.md`.
   * **Routing:** End turn.
 
 ## 
 
 ## **🔗 Current Primary Graph Routing Summary**
 
-Start → Node 00 for INIT, otherwise Node 01\. Node 01 → Node 02c → Node 02d. A valid financial turn → Node 03a Tool-Calling Planner → Node 03b Generic Dispatcher. A RAG task enters Node 02e → Node 03b RAG Worker → Node 03c; Node 03c loops unresolved RAG tasks to Node 02e and converts terminal outcomes into validated tool results. Node 04a joins validated results, optionally loops to Node 03a for an additive enabled capability, otherwise → Node 04b → Node 05 → parallel Node 06 compliance and groundedness audits → audit join → Node 07 → Node 08 → End. Node 06 third clarification-only failure → Node 11 → End. Explicit or hard escalation → Node 09 confirmation → mock transfer on confirmation. A compliant non-financial turn → Node 12 → outbound gates; non-compliant, unsafe, or non-recoverable deterministic paths → Node 10.
+Start → Node 00 for INIT, otherwise Node 01\. Node 01 → Node 02c → Node 02d. A valid financial turn → Node 03a Tool-Calling Planner → Node 03b Generic Dispatcher. A RAG task enters Node 02e → Node 03b RAG Worker → Node 03c; Node 03c loops unresolved RAG tasks to Node 02e and converts terminal outcomes into validated tool results. Node 04a joins validated results, optionally loops to Node 03a for an additive enabled capability, otherwise → Node 04b → Node 05 → parallel Node 06 compliance and groundedness audits → audit join → Node 07 → Node 08 → End. Node 06 third clarification-only failure → Node 11 → End. Node 04a also routes straight to Node 11 → End when a pending intent clarification has no search tasks at all, independent of that retry count. Explicit or hard escalation → Node 09 confirmation → mock transfer on confirmation. A compliant non-financial turn → Node 12 → outbound gates; non-compliant, unsafe, or non-recoverable deterministic paths → Node 10.
 
 ## 

@@ -4,7 +4,8 @@ import {
   Send, Bot, ChevronRight, CheckCircle2,
   CreditCard, Wallet, Landmark, ShieldCheck,
   FileText, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
-  Loader2, Settings, ClipboardList, Clock, XCircle, ArrowRight, ArrowLeft, LayoutDashboard
+  Loader2, Settings, ClipboardList, Clock, XCircle, ArrowRight, ArrowLeft, LayoutDashboard,
+  ThumbsUp, ThumbsDown
 } from 'lucide-react';
 
 // 1. THE NODE CAPTION DICTIONARY
@@ -63,6 +64,11 @@ export default function BankingBotUI() {
   const [sessionId, setSessionId] = useState(() => localStorage.getItem(ACTIVE_SESSION_KEY));
   const [isLoggedIn, setIsLoggedIn] = useState(() => Boolean(localStorage.getItem(ACTIVE_SESSION_KEY)));
   const [messages, setMessages] = useState([]);
+  // Ratings the customer has already submitted this session, keyed by
+  // message id -- deliberately plain useState like personalDataStore below:
+  // a reload losing this is fine, it only suppresses re-showing thumbs on a
+  // message already rated, and the durable record lives server-side.
+  const [turnRatings, setTurnRatings] = useState({});
   // In-memory, session-scoped {{data-*}} token -> real value map (WP-1/WP-3).
   // Deliberately plain useState, not persisted to localStorage or any
   // backend store: the backend never resolves this token into chat text, so
@@ -149,6 +155,8 @@ export default function BankingBotUI() {
       totalSteps: payload.totalSteps,
       serviceRequestActions: payload.serviceRequestActions || [],
       navigationActions: payload.navigationActions || [],
+      showFeedbackPrompt: payload.showFeedbackPrompt || false,
+      turnNumber: payload.turnNumber,
       createdAt: message.created_at
     };
   };
@@ -349,6 +357,30 @@ export default function BankingBotUI() {
       setServiceRequestList(data.items || []);
     } catch (error) {
       console.error('Failed to load service request list', error);
+    }
+  };
+
+  // Only offered by the backend (showFeedbackPrompt) when node_08's
+  // schema-derived confidence for that specific turn was itself ambiguous.
+  // Optimistically marks the message rated so the buttons disappear even if
+  // the request is still in flight; a failure just means the durable log
+  // and the live confidence adjustment didn't happen, which is a silent,
+  // low-stakes miss rather than something worth retrying or alerting on.
+  const submitTurnRating = async (messageId, turnNumber, rating) => {
+    setTurnRatings(prev => ({ ...prev, [messageId]: rating }));
+    try {
+      await fetch('http://localhost:8000/api/feedback/turn-rating', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          user_id: MOCK_PROFILE.userId,
+          turn_number: turnNumber,
+          rating,
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to submit turn rating', error);
     }
   };
 
@@ -661,6 +693,8 @@ export default function BankingBotUI() {
             totalSteps: finalBotData.totalSteps,
             serviceRequestActions: finalBotData.serviceRequestActions || [],
             navigationActions: finalBotData.navigationActions || [],
+            showFeedbackPrompt: finalBotData.showFeedbackPrompt || false,
+            turnNumber: finalBotData.turnNumber,
             createdAt: new Date().toISOString()
           };
           if (botResponse.type === 'stepper') {
@@ -747,6 +781,39 @@ export default function BankingBotUI() {
       })}
     </div>
   );
+
+  const renderTurnFeedback = (msg) => {
+    if (!msg.showFeedbackPrompt) return null;
+    const submitted = turnRatings[msg.id];
+    if (submitted !== undefined) {
+      return (
+        <div className="mt-2 text-xs text-slate-400">
+          {t(preferences.language, "feedback.thanks")}
+        </div>
+      );
+    }
+    return (
+      <div className="mt-2 flex items-center gap-2">
+        <span className="text-xs text-slate-400">{t(preferences.language, "feedback.prompt")}</span>
+        <button
+          type="button"
+          onClick={() => submitTurnRating(msg.id, msg.turnNumber, 1)}
+          aria-label="Thumbs up"
+          className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition-colors hover:border-emerald-300 hover:text-emerald-600"
+        >
+          <ThumbsUp size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={() => submitTurnRating(msg.id, msg.turnNumber, 0)}
+          aria-label="Thumbs down"
+          className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition-colors hover:border-red-300 hover:text-red-600"
+        >
+          <ThumbsDown size={14} />
+        </button>
+      </div>
+    );
+  };
 
   const renderPrecisionBadge = () => (
     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 normal-case tracking-normal">
@@ -1791,6 +1858,7 @@ export default function BankingBotUI() {
                       </div>
                     )}
                     {msg.type === 'escalation' && renderEscalation()}
+                    {renderTurnFeedback(msg)}
                   </div>
                 </div>
               </React.Fragment>

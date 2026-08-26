@@ -65,6 +65,12 @@ class ServiceRequestCredentialCheckPayload(BaseModel):
     session_id: str
     passed: bool
 
+class TurnRatingPayload(BaseModel):
+    session_id: str
+    user_id: str
+    turn_number: int
+    rating: int
+
 
 async def archive_session_history(payload: CloseSessionPayload, archive_reason: str):
     """Write the complete in-memory transcript to SQLite before a session boundary.
@@ -311,6 +317,48 @@ async def credential_check_service_request(payload: ServiceRequestCredentialChec
     )
 
 
+@app.post("/api/feedback/turn-rating")
+async def submit_turn_rating(payload: TurnRatingPayload):
+    """Record a customer's thumbs rating for one turn's response quality.
+
+    Only offered by the frontend when node_08_soft_escalation_analyzer found
+    that turn's own schema-derived confidence ambiguous (see
+    TURN_FEEDBACK_SCORE_LOWER_BOUND/UPPER_BOUND). Durably logged for future
+    analysis, and also patched into the live, still-open session's
+    turn_escalation_history so it can immediately sharpen later turns'
+    rolling bot-confidence -- see _turn_confidence's override behavior.
+    """
+    if payload.rating not in (0, 1):
+        return {"status": "error", "message": "rating must be 0 or 1."}
+
+    found = await asyncio.to_thread(
+        LongTermMemoryManager.record_turn_rating,
+        payload.user_id, payload.session_id, payload.turn_number, payload.rating,
+    )
+    if not found:
+        return {"status": "error", "message": "No logged turn matches this session and turn number."}
+
+    config = {"configurable": {"thread_id": payload.session_id}}
+    state_snapshot = app_graph.get_state(config)
+    history = list((state_snapshot.values or {}).get("turn_escalation_history", []))
+    matched = False
+    for entry in history:
+        if entry.get("turn_number") == payload.turn_number:
+            entry["user_rating"] = payload.rating
+            matched = True
+            break
+    if matched:
+        app_graph.update_state(config, {"turn_escalation_history": history})
+
+    log_event(
+        "escalation.turn_rating.recorded",
+        session_id=payload.session_id, user_id=payload.user_id,
+        turn_number=payload.turn_number, rating=payload.rating,
+        live_state_patched=matched,
+    )
+    return {"status": "ok"}
+
+
 @app.post("/api/session/checkout")
 async def close_and_compact_session(payload: CloseSessionPayload):
     """
@@ -488,6 +536,18 @@ async def process_chat(payload: ChatPayload):
                     execution_result.get("ui_action_payload", {}),
                 )
 
+            # Durable, every-turn log of the full resolution schema (not a
+            # derived score) for future analysis -- see
+            # docs/SOFT_ESCALATION_v1.0.md. Independent of whether this turn
+            # ever showed the thumbs prompt.
+            await asyncio.to_thread(
+                LongTermMemoryManager.persist_turn_resolution,
+                payload.user_id,
+                payload.session_id,
+                execution_result.get("turn_count", 0),
+                execution_result.get("financial_subqueries", []),
+            )
+
             final_payload = {
                 "type": "complete",
                 "text": execution_result.get("final_response", ""),
@@ -510,6 +570,8 @@ async def process_chat(payload: ChatPayload):
                 "navigationActions": execution_result.get("ui_action_payload", {}).get("navigationActions", []),
                 "personalDataReveals": execution_result.get("ui_action_payload", {}).get("personalDataReveals", []),
                 "personalDataSubstituted": execution_result.get("ui_action_payload", {}).get("personalDataSubstituted", False),
+                "showFeedbackPrompt": execution_result.get("ui_action_payload", {}).get("showFeedbackPrompt", False),
+                "turnNumber": execution_result.get("turn_count", 0),
             }
             yield json.dumps(final_payload) + "\n"
             log_event("chat.response", ui_type=final_payload["uiType"], response_length=len(final_payload["text"]))

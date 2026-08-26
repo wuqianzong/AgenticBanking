@@ -100,7 +100,23 @@ def build_agent_graph():
     def route_n19(state: AgentState):
         if state.get("preflight_status") == "needs_tools":
             return "n14"
-        return "n8" if state.get("preflight_status") != "fail" else "n5"
+        if state.get("preflight_status") == "fail":
+            return "n5"
+        # A pending intent_clarification_task with no search_tasks at all
+        # means there is genuinely nothing else to answer -- the generative
+        # path (n8) has repeatedly been observed giving a bland, technically
+        # safe "I don't have information" answer instead of reliably asking
+        # the pending clarifying question, since that instruction has to
+        # compete with everything else in its prompt. n25 already builds the
+        # right question deterministically from intent_clarification_tasks
+        # (see node_11_deterministic_clarification_fallback); this was
+        # previously reachable only after 3 failed safety retries, which a
+        # bland non-answer trivially avoids since it makes no unsupported
+        # claims. intent_clarification_tasks is reset every turn, so this
+        # can never fire on a stale clarification from an earlier turn.
+        if state.get("intent_clarification_tasks") and not state.get("search_tasks"):
+            return "n25"
+        return "n8"
 
     def route_n20(state: AgentState):
         count = state.get("safety_retry_count", 0)
@@ -140,7 +156,7 @@ def build_agent_graph():
     workflow.add_conditional_edges("n17_dispatch", route_tool_dispatcher, {"n2e": "n2e", "n19": "n19"})
     workflow.add_edge("n17_rag", "n18")
     workflow.add_conditional_edges("n18", route_n18, {"n2e": "n2e", "n19": "n19"})
-    workflow.add_conditional_edges("n19", route_n19, {"n14": "n14", "n8": "n8", "n5": "n5"})
+    workflow.add_conditional_edges("n19", route_n19, {"n14": "n14", "n8": "n8", "n5": "n5", "n25": "n25"})
     workflow.add_edge("n8", "n20")
     workflow.add_conditional_edges(
         "n20",

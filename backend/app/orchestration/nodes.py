@@ -81,6 +81,18 @@ SOFT_ESCALATION_SESSION_DURATION_SECONDS = 10 * 60
 SOFT_ESCALATION_SAME_INTENT_STREAK = 20
 SOFT_ESCALATION_CONFIDENCE_THRESHOLD = 0.5
 SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT = 3
+# A turn's own (unwindowed) confidence lands in this band exactly when
+# Tool Calling v3.0's own schema is itself ambiguous about whether the
+# response was good enough -- not confidently RESOLVED, not confidently
+# empty. That is precisely the case worth asking the customer to break the
+# tie on, rather than a turn the schema is already fairly sure about.
+TURN_FEEDBACK_SCORE_LOWER_BOUND = 0.5
+TURN_FEEDBACK_SCORE_UPPER_BOUND = 0.85
+# TEMPORARY: show the thumbs prompt on every scored turn, bypassing the band
+# above, for broader feedback collection during testing. Set back to False to
+# restore the band-gated behavior -- TURN_FEEDBACK_SCORE_LOWER_BOUND/
+# UPPER_BOUND are left untouched below so reverting is a one-line change.
+TURN_FEEDBACK_SHOW_ON_ANY_SCORE = True
 ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "PARTIALLY_SUFFICIENT"}
 # One initial attempt plus three refinement stages (INTENT_EXPANSION,
 # PRODUCT_EXPANSION, ANGLE_EXPANSION — see _retry_expansion_plan). Must stay
@@ -461,6 +473,7 @@ _DECLINE_CATEGORY_REASONS = {
     "non_compliant": "it is outside the assistance I can provide under banking compliance requirements",
     "non_financial": "I can only help with Horizon Bank-related questions",
     "out_of_scope_product": "it's not a product or service Horizon currently offers",
+    "individual_customers_only": "this assistant's information covers individual, personal banking products only — business or corporate banking questions aren't covered here",
 }
 
 
@@ -1298,13 +1311,38 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
 
     1. CONTEXTUAL INHERITANCE: Read each component's customer_component text first. A Product or Intent may be inherited only when it is unambiguously established by the current-session trusted history, Active Context Matrix, or an active graph plan. Do not use the user baseline or prior-session recall to fill a missing Product or Intent, unless the component explicitly continues that recalled topic (for example, "yes, continue").
     2. FOR EACH supplied component, evaluate the two mandatory retrieval foundations:
-       - PRODUCT: a specific commercial product or valid universal scope ("ALL").
+       - PRODUCT: Identify the component's BASE product family by stripping any
+         descriptive qualifier, tier name, customer-segment word, or marketing
+         brand from the wording (e.g., "business credit card" -> base family
+         "credit card"; "Flexible Loan"/"Instant Loan" -> base family "loan";
+         "joint savings account" -> base family "savings account"). Match that
+         base family, not the qualified name, to the closest Matrix noun.
+         - If the qualifier names a product tier, plan, or marketing brand
+           (e.g., "Flexible Loan", "Gold Card", "joint savings account") --
+           anything other than a non-individual customer segment -- use the
+           matched base Matrix noun as PRODUCT; a qualifier is never grounds
+           to withhold PRODUCT here. Preserve the qualifier and every other
+           original word in this component's own customer_component output
+           field unchanged; base-product matching affects only PRODUCT/
+           target_commercial_product, never the wording shown to the customer
+           or judged by the evidence audit downstream. Whether that specific
+           qualified variant is actually covered is decided later, against
+           real retrieved evidence -- not here.
+         - If the qualifier instead names a non-individual customer segment
+           (business, corporate, institutional) rather than an individual
+           retail customer, do not set PRODUCT for SEARCH purposes at all --
+           this resolves as DECLINE (case b in Rule 3), since this
+           assistant's information is scoped exclusively to individual
+           banking regardless of whether the underlying base product exists.
        - INTENT: a specific request type that maps to an intent in the PRODUCT/INTENT MATRIX.
        Determine these foundations from the component and, only when unambiguous, the permitted current-session context in Rule 1.
     3. Assign EVERY component exactly one resolution:
        - SEARCH: use only when BOTH Product and Intent are available and form a valid pair in the Product/Intent Matrix.
        - CLARIFY: use when either mandatory foundation is missing or ambiguous, but the component could plausibly become searchable with more detail from the user. A generic process or policy word alone—such as "application", "fee", "eligibility", "limit", "rate", "requirements", or "processing time"—is an INTENT only. It does not identify a PRODUCT and MUST be CLARIFY unless a product is explicit or unambiguously inherited from permitted context. Likewise, a product name alone without a discernible request type MUST be CLARIFY.
-       - DECLINE: use only when the component clearly and confidently names a specific product, account type, or service that does NOT exist anywhere in the PRODUCT/INTENT MATRIX (e.g., margin trading, cryptocurrency trading, or any product with no matrix entry at all). Never use DECLINE merely because wording is vague or underspecified — that is CLARIFY. DECLINE means no amount of user clarification would ever produce a valid matrix pair.
+       - DECLINE: use in either of two cases, and set decline.category accordingly:
+         (a) decline.category="out_of_scope_product" -- the component's BASE product family, after stripping every qualifier, tier, or brand name per the PRODUCT rule above, still matches no Matrix noun at all (a fundamentally different financial instrument, e.g., margin trading, cryptocurrency trading, forex trading, or any product with no matrix entry at all). DECLINE means no amount of user clarification would ever produce a valid matrix pair.
+         (b) decline.category="individual_customers_only" -- the BASE product family DOES exist in the Matrix, but the component names a non-individual customer segment (business, corporate, institutional) rather than an individual retail customer. This assistant's information is scoped exclusively to individual/personal banking.
+         Never decline solely because of an unfamiliar qualifier, tier name, or marketing brand attached to an existing base product for an individual customer (e.g., "Flexible Loan", "Gold Card") -- that is SEARCH, not DECLINE. Only a non-individual customer segment triggers case (b).
        A component, its wording, a substring of its wording, or a paraphrase of it MUST NOT appear under more than one resolution.
     4. For EACH SEARCH component, formulate exactly one base Angle Group with three distinct semantic angles. Each angle must be a SHORT NATURAL-LANGUAGE PHRASE (8-20 words) that resembles a sentence fragment likely found in an FAQ answer TO THAT COMPONENT'S TOPIC — NOT an FAQ question. The direct customer query is searched separately; your angles must approach from the ANSWER side of the knowledge base.
        - "procedural": A phrase describing the actions, steps, or navigation a customer or bank performs to address this specific component. Should sound like it comes from an FAQ answer's step-by-step instructions for this topic.
@@ -1312,12 +1350,12 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        - "conceptual": A phrase describing what the product, feature, or service in this specific component is and how it works. Should sound like it comes from an FAQ answer's explanatory introduction for this topic.
        DO NOT use comma-separated keywords. DO NOT paraphrase the customer's original question. Use common banking vocabulary only — do not invent specific product names, amounts, dates, or branch details. Each angle MUST target a structurally different part of a hypothetical FAQ answer about the component's topic.
     5. For EACH SEARCH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed. In RETRY MODE preserve the supplied task_id and use its task-specific sufficiency feedback to change the search terms, product, or intent.
-    6. INTENT CLARIFICATION: For a CLARIFY component, copy only the ambiguous customer term into clarification.unresolved_request and explain internally whether Product, Intent, or both are missing or ambiguous. Do not guess a product or create a generic task merely to fill the array.
-    7. SCOPE DECLINE: For a DECLINE component, set decline.reason to a short, factual statement naming the product/service Horizon does not offer. Only decline when the matrix confirms no such product exists — never guess.
+    6. INTENT CLARIFICATION: For a CLARIFY component, copy only the ambiguous customer term into clarification.unresolved_request and explain internally whether Product, Intent, or both are missing or ambiguous. Do not guess a product or create a generic task merely to fill the array. Also set clarification.customer_facing_question: one short, natural, standalone question a customer would actually be shown, asking only about unresolved_request. It must not assert a product, policy, or fact, and must not attempt to answer any part of the request -- it is rendered as its own separate response element, never combined with anything else, so it must read completely on its own.
+    7. SCOPE DECLINE: For a DECLINE component, set decline.reason to a short, factual statement and decline.category per Rule 3's two cases. For category="out_of_scope_product", only decline when the matrix confirms no matching BASE product family exists at all — never guess, and never decline merely because a qualified or branded variant of an existing base product is unfamiliar. For category="individual_customers_only", name the non-individual segment (e.g., business, corporate) in decline.reason without asserting whether Horizon does or does not serve that segment in reality — only that this assistant's information does not cover it. Also set decline.customer_facing_message: one short, natural, standalone sentence a customer would actually be shown, following the same category rule as decline.reason. It is rendered as its own separate response element, never combined with anything else, so it must read completely on its own.
     8. Use "ALL" only when a component is genuinely universal and its Intent is a valid intent listed under "ALL" in the Product/Intent Matrix. "ALL" is not a fallback for an unknown product.
 
     Output JSON ONLY:
-    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"clarification_id":"intent_clarification_1","unresolved_request":"the fee","reason":"No product or service is identified."}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts."}}}}]}}
+    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"clarification_id":"intent_clarification_1","unresolved_request":"the fee","reason":"No product or service is identified.","customer_facing_question":"Could you let me know which product or service this fee question is about?"}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product","customer_facing_message":"Margin trading accounts aren't a product or service Horizon offers."}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only","customer_facing_message":"I can only help with individual, personal credit cards here -- business credit card questions aren't covered."}}}}]}}
     {retry_context}
     """
 
@@ -1430,11 +1468,18 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 formulated_clarifications.append(component["clarification"])
             elif resolution == "DECLINE":
                 decline = component.get("decline") if isinstance(component.get("decline"), dict) else {}
+                # Only these two categories are ever valid from this node's own
+                # DECLINE resolution -- non_compliant/non_financial belong to
+                # triage's separate decline vocabulary, never this one.
+                category = str(decline.get("category", "")).strip()
+                if category not in {"out_of_scope_product", "individual_customers_only"}:
+                    category = "out_of_scope_product"
                 formulated_declines.append({
                     "task_id": f"decline_formulator_{index}",
                     "subquery": customer_component,
-                    "reason_category": "out_of_scope_product",
+                    "reason_category": category,
                     "detail": str(decline.get("reason", "")).strip(),
+                    "customer_facing_message": str(decline.get("customer_facing_message", "")).strip(),
                     "source": "formulator",
                 })
     except Exception as e:
@@ -1531,6 +1576,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 "source": "intent_formulator",
                 "unresolved_request": unresolved_request,
                 "reason": str(task.get("reason", "The request component is too ambiguous to search safely.")).strip(),
+                "customer_facing_question": str(task.get("customer_facing_question", "")).strip(),
             })
         intent_clarification_tasks = normalized_clarifications
 
@@ -5078,6 +5124,21 @@ def _score_subquery(subquery: dict) -> float:
     return 0.5 if has_partial_rag_evidence else 0.0
 
 
+def _turn_confidence(entry: dict) -> float | None:
+    """One turn's confidence contribution: a user rating (see
+    /api/feedback/turn-rating), when present, replaces the schema-derived
+    average entirely rather than blending with it -- the customer's own
+    feeling about the whole response is a strictly better signal than the
+    proxy it is correcting. None when the turn had no financial subqueries
+    and no rating (pure chitchat contributes no data point either way).
+    """
+    user_rating = entry.get("user_rating")
+    if user_rating is not None:
+        return float(user_rating)
+    scores = [sq["score"] for sq in entry.get("subqueries", [])]
+    return sum(scores) / len(scores) if scores else None
+
+
 def node_08_soft_escalation_analyzer(state: AgentState):
     """Offers the non-blocking "Talk to Agent" chip on evidence of a
     customer possibly struggling, even though nothing explicit demands it
@@ -5092,7 +5153,9 @@ def node_08_soft_escalation_analyzer(state: AgentState):
        MAX_ESCALATION_HISTORY_TURNS turns, drops below threshold. Tool
        Calling v3.0's schema already tracks resolution at a finer grain than
        resolved/not (see _score_subquery), so this is a continuous average,
-       not a binary unresolved-turn count.
+       not a binary unresolved-turn count -- and a turn's own schema-derived
+       average is itself replaceable by a direct customer thumbs rating (see
+       _turn_confidence) for the ambiguous band a rating is offered on.
     4. The same underlying need recurring across several turns. Detected by
        node_02d/triage's own LLM call (repetitive_issue_detected), which
        judges directly from the conversation history it already sees --
@@ -5126,8 +5189,23 @@ def node_08_soft_escalation_analyzer(state: AgentState):
         "turn_number": state.get("turn_count", 0),
         "had_repeated_need": bool(state.get("repeated_need_detected_this_turn", False)),
         "subqueries": turn_subqueries,
+        "user_rating": None,
     })
     history = history[-MAX_ESCALATION_HISTORY_TURNS:]
+
+    # A thumbs prompt is offered only when THIS turn's own (unwindowed)
+    # confidence sits in the band the schema itself is ambiguous about --
+    # not the rolling window average, which mixes in other turns.
+    this_turn_scores = [sq["score"] for sq in turn_subqueries]
+    this_turn_confidence = sum(this_turn_scores) / len(this_turn_scores) if this_turn_scores else None
+    show_feedback_prompt = (
+        this_turn_confidence is not None
+        and (
+            TURN_FEEDBACK_SHOW_ON_ANY_SCORE
+            or TURN_FEEDBACK_SCORE_LOWER_BOUND <= this_turn_confidence < TURN_FEEDBACK_SCORE_UPPER_BOUND
+        )
+        and not state.get("final_clarification", "").strip()
+    )
 
     duration_triggered = False
     elapsed_seconds = None
@@ -5145,8 +5223,8 @@ def node_08_soft_escalation_analyzer(state: AgentState):
     same_intent_streak_count = state.get("same_intent_streak_count", 0)
     same_intent_triggered = same_intent_streak_count > SOFT_ESCALATION_SAME_INTENT_STREAK
 
-    all_scores = [sq["score"] for entry in history for sq in entry.get("subqueries", [])]
-    confidence = sum(all_scores) / len(all_scores) if all_scores else None
+    turn_confidences = [c for c in (_turn_confidence(entry) for entry in history) if c is not None]
+    confidence = sum(turn_confidences) / len(turn_confidences) if turn_confidences else None
     confidence_triggered = confidence is not None and confidence < SOFT_ESCALATION_CONFIDENCE_THRESHOLD
 
     repeated_need_turns = sum(1 for entry in history if entry.get("had_repeated_need"))
@@ -5174,6 +5252,9 @@ def node_08_soft_escalation_analyzer(state: AgentState):
             confidence=confidence,
             repeated_need_turns=repeated_need_turns,
         )
+
+    payload["showFeedbackPrompt"] = show_feedback_prompt
+    payload["turnNumber"] = state.get("turn_count", 0)
 
     chat_history = list(state.get("chat_history", []))
     if state.get("final_response", ""):
@@ -5428,52 +5509,160 @@ def node_10_standard_rejection(state: AgentState):
     }
 
 
+def _audit_clarification_decline_blocks(candidates: list[dict]) -> set[str]:
+    """One combined compliance + groundedness pass over every LLM-phrased
+    clarification/decline candidate, returning the blockIds that failed
+    either check. This is two calls total for the whole batch, not two per
+    block -- reusing the same shared Groundedness v2.0 functions and
+    scope-tagged violation reporting every other customer-facing surface in
+    this codebase already relies on (see groundedness.py's module
+    docstring: any content reaching a customer must pass both checks).
+    Fails closed: if either audit flags a problem but can't localize which
+    block, every block in the batch is treated as failed.
+    """
+    if not candidates:
+        return set()
+    block_ids = [c["blockId"] for c in candidates]
+    content_block = "\n\n".join(
+        f'blockId="{c["blockId"]}" ({c["kind"]}): "{c["text"]}"' for c in candidates
+    )
+    route_specific_rules = f"""
+    Each entry above is either a "clarification" (a standalone question about
+    one unresolved term) or a "decline" (a standalone scope-boundary
+    statement). Each is shown to the customer as its own independent
+    message, never combined with any other entry -- do not penalize an
+    entry for lacking content that belongs to a different entry.
+    - A clarification must not assert a product, policy, fact, or
+      eligibility rule, and must not attempt to answer any part of the
+      request -- only ask about its own unresolved term.
+    - A decline must not assert a specific Horizon product, policy, fee, or
+      commitment as the reason, and must never provide the declined advice,
+      action, or information itself.
+    Valid blockIds: {block_ids}
+    """
+    conduct = check_conduct_compliance(
+        content_block,
+        route_specific_rules=route_specific_rules,
+        extra_output_fields=', "non_compliant_block_ids": ["blockId", "..."]',
+    )
+    groundedness = check_evidence_groundedness(
+        content_block,
+        evidence_bundle="None -- these are scope/clarification statements, not answers; no factual claim is permitted or required.",
+        evidence_description="No permitted evidence (clarification/decline statements only)",
+        route_specific_rules=route_specific_rules,
+        extra_output_fields=', "ungrounded_block_ids": ["blockId", "..."]',
+    )
+    failed = set(conduct.get("non_compliant_block_ids") or [])
+    failed |= set(groundedness.get("ungrounded_block_ids") or [])
+    if not conduct.get("conduct_compliant", True) and not failed & set(block_ids):
+        failed |= set(block_ids)
+    if not groundedness.get("evidence_grounded", True) and not failed & set(block_ids):
+        failed |= set(block_ids)
+    return failed & set(block_ids)
+
+
 def node_11_deterministic_clarification_fallback(state: AgentState):
-    """Safe terminal path when three generated clarifications fail review."""
+    """Safe terminal path when three generated clarifications fail review, or
+    when node_04a/route_n19 finds a pending intent_clarification_task with
+    nothing else searchable at all (see route_n19 in graph.py).
+
+    Never a generation call. Each clarification and decline is its own
+    response block (never combined into one paragraph), using n2e's own
+    customer_facing_question/customer_facing_message -- already produced in
+    the same call that decided CLARIFY/DECLINE, so there is no separate
+    generation step that could dodge the harder response the way the
+    flexible generator was observed to. Every such block is then audited in
+    one combined pass (_audit_clarification_decline_blocks); a block that
+    fails, or was left empty by the model, falls back to a fixed
+    deterministic sentence -- the retained answer (if any) needs no audit
+    here since node_06 already validated it before retaining it.
+    """
     print("🟡 [NODE 11] Executing Deterministic Clarification Fallback")
     answer = state.get("safe_answer_for_fallback", "").strip()
     intent_tasks = state.get("intent_clarification_tasks", [])
-    unresolved_terms = [
-        str(task.get("unresolved_request", "")).strip()
-        for task in intent_tasks
-        if str(task.get("unresolved_request", "")).strip()
-    ]
-    named_terms = ", ".join(unresolved_terms)
-    all_intent_unclear = bool(intent_tasks) and not state.get("search_tasks", []) and not answer
+    decline_tasks = state.get("decline_tasks", [])
 
-    if all_intent_unclear:
-        clarification = (
-            f"Sorry, I’m not yet sure what banking information you need about {named_terms}. "
-            "Could you tell me the product or service you’re asking about and what you would like to know?"
+    response_blocks = []
+    answer_parts = []
+
+    if answer:
+        response_blocks.append({
+            "blockId": "retained_answer", "sourceTaskIds": [], "type": "text",
+            "contextText": "", "text": answer, "items": [], "options": [],
+            "progressTitle": "", "stepDetails": [], "currentStep": None,
+            "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
+        })
+        answer_parts.append(answer)
+
+    # Build every clarification/decline candidate with both its LLM-phrased
+    # text and its deterministic fallback before auditing, so a failure can
+    # be swapped in place without a second round of generation or audit.
+    candidates = []
+    for index, task in enumerate(intent_tasks, start=1):
+        unresolved_request = str(task.get("unresolved_request", "")).strip()
+        if not unresolved_request:
+            continue
+        fallback_text = (
+            f"Sorry, I'm not yet sure what banking information you need about {unresolved_request}. "
+            "Could you tell me the product or service you're asking about and what you would like to know?"
         )
-    elif answer and named_terms:
-        clarification = (
-            f"Sorry, I need a little more detail about {named_terms} to help with that part of your request. "
-            "Could you clarify the product, service, or specific information you mean?"
-        )
-    elif answer:
-        clarification = (
-            "Sorry, I couldn't find relevant FAQ details for the remaining part of your request. "
-            "Could you clarify what information you are looking for?"
-        )
-    else:
-        clarification = "Sorry, I couldn't find relevant FAQ details to answer that. Could you clarify what information you are looking for?"
-    response = "\n\n".join(part for part in [answer, clarification] if part)
-    response = _append_decline_suffix(response, state.get("decline_tasks", []))
-    payload = {"uiType": "none", "options": []}
+        llm_text = str(task.get("customer_facing_question", "")).strip()
+        candidates.append({
+            "blockId": f"clarification_{task.get('clarification_id') or index}",
+            "kind": "clarification", "type": "clarification",
+            "text": llm_text or fallback_text, "fallback_text": fallback_text, "needs_audit": bool(llm_text),
+        })
+
+    for index, task in enumerate(decline_tasks, start=1):
+        subquery = str(task.get("subquery", "")).strip()
+        fallback_scope = f'your "{subquery}" question' if subquery else "your request"
+        fallback_text = _decline_message([task], fallback_scope)
+        llm_text = str(task.get("customer_facing_message", "")).strip()
+        candidates.append({
+            "blockId": f"decline_{task.get('task_id') or index}",
+            "kind": "decline", "type": "clarification",
+            "text": llm_text or fallback_text, "fallback_text": fallback_text, "needs_audit": bool(llm_text),
+        })
+
+    failed_block_ids = _audit_clarification_decline_blocks(
+        [c for c in candidates if c["needs_audit"]]
+    )
+    clarification_parts = []
+    for candidate in candidates:
+        text = candidate["fallback_text"] if candidate["blockId"] in failed_block_ids else candidate["text"]
+        response_blocks.append({
+            "blockId": candidate["blockId"], "sourceTaskIds": [], "type": candidate["type"], "text": text,
+        })
+        answer_parts.append(text)
+        clarification_parts.append(text)
+
+    response = "\n\n".join(answer_parts) if answer_parts else (
+        "Sorry, I couldn't find relevant FAQ details to answer that. Could you clarify what information you are looking for?"
+    )
+    if not response_blocks:
+        response_blocks.append({
+            "blockId": "fallback", "sourceTaskIds": [], "type": "text",
+            "contextText": "", "text": response, "items": [], "options": [],
+            "progressTitle": "", "stepDetails": [], "currentStep": None,
+            "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
+        })
+    payload = {"uiType": "blocks", "responseBlocks": response_blocks, "options": []}
     history = list(state.get("chat_history", []))
     history.append(AIMessage(content=response))
     log_event(
         "clarification.deterministic_fallback",
         retained_answer=bool(answer),
         intent_clarification_count=len(intent_tasks),
-        all_intent_unclear=all_intent_unclear,
+        decline_count=len(decline_tasks),
+        block_count=len(response_blocks),
+        audited_block_count=sum(1 for c in candidates if c["needs_audit"]),
+        failed_block_ids=list(failed_block_ids),
         safety_retry_count=state.get("safety_retry_count", 0),
     )
     return {
         "final_response": response,
         "final_answer": answer,
-        "final_clarification": clarification,
+        "final_clarification": "\n\n".join(clarification_parts),
         "ui_action_payload": payload,
         "chat_history": history,
         "pending_advance": False,

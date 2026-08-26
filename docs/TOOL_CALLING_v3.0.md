@@ -60,6 +60,16 @@ correctly skipped entirely, and the 5-subquery mixed-tool turn resolving
 `api`/`rag`/`deeplink`/`service_request` together in one round with RAG
 invoked only for the one subquery nothing else covered).
 
+**Follow-up (separate doc)**: `node_02e`'s own SEARCH/CLARIFY/DECLINE
+resolution (base-product identification, DECLINE's honest category
+wording, and how a CLARIFY/DECLINE-only turn is presented to the customer)
+was substantially reworked after this document's initial migration -- see
+`docs/DECLINE_CLARIFICATION_DESIGN_v1.0.md`. This also added a new
+`route_n19` branch straight to `node_11` (the deterministic clarification
+fallback) for a turn with a pending `intent_clarification_task` and no
+`search_tasks` at all, independent of the three-failed-retry path that
+node already existed for.
+
 ## Why this exists
 
 Two problems surfaced while tracing a live turn ("what's my address on

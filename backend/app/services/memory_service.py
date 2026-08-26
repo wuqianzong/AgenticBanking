@@ -117,6 +117,24 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_persistent_chat_message_owner
         ON Persistent_Chat_Message(customer_id, session_id, message_sequence)
     """)
+    # One durable row per turn: the full Tool Calling v3.0 financial_subqueries
+    # schema (resolution_status, tool_attempts) rather than any derived score,
+    # so a future scoring formula can be recomputed or audited against the
+    # original evidence. user_rating is the one piece of data that cannot be
+    # derived from anything else -- it is set later, only for turns whose live
+    # confidence fell in the ambiguous band (see node_08_soft_escalation_analyzer).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Turn_Resolution_Feedback (
+            session_id TEXT NOT NULL,
+            turn_number INTEGER NOT NULL,
+            customer_id TEXT NOT NULL,
+            financial_subqueries TEXT NOT NULL,
+            user_rating INTEGER,
+            created_at TEXT NOT NULL,
+            rated_at TEXT,
+            PRIMARY KEY (session_id, turn_number)
+        )
+    """)
 
 class ShortTermMemoryManager:
     @staticmethod
@@ -646,4 +664,52 @@ class LongTermMemoryManager:
                 WHERE customer_id = ? AND session_id = ? AND message_sequence = ? AND role = 'assistant'
             """, (json.dumps(ui_payload), customer_id, session_id, message_sequence))
             conn.commit()
+
+    @staticmethod
+    def persist_turn_resolution(
+        customer_id: str,
+        session_id: str,
+        turn_number: int,
+        financial_subqueries: List[Dict[str, Any]],
+    ) -> None:
+        """Durably log one turn's full resolution schema, every turn, unconditionally.
+
+        This is intentionally the raw schema, not a computed score -- storage
+        is idempotent (REPLACE) since financial_subqueries is a deterministic
+        function of the turn, so a duplicate call from a retried request can
+        never disagree with the first write.
+        """
+        ensure_db_dir_exists()
+        with sqlite3.connect(DB_PATH) as conn:
+            ensure_memory_schema(conn)
+            conn.execute("""
+                INSERT OR REPLACE INTO Turn_Resolution_Feedback
+                (session_id, turn_number, customer_id, financial_subqueries, user_rating, created_at, rated_at)
+                VALUES (
+                    ?, ?, ?, ?,
+                    (SELECT user_rating FROM Turn_Resolution_Feedback WHERE session_id = ? AND turn_number = ?),
+                    ?,
+                    (SELECT rated_at FROM Turn_Resolution_Feedback WHERE session_id = ? AND turn_number = ?)
+                )
+            """, (
+                session_id, turn_number, customer_id, json.dumps(financial_subqueries),
+                session_id, turn_number,
+                datetime.now().isoformat(timespec="seconds"),
+                session_id, turn_number,
+            ))
+            conn.commit()
+
+    @staticmethod
+    def record_turn_rating(customer_id: str, session_id: str, turn_number: int, rating: int) -> bool:
+        """Attach a thumbs rating to an already-logged turn. Returns False if no such turn exists."""
+        ensure_db_dir_exists()
+        with sqlite3.connect(DB_PATH) as conn:
+            ensure_memory_schema(conn)
+            cursor = conn.execute("""
+                UPDATE Turn_Resolution_Feedback
+                SET user_rating = ?, rated_at = ?
+                WHERE session_id = ? AND turn_number = ? AND customer_id = ?
+            """, (rating, datetime.now().isoformat(timespec="seconds"), session_id, turn_number, customer_id))
+            conn.commit()
+            return cursor.rowcount > 0
 

@@ -257,7 +257,7 @@ async def get_service_request(special_id: str):
 @app.post("/api/service-request/submit")
 async def submit_service_request(payload: ServiceRequestSubmitPayload):
     record = await asyncio.to_thread(service_request_service.get, payload.special_id)
-    if record is None or record["user_id"] != payload.user_id or record["session_id"] != payload.session_id:
+    if record is None or record["user_id"] != payload.user_id:
         return {"status": "error", "message": "This request could not be found or has expired."}
     if record["status"] == "expired":
         return {"status": "error", "message": "This request has expired. Please ask again."}
@@ -286,7 +286,7 @@ async def submit_service_request(payload: ServiceRequestSubmitPayload):
 @app.post("/api/service-request/credential-check")
 async def credential_check_service_request(payload: ServiceRequestCredentialCheckPayload):
     record = await asyncio.to_thread(service_request_service.get, payload.special_id)
-    if record is None or record["user_id"] != payload.user_id or record["session_id"] != payload.session_id:
+    if record is None or record["user_id"] != payload.user_id:
         return {"status": "error", "message": "This request could not be found or has expired."}
     if record["status"] != "pending" or not record.get("submitted_data"):
         return {"status": "error", "message": "This request is not awaiting a credential check."}

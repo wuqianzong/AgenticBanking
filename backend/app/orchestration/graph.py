@@ -26,8 +26,7 @@ def build_agent_graph():
     workflow.add_node("n19", nodes.node_04a_resolution_planner)
     workflow.add_node("n8", nodes.node_04b_response_generator)
     workflow.add_node("n20", nodes.node_05_outbound_deterministic_gate)
-    workflow.add_node("n21_compliance", nodes.node_06_outbound_compliance_gate)
-    workflow.add_node("n21_groundedness", nodes.node_06_outbound_groundedness_gate)
+    workflow.add_node("n21_audit", nodes.node_06_outbound_combined_audit_gate)
     workflow.add_node("n21", nodes.node_06_outbound_audit_join)
     workflow.add_node("n22", nodes.node_07_precision_substitution)
     workflow.add_node("n24", nodes.node_08_soft_escalation_analyzer)
@@ -117,7 +116,7 @@ def build_agent_graph():
     def route_n20(state: AgentState):
         count = state.get("safety_retry_count", 0)
         if state.get("preflight_status") == "pass":
-            return ["n21_compliance", "n21_groundedness"]
+            return "n21_audit"
         if state.get("triage_status") == "NON_FINANCIAL":
             return "n26"
         return "n8" if count < 3 else "n23"
@@ -158,14 +157,13 @@ def build_agent_graph():
         "n20",
         route_n20,
         {
-            "n21_compliance": "n21_compliance",
-            "n21_groundedness": "n21_groundedness",
+            "n21_audit": "n21_audit",
             "n8": "n8",
             "n26": "n26",
             "n23": "n23",
         },
     )
-    workflow.add_edge(["n21_compliance", "n21_groundedness"], "n21")
+    workflow.add_edge("n21_audit", "n21")
     workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n23": "n23", "n25": "n25", "n26": "n26"})
     workflow.add_edge("n22", "n24")
     workflow.add_edge("n24", END)

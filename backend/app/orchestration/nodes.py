@@ -2508,12 +2508,12 @@ def _available_response_shortcuts(state: AgentState) -> list[dict]:
     question it just found no FAQ evidence for, and defaults to an apology
     before belatedly mentioning the shortcut as an afterthought. The
     response generator may use this only to write natural text; it is never
-    asked to identify, place, or attach a button itself. The actual
-    button(s) are built separately and deterministically in node_07 straight
-    from tool_attempts, regardless of whether the generated text mentions
-    them at all -- so unlike the id-based approaches tried before, nothing
-    here is load-bearing for correctness, only for how natural the response
-    reads.
+    asked to identify, place, or attach the actual UI itself. The real
+    button ("navigation") or embedded fillable form card ("form") is built
+    separately and deterministically in node_07 straight from
+    tool_attempts, regardless of whether the generated text mentions it at
+    all -- so unlike the id-based approaches tried before, nothing here is
+    load-bearing for correctness, only for how natural the response reads.
     """
     shortcuts = []
     for attempt, for_request in _iter_tool_attempts(state):
@@ -2779,7 +2779,6 @@ def node_svc_service_request_resolver(state: AgentState):
         )
 
     history = list(state.get("chat_history", []))
-    history.append(HumanMessage(content=f"[Completed: {description}]"))
     history.append(AIMessage(content=content_block))
 
     return {
@@ -3451,8 +3450,8 @@ def _style_personalization_block(user_profile: dict) -> str:
 
 
 # Shared verbatim guardrails for every response-generation sub-prompt, drawn
-# from the exact same constants node_06_outbound_compliance_gate audits
-# against (see check_conduct_compliance). Writing the response within these
+# from the exact same constants node_06_outbound_combined_audit_gate audits
+# against (see BANK_CONDUCT_CONTEXT/REGULATORY_LICENSING_CONTEXT there). Writing the response within these
 # boundaries from the start -- rather than relying solely on the downstream
 # audit to catch a violation and force a redraft -- cuts the retry loop this
 # turn's generation/audit exchange would otherwise need; the audit still runs
@@ -3597,11 +3596,16 @@ def _generate_response_blocks(state: AgentState) -> dict:
     Decline inputs -- each already carries the underlying sentence to
     convey (in your own words, per the rule below) in its own
     "decline_evidence" field: {json.dumps(decline_context, ensure_ascii=False)}
-    Available shortcuts this turn (each is either a "form" -- a guided
-    service request the customer could complete instead of the manual FAQ
-    steps -- or "navigation" -- a direct in-app link to the relevant screen.
-    Each button is attached automatically and unconditionally; you do not
-    control whether it appears, only whether your text acknowledges it):
+    Available shortcuts this turn (each is either a "form" -- rendered as
+    an embedded, fillable form card directly in the chat, not a button;
+    the customer fills it in and submits it right there instead of doing
+    the manual FAQ steps -- or "navigation" -- rendered as an actual
+    clickable button that takes the customer to the relevant screen. Each
+    is attached automatically and unconditionally; you do not control
+    whether it appears, only whether your text acknowledges it, and your
+    wording must match which one it is: "fill in and submit the ___ form
+    below" for a "form" shortcut, never "click"/"tap"/"use the option
+    below" language, which describes a button, not a form):
     {json.dumps(available_shortcuts, ensure_ascii=False)}
     Unavailable service requests (could not be registered this turn; state
     only the supplied reason, never guess why): {json.dumps(unavailable_service_requests, ensure_ascii=False)}
@@ -3687,34 +3691,47 @@ def _generate_response_blocks(state: AgentState) -> dict:
       * CRITICAL, for every shortcut you mention anywhere in the response
         (here or in the closing statement below): quote its `label` field
         verbatim, character for character, inside the sentence -- never
-        paraphrase, summarize, rename, or describe it in different words.
-        The button the customer actually sees is attached separately with
-        that exact label text; if your sentence uses different wording,
-        the customer cannot tell which button you mean. Wrong: a shortcut
+        paraphrase, summarize, rename, or describe it in different words --
+        AND phrase the action to match its `kind`, never generic "click"/
+        "use the option below" language for both: a "navigation" shortcut
+        is an actual clickable button, so "click"/"use"/"tap the ___
+        button below" is correct for it; a "form" shortcut renders as an
+        embedded, fillable form card directly in the chat, not a button --
+        the customer fills it in and submits it right there, so the only
+        correct phrasing is "fill in and submit the ___ form below" (or
+        equivalent), never "click"/"tap"/"use the option below," which
+        describes a button that isn't there. If your sentence uses the
+        wrong label or the wrong action for the kind, the customer cannot
+        tell what you mean or what to actually do. Wrong: a shortcut
         labeled "Update Profile" described as "visit the Profile section
-        in your account settings," or one labeled "Change Address"
-        described as "the form below" -- neither names a button the
-        customer can actually find. Right: name it exactly, e.g. "using
-        the Update Profile option below" or "submit a Change Address
-        request."
+        in your account settings" (wrong label); a "form" shortcut labeled
+        "Change Address" described as "click the option below" (wrong
+        action -- there is no button to click). Right: "using the Update
+        Profile button below" (navigation) / "fill in and submit the
+        Change Address form below" (form).
       * Exactly one matching shortcut: name what it lets the customer do,
-        quoting its exact `label` (for example, for a shortcut labeled
-        "Update Profile": "You can update your residential address
-        directly using the Update Profile option below.").
+        quoting its exact `label` and phrasing the action for its `kind`
+        (for example, a "navigation" shortcut labeled "Update Profile":
+        "You can update your residential address directly using the
+        Update Profile button below." A "form" shortcut labeled "Change
+        Address": "You can fill in and submit the Change Address form
+        below.").
       * More than one matching shortcut (this happens often: a "form" and
         a "navigation" shortcut both registered for the same request):
         distinguish them explicitly by `kind`, in one coherent sentence,
         rather than presenting them as an undifferentiated pair. A
-        "navigation" shortcut is a screen the customer manages it on
-        themselves; a "form" shortcut is a guided request submitted for
-        it to be done. For example, if a "navigation" shortcut labeled
-        "Update Profile" and a "form" shortcut labeled "Change Address"
-        both matched: "You can use the Update Profile option below to go
-        directly to your profile and update it yourself, or submit a
-        Change Address request instead if you'd rather have it updated
-        for you." Never invent a mechanism or distinction beyond kind,
-        label, and topic -- and never substitute either exact label with
-        a paraphrase.
+        "navigation" shortcut is a button that takes the customer to a
+        screen where they manage it themselves; a "form" shortcut is an
+        embedded card in the chat that they fill in and submit right
+        there. For example, if a "navigation" shortcut labeled "Update
+        Profile" and a "form" shortcut labeled "Change Address" both
+        matched: "You can use the Update Profile button below to go
+        directly to your profile and update it yourself, or fill in and
+        submit the Change Address form below instead if you'd rather have
+        it updated for you." Never invent a mechanism or distinction
+        beyond kind, label, and topic -- and never substitute either exact
+        label with a paraphrase, or a form's "fill in and submit" action
+        with button language.
       This is that subquery's complete answer -- do not also cover these
       same shortcuts again in the closing statement below; that rule is
       for shortcuts offered *alongside* a real evidence-based answer, not
@@ -3731,12 +3748,17 @@ def _generate_response_blocks(state: AgentState) -> dict:
       room, or the response already feeling complete is never a reason to
       drop it -- it is a required closing element whenever such a shortcut
       exists, not an optional addition. Use only each shortcut's supplied
-      `label`/`topic`. Good style, one shortcut: "If you'd rather skip
-      these steps, you can also do this directly using the shortcut
-      below." Good style, multiple shortcuts for different topics: "If
-      you'd like to skip the manual steps, you can also update your
-      address or jump straight to your statements using the shortcuts
-      below." The statement must:
+      `label`/`topic`, phrased for its `kind` (see the CRITICAL rule above:
+      "click"/"use the ___ button below" for "navigation," "fill in and
+      submit the ___ form below" for "form" -- never the reverse). Good
+      style, one "navigation" shortcut: "If you'd rather skip these steps,
+      you can also do this directly using the ___ button below." Good
+      style, one "form" shortcut: "If you'd rather skip these steps, you
+      can also fill in and submit the ___ form below." Good style,
+      multiple shortcuts for different topics: "If you'd like to skip the
+      manual steps, you can also update your address using the ___ button
+      below or fill in and submit the ___ form to jump straight to your
+      statements." The statement must:
       * Make clear the approved-evidence method you just described still
         works -- each shortcut is an alternative or faster path, never a
         replacement or a claim that the manual method no longer applies.
@@ -3746,9 +3768,9 @@ def _generate_response_blocks(state: AgentState) -> dict:
         step, field, screen layout, count, url, or any detail beyond what
         was supplied.
       * Never claim you are attaching, opening, sending, starting, or
-        completing anything yourself -- the button is attached separately
-        and automatically regardless of this sentence; you are only
-        introducing that it exists.
+        completing anything yourself -- a "navigation" button or a "form"
+        card is attached separately and automatically regardless of this
+        sentence; you are only introducing that it exists.
       * Never fabricate a shortcut that is not in the list, and never
         mention one when the list is empty.
     - Do not let a closing shortcut sentence replace the substantive answer
@@ -4093,6 +4115,41 @@ def _generate_response_blocks(state: AgentState) -> dict:
             for task_id in block.get("sourceTaskIds", []):
                 if task_id in replies_by_task_id:
                     block["options"] = list(block.get("options", [])) + replies_by_task_id[task_id]
+
+    # Deterministic completeness net for shortcuts, mirroring the one
+    # above for clarification/decline/no-info entries. The prompt already
+    # tells the model a retry is never a reason to drop a shortcut, but it
+    # has been observed doing exactly that when a redraft narrows its
+    # attention to only the flagged sentence -- confirmed live: a
+    # compliance failure on one sentence ("we will help you update it")
+    # produced a redraft that fixed that sentence and silently lost the
+    # entire second shortcut (an unrelated deeplink) that had nothing to
+    # do with the violation. Matched by label substring, not task_id
+    # citation -- citing a shortcut's id was tried before and repeatedly
+    # failed for unrelated reasons (see _available_response_shortcuts's
+    # docstring); the label is already required to appear verbatim by the
+    # CRITICAL prompt rule above, so checking for it directly needs no
+    # cooperation from the model beyond what it's already instructed to do.
+    combined_so_far = "\n\n".join(part for part in answer_parts if part)
+    for shortcut in available_shortcuts:
+        label = str(shortcut.get("label", "")).strip()
+        if not label or label in combined_so_far:
+            continue
+        fallback_text = (
+            f'You can also fill in and submit the "{label}" form below.'
+            if shortcut.get("kind") == "form"
+            else f'You can also use the "{label}" button below.'
+        )
+        print(f"   ⚠️ [SHORTCUT OMITTED IN DRAFT]: '{label}' missing from generated text — inserting deterministic fallback")
+        log_event("response.flexible.shortcut_omitted", label=label, kind=shortcut.get("kind"))
+        response_blocks.append({
+            "blockId": f"shortcut_fallback_{len(response_blocks)}", "sourceTaskIds": [],
+            "type": "text", "contextText": "", "text": fallback_text,
+            "items": [], "options": [], "progressTitle": "", "stepDetails": [],
+            "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
+        })
+        answer_parts.append(fallback_text)
+        combined_so_far += "\n\n" + fallback_text
 
     answer_text = "\n\n".join(part for part in answer_parts if part)
     draft = "\n\n".join(part for part in [answer_text, clarification] if part) or "Sorry, I don't have an answer for that right now."
@@ -4563,21 +4620,37 @@ def _normalize_grounding_violations(raw_violations: Any) -> list[dict]:
     return normalized
 
 
-def node_06_outbound_compliance_gate(state: AgentState):
-    """Groundedness v2.0 conduct axis: bank conduct + MAS compliance audit."""
-    print("🟢 [NODE 06a] Executing Outbound Compliance Audit")
-    answer, clarification, rendered_payload = _outbound_response_content(state)
-    content_block = f"""
-    Customer-Facing Answer:
-    "{answer}"
+def node_06_outbound_combined_audit_gate(state: AgentState):
+    """Groundedness v2.0, both axes in one model call.
 
-    Customer-Facing Clarification:
-    "{clarification}"
+    Was two separate node_06 gates (compliance, groundedness), dispatched
+    in parallel but each an independent call to the same underlying model
+    (MODEL_B_AUDITOR) on the same draft. Combining them into one call
+    removes a real correctness gap the parallel-but-separate design had,
+    not just latency: a redraft only ever sees "what failed," never "what
+    already passed," so fixing a flagged compliance violation could
+    silently reintroduce a groundedness problem the previous draft had
+    already cleared (or vice versa), with neither audit aware the other
+    axis had regressed -- risking the safety-retry budget being spent
+    oscillating between the two failure types rather than ever landing on
+    a draft that satisfies both at once. One combined call judges both
+    axes against the same draft simultaneously, so a rewrite instructed by
+    this audit's feedback addresses both at once instead of trading one
+    off against the other across turns.
 
-    Complete Customer-Facing UI Payload:
-    "{rendered_payload}"
+    Every rule, evidence bundle, and output field below is copied
+    verbatim from the two gates this replaces -- nothing about what is
+    checked or how results are used downstream changed, only that it now
+    happens in one call instead of two. Returns both
+    outbound_compliance_result and outbound_groundedness_result in the
+    same shape as before, so node_06_outbound_audit_join needed no changes
+    at all.
     """
-    route_specific_rules = """
+    print("🟢 [NODE 06] Executing Combined Outbound Compliance & Groundedness Audit")
+    answer, clarification, rendered_payload = _outbound_response_content(state)
+    is_non_financial_response = state.get("triage_status") == "NON_FINANCIAL"
+
+    conduct_route_specific_rules = """
     Determine whether any customer-facing text, UI item, option, step, list
     entry, or extended text provides unauthorized personalized financial
     advice, subjective product recommendation, return forecast, transaction
@@ -4593,35 +4666,7 @@ def node_06_outbound_compliance_gate(state: AgentState):
     Customer-Facing Clarification SEPARATELY, since a failure confined to
     one can be corrected without discarding the other.
     """
-    result = check_conduct_compliance(
-        content_block,
-        route_specific_rules=route_specific_rules,
-        extra_output_fields=', "answer_compliant": true/false, "clarification_compliant": true/false, "rewrite_instruction": "..."',
-    )
-    answer_compliant = bool(result.get("answer_compliant", False))
-    clarification_compliant = bool(result.get("clarification_compliant", False))
-    passed = bool(result.get("conduct_compliant", False)) and answer_compliant and clarification_compliant
-    audit = {
-        "passed": passed,
-        "answer_compliant": answer_compliant,
-        "clarification_compliant": clarification_compliant,
-        "reason": result.get("reason", "Compliance audit failed."),
-        "rewrite_instruction": result.get("rewrite_instruction", "Rewrite the response to comply with banking regulations."),
-    }
-    log_event("outbound.compliance.completed", passed=passed, reason=audit["reason"])
-    return {"outbound_compliance_result": audit}
-
-
-def _legacy_node_06_outbound_groundedness_gate(state: AgentState):
-    """Compatibility alias for in-flight callers of the retired audit path."""
-    return node_06_outbound_groundedness_gate(state)
-
-
-def node_06_outbound_groundedness_gate(state: AgentState):
-    """Groundedness v2.0 evidence axis: audit only the evidence permitted for this response event."""
-    print("🟢 [NODE 06b] Executing Outbound Groundedness Audit")
-    answer, clarification, rendered_payload = _outbound_response_content(state)
-    is_non_financial_response = state.get("triage_status") == "NON_FINANCIAL"
+    conduct_extra_output_fields = ', "answer_compliant": true/false, "clarification_compliant": true/false, "rewrite_instruction": "..."'
 
     audit_feedback_rules = """
     Audit-Feedback Rules:
@@ -4650,6 +4695,83 @@ def node_06_outbound_groundedness_gate(state: AgentState):
     """
     recovery_strategy_field = ', "response_recovery_strategy":"NO_STRATEGY" | "REMOVE_UNSUPPORTED_CONTENT" | "NARROW_TO_EVIDENCE_SCOPE" | "CLARIFY_FROM_ALLOWED_CONTEXT"'
 
+    def _run_combined_audit(evidence_bundle, evidence_description, evidence_route_specific_rules, evidence_extra_output_fields):
+        """One call, both axes -- prompt bodies copied verbatim from
+        check_conduct_compliance/check_evidence_groundedness (groundedness.py),
+        just concatenated instead of issued as two separate calls."""
+        evidence_text = evidence_bundle if isinstance(evidence_bundle, str) else json.dumps(evidence_bundle, ensure_ascii=False)
+        prompt = f"""
+        GROUNDEDNESS v2.0 — COMBINED CONDUCT & EVIDENCE AUDIT
+        You are an independent conduct, regulatory compliance, and
+        evidence-groundedness auditor for a Singaporean Bank, assessing a
+        read-only Horizon Bank assistant's customer-facing content against
+        TWO independent axes in this same pass. Assess each axis strictly
+        on its own terms; a pass or failure on one axis never excuses,
+        explains away, or is evidence toward the other axis's verdict.
+
+        ============================================================
+        AXIS 1 — CONDUCT & COMPLIANCE (evidence-independent)
+        ============================================================
+        Bank Conduct Rules:
+        {BANK_CONDUCT_CONTEXT}
+
+        Regulatory Context:
+        {REGULATORY_LICENSING_CONTEXT}
+
+        Language and emoji usage are outside the scope of this conduct
+        axis. Evaluate only the semantic meaning and behavioral intent of
+        the content, regardless of what language it is written in.
+
+        {conduct_route_specific_rules}
+
+        ============================================================
+        AXIS 2 — EVIDENCE GROUNDEDNESS (factual axis)
+        ============================================================
+        Permitted Evidence ({evidence_description}):
+        {evidence_text}
+
+        {PRECISION_REFERENCE_CONTRACT}
+
+        Every factual claim, instruction, figure, or suggestion in the
+        Customer-Facing Content below must be directly supported by the
+        Permitted Evidence above; nothing outside it may be used as a
+        factual source. This axis never assesses conduct, tone, or
+        regulatory compliance -- that is Axis 1 above, assessed
+        independently.
+
+        {evidence_route_specific_rules}
+
+        ============================================================
+        Customer-Facing Content (assess against BOTH axes above):
+        {content_block}
+
+        Output JSON only:
+        {{"conduct_compliant": true/false, "conduct_reason": "...", "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "violation": "...", "unsupported_content": ["verbatim phrase"]}}]{conduct_extra_output_fields}, "evidence_grounded": true/false, "evidence_reason": "...", "evidence_violations": [{{"scope": "...", "unsupported_content": ["verbatim phrase"], "evidence_gap": "..."}}]{evidence_extra_output_fields}}}
+        """
+        try:
+            result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
+            result.setdefault("conduct_compliant", False)
+            result.setdefault("conduct_violations", [])
+            result.setdefault("conduct_reason", "Conduct compliance audit did not return a reason.")
+            result.setdefault("evidence_grounded", False)
+            result.setdefault("evidence_violations", [])
+            result.setdefault("evidence_reason", "Evidence groundedness audit did not return a reason.")
+            return result
+        except Exception as error:
+            print(f"🚨 [COMBINED OUTBOUND AUDIT ERROR]: {error}")
+            return {
+                "conduct_compliant": False,
+                "conduct_reason": "Conduct compliance audit failed.",
+                "conduct_violations": [],
+                "evidence_grounded": False,
+                "evidence_reason": "Evidence groundedness audit failed.",
+                "evidence_violations": [{
+                    "scope": "answer",
+                    "unsupported_content": [],
+                    "evidence_gap": "The groundedness audit was unavailable; no additional customer-facing facts or actions may be added.",
+                }],
+            }
+
     if is_non_financial_response:
         content_block = f"""
         Original Customer Message (courtesy-context only; never a source for a banking fact):
@@ -4664,7 +4786,7 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         Complete Customer-Facing UI Payload:
         {rendered_payload}
         """
-        route_specific_rules = """
+        evidence_route_specific_rules = """
         This route is for politeness and natural interaction, never for
         providing information. Pass only when every visible field is a brief,
         natural, non-material acknowledgement or a generic banking-assistant
@@ -4681,12 +4803,11 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         of what the customer expressed; it never supports a material claim.
         Do not assess helpfulness or whether the response answers a banking question.
         """
-        result = check_evidence_groundedness(
-            content_block,
+        result = _run_combined_audit(
             evidence_bundle="None — this route permits no factual evidence; only a courteous, non-material acknowledgement is grounded.",
             evidence_description="Non-Financial Conversation (no factual evidence permitted)",
-            route_specific_rules=route_specific_rules,
-            extra_output_fields=', "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false',
+            evidence_route_specific_rules=evidence_route_specific_rules,
+            evidence_extra_output_fields=', "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false',
         )
         audit_scope = "non_financial_response"
     else:
@@ -4720,7 +4841,7 @@ def node_06_outbound_groundedness_gate(state: AgentState):
         Complete Customer-Facing UI Payload:
         "{rendered_payload}"
         """
-        route_specific_rules = f"""
+        evidence_route_specific_rules = f"""
         ANSWER AUDIT: assess the customer's natural answer as one coherent
         response. Do NOT require it to be written in separate factual and
         inferential sections. Instead, distinguish the following two internal
@@ -4860,8 +4981,7 @@ def node_06_outbound_groundedness_gate(state: AgentState):
           never legitimately appear as prose) and must never use a
           `{{data-*}}` token that is not present in this list.
         """
-        result = check_evidence_groundedness(
-            content_block,
+        result = _run_combined_audit(
             evidence_bundle={
                 "approved_by_task": grounding_context["approved_by_task"],
                 "available_shortcuts": grounding_context["available_shortcuts"],
@@ -4870,11 +4990,25 @@ def node_06_outbound_groundedness_gate(state: AgentState):
                 "personal_data_placeholders": grounding_context["personal_data_placeholders"],
             },
             evidence_description="Task-Level Approved Evidence, Available Shortcuts, Unavailable Service Requests, Verified Customer-Specific Facts, and Personal Data References — the only factual sources for answers and answer UI",
-            route_specific_rules=route_specific_rules,
-            extra_output_fields=f', "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false{recovery_strategy_field}, "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]',
+            evidence_route_specific_rules=evidence_route_specific_rules,
+            evidence_extra_output_fields=f', "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false{recovery_strategy_field}, "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]',
         )
         audit_scope = "normal_response"
 
+    # --- Compliance axis (from the same combined `result`) ---
+    answer_compliant = bool(result.get("answer_compliant", False))
+    clarification_compliant = bool(result.get("clarification_compliant", False))
+    compliance_passed = bool(result.get("conduct_compliant", False)) and answer_compliant and clarification_compliant
+    compliance_audit = {
+        "passed": compliance_passed,
+        "answer_compliant": answer_compliant,
+        "clarification_compliant": clarification_compliant,
+        "reason": result.get("conduct_reason", "Compliance audit failed."),
+        "rewrite_instruction": result.get("rewrite_instruction", "Rewrite the response to comply with banking regulations."),
+    }
+    log_event("outbound.compliance.completed", passed=compliance_passed, reason=compliance_audit["reason"])
+
+    # --- Groundedness axis (from the same combined `result`) ---
     answer_grounded = bool(result.get("evidence_grounded", False))
     answer_evidence_grounded = bool(result.get("answer_evidence_grounded", answer_grounded))
     answer_bridge_grounded = bool(result.get("answer_bridge_grounded", answer_grounded))
@@ -4882,7 +5016,7 @@ def node_06_outbound_groundedness_gate(state: AgentState):
     clarification_connected = bool(result.get("clarification_connected", False))
     if audit_scope == "normal_response":
         answer_grounded = answer_grounded and answer_evidence_grounded and answer_bridge_grounded
-    passed = answer_grounded and clarification_grounded and clarification_connected
+    groundedness_passed = answer_grounded and clarification_grounded and clarification_connected
 
     grounding_violations = _normalize_grounding_violations(result.get("grounding_violations", result.get("evidence_violations", [])))
     response_recovery_strategy = str(result.get("response_recovery_strategy", "NO_STRATEGY")).upper()
@@ -4894,28 +5028,28 @@ def node_06_outbound_groundedness_gate(state: AgentState):
     }:
         response_recovery_strategy = "NO_STRATEGY"
 
-    audit = {
-        "passed": passed,
+    groundedness_audit = {
+        "passed": groundedness_passed,
         "answer_grounded": answer_grounded,
         "answer_evidence_grounded": answer_evidence_grounded,
         "answer_bridge_grounded": answer_bridge_grounded,
         "clarification_grounded": clarification_grounded,
         "clarification_connected": clarification_connected,
         "response_recovery_strategy": response_recovery_strategy,
-        "reason": result.get("reason", "Groundedness audit failed."),
+        "reason": result.get("evidence_reason", "Groundedness audit failed."),
         "grounding_violations": grounding_violations,
     }
     log_event(
         "outbound.groundedness.completed",
         scope=audit_scope,
-        passed=passed,
-        reason=audit["reason"],
+        passed=groundedness_passed,
+        reason=groundedness_audit["reason"],
         answer_evidence_grounded=answer_evidence_grounded,
         answer_bridge_grounded=answer_bridge_grounded,
         grounding_violation_count=len(grounding_violations),
         response_recovery_strategy=response_recovery_strategy,
     )
-    return {"outbound_groundedness_result": audit}
+    return {"outbound_compliance_result": compliance_audit, "outbound_groundedness_result": groundedness_audit}
 
 
 def node_06_outbound_audit_join(state: AgentState):

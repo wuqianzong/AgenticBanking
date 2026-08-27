@@ -5,7 +5,7 @@ import {
   CreditCard, Wallet, Landmark, ShieldCheck,
   FileText, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
   Loader2, Settings, ClipboardList, Clock, XCircle, ArrowRight, ArrowLeft, LayoutDashboard,
-  ThumbsUp, ThumbsDown, Copy, Check
+  ThumbsUp, ThumbsDown, Copy, Check, Sparkles
 } from 'lucide-react';
 
 // 1. THE NODE CAPTION DICTIONARY
@@ -79,6 +79,7 @@ export default function BankingBotUI() {
   const [personalDataStore, setPersonalDataStore] = useState({});
 
   const [inputValue, setInputValue] = useState('');
+  const [isInputHovered, setIsInputHovered] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isCompactingMemory, setIsCompactingMemory] = useState(false);
   const [loadingCaption, setLoadingCaption] = useState(t("English", "caption.processing")); // <-- NEW STATE FOR TRACKER
@@ -94,12 +95,40 @@ export default function BankingBotUI() {
     financial_literacy: "intermediate"
   });
 
-  // --- WP-7: Service Request (form-gated, risk-tiered) state ---
-  // activeServiceRequest holds the open form's schema + in-progress answers.
-  // activeCredentialCheck holds only the special_id awaiting the mocked
-  // "Bank Centralized Credential Check" gate. Only one can be open at a
-  // time, and opening either blocks the main chat input (a UX choice for
-  // focus, not a correctness mechanism -- see SERVICE_REQUEST_DESIGN_v1.0.md).
+  // Suggested next actions (max 3, shown floating above the input on focus)
+  const suggestedNextActions = useMemo(() => {
+    // 1. Check if any recent bot message has options
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.sender === 'bot' && msg.options && msg.options.length > 0) {
+        return msg.options.slice(0, 3);
+      }
+    }
+    // 2. Default banking starter prompts based on user language preference
+    const defaults = {
+      English: [
+        "Check my account balance",
+        "Recent transactions",
+        "How to change my address"
+      ],
+      Mandarin: [
+        "查询账户余额",
+        "查看近期交易",
+        "如何更改地址"
+      ],
+      Spanish: [
+        "Consultar saldo de cuenta",
+        "Transacciones recientes",
+        "Cómo cambiar dirección"
+      ]
+    };
+    return defaults[preferences.language] || defaults.English;
+  }, [messages, preferences.language]);
+
+  // --- WP-7: Embedded Interactive Service Request state ---
+  // embeddedFormStates holds in-place step indices, values, submission states,
+  // and inline credential challenges keyed by specialId.
+  const [embeddedFormStates, setEmbeddedFormStates] = useState({});
   const [activeServiceRequest, setActiveServiceRequest] = useState(null);
   const [activeCredentialCheck, setActiveCredentialCheck] = useState(null);
   const [serviceRequestNotice, setServiceRequestNotice] = useState('');
@@ -129,6 +158,25 @@ export default function BankingBotUI() {
   const oldestSequenceRef = useRef(null);
   const oldestPriorRowIdRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
+
+  const hoverTimeoutRef = useRef(null);
+
+  const handleInputMouseEnter = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsInputHovered(true);
+  };
+
+  const handleInputMouseLeave = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsInputHovered(false);
+    }, 250);
+  };
 
   const toUiMessage = (message, targetSessionId) => {
     const payload = message.ui_payload || {};
@@ -176,7 +224,9 @@ export default function BankingBotUI() {
       const response = await fetch(`http://localhost:8000/api/history/${MOCK_PROFILE.userId}?${query}`);
       if (!response.ok) throw new Error(`History request failed: ${response.status}`);
       const page = await response.json();
-      const historyMessages = page.messages.map((message) => toUiMessage(message, targetSessionId));
+      const historyMessages = page.messages
+        .filter((message) => !message.content?.startsWith('[Completed:') && !message.content?.startsWith('[Denied:'))
+        .map((message) => toUiMessage(message, targetSessionId));
       const container = chatContainerRef.current;
       const previousHeight = container?.scrollHeight ?? 0;
       const previousTop = container?.scrollTop ?? 0;
@@ -223,7 +273,9 @@ export default function BankingBotUI() {
       const response = await fetch(`http://localhost:8000/api/history/${MOCK_PROFILE.userId}/previous?${query}`);
       if (!response.ok) throw new Error(`Prior-history request failed: ${response.status}`);
       const page = await response.json();
-      const historyMessages = page.messages.map((message) => toUiMessage(message, targetSessionId));
+      const historyMessages = page.messages
+        .filter((message) => !message.content?.startsWith('[Completed:') && !message.content?.startsWith('[Denied:'))
+        .map((message) => toUiMessage(message, targetSessionId));
       const container = chatContainerRef.current;
       const previousHeight = container?.scrollHeight ?? 0;
       const previousTop = container?.scrollTop ?? 0;
@@ -339,6 +391,15 @@ export default function BankingBotUI() {
     }
   }, [isTyping]);
 
+  // Dynamically auto-resize textarea height to fit multiline queries up to 140px
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const nextHeight = Math.min(textarea.scrollHeight, 140);
+    textarea.style.height = `${nextHeight}px`;
+  }, [inputValue]);
+
   const fetchPreferences = async () => {
     try {
       const res = await fetch(`http://localhost:8000/api/preferences/${MOCK_PROFILE.userId}`);
@@ -447,6 +508,124 @@ export default function BankingBotUI() {
     }
   };
 
+  const updateEmbeddedFormField = (specialId, fieldId, value) => {
+    setEmbeddedFormStates(prev => {
+      const current = prev[specialId] || { stepIndex: 0, values: {}, status: 'pending' };
+      return {
+        ...prev,
+        [specialId]: {
+          ...current,
+          values: { ...current.values, [fieldId]: value }
+        }
+      };
+    });
+  };
+
+  const goToEmbeddedFormStep = (specialId, delta, totalSteps) => {
+    setEmbeddedFormStates(prev => {
+      const current = prev[specialId] || { stepIndex: 0, values: {}, status: 'pending' };
+      const nextIndex = Math.min(Math.max((current.stepIndex || 0) + delta, 0), Math.max(0, totalSteps - 1));
+      return {
+        ...prev,
+        [specialId]: {
+          ...current,
+          stepIndex: nextIndex
+        }
+      };
+    });
+  };
+
+  const submitEmbeddedForm = async (action) => {
+    const specialId = action.specialId;
+    const current = embeddedFormStates[specialId] || { stepIndex: 0, values: {} };
+
+    setEmbeddedFormStates(prev => ({
+      ...prev,
+      [specialId]: { ...current, isSubmitting: true, errorMessage: '' }
+    }));
+
+    try {
+      const res = await fetch('http://localhost:8000/api/service-request/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          special_id: specialId,
+          user_id: MOCK_PROFILE.userId,
+          session_id: sessionId,
+          submitted_data: current.values || {}
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'credential_check_required') {
+        setEmbeddedFormStates(prev => ({
+          ...prev,
+          [specialId]: { ...prev[specialId], isSubmitting: false, status: 'credential_check_required' }
+        }));
+      } else if (data.status === 'error') {
+        setEmbeddedFormStates(prev => ({
+          ...prev,
+          [specialId]: { ...prev[specialId], isSubmitting: false, status: 'error', errorMessage: data.message || t(preferences.language, 'serviceRequest.unavailable') }
+        }));
+      } else {
+        setEmbeddedFormStates(prev => ({
+          ...prev,
+          [specialId]: { ...prev[specialId], isSubmitting: false, status: 'completed' }
+        }));
+        appendServiceRequestResultMessage(data);
+      }
+    } catch (error) {
+      console.error('Service request submission failed', error);
+      setEmbeddedFormStates(prev => ({
+        ...prev,
+        [specialId]: { ...prev[specialId], isSubmitting: false, status: 'error', errorMessage: t(preferences.language, 'serviceRequest.unavailable') }
+      }));
+    } finally {
+      void fetchServiceRequestList();
+    }
+  };
+
+  const resolveEmbeddedCredentialCheck = async (specialId, passed) => {
+    const current = embeddedFormStates[specialId] || {};
+    setEmbeddedFormStates(prev => ({
+      ...prev,
+      [specialId]: { ...current, isSubmitting: true, errorMessage: '' }
+    }));
+
+    try {
+      const res = await fetch('http://localhost:8000/api/service-request/credential-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          special_id: specialId,
+          user_id: MOCK_PROFILE.userId,
+          session_id: sessionId,
+          passed
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'error') {
+        setEmbeddedFormStates(prev => ({
+          ...prev,
+          [specialId]: { ...prev[specialId], isSubmitting: false, status: 'error', errorMessage: data.message || t(preferences.language, 'serviceRequest.unavailable') }
+        }));
+      } else {
+        setEmbeddedFormStates(prev => ({
+          ...prev,
+          [specialId]: { ...prev[specialId], isSubmitting: false, status: passed ? 'completed' : 'denied' }
+        }));
+        appendServiceRequestResultMessage(data);
+      }
+    } catch (error) {
+      console.error('Credential check failed', error);
+      setEmbeddedFormStates(prev => ({
+        ...prev,
+        [specialId]: { ...prev[specialId], isSubmitting: false, status: 'error', errorMessage: t(preferences.language, 'serviceRequest.unavailable') }
+      }));
+    } finally {
+      void fetchServiceRequestList();
+    }
+  };
+
   const updateServiceRequestField = (fieldId, value) => {
     setActiveServiceRequest(prev => prev ? { ...prev, values: { ...prev.values, [fieldId]: value } } : prev);
   };
@@ -495,10 +674,6 @@ export default function BankingBotUI() {
     }
   };
 
-  // The mocked "Bank Centralized Credential Check" -- a real integration
-  // would perform an actual re-authentication challenge and report only
-  // pass/fail here; this MVP lets the demo choose the outcome directly so
-  // both the granted and denied paths can be shown.
   const resolveCredentialCheck = async (passed) => {
     if (!activeCredentialCheck) return;
     setIsSubmittingServiceRequest(true);
@@ -1145,20 +1320,283 @@ export default function BankingBotUI() {
     </div>
   );
 
-  // The button attached to a message that registered a service_request.
-  // Deterministic props (specialId/formSchema/description) came straight
-  // from the backend's ui_action_payload -- never model-authored.
-  const renderServiceRequestAction = (action) => (
-    <button
-      type="button"
-      onClick={() => openServiceRequestForm(action)}
-      disabled={isTyping || isCompactingMemory}
-      className="mt-3 flex w-full max-w-sm items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      <FileText size={16} />
-      {action.label || t(preferences.language, "serviceRequest.completeForm")}
-    </button>
-  );
+  // Interactive Embedded Service Request Block (rendered directly in chat flow)
+  const renderEmbeddedServiceRequestField = (field, specialId, values) => {
+    const value = values?.[field.field_id];
+    if (field.field_type === "text") {
+      return (
+        <input
+          type="text"
+          className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[15px] text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/70 focus:bg-white transition-all"
+          placeholder={field.placeholder || ""}
+          value={value ?? field.default ?? ""}
+          onChange={(e) => updateEmbeddedFormField(specialId, field.field_id, e.target.value)}
+        />
+      );
+    }
+    if (field.field_type === "options") {
+      return (
+        <select
+          className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[15px] text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+          value={value ?? field.default ?? ""}
+          onChange={(e) => updateEmbeddedFormField(specialId, field.field_id, e.target.value)}
+        >
+          <option value="" disabled>—</option>
+          {(field.options || []).map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      );
+    }
+    if (field.field_type === "checkbox") {
+      return (
+        <label className="flex items-center gap-2.5 text-[14px] text-slate-700 cursor-pointer pt-0.5">
+          <input
+            type="checkbox"
+            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            checked={Boolean(value ?? field.default ?? false)}
+            onChange={(e) => updateEmbeddedFormField(specialId, field.field_id, e.target.checked)}
+          />
+          <span className="leading-snug">{field.label}</span>
+        </label>
+      );
+    }
+    if (field.field_type === "document_reference") {
+      const uploaded = Boolean(value);
+      return (
+        <div className="flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={() => updateEmbeddedFormField(specialId, field.field_id, `mock-doc-ref-${Date.now()}`)}
+            className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[14px] font-medium transition-colors ${
+              uploaded
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+            }`}
+          >
+            {uploaded ? <CheckCircle2 size={16} /> : <FileText size={16} />}
+            <span>{uploaded ? t(preferences.language, "serviceRequest.uploaded") : t(preferences.language, "serviceRequest.simulateUpload")}</span>
+          </button>
+          <span className="text-[12px] text-slate-400">{t(preferences.language, "serviceRequest.mockDemoNotice")}</span>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const renderEmbeddedServiceRequest = (action) => {
+    const specialId = action.specialId;
+    const formState = embeddedFormStates[specialId] || {
+      stepIndex: 0,
+      values: {},
+      status: 'pending',
+      isSubmitting: false,
+      errorMessage: ''
+    };
+
+    const steps = action.formSchema?.steps || formState.formSchema?.steps || [];
+    const stepIndex = formState.stepIndex || 0;
+    const currentStep = steps[stepIndex] || steps[0] || { caption: action.label, fields: [] };
+    const isLastStep = stepIndex >= steps.length - 1;
+    const isFirstStep = stepIndex === 0;
+
+    // 1. COMPLETED STATE
+    if (formState.status === 'completed') {
+      return (
+        <div id={`service-request-card-${specialId}`} className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm animate-in fade-in duration-200 transition-all">
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-emerald-100 p-2 text-emerald-600 shrink-0 mt-0.5">
+              <CheckCircle2 size={20} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="font-bold text-[15px] text-emerald-900 truncate">{action.label || t(preferences.language, "serviceRequest.statusCompleted")}</h4>
+                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+                  {t(preferences.language, "serviceRequest.statusCompleted")}
+                </span>
+              </div>
+              <p className="mt-1 text-[14px] text-emerald-700 leading-relaxed">
+                {t(preferences.language, "serviceRequest.submittedSuccess")}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 2. DENIED CREDENTIAL CHECK STATE
+    if (formState.status === 'denied') {
+      return (
+        <div id={`service-request-card-${specialId}`} className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-amber-200 bg-amber-50/70 p-4 shadow-sm transition-all">
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-amber-100 p-2 text-amber-600 shrink-0 mt-0.5">
+              <AlertCircle size={20} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="font-bold text-[15px] text-amber-900">{action.label}</h4>
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                  Verification Denied
+                </span>
+              </div>
+              <p className="mt-1 text-[14px] text-amber-700 leading-relaxed">
+                Security authorization was cancelled. You can retry anytime.
+              </p>
+              <button
+                type="button"
+                onClick={() => setEmbeddedFormStates(prev => ({ ...prev, [specialId]: { ...formState, status: 'pending' } }))}
+                className="mt-2 text-[13px] font-semibold text-amber-900 hover:underline"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 3. CREDENTIAL CHECK REQUIRED (INLINE STEP-UP)
+    if (formState.status === 'credential_check_required') {
+      return (
+        <div id={`service-request-card-${specialId}`} className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-blue-200 bg-white p-4 shadow-sm animate-in fade-in duration-200 transition-all">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+            <div className="rounded-xl bg-blue-50 p-2 text-blue-600">
+              <ShieldCheck size={18} />
+            </div>
+            <div>
+              <h4 className="font-bold text-[15px] text-slate-800">{t(preferences.language, "serviceRequest.credentialCheckTitle")}</h4>
+              <p className="text-[11px] text-slate-400">Step-up Authentication</p>
+            </div>
+          </div>
+          <p className="py-3.5 text-[14px] text-slate-600 leading-relaxed">
+            {t(preferences.language, "serviceRequest.credentialCheckBody")}
+          </p>
+          <div className="flex flex-col gap-2.5 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => resolveEmbeddedCredentialCheck(specialId, true)}
+              disabled={formState.isSubmitting}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-xl text-[14px] transition-colors disabled:opacity-50"
+            >
+              {formState.isSubmitting && <Loader2 size={15} className="animate-spin" />}
+              <span>{t(preferences.language, "serviceRequest.simulatePass")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => resolveEmbeddedCredentialCheck(specialId, false)}
+              disabled={formState.isSubmitting}
+              className="w-full border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium py-2.5 px-4 rounded-xl text-[14px] transition-colors disabled:opacity-50"
+            >
+              {t(preferences.language, "serviceRequest.simulateFail")}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // 4. ACTIVE EMBEDDED FORM
+    return (
+      <div id={`service-request-card-${specialId}`} className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-blue-100 bg-white shadow-sm overflow-hidden animate-in fade-in duration-150 transition-all">
+        {/* Header */}
+        <div className="px-4 py-3.5 bg-gradient-to-r from-blue-50/80 to-slate-50 border-b border-blue-100/80 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="rounded-xl bg-blue-600 text-white p-2 shrink-0">
+              <FileText size={16} />
+            </div>
+            <div className="min-w-0">
+              <h4 className="font-bold text-[15px] text-slate-800 truncate">
+                {action.label || action.action_label || t(preferences.language, "serviceRequest.completeForm")}
+              </h4>
+              {action.description && (
+                <p className="text-[13px] text-slate-500 line-clamp-2 leading-tight mt-0.5">{action.description}</p>
+              )}
+            </div>
+          </div>
+          {steps.length > 1 && (
+            <span className="shrink-0 text-[11px] font-semibold text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-full">
+              {stepIndex + 1}/{steps.length}
+            </span>
+          )}
+        </div>
+
+        {/* Step Progress Bar & Subtitle */}
+        {steps.length > 1 && (
+          <div className="bg-slate-50/80 border-b border-slate-100 px-4 py-2 flex items-center justify-between">
+            <span className="text-[12px] font-medium text-slate-500">
+              {currentStep.caption || `${t(preferences.language, "serviceRequest.step")} ${stepIndex + 1}`}
+            </span>
+            <div className="w-20 bg-slate-200 rounded-full h-1 overflow-hidden">
+              <div
+                className="bg-blue-600 h-1 transition-all duration-300 rounded-full"
+                style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Fields */}
+        <div className="p-4 space-y-3.5">
+          {(currentStep.fields || []).map((field) => (
+            <div key={field.field_id} className="space-y-1.5">
+              {field.field_type !== "checkbox" && (
+                <label className="block text-[13px] font-semibold text-slate-700 tracking-normal">
+                  {field.label}
+                </label>
+              )}
+              {renderEmbeddedServiceRequestField(field, specialId, formState.values)}
+              {field.notice && (
+                <p className="text-[12px] text-slate-400 italic">{field.notice}</p>
+              )}
+            </div>
+          ))}
+
+          {formState.errorMessage && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[13px] flex items-center gap-2">
+              <AlertCircle size={15} className="shrink-0" />
+              <span>{formState.errorMessage}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
+          {!isFirstStep ? (
+            <button
+              type="button"
+              onClick={() => goToEmbeddedFormStep(specialId, -1, steps.length)}
+              disabled={formState.isSubmitting}
+              className="px-3.5 py-2 rounded-xl text-[14px] font-medium text-slate-600 hover:bg-slate-200/70 transition-colors disabled:opacity-40"
+            >
+              {t(preferences.language, "serviceRequest.back")}
+            </button>
+          ) : (
+            <div />
+          )}
+
+          {isLastStep ? (
+            <button
+              type="button"
+              onClick={() => submitEmbeddedForm(action)}
+              disabled={formState.isSubmitting}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-xl text-[14px] transition-colors shadow-2xs disabled:opacity-50"
+            >
+              {formState.isSubmitting && <Loader2 size={14} className="animate-spin shrink-0" />}
+              <span>{formState.isSubmitting ? t(preferences.language, "serviceRequest.submitting") : t(preferences.language, "serviceRequest.submit")}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => goToEmbeddedFormStep(specialId, 1, steps.length)}
+              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-xl text-[14px] transition-colors shadow-2xs"
+            >
+              <span>{t(preferences.language, "serviceRequest.next")}</span>
+              <ChevronRight size={15} />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // The button attached to a message that resolved a deeplink navigation
   // target. destinationId/route/label all came straight from the backend's
@@ -1176,164 +1614,6 @@ export default function BankingBotUI() {
       {action.label}
     </button>
   );
-
-  const renderServiceRequestField = (field) => {
-    const value = activeServiceRequest?.values?.[field.field_id];
-    if (field.field_type === "text") {
-      return (
-        <input
-          type="text"
-          className="w-full border border-slate-200 rounded-lg p-2 text-sm"
-          value={value ?? field.default ?? ""}
-          onChange={(e) => updateServiceRequestField(field.field_id, e.target.value)}
-        />
-      );
-    }
-    if (field.field_type === "options") {
-      return (
-        <select
-          className="w-full border border-slate-200 rounded-lg p-2 text-sm"
-          value={value ?? field.default ?? ""}
-          onChange={(e) => updateServiceRequestField(field.field_id, e.target.value)}
-        >
-          <option value="" disabled>—</option>
-          {(field.options || []).map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
-      );
-    }
-    if (field.field_type === "checkbox") {
-      return (
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={Boolean(value ?? field.default ?? false)}
-            onChange={(e) => updateServiceRequestField(field.field_id, e.target.checked)}
-          />
-          {field.label}
-        </label>
-      );
-    }
-    if (field.field_type === "document_reference") {
-      const uploaded = Boolean(value);
-      return (
-        <div className="flex flex-col gap-1.5">
-          <button
-            type="button"
-            onClick={() => updateServiceRequestField(field.field_id, `mock-doc-ref-${Date.now()}`)}
-            className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-              uploaded
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
-            }`}
-          >
-            {uploaded ? <CheckCircle2 size={16} /> : <FileText size={16} />}
-            {uploaded ? t(preferences.language, "serviceRequest.uploaded") : t(preferences.language, "serviceRequest.simulateUpload")}
-          </button>
-          <span className="text-[11px] text-slate-400">{t(preferences.language, "serviceRequest.mockDemoNotice")}</span>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const renderServiceRequestFormModal = () => {
-    if (!activeServiceRequest) return null;
-    const steps = activeServiceRequest.formSchema?.steps || [];
-    const currentStep = steps[activeServiceRequest.stepIndex];
-    if (!currentStep) return null;
-    const isLastStep = activeServiceRequest.stepIndex === steps.length - 1;
-    const isFirstStep = activeServiceRequest.stepIndex === 0;
-    return (
-      <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
-        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl flex flex-col max-h-[80vh] overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-slate-800">{currentStep.caption}</h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {t(preferences.language, "serviceRequest.step")} {activeServiceRequest.stepIndex + 1} {t(preferences.language, "serviceRequest.of")} {steps.length}
-              </p>
-            </div>
-            <button
-              onClick={() => setActiveServiceRequest(null)}
-              className="text-slate-400 hover:text-slate-600"
-              title={t(preferences.language, "serviceRequest.cancel")}
-            >×</button>
-          </div>
-          <div className="p-4 overflow-y-auto flex flex-col gap-4 text-sm">
-            {(currentStep.fields || []).map((field) => (
-              <div key={field.field_id}>
-                {field.field_type !== "checkbox" && (
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{field.label}</label>
-                )}
-                {renderServiceRequestField(field)}
-                {field.notice && <p className="mt-1 text-[11px] text-slate-400">{field.notice}</p>}
-              </div>
-            ))}
-          </div>
-          <div className="p-4 border-t border-slate-100 flex justify-between gap-2">
-            <button
-              onClick={() => goToServiceRequestStep(-1)}
-              disabled={isFirstStep || isSubmittingServiceRequest}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40"
-            >
-              {t(preferences.language, "serviceRequest.back")}
-            </button>
-            {isLastStep ? (
-              <button
-                onClick={submitServiceRequestForm}
-                disabled={isSubmittingServiceRequest}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {isSubmittingServiceRequest ? t(preferences.language, "serviceRequest.submitting") : t(preferences.language, "serviceRequest.submit")}
-              </button>
-            ) : (
-              <button
-                onClick={() => goToServiceRequestStep(1)}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-              >
-                {t(preferences.language, "serviceRequest.next")}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderCredentialCheckModal = () => {
-    if (!activeCredentialCheck) return null;
-    return (
-      <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
-        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center gap-2">
-            <ShieldCheck size={18} className="text-blue-600" />
-            <h3 className="font-bold text-slate-800 text-sm">{t(preferences.language, "serviceRequest.credentialCheckTitle")}</h3>
-          </div>
-          <div className="p-4 text-sm text-slate-600 leading-relaxed">
-            {t(preferences.language, "serviceRequest.credentialCheckBody")}
-          </div>
-          <div className="p-4 border-t border-slate-100 flex flex-col gap-2">
-            <button
-              onClick={() => resolveCredentialCheck(true)}
-              disabled={isSubmittingServiceRequest}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {t(preferences.language, "serviceRequest.simulatePass")}
-            </button>
-            <button
-              onClick={() => resolveCredentialCheck(false)}
-              disabled={isSubmittingServiceRequest}
-              className="border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {t(preferences.language, "serviceRequest.simulateFail")}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const renderDeeplinkContent = () => {
     switch (activeDeeplink.destinationId) {
@@ -1495,6 +1775,143 @@ export default function BankingBotUI() {
             </button>
           </div>
         );
+
+      case 'profile-personal-details':
+        return (
+          <div className="w-full text-left space-y-4 max-w-md pb-6">
+            {/* Profile Avatar Card */}
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+              <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="flex items-center gap-4 relative z-10">
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center text-white text-xl font-bold shadow-inner">
+                    {preferences.nickname ? preferences.nickname.slice(0, 2).toUpperCase() : 'BW'}
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center">
+                    <Check size={11} className="text-white stroke-[3]" />
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base text-white truncate">
+                      {preferences.nickname ? `${preferences.nickname} (Mr. Wu)` : 'Benson Wu'}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-blue-100 font-mono mt-0.5">ID: USR-999 • Priority Banking</p>
+                  <div className="mt-2 inline-flex items-center gap-1 bg-white/15 backdrop-blur-xs px-2.5 py-0.5 rounded-full text-[10px] font-medium text-blue-50 border border-white/20">
+                    <ShieldCheck size={11} className="text-emerald-300" />
+                    Singpass MyInfo Verified
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Personal Details Section */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3.5">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Legal Identification</h4>
+                <span className="text-[10px] text-slate-400 font-medium">Synced with GovTech</span>
+              </div>
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Full Legal Name</label>
+                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 flex items-center justify-between">
+                    <span>Benson Qianzong Wu</span>
+                    <LockIcon size={13} className="text-slate-400" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">NRIC / FIN</label>
+                    <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 font-mono">
+                      S••••789A
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Date of Birth</label>
+                    <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700">
+                      15 Oct 1990
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Nationality & Tax Residency</label>
+                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 flex items-center justify-between">
+                    <span>Singaporean (SG)</span>
+                    <span className="text-[11px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">Tax Resident</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Details Section */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3.5">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Contact Information</h4>
+                <span className="text-[10px] text-blue-600 font-medium">Synced Profile</span>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Registered Mobile Number</label>
+                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 flex items-center justify-between">
+                    <span className="font-mono">+65 9123 4567</span>
+                    <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">Verified</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Email Address</label>
+                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 flex items-center justify-between">
+                    <span className="font-mono text-xs">benson.wu@example.com</span>
+                    <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">Verified</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Address Section */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3.5">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Registered Address</h4>
+                <span className="text-[10px] text-slate-400">Primary Residence</span>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Residential Address</label>
+                <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 leading-relaxed">
+                  12 Marina Boulevard, #28-01<br />
+                  Marina Bay Financial Centre Tower 3<br />
+                  Singapore 018982
+                </div>
+              </div>
+
+              <div className="pt-1 flex items-center justify-between text-xs text-slate-600 border-t border-slate-100">
+                <span>Mailing Address same as residential</span>
+                <div className="w-9 h-5 bg-blue-600 rounded-full relative pointer-events-none">
+                  <div className="w-3.5 h-3.5 bg-white rounded-full absolute right-1 top-0.75 shadow-xs" />
+                </div>
+              </div>
+            </div>
+
+            {/* Mock Action Buttons & Notice */}
+            <div className="pt-2 space-y-2">
+              <button
+                type="button"
+                disabled
+                className="w-full bg-slate-300 text-white font-semibold py-3.5 rounded-xl text-sm transition-all cursor-not-allowed shadow-xs"
+              >
+                Save Changes (Read-Only Demo)
+              </button>
+              <p className="text-[11px] text-slate-400 text-center leading-relaxed">
+                🔒 For regulatory security, live personal updates require official Singpass authentication or the in-chat Change Address service request.
+              </p>
+            </div>
+          </div>
+        );
         
       default:
         return (
@@ -1597,9 +2014,44 @@ export default function BankingBotUI() {
                     <button
                       type="button"
                       disabled={!isPending}
-                      onClick={() => {
+                      onClick={async () => {
                         setShowServiceRequestList(false);
-                        openServiceRequestForm({ specialId: item.special_id, description: item.description });
+                        const cardElement = document.getElementById(`service-request-card-${item.special_id}`);
+                        if (cardElement) {
+                          cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          cardElement.classList.add('ring-2', 'ring-blue-500', 'shadow-md');
+                          setTimeout(() => {
+                            cardElement.classList.remove('ring-2', 'ring-blue-500', 'shadow-md');
+                          }, 2000);
+                        } else {
+                          try {
+                            const res = await fetch(`http://localhost:8000/api/service-request/${item.special_id}`);
+                            const data = await res.json();
+                            if (data.status === 'pending') {
+                              setMessages(prev => [...prev, {
+                                id: Date.now(),
+                                sender: 'bot',
+                                text: item.description || item.action_label || t(preferences.language, "serviceRequest.completeForm"),
+                                type: 'text',
+                                serviceRequestActions: [{
+                                  specialId: item.special_id,
+                                  serviceRequestId: data.service_request_id,
+                                  label: item.action_label || data.description,
+                                  description: data.description || item.description,
+                                  formSchema: data.form_schema
+                                }],
+                                createdAt: new Date().toISOString()
+                              }]);
+                              shouldAutoScrollRef.current = true;
+                            } else if (data.status === 'completed') {
+                              setServiceRequestNotice(t(preferences.language, 'serviceRequest.alreadyCompleted'));
+                            } else if (data.status === 'expired') {
+                              setServiceRequestNotice(t(preferences.language, 'serviceRequest.expired'));
+                            }
+                          } catch (e) {
+                            console.error('Failed to load service request from drawer', e);
+                          }
+                        }
                       }}
                       className={`w-full text-left p-4 flex flex-col gap-1.5 ${isPending ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default'}`}
                     >
@@ -1861,7 +2313,7 @@ export default function BankingBotUI() {
                     )}
                     {msg.serviceRequestActions?.map((action) => (
                       <React.Fragment key={action.specialId}>
-                        {renderServiceRequestAction(action)}
+                        {renderEmbeddedServiceRequest(action)}
                       </React.Fragment>
                     ))}
                     {msg.navigationActions?.map((action) => (
@@ -1898,7 +2350,7 @@ export default function BankingBotUI() {
                     {msg.type === 'checklist' && renderChecklist(msg.items, msg.listTitle, msg.options)}
                     {msg.type === 'checklist' && msg.extendedText && (
                       <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
-                        {msg.extendedText}
+                        {renderTextWithDataChips(msg.extendedText)}
                       </div>
                     )}
                     {msg.type === 'checklist' && msg.listClarificationText && renderClarificationCard(msg.listClarificationText)}
@@ -1936,36 +2388,73 @@ export default function BankingBotUI() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Text Input Area */}
-        <div className="bg-white border-t border-slate-200 p-3 z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-          <div className="relative flex items-center">
-            <input
+        {/* Text Input Area with Floating Suggestions on Hover */}
+        <div
+          className="relative bg-white border-t border-slate-200 p-3 z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]"
+          onMouseEnter={handleInputMouseEnter}
+          onMouseLeave={handleInputMouseLeave}
+        >
+          {/* Floating Next Action Suggestions (shown only when input is hovered, max 3, semi-transparent) */}
+          {isInputHovered && !inputValue.trim() && !isTyping && isLoggedIn && !activeDeeplink && suggestedNextActions.length > 0 && (
+            <div
+              className="absolute bottom-full pb-2.5 left-3 right-3 flex items-center gap-1.5 overflow-x-auto hide-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-200 z-30 pointer-events-auto"
+              onMouseEnter={handleInputMouseEnter}
+              onMouseLeave={handleInputMouseLeave}
+            >
+              {suggestedNextActions.map((action, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSend(action)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSend(action);
+                  }}
+                  className="flex items-center gap-1.5 rounded-full border border-slate-200/70 bg-white/90 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-md backdrop-blur-md transition-all hover:border-blue-400 hover:bg-blue-50/95 hover:text-blue-700 hover:shadow-lg active:scale-95 shrink-0 cursor-pointer"
+                >
+                  <Sparkles size={11} className="text-blue-500 shrink-0" />
+                  <span className="truncate max-w-[200px]">{action}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="relative flex items-end bg-slate-100 rounded-2xl p-1.5 focus-within:ring-2 focus-within:ring-blue-500/40 focus-within:bg-white border border-transparent focus-within:border-blue-200 transition-all">
+            <textarea
               ref={inputRef}
-              type="text"
+              rows={1}
+              maxLength={1000}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend(inputValue)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  if (inputValue.trim() && !isTyping && isLoggedIn && !activeDeeplink) {
+                    handleSend(inputValue);
+                  }
+                }
+              }}
               placeholder={t(preferences.language, "chat.placeholder")}
-              className="w-full bg-slate-100 text-slate-800 text-[15px] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-400"
-              disabled={isTyping || !isLoggedIn || Boolean(activeServiceRequest || activeCredentialCheck || activeDeeplink)}
+              className="w-full bg-transparent text-slate-800 text-[15px] pl-3.5 pr-11 py-2 focus:outline-none resize-none leading-relaxed placeholder:text-slate-400 max-h-[140px] overflow-y-auto"
+              style={{ minHeight: '40px' }}
+              disabled={isTyping || !isLoggedIn || Boolean(activeDeeplink)}
             />
             <button
               onClick={() => handleSend(inputValue)}
-              disabled={!inputValue.trim() || isTyping || !isLoggedIn || Boolean(activeServiceRequest || activeCredentialCheck || activeDeeplink)}
-              className="absolute right-1.5 bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-50 disabled:bg-slate-300 hover:bg-blue-700 transition-colors shadow-sm"
+              disabled={!inputValue.trim() || isTyping || !isLoggedIn || Boolean(activeDeeplink)}
+              className="absolute right-1.5 bottom-1.5 bg-blue-600 text-white w-9 h-9 rounded-xl flex items-center justify-center disabled:opacity-40 disabled:bg-slate-300 hover:bg-blue-700 transition-all shadow-xs shrink-0"
+              title="Send"
             >
-              <Send size={18} className="ml-0.5" />
+              <Send size={16} className="ml-0.5" />
             </button>
           </div>
-          <div className="flex items-center justify-center gap-1 mt-3 mb-1">
+          <div className="flex items-center justify-center gap-1 mt-2.5 mb-0.5">
              <LockIcon size={10} className="text-slate-400"/>
              <span className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">{t(preferences.language, "chat.footer")}</span>
           </div>
         </div>
         {renderPreferencesModal()}
         {renderDeeplinkMockScreen()}
-        {renderServiceRequestFormModal()}
-        {renderCredentialCheckModal()}
         {renderServiceRequestListModal()}
         {renderServiceRequestNotice()}
       </div>

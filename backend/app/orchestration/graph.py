@@ -103,19 +103,15 @@ def build_agent_graph():
         if state.get("preflight_status") == "fail":
             return "n5"
         # A pending intent_clarification_task with no search_tasks at all
-        # means there is genuinely nothing else to answer -- the generative
-        # path (n8) has repeatedly been observed giving a bland, technically
-        # safe "I don't have information" answer instead of reliably asking
-        # the pending clarifying question, since that instruction has to
-        # compete with everything else in its prompt. n25 already builds the
-        # right question deterministically from intent_clarification_tasks
-        # (see node_11_deterministic_clarification_fallback); this was
-        # previously reachable only after 3 failed safety retries, which a
-        # bland non-answer trivially avoids since it makes no unsupported
-        # claims. intent_clarification_tasks is reset every turn, so this
-        # can never fire on a stale clarification from an earlier turn.
-        if state.get("intent_clarification_tasks") and not state.get("search_tasks"):
-            return "n25"
+        # used to be special-cased straight to n25 here, because n8's single
+        # open-ended prompt reliably gave a bland non-answer instead of
+        # asking the pending clarification. n8 now dispatches to a narrower
+        # sub-prompt for exactly this shape of turn (see
+        # _generate_evidence_only_response in nodes.py), whose schema has no
+        # alternative field to substitute a different answer into -- so this
+        # case goes through n8 like any other turn, sharing the same node_06
+        # audit. n25 (node_11) is reachable only via route_n21's own
+        # three-failed-retries condition now.
         return "n8"
 
     def route_n20(state: AgentState):

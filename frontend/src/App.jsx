@@ -5,7 +5,7 @@ import {
   CreditCard, Wallet, Landmark, ShieldCheck,
   FileText, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
   Loader2, Settings, ClipboardList, Clock, XCircle, ArrowRight, ArrowLeft, LayoutDashboard,
-  ThumbsUp, ThumbsDown
+  ThumbsUp, ThumbsDown, Copy, Check
 } from 'lucide-react';
 
 // 1. THE NODE CAPTION DICTIONARY
@@ -84,6 +84,7 @@ export default function BankingBotUI() {
   const [loadingCaption, setLoadingCaption] = useState(t("English", "caption.processing")); // <-- NEW STATE FOR TRACKER
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [expandedProgressSteps, setExpandedProgressSteps] = useState({});
+  const [copiedKey, setCopiedKey] = useState(null);
   const [showPreferences, setShowPreferences] = useState(false);
   const [preferences, setPreferences] = useState({
     nickname: "",
@@ -785,31 +786,39 @@ export default function BankingBotUI() {
   const renderTurnFeedback = (msg) => {
     if (!msg.showFeedbackPrompt) return null;
     const submitted = turnRatings[msg.id];
-    if (submitted !== undefined) {
-      return (
-        <div className="mt-2 text-xs text-slate-400">
-          {t(preferences.language, "feedback.thanks")}
-        </div>
-      );
-    }
     return (
-      <div className="mt-2 flex items-center gap-2">
-        <span className="text-xs text-slate-400">{t(preferences.language, "feedback.prompt")}</span>
+      <div className="flex items-center gap-0.5">
         <button
           type="button"
           onClick={() => submitTurnRating(msg.id, msg.turnNumber, 1)}
+          disabled={submitted !== undefined}
+          title={submitted === 1 ? t(preferences.language, "feedback.thanks") : "Thumbs up"}
           aria-label="Thumbs up"
-          className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition-colors hover:border-emerald-300 hover:text-emerald-600"
+          className={`rounded p-1 transition-colors ${
+            submitted === 1
+              ? "text-emerald-600 bg-emerald-50"
+              : submitted !== undefined
+                ? "text-slate-300 cursor-default"
+                : "text-slate-400 hover:text-emerald-600 hover:bg-slate-100"
+          }`}
         >
-          <ThumbsUp size={14} />
+          <ThumbsUp size={12} />
         </button>
         <button
           type="button"
           onClick={() => submitTurnRating(msg.id, msg.turnNumber, 0)}
+          disabled={submitted !== undefined}
+          title={submitted === 0 ? t(preferences.language, "feedback.thanks") : "Thumbs down"}
           aria-label="Thumbs down"
-          className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition-colors hover:border-red-300 hover:text-red-600"
+          className={`rounded p-1 transition-colors ${
+            submitted === 0
+              ? "text-red-600 bg-red-50"
+              : submitted !== undefined
+                ? "text-slate-300 cursor-default"
+                : "text-slate-400 hover:text-red-600 hover:bg-slate-100"
+          }`}
         >
-          <ThumbsDown size={14} />
+          <ThumbsDown size={12} />
         </button>
       </div>
     );
@@ -836,18 +845,61 @@ export default function BankingBotUI() {
     </span>
   );
 
-  const renderProtectedDataChip = (key, value) => (
-    <span
-      key={key}
-      className="group relative inline cursor-help rounded px-0.5 underline decoration-dotted decoration-blue-400/80 decoration-1 underline-offset-[3px] transition-all hover:bg-blue-50/80 hover:decoration-blue-600 hover:ring-1 hover:ring-blue-200/70 box-decoration-clone"
-    >
-      <span>{value}</span>
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-normal normal-case leading-snug text-slate-100 opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100 text-center">
-        {t(preferences.language, "misc.dataProtectedTooltip")}
-        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+  const handleCopyPersonalData = (value, key, e) => {
+    e.stopPropagation();
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(value);
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = value;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      }
+      textArea.remove();
+    }
+    setCopiedKey(key);
+    setTimeout(() => {
+      setCopiedKey((prev) => (prev === key ? null : prev));
+    }, 2000);
+  };
+
+  const renderProtectedDataChip = (key, value) => {
+    const isCopied = copiedKey === key;
+    return (
+      <span
+        key={key}
+        className="group relative inline cursor-help rounded px-0.5 underline decoration-dotted decoration-blue-400/80 decoration-1 underline-offset-[3px] transition-all hover:bg-blue-50/80 hover:decoration-blue-600 hover:ring-1 hover:ring-blue-200/70 box-decoration-clone"
+      >
+        <span>{value}</span>
+        <button
+          type="button"
+          onClick={(e) => handleCopyPersonalData(value, key, e)}
+          title={t(preferences.language, isCopied ? "misc.copied" : "misc.copy")}
+          aria-label={t(preferences.language, isCopied ? "misc.copied" : "misc.copy")}
+          className="inline-flex items-center justify-center ml-1 p-0.5 align-baseline rounded text-slate-400 hover:text-blue-600 hover:bg-blue-100/70 transition-colors no-underline cursor-pointer"
+          style={{ textDecoration: 'none' }}
+        >
+          {isCopied ? (
+            <Check size={11} className="text-emerald-600 shrink-0" />
+          ) : (
+            <Copy size={11} className="shrink-0" />
+          )}
+        </button>
+        <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-normal normal-case leading-snug text-slate-100 opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100 text-center">
+          {t(preferences.language, "misc.dataProtectedTooltip")}
+          <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+        </span>
       </span>
-    </span>
-  );
+    );
+  };
 
   const renderTextWithDataChips = (text) => {
     if (typeof text !== 'string') return text;
@@ -948,10 +1000,13 @@ export default function BankingBotUI() {
     </div>
   );
 
-  const renderClarificationCard = (text) => (
-    <div className="mt-3 flex max-w-sm items-start gap-2.5 rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 shadow-sm">
-      <AlertCircle size={16} className="mt-1 shrink-0 text-blue-600" aria-hidden="true" />
-      <span className="whitespace-pre-wrap">{renderTextWithDataChips(text)}</span>
+  const renderClarificationCard = (text, options = []) => (
+    <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 shadow-sm">
+      <div className="flex items-start gap-2.5">
+        <AlertCircle size={16} className="mt-1 shrink-0 text-blue-600" aria-hidden="true" />
+        <span className="whitespace-pre-wrap">{renderTextWithDataChips(text)}</span>
+      </div>
+      {options?.length > 0 && <div className="mt-2 pl-[26px]">{renderChips(options)}</div>}
     </div>
   );
 
@@ -1043,7 +1098,7 @@ export default function BankingBotUI() {
             {renderTextWithDataChips(block.text)}
           </div>
         )}
-        {block.type === 'clarification' && renderClarificationCard(block.text)}
+        {block.type === 'clarification' && renderClarificationCard(block.text, block.options)}
         {block.type === 'stepper' && block.contextText && (
           <div className="mb-2 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
             {renderTextWithDataChips(block.contextText)}
@@ -1796,19 +1851,14 @@ export default function BankingBotUI() {
                         >
                           {msg.sender === 'bot' ? renderTextWithDataChips(msg.text) : msg.text}
                         </div>
-                        <div className={`mt-1 text-[10px] tabular-nums text-slate-400 ${msg.sender === 'user' ? 'text-right mr-1' : 'ml-1'}`}>
-                          {formatMessageTime(timestamp)}
-                        </div>
                       </>
                     )}
 
                     {/* Dynamic UI Components */}
                     {msg.type === 'carousel' && renderCarousel(msg.options)}
-                    {msg.type === 'chips' && renderChips(msg.options)}
                     {msg.type === 'blocks' && msg.responseBlocks?.map((block, blockIndex) =>
                       renderResponseBlock(block, msg.id, blockIndex, msg.precisionSubstituted, msg.personalDataSubstituted)
                     )}
-                    {msg.type === 'blocks' && msg.options?.length > 0 && renderChips(msg.options)}
                     {msg.serviceRequestActions?.map((action) => (
                       <React.Fragment key={action.specialId}>
                         {renderServiceRequestAction(action)}
@@ -1852,13 +1902,19 @@ export default function BankingBotUI() {
                       </div>
                     )}
                     {msg.type === 'checklist' && msg.listClarificationText && renderClarificationCard(msg.listClarificationText)}
-                    {(msg.type === 'stepper' || msg.type === 'checklist' || msg.type === 'blocks') && (
-                      <div className="mt-1 ml-1 text-[10px] tabular-nums text-slate-400">
-                        {formatMessageTime(timestamp)}
-                      </div>
-                    )}
                     {msg.type === 'escalation' && renderEscalation()}
-                    {renderTurnFeedback(msg)}
+                    
+                    {/* Message Footer: Timestamp on left, Thumbs feedback on right */}
+                    <div className={`mt-1 flex items-center ${msg.sender === 'user' ? 'justify-end mr-1' : 'justify-between ml-1 mr-1'}`}>
+                      <span className="text-[10px] tabular-nums text-slate-400">
+                        {formatMessageTime(timestamp)}
+                      </span>
+                      {msg.sender === 'bot' && renderTurnFeedback(msg)}
+                    </div>
+                    
+                    {/* Quick action chips placed below timestamp & thumbs */}
+                    {msg.type === 'chips' && renderChips(msg.options)}
+                    {msg.type === 'blocks' && msg.options?.length > 0 && renderChips(msg.options)}
                   </div>
                 </div>
               </React.Fragment>

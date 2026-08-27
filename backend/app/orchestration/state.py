@@ -66,6 +66,7 @@ class AgentState(TypedDict):
     tool_planning_round: int                     # Bounded outer orchestration-loop count
     tool_plan_status: str                        # continue | resolved | exhausted
     decline_tasks: List[Dict[str, Any]]          # Legacy downstream scope-decline compatibility only
+    unresolvable_search_tasks: List[Dict[str, Any]]  # A fresh SEARCH resolution whose product/intent pairing the matrix itself rejected -- accumulated the same manual way as decline_tasks (never a LangGraph-reduced field) so it survives a mixed turn where node_03c also writes task_resolution_instructions for a sibling task this same round. Rendered as a no_info entry, never a decline: the matrix rejecting a RAG formulation only proves RAG can't answer it from FAQ text, never that Horizon doesn't offer the underlying service.
 
     # Search strategy v2.6 tasks: stable direct subquery plus optional angle groups
     search_tasks: List[Dict[str, Any]]           # Immutable task definitions with stable task_id values

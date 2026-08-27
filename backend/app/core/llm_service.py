@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from typing import List
+from typing import Any, List
 from groq import Groq
 from google import genai
 from google.genai import types
@@ -131,16 +131,21 @@ class SearchTask(BaseModel):
     target_commercial_product: str = Field(description="The exact Noun from the Product Matrix.")
     target_intent: List[str] = Field(description="List of 1-3 Verbs from the Intent Matrix.")
 
+class ClarificationReply(BaseModel):
+    """A tappable guess at what the customer means -- reusable by any node
+    that triggers a clarification, not specific to product ambiguity."""
+    label: str = Field(description="Short chip label shown to the customer, e.g. 'Personal Loan'.")
+    message: str = Field(description="The complete, natural sentence sent to the assistant if this chip is tapped, e.g. 'I'm asking about a personal loan.' Must read as something a customer would actually say -- never a bare word or phrase.")
+
 class IntentClarificationTask(BaseModel):
     clarification_id: str = Field(description="Stable identifier, e.g. intent_clarification_1.")
     unresolved_request: str = Field(description="The exact ambiguous product, service, or request component from the user's wording.")
     reason: str = Field(description="A concise internal explanation of why a valid search task cannot be formed without clarification.")
-    customer_facing_question: str = Field(description="One short, natural question to ask the customer, referencing only unresolved_request. Must not assert a product, policy, or fact, and must not attempt to answer anything.")
+    candidate_replies: List[ClarificationReply] = Field(default_factory=list, description="0-3 plausible guesses at what the customer means -- about the product, the intent, or whatever is actually ambiguous here -- most likely first. Populate only when genuinely inferable from context (e.g. a term with only one plausible matrix match); leave empty when there is no real basis to guess.")
 
 class DeclineTask(BaseModel):
     reason: str = Field(description="A short, factual statement for the decline.")
     category: str = Field(default="out_of_scope_product", description="Must be exactly 'out_of_scope_product' when the base product family has no Matrix entry at all, or 'individual_customers_only' when the base product exists but the component names a non-individual customer segment (business, corporate, institutional) rather than an individual retail customer.")
-    customer_facing_message: str = Field(description="One short, natural, honest sentence explaining the decline. For category 'out_of_scope_product', state the product/service isn't offered. For category 'individual_customers_only', state that this assistant's information covers individual/personal banking only -- never assert whether Horizon does or doesn't actually serve the other segment in reality.")
 
 class RequestComponentResolution(BaseModel):
     component_id: str = Field(description="Stable identifier for one distinct component of the latest user input, e.g. component_1.")
@@ -173,7 +178,21 @@ class SupervisorRouting(BaseModel):
     active_tool_routes: List[str] = Field(description="Array of selected tools (e.g., 'n17_rag', 'n17_api').")
 
 class ToolTaskInput(BaseModel):
-    customer_component: str = Field(default="", description="Resolved customer component for the task.")
+    # Gemini's controlled generation (response_schema below) constrains the
+    # model to ONLY the fields declared here -- a field missing from this
+    # schema is not merely discouraged by the prompt, it is structurally
+    # impossible for the model to emit at all, regardless of what the
+    # prompt's rules say. This model used to declare only
+    # customer_component, which meant a "service_request"/"deeplink"/"api"
+    # tool_task could never carry its required id field no matter how the
+    # prompt was worded -- the model was forced to echo customer_component
+    # for every tool_name because that was the only field the decoder
+    # could produce. One field per non-"rag" tool type, all optional since
+    # any single tool_task only ever populates the one its tool_name needs.
+    customer_component: str = Field(default="", description="Resolved customer component for a 'rag' tool_task's input. Never populated for service_request/deeplink/api.")
+    service_request_id: str = Field(default="", description="Registered service_request id for a 'service_request' tool_task's input, copied verbatim from that tool's available_requests registry. Never populated for other tool_names.")
+    destination_id: str = Field(default="", description="Registered deeplink destination id for a 'deeplink' tool_task's input, copied verbatim from that tool's available_destinations registry. Never populated for other tool_names.")
+    field_id: str = Field(default="", description="Registered api field id for an 'api' tool_task's input, copied verbatim from that tool's available_fields registry. Never populated for other tool_names.")
 
 class ToolCallingTask(BaseModel):
     subquery_id: str = Field(description="Exact financial subquery identifier.")
@@ -206,10 +225,17 @@ class EscalationCaseSummary(BaseModel):
 
 # =====================================================================
 
-def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
+def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_schema_override: Any = None) -> str:
     """
     Centralized remote inference client manager.
     Supports Groq LPUs and dynamic Google GenAI Pydantic Structured Outputs.
+
+    response_schema_override lets a caller supply a schema built at request
+    time (e.g. one whose enum fields reflect exactly this turn's registered
+    ids) instead of relying on the static, prompt-content-matched schema
+    below -- the same mechanism that makes tool_name/operation impossible to
+    get wrong under structured output, extended to an id field whose valid
+    set is only known at call time, not at class-definition time.
     """
     started_at = time.perf_counter()
     log_event("llm.request", model_id=model_id, raw_prompt=prompt)
@@ -242,7 +268,10 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR) -> str:
                 active_schema = MemorySummaryEvaluation
             elif "CURRENT SESSION ESCALATION CASE SUMMARY" in prompt:
                 active_schema = EscalationCaseSummary
-                
+
+            if response_schema_override is not None:
+                active_schema = response_schema_override
+
             config_kwargs = {
                 "response_mime_type": "application/json",
                 "temperature": 0.0

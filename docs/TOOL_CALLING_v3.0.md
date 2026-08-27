@@ -382,6 +382,59 @@ redundant, which is not a cost question at all) while keeping the
 economics decision fully deterministic and auditable
 (`tool.task.rag_redundant_dropped` is logged whenever the tiebreak fires).
 
+## Reliability hardening: making the planner's structured output actually match its own rules
+
+Two live-traced bugs, both eventually root-caused to the *schema* the
+planner's LLM call decodes against, not to the prompt wording — worth
+recording since prompt-only fixes provably could not have worked here.
+
+**Bug 1 — the model could not physically emit `service_request_id`,
+`destination_id`, or `field_id`.** `node_03a`'s call uses Gemini's
+structured output (`response_schema`), which constrains the model to
+*only* the fields a Pydantic schema declares — a field missing from the
+schema is not merely discouraged, it is structurally impossible to decode,
+regardless of what the prompt's rules say. `ToolTaskInput`
+(`llm_service.py`) declared only `customer_component`, so a
+`"service_request"`/`"deeplink"`/`"api"` task's `input` could never carry
+its required id field no matter how the prompt was worded — the model was
+forced to echo `customer_component` for every `tool_name`, because that
+was the only field the decoder could produce. Confirmed live: two rounds
+of prompt-only fixes (an explicit prohibition, then a contrastive
+right/wrong example) produced byte-identical wrong output across every
+retry, which is the signature of a hard decoding constraint, not a soft
+LLM tendency. Fixed by adding the three missing optional fields to
+`ToolTaskInput`, each documented as belonging to exactly one non-`rag`
+tool type.
+
+**Bug 2 — the id, once reachable, still wasn't constrained to a real
+registry value.** The ids named above are already orchestration-assigned
+(never LLM-invented — see `service_request_registry.py`'s own docstring),
+but as plain `str` fields the schema couldn't guarantee the *value*
+matched one, only that a string landed in the right field. `node_03a`
+builds a structured-output schema fresh per call now
+(`_tool_calling_plan_schema`, `nodes.py`), whose id fields are a
+dynamically-constructed `Optional[Literal[...]]` over exactly that
+request's live registry ids (`enabled_tool_capabilities()`), passed to
+`call_llm_router` via a new `response_schema_override` parameter (bypassing
+the static, prompt-content-matched schema selection for this one call).
+An invented, malformed, or copied-from-elsewhere value is no longer
+rejected after the fact by `node_03a`'s allow-list check — it's
+impossible to decode in the first place, the same guarantee structured
+output already gave `tool_name`/`operation`. One live API constraint
+worth recording: Gemini's controlled generation rejects an empty string as
+an `enum` member outright (`400 INVALID_ARGUMENT`); the "not this
+`tool_name`" sentinel is `None`/`null` (`Optional[...]`), never `""`.
+
+**A related contradiction this made visible, not created by it:** a
+subquery is commonly planned with `rag` (often tagged `"complementary"`)
+alongside a real tool in the same round. Once the real tool started
+reliably succeeding after the fixes above, RAG's own empty result for the
+same subquery could still surface as a no-info claim sitting right next to
+that tool's real answer. See `DECLINE_CLARIFICATION_DESIGN_v1.0.md` §6 for
+the fix (`_resolved_by_other_tool`) — it belongs to the no-info/decline
+design, not the dispatch mechanics here, but the trigger condition is
+exactly the multi-tool-per-subquery planning this section describes.
+
 ## What this replaces
 
 - **Removed entirely**: `tool_tasks`, `tool_results` (flat, `AgentState`-level

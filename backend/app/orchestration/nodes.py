@@ -72,6 +72,7 @@ VOLATILE_STATE_RESET = {
     "personal_data_reveal_map": {},
     "repeated_need_detected_this_turn": False,
     "low_confidence_mode": False,
+    "live_task_confidence": None,
 }
 
 MAX_VERIFIED_TASK_HISTORY_TURNS = 10
@@ -3014,97 +3015,45 @@ async def node_03b_rag_worker(state: AgentState):
 def node_03b_deeplink_worker(state: AgentState):
     return {"deeplink_payload": "[DEEPLINK DATA]:\nNo Deep-links requested for this MVP."}
 
+def _dynamic_task_confidence(result: dict, partial_evidence: dict) -> float:
+    """Live, per-task confidence for the round just completed. Reuses
+    _score_subquery's 0/0.5/1.0 tiers for consistency, but reflects this
+    task's OWN current-round outcome, not a historical session average --
+    RAG's retry depth now reads this instead of the rolling confidence
+    _score_subquery otherwise feeds (see RAG_RETRY_EFFORT_v1.0.md). RETRY
+    (still mid-ladder, will try again next round) scores 0.5 if it has
+    already accumulated real partial evidence this turn, else 0.0 -- the
+    same distinction _score_subquery draws between a genuinely partial
+    answer and nothing at all."""
+    status = result.get("status")
+    if status == "SUFFICIENT":
+        return 1.0
+    if status == "PARTIALLY_SUFFICIENT":
+        return 0.5
+    if status == "RETRY":
+        return 0.5 if partial_evidence.get(str(result.get("task_id"))) else 0.0
+    return 0.0  # CLARIFICATION_REQUIRED
+
+
 def node_03c_sufficiency_auditor(state: AgentState):
     print("🟢 [NODE 03c] Executing Task-Level Sufficiency & Evidence Selection")
-    # Confidence-scaled retry depth: a session with a strong, well-
-    # established recent track record (rolling bot-confidence over the
-    # last MAX_ESCALATION_HISTORY_TURNS completed turns -- the same metric
-    # node_08 uses for the soft-escalation chip) is capped at DIRECT +
-    # INTENT_EXPANSION ("normal effort") instead of continuing into the
-    # PRODUCT_EXPANSION/ANGLE_EXPANSION rounds ("extra effort"): those two
-    # rounds are RAG's most expensive attempts (each a full retrieval +
-    # sufficiency LLM round-trip) for the lowest marginal payoff, and a
-    # session that's been finding what it needs lately doesn't need that
-    # insurance spent on every task by default.
-    #
-    # Three guards, all added after a live trace showed the naive version
-    # (confidence >= 0.5 -> lean) fail exactly the case it should have
-    # protected: a customer asked to open an account (resolved, score
-    # 1.0), then asked how to apply for a loan -- with only that one
-    # prior turn on record, rolling confidence was already 1.0, so the
-    # loan question got the lean path, found nothing, and gave up
-    # immediately. The customer's next message was "why, can you try
-    # harder?" -- and confidence was now exactly 0.5 (one success, one
-    # failure), which the naive ">=" check still classified as
-    # confident-enough-to-go-lean, so the retried question got the exact
-    # same under-effort treatment and failed the exact same way.
-    #
-    # 1. Require a real sample before trusting the average at all: 1-2
-    #    turns of history can swing the rolling average by a full 0.5 on a
-    #    single result, which is noise, not a track record.
-    # 2. Exactly at the threshold is not "confident" -- it's a 50/50
-    #    record, which is precisely what SOFT_ESCALATION_CONFIDENCE_
-    #    THRESHOLD itself treats as low-confidence-adjacent for
-    #    escalation (node_08's own check is a strict "<", never "<="), so
-    #    the lean path uses a strict ">" for symmetry: only a genuinely
-    #    good record, not a coin flip, earns the lean path.
-    # 3. A repeated need this turn (triage's own repetitive_issue_detected,
-    #    already computed before node_03c runs) always forces the full
-    #    ladder regardless of rolling confidence -- the customer visibly
-    #    re-asking or rephrasing the same thing is a fresher, more
-    #    relevant signal than a multi-turn rolling average, and is exactly
-    #    the moment more effort is warranted, not less.
-    #
-    # Reads only already-completed prior turns (state's turn_escalation
-    # history, before node_08 appends this turn's own outcome at the very
-    # end of the graph), so this is available and correct mid-turn.
-    turn_escalation_history = state.get("turn_escalation_history", [])
-    rolling_confidence = _rolling_bot_confidence(turn_escalation_history)
-    scored_turn_count = sum(1 for entry in turn_escalation_history if _turn_confidence(entry) is not None)
-    has_repeated_need_this_turn = bool(state.get("repeated_need_detected_this_turn", False))
-    eligible_for_lean_retry = (
-        not has_repeated_need_this_turn
-        and scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST
-        and rolling_confidence is not None
-        and rolling_confidence > EXTRA_EFFORT_CONFIDENCE_THRESHOLD
-    )
-    # DIRECT + INTENT_EXPANSION (round 2) are "normal effort" and are never
-    # gated: round 2 is deterministic (no extra LLM call) and, per historical
-    # log analysis, rounds 1-2 together already capture ~94% of everything
-    # this ladder ever rescues. Only PRODUCT_EXPANSION/ANGLE_EXPANSION
-    # (rounds 3-4) -- the two paid-LLM-call rounds with a combined ~11%
-    # marginal rescue rate -- are withheld from high-confidence sessions.
-    # Rounds 3 and 4 are gated as a single "extra effort" tier, not two
-    # separate ones: their rescue-rate confidence intervals overlap, and a
-    # historical backtest of rolling confidence against which round a turn
-    # actually needed showed no separation between the two populations --
-    # there's no data basis for picking a second threshold between them.
+    # OLD (removed): a session's rolling historical confidence alone used
+    # to cap this task's ladder at DIRECT+INTENT_EXPANSION ("normal
+    # effort") before PRODUCT_EXPANSION/ANGLE_EXPANSION ever ran, betting
+    # purely on a well-established track record from OTHER, unrelated past
+    # turns rather than on how *this* task's own retrieval is actually
+    # going -- a single real failure this turn couldn't override a
+    # confident session's history at all. Replaced with a per-turn
+    # dilution average (see the "Dilution check" below) that blends this
+    # task's own live dynamic confidence with that same rolling historical
+    # signal as one equal-weight vote, not a pre-decided override: a real
+    # current failure still drags the average down regardless of history,
+    # but a confident session's track record now gives real ballast
+    # against extending effort on a merely-partial result. Static rolling
+    # confidence is otherwise untouched and still exclusively feeds
+    # node_08's soft-escalation chip. See RAG_RETRY_EFFORT_v1.0.md.
     NORMAL_EFFORT_RAG_ATTEMPTS = 2
-    effective_max_rag_attempts = NORMAL_EFFORT_RAG_ATTEMPTS if eligible_for_lean_retry else MAX_RAG_ATTEMPTS
-    # Distinct from "gets the full ladder": a brand-new or thin-history
-    # session also gets the full ladder, but isn't "low confidence" --
-    # there's not yet enough of a track record to be confident or
-    # unconfident about. Only a genuinely low, well-established rolling
-    # score means the bot has actually been struggling lately, which is
-    # the one case worth surfacing to the customer as "thinking harder"
-    # (see api_gateway.py's progress stream). Tracks EXTRA_EFFORT_
-    # CONFIDENCE_THRESHOLD, not SOFT_ESCALATION_CONFIDENCE_THRESHOLD: this
-    # label's job is to reflect whether extra retrieval effort is actually
-    # happening right now, so it must move with the threshold that gates
-    # that effort, not with the (lower, separately-tuned) threshold that
-    # gates the human-escalation offer.
-    is_low_confidence = (
-        scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST
-        and rolling_confidence is not None
-        and rolling_confidence < EXTRA_EFFORT_CONFIDENCE_THRESHOLD
-    )
-    if effective_max_rag_attempts < MAX_RAG_ATTEMPTS:
-        log_event(
-            "task.retry_depth.reduced",
-            rolling_confidence=rolling_confidence,
-            scored_turn_count=scored_turn_count,
-            effective_max_rag_attempts=effective_max_rag_attempts,
-        )
+    pending_decisions = []
     tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", [])}
     subqueries_by_id = {
         subquery.get("subquery_id"): subquery
@@ -3395,10 +3344,79 @@ def node_03c_sufficiency_auditor(state: AgentState):
             # Backward-compatible handling for an in-flight / legacy model
             # response that still uses the former string field.
             refinement = audit.get("search_feedback") or reason
-        # A partial task remains retryable with its retained evidence until the
-        # configured final attempt. At the boundary it is answerable for the supported
-        # part and carries a clarification only for the unresolved part.
-        if attempt_count >= effective_max_rag_attempts:
+        # Not decided yet whether this task stops here or continues -- see
+        # the dilution check right after this loop. A task below
+        # NORMAL_EFFORT_RAG_ATTEMPTS or at/past MAX_RAG_ATTEMPTS has no
+        # real choice either way, but one in between depends on how the
+        # *whole turn* is reading once every task's current-round result
+        # is known, not on this task in isolation.
+        pending_decisions.append({
+            "task_id": task_id,
+            "attempt_count": attempt_count,
+            "partial_ids": partial_ids,
+            "reason": reason,
+            "refinement": refinement,
+            "requested_status": requested_status,
+        })
+
+    # Dilution check: a task that has finished NORMAL_EFFORT_RAG_ATTEMPTS
+    # without a full answer only actually continues into rounds 3-4 if the
+    # WHOLE turn's live confidence -- averaging in every task's
+    # current-round result, including ones already finalized SUFFICIENT
+    # above -- would read below EXTRA_EFFORT_CONFIDENCE_THRESHOLD if
+    # everyone stopped right now. One struggling task among several
+    # successful siblings in the same turn doesn't automatically win extra
+    # effort for itself if the turn overall still reads confidently
+    # resolved; a lone struggling task (or a turn whose siblings are also
+    # struggling) does. _dynamic_task_confidence's tiers are identical
+    # whether a task ends up RETRY or finalized terminal this round, so
+    # this same aggregate is also exactly the number logged/streamed
+    # further below -- no separate "provisional vs final" computation
+    # needed.
+    #
+    # The session's rolling historical confidence joins this same average
+    # as one more equal-weight vote, when it's trustworthy enough to
+    # count at all (same MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST guard
+    # node_08 uses) -- not a separate blending formula, and not a
+    # pre-decided override: a lone task's own real failure this turn (0.0)
+    # still drags a confident session's average below threshold and
+    # extends (0.0 averaged with a 0.9 history is 0.45), but a confident
+    # session's history now gives real ballast against extending on a
+    # merely-partial result (0.5 averaged with 0.9 history is 0.7 -- right
+    # at the line, no longer automatically extended). This is exactly
+    # where this feature's cost savings come back for the common
+    # single-subquery turn, without reintroducing the old flaw of history
+    # alone overriding what this turn's own evidence actually shows.
+    provisional_confidences = [1.0 for result in current_results.values() if result.get("status") == "SUFFICIENT"]
+    for decision in pending_decisions:
+        provisional_confidences.append(0.5 if decision["partial_ids"] else 0.0)
+    turn_escalation_history = state.get("turn_escalation_history", [])
+    rolling_confidence = _rolling_bot_confidence(turn_escalation_history)
+    scored_turn_count = sum(1 for entry in turn_escalation_history if _turn_confidence(entry) is not None)
+    if scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST and rolling_confidence is not None:
+        provisional_confidences.append(rolling_confidence)
+    provisional_turn_confidence = (
+        sum(provisional_confidences) / len(provisional_confidences) if provisional_confidences else None
+    )
+    extend_if_optional = (
+        provisional_turn_confidence is not None and provisional_turn_confidence < EXTRA_EFFORT_CONFIDENCE_THRESHOLD
+    )
+
+    for decision in pending_decisions:
+        task_id = decision["task_id"]
+        attempt_count = decision["attempt_count"]
+        partial_ids = decision["partial_ids"]
+        reason = decision["reason"]
+        refinement = decision["refinement"]
+        requested_status = decision["requested_status"]
+        # A partial task remains retryable with its retained evidence until
+        # the applicable boundary. At the boundary it is answerable for the
+        # supported part and carries a clarification only for the
+        # unresolved part.
+        below_floor = attempt_count < NORMAL_EFFORT_RAG_ATTEMPTS
+        at_ceiling = attempt_count >= MAX_RAG_ATTEMPTS
+        should_retry = below_floor or (not at_ceiling and extend_if_optional)
+        if not should_retry:
             if partial_ids:
                 current_results[task_id] = {
                     "task_id": task_id,
@@ -3424,6 +3442,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
                 task_id=task_id,
                 status=current_results[task_id]["status"],
                 approved_parent_ids=partial_ids,
+                turn_confidence_if_stopped=provisional_turn_confidence,
             )
             feedback.pop(task_id, None)
         else:
@@ -3491,6 +3510,27 @@ def node_03c_sufficiency_auditor(state: AgentState):
         )
         next_stage = next((item for item in retry_expansion if item.get("task_id") == result.get("task_id")), {})
         log_event(event, task_id=result.get("task_id"), status=result.get("status"), approved_parent_ids=result.get("approved_parent_ids", []), reason=result.get("reason", ""), retry_count=retry_counts.get(result.get("task_id"), 0), next_expansion_stage=next_stage.get("stage", ""))
+    # Per-task dynamic confidence, logged individually for future analysis
+    # (see RAG_RETRY_EFFORT_v1.0.md) -- numerically identical to the
+    # dilution check's provisional_confidences above (same 0/0.5/1.0 tiers
+    # applied to the same final statuses), so the turn-level aggregate
+    # used for the retry/stop decision and the one streamed live to the
+    # frontend below are deliberately the same number, not two
+    # independently-computed ones that could quietly drift apart.
+    for result in current_results.values():
+        task_id = result.get("task_id")
+        log_event(
+            "task.dynamic_confidence",
+            task_id=task_id,
+            round=retry_counts.get(task_id, 0),
+            status=result.get("status"),
+            confidence=_dynamic_task_confidence(result, partial_evidence),
+        )
+    live_task_confidence = provisional_turn_confidence
+    # "Thinking harder" now tracks this live signal, not a pre-decided
+    # session-level one: it should reflect whether extra effort is
+    # actually happening on this task right now.
+    is_low_confidence = live_task_confidence is not None and live_task_confidence < EXTRA_EFFORT_CONFIDENCE_THRESHOLD
     # The RAG subgraph is an implementation detail of a generic tool
     # attempt. Only terminal, approved IDs cross this boundary; raw
     # candidates and retry evidence remain inside RAG.
@@ -3515,6 +3555,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         "task_resolution_instructions": task_resolution_instructions,
         "financial_subqueries": financial_subqueries,
         "low_confidence_mode": is_low_confidence,
+        "live_task_confidence": live_task_confidence,
     }
 
 

@@ -83,6 +83,7 @@ export default function BankingBotUI() {
   const [isCompactingMemory, setIsCompactingMemory] = useState(false);
   const [loadingCaption, setLoadingCaption] = useState(t("English", "caption.processing")); // <-- NEW STATE FOR TRACKER
   const [isLowConfidenceMode, setIsLowConfidenceMode] = useState(false);
+  const [taskConfidence, setTaskConfidence] = useState(null);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [expandedProgressSteps, setExpandedProgressSteps] = useState({});
   const [expandedAccordions, setExpandedAccordions] = useState({});
@@ -745,6 +746,7 @@ export default function BankingBotUI() {
     setIsTyping(true);
     setLoadingCaption(t(preferences.language, "caption.understanding"));
     setIsLowConfidenceMode(false);
+    setTaskConfidence(null);
 
     try {
       const response = await fetch("http://localhost:8000/api/chat", {
@@ -824,6 +826,12 @@ export default function BankingBotUI() {
               if (parsedData.lowConfidenceMode) {
                 setIsLowConfidenceMode(true);
               }
+              // Not sticky like lowConfidenceMode: the backend recomputes
+              // this fresh every retry round and resends the latest known
+              // value on every progress event (null until RAG's first
+              // round completes, then holding steady through the rest of
+              // the turn) -- so just take whatever it says.
+              setTaskConfidence(parsedData.taskConfidence ?? null);
             }
 
             // Check if the payload contains the final response
@@ -2675,6 +2683,11 @@ export default function BankingBotUI() {
           {/* 3. UI RENDERING REQUIREMENT: Agentic Processing Tracker */}
           {isTyping && (
             <div className="flex flex-col items-start gap-1.5">
+              {taskConfidence !== null && (
+                <div className="flex items-center gap-1 pl-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <span>{t(preferences.language, "caption.confidence")}: {Math.round(taskConfidence * 100)}%</span>
+                </div>
+              )}
               {isLowConfidenceMode && (
                 <div className="flex items-center gap-1 pl-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600">
                   <Sparkles size={11} className="shrink-0" />

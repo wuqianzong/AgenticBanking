@@ -500,23 +500,32 @@ async def process_chat(payload: ChatPayload):
 
             # 1. Stream the Node Execution Progress
             # low_confidence_mode is set once by node_03c (see its own
-            # docstring) when the rolling bot-confidence over recent turns
-            # is genuinely below threshold. It's a state field, not a
+            # docstring) when this task's own live dynamic confidence is
+            # genuinely below threshold. It's a state field, not a
             # per-chunk event, so once any chunk this turn sets it, every
             # subsequent progress event keeps reporting it -- the frontend
             # shows "Thinking harder" for the rest of this turn's
             # processing, not just the one node transition that set it.
+            # task_confidence, by contrast, is deliberately NOT sticky:
+            # node_03c recomputes and returns it fresh every round (once
+            # per retry attempt, not once per turn), so the frontend sees
+            # it actually move as retrieval progresses -- see
+            # RAG_RETRY_EFFORT_v1.0.md.
             low_confidence_mode = False
+            task_confidence = None
             async for chunk in app_graph.astream(initial_turn_state, config=config):
                 for node_name, state_update in chunk.items():
                     if state_update.get("low_confidence_mode"):
                         low_confidence_mode = True
+                    if "live_task_confidence" in state_update:
+                        task_confidence = state_update["live_task_confidence"]
                     log_event("graph.node.completed", node=node_name, state_keys=list(state_update.keys()))
                     # Yield the name of the node currently executing to the frontend
                     yield json.dumps({
                         "type": "progress",
                         "node": node_name,
                         "lowConfidenceMode": low_confidence_mode,
+                        "taskConfidence": task_confidence,
                     }) + "\n"
                     # Pace progress events so React can render each transition.
                     await asyncio.sleep(0.3)

@@ -195,20 +195,30 @@ user_rating (nullable), created_at, rated_at
 PRIMARY KEY (session_id, turn_number)
 ```
 
-## 5a. Shared with a second confidence-gated consumer, and a matching bug fix
+## 5a. A related consumer, and a matching bug fix (since superseded for that consumer)
 
-The same rolling-confidence primitive (`_rolling_bot_confidence`,
-`_turn_confidence`) now also gates `node_03c`'s RAG retry-depth decision —
-see `RAG_RETRY_EFFORT_v1.0.md`. That work's minimum-sample guard
+`node_03c`'s RAG retry-depth decision briefly shared this same
+rolling-confidence primitive (`_rolling_bot_confidence`, `_turn_confidence`)
+as a second consumer, gated by a minimum-sample guard
 (`MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST`, previously
-`MIN_SCORED_TURNS_FOR_LEAN_RAG_RETRY`) was originally applied only to that
-one consumer; live tracing then found this node's own `confidence_triggered`
-rule had never had an equivalent guard, so a single bad first turn (score
-0.0, n=1) could trigger the "Talk to Agent" chip's low-confidence signal
-immediately, before any real track record existed. Fixed identically:
+`MIN_SCORED_TURNS_FOR_LEAN_RAG_RETRY`). That guard's introduction is what
+surfaced this node's own `confidence_triggered` rule had never had an
+equivalent one, so a single bad first turn (score 0.0, n=1) could trigger
+the "Talk to Agent" chip's low-confidence signal immediately, before any
+real track record existed. Fixed identically here:
 `confidence_triggered` now also requires
 `scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST`, logged via a
-new `scored_turn_count` field on `escalation.soft.triggered`.
+new `scored_turn_count` field on `escalation.soft.triggered` — this part
+is still exactly as described.
+
+`node_03c`'s own use of the *rolling/historical* signal was subsequently
+replaced with a live, per-task dynamic confidence instead (see
+`RAG_RETRY_EFFORT_v1.0.md` — the rolling signal decided RAG's effort based
+on how *other, unrelated* past turns went, which could deny a genuinely
+struggling task extra effort in an otherwise-confident session). This
+node's `confidence_triggered` rule, and the guard fixed above, are
+unaffected by that change — the rolling/historical confidence computed
+here still exists and still does exactly this one job.
 
 Also see `DECLINE_CLARIFICATION_DESIGN_v1.0.md` §10: a turn that ends in
 `node_09`/`node_11`'s exhausted-retry fallback now always appends a

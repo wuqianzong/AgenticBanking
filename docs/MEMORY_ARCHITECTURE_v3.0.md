@@ -65,9 +65,9 @@ deterministic database checks instead of any stored or generated summary.
 
 ## 4. The new greeting: on-demand, deterministic, unaudited
 
-`node_00_context_hydrator_and_greeting` no longer calls an LLM. It runs two
-direct, cheap checks and assembles the greeting from fixed, translated
-templates:
+`node_00_context_hydrator_and_greeting` no longer calls an LLM. It runs
+three direct, cheap checks and assembles the greeting from fixed,
+translated templates:
 
 ```text
 node_00
@@ -81,6 +81,13 @@ node_00
           naming the true total and distinct request types, pointing at
           the header's requests icon (see below) -- never attaches
           serviceRequestActions to the greeting turn itself.
+  3. fetch_recent_turn_resolutions(customer_id, limit=29)
+       SELECT ... FROM Turn_Resolution_Feedback WHERE customer_id = ?
+       ORDER BY created_at DESC LIMIT 29
+       -> seeds turn_escalation_history with this customer's real
+          standing history across every past session, not an empty list
+          -- see RAG_RETRY_EFFORT_v1.0.md §4a for why this needed to
+          survive a login rather than reset on every one.
 ```
 
 Both checks are direct reads of durable, verifiable state -- never a

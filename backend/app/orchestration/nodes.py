@@ -81,20 +81,113 @@ MAX_VERIFIED_TASK_HISTORY_TURNS = 10
 # MAX_VERIFIED_TASK_HISTORY_TURNS -- a repeat or a confidence dip that
 # hasn't recurred within this many turns is no longer an active pattern.
 MAX_ESCALATION_HISTORY_TURNS = 10
+# RAG's own effort-gating hypothesis test (node_03c) needs a longer sample
+# than node_08's 10-turn recency window -- 30 is the sample size this
+# test's design was specified against, and the cap the rolling sample
+# never grows past (a t-test, unlike the z-approximation this constant
+# originally justified, is valid at any sample size -- see
+# CONFIDENCE_TEST_T_CRITICAL below -- but a sample doesn't need to be
+# infinite for the test to be meaningful, and 30 recent data points is
+# already enough to detect a real, sustained quality change). The test's
+# own sampling unit is one SUBQUERY's 1.0/0.5/0.0 grade, not a turn's
+# averaged grade (see _historical_subquery_scores) -- a turn with several
+# subqueries contributes several points toward this cap, not one.
+# turn_escalation_history itself is still stored turn-by-turn at
+# HYPOTHESIS_TEST_SAMPLE_SIZE turns of length (comfortably more raw
+# subquery scores than the cap in nearly every real case) so both this
+# window and node_08's unrelated one can be read from the same underlying
+# list -- node_08 explicitly slices back down to MAX_ESCALATION_HISTORY_TURNS
+# for its own purpose.
+HYPOTHESIS_TEST_SAMPLE_SIZE = 30
+# One-tailed critical t-values, keyed by [alpha][degrees_of_freedom],
+# standard published table values (df = n - 1). Used instead of a normal
+# (z) approximation: the population standard deviation is never known
+# here, only estimated from the sample, which is exactly the situation a
+# t-test -- not a z-test -- is the correct tool for, at ANY sample size,
+# not just once n is large. The t-distribution's own critical value
+# shrinks toward the z-value as df grows (converging by df=30), so this
+# is a strict generalization, not a separate small-sample correction
+# bolted onto the earlier z-only version: using the t-table's own
+# asymptotic values in place of a hardcoded z-table would give the
+# identical answer for a large sample, while a small one now gets an
+# appropriately wider, more conservative critical value instead of the
+# same 1.645 regardless of how little data actually supports it.
+# Covers df=1..29; MIN_SCORED_SUBQUERIES_FOR_CONFIDENCE_TRUST guards
+# against relying on the low end of this table, and CONFIDENCE_TEST_Z_CRITICAL
+# is the asymptotic (df>=30) fallback once a sample fills HYPOTHESIS_TEST_SAMPLE_SIZE.
+CONFIDENCE_TEST_T_CRITICAL = {
+    0.10: {
+        1: 3.078, 2: 1.886, 3: 1.638, 4: 1.533, 5: 1.476, 6: 1.440, 7: 1.415, 8: 1.397, 9: 1.383, 10: 1.372,
+        11: 1.363, 12: 1.356, 13: 1.350, 14: 1.345, 15: 1.341, 16: 1.337, 17: 1.333, 18: 1.330, 19: 1.328, 20: 1.325,
+        21: 1.323, 22: 1.321, 23: 1.319, 24: 1.318, 25: 1.316, 26: 1.315, 27: 1.314, 28: 1.313, 29: 1.311,
+    },
+    0.05: {
+        1: 6.314, 2: 2.920, 3: 2.353, 4: 2.132, 5: 2.015, 6: 1.943, 7: 1.895, 8: 1.860, 9: 1.833, 10: 1.812,
+        11: 1.796, 12: 1.782, 13: 1.771, 14: 1.761, 15: 1.753, 16: 1.746, 17: 1.740, 18: 1.734, 19: 1.729, 20: 1.725,
+        21: 1.721, 22: 1.717, 23: 1.714, 24: 1.711, 25: 1.708, 26: 1.706, 27: 1.703, 28: 1.701, 29: 1.699,
+    },
+    0.01: {
+        1: 31.821, 2: 6.965, 3: 4.541, 4: 3.747, 5: 3.365, 6: 3.143, 7: 2.998, 8: 2.896, 9: 2.821, 10: 2.764,
+        11: 2.718, 12: 2.681, 13: 2.650, 14: 2.624, 15: 2.602, 16: 2.583, 17: 2.567, 18: 2.552, 19: 2.539, 20: 2.528,
+        21: 2.518, 22: 2.508, 23: 2.500, 24: 2.492, 25: 2.485, 26: 2.479, 27: 2.473, 28: 2.467, 29: 2.462,
+    },
+}
+# Asymptotic (df -> infinity) fallback for any df past the table above --
+# i.e. once a sample reaches HYPOTHESIS_TEST_SAMPLE_SIZE (30), this is
+# what the t-critical value has already converged to in the table's own
+# final few rows (1.699 at df=29 vs 1.645 here -- close, and would keep
+# closing further past df=29 if the table extended).
+CONFIDENCE_TEST_Z_CRITICAL = {0.10: 1.282, 0.05: 1.645, 0.01: 2.326}
+CONFIDENCE_TEST_ALPHA = 0.05
+# Business decision, not a statistical one -- but grounded in this
+# system's own real, achievable baseline rather than an aspirational round
+# number. RAG_RETRY_EFFORT_v1.0.md §2's historical funnel data (333 real
+# outcomes) shows rounds 1-2 alone resolve roughly two-thirds of tasks
+# outright and capture 93-94% of every eventual success; a 0.9 target
+# (tried first) sat so far above what this system actually produces that
+# the test rejected H0 almost unconditionally for a normally-performing
+# customer, making it a near-constant "extend" signal rather than a real
+# discriminator between typical and genuinely degraded quality (confirmed
+# live: a real customer's session showed mean~0.68-0.75 turn after turn,
+# always rejecting against 0.9). 0.75 sits at this system's actual typical
+# operating point instead, so the test can tell "performing normally" from
+# "performing worse than normal" again. Also changes small-sample
+# calibration for the better, since 0.75 is further from the 1.0 ceiling
+# every subquery score is bounded by than 0.9 was -- see
+# MIN_SCORED_SUBQUERIES_FOR_CONFIDENCE_TRUST below and
+# RAG_RETRY_EFFORT_v1.0.md §4e.
+CONFIDENCE_TEST_POPULATION_MEAN_H0 = 0.75
 SOFT_ESCALATION_SESSION_DURATION_SECONDS = 10 * 60
 SOFT_ESCALATION_SAME_INTENT_STREAK = 20
 SOFT_ESCALATION_CONFIDENCE_THRESHOLD = 0.5
 SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT = 3
-# Shared by every consumer of _rolling_bot_confidence (node_03c's
-# extra-effort gate and node_08's escalation trigger): don't trust the
-# rolling average until at least this many scored turns exist. Confirmed
-# live that 1-2 turns of history swings the average by a full 0.5 on a
-# single result, which is noise, not a track record -- true whether that
-# noisy average is being used to cut retrieval effort or to offer a human
-# agent. Below this count, node_03c defaults to the safer full ladder and
-# node_08 never fires its confidence rule, regardless of what the raw
-# (unreliable) average says.
+# Used by node_08's own _rolling_bot_confidence gate (a plain average, not
+# a hypothesis test -- node_03c's own gate is MIN_SCORED_SUBQUERIES_FOR_
+# CONFIDENCE_TRUST below, a different constant for a different sampling
+# unit): don't trust the rolling average until at least this many scored
+# turns exist. Confirmed live that 1-2 turns of history swings the average
+# by a full 0.5 on a single result, which is noise, not a track record.
+# Below this count, node_08 never fires its confidence rule, regardless of
+# what the raw (unreliable) average says.
 MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST = 4
+# node_03c's hypothesis test floor, in SUBQUERY-scored data points, not
+# turns. Re-verified by Monte Carlo simulation each time
+# CONFIDENCE_TEST_POPULATION_MEAN_H0 changes (RAG_RETRY_EFFORT_v1.0.md
+# §4e), since a subquery score only ever takes one of three discrete
+# values (1.0/0.5/0.0) and how close H0 sits to the 1.0 ceiling directly
+# controls how badly a small sample of such scores miscalibrates the
+# t-test. At the current H0 (0.75, comfortably inside the scale rather
+# than pinned near its ceiling), the worst plausible score distribution's
+# empirical false-positive rate falls to roughly 4-7% (against a nominal
+# 5% alpha) by n=15 and stays in that range through n=30 -- so 15 is used
+# here rather than requiring a full 30-point window, which an earlier,
+# much higher H0 (0.9) did require. Below this floor, only
+# has_repeated_need_this_turn can unlock extra effort past the
+# unconditional NORMAL_EFFORT_RAG_ATTEMPTS floor -- the same "not enough
+# track record to trust a statistic, but a customer visibly repeating
+# themselves is still worth trying harder for" stance node_08 takes with
+# its own, separate floor above.
+MIN_SCORED_SUBQUERIES_FOR_CONFIDENCE_TRUST = 15
 # Deliberately higher than SOFT_ESCALATION_CONFIDENCE_THRESHOLD, not the same
 # value: an extra RAG round is cheap and invisible to the customer, while
 # offering human escalation is not, so the cheap lever should trigger
@@ -988,6 +1081,37 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
     last_session_transcript = LongTermMemoryManager.fetch_last_session_transcript(customer_id)
     has_followup_candidate = bool(last_session_transcript)
 
+    # The hypothesis test's population is this customer's turns generally
+    # -- past, present, and future -- not just the ones that happen to
+    # fall inside whichever login session is currently open, so its
+    # sample shouldn't restart empty every time the customer logs back
+    # in. Seeded here from the customer's durably-logged history
+    # (Turn_Resolution_Feedback, across every past session), reserving
+    # one slot for the current, still-forming turn to occupy live once
+    # node_03c runs (see RAG_RETRY_EFFORT_v1.0.md §4) -- a customer who
+    # never sends 30 turns in a single sitting still gets a real,
+    # standing-history-informed test from their very first message this
+    # session, rather than one perpetually starting from scratch.
+    recent_turn_resolutions = LongTermMemoryManager.fetch_recent_turn_resolutions(
+        customer_id, HYPOTHESIS_TEST_SAMPLE_SIZE - 1
+    )
+    turn_escalation_history = [
+        {
+            "turn_number": resolution["turn_number"],
+            # Not persisted in Turn_Resolution_Feedback at all -- see
+            # fetch_recent_turn_resolutions' own docstring for why this
+            # narrow gap is accepted rather than fixed here.
+            "had_repeated_need": False,
+            "subqueries": [
+                {"text": sq.get("customer_component", ""), "score": _score_subquery(sq)}
+                for sq in resolution["financial_subqueries"]
+                if isinstance(sq, dict)
+            ],
+            "user_rating": resolution["user_rating"],
+        }
+        for resolution in recent_turn_resolutions
+    ]
+
     return {
         # A new login begins a clean graph. No plan, task evidence, retry
         # data, or other execution state crosses the session boundary, and
@@ -1013,7 +1137,7 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         # per-turn -- see node_08_soft_escalation_analyzer's docstring.
         "session_started_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         "same_intent_streak_count": 0,
-        "turn_escalation_history": [],
+        "turn_escalation_history": turn_escalation_history,
         "final_draft": greeting,
         "final_answer": greeting,
         "final_response": greeting,
@@ -3035,6 +3159,81 @@ def _dynamic_task_confidence(result: dict, partial_evidence: dict) -> float:
     return 0.0  # CLARIFICATION_REQUIRED
 
 
+def _reject_confidence_null_hypothesis(
+    sample: list[float],
+    population_mean_h0: float = CONFIDENCE_TEST_POPULATION_MEAN_H0,
+    alpha: float = CONFIDENCE_TEST_ALPHA,
+) -> tuple[bool, dict]:
+    """One-tailed one-sample hypothesis test (t-test) on whether recent
+    subquery grades provide significant evidence the TRUE (population) mean
+    has dropped below population_mean_h0 -- not just a raw
+    sample-average-vs-threshold check, which can't distinguish "genuinely
+    degraded" from "a couple of turns were noisy." H0: population mean
+    >= population_mean_h0 (things are fine). H1: population mean <
+    population_mean_h0 (evidence of real decline). Reject H0 -> engage
+    extra effort.
+
+    Uses an exact t-distribution critical value (CONFIDENCE_TEST_T_CRITICAL,
+    keyed by degrees of freedom = n-1), not a normal (z) approximation: the
+    population standard deviation is never known here, only estimated from
+    the sample, which is exactly what a t-test is for, at any sample size
+    -- not only once n is large. This is a strict improvement over an
+    earlier version of this function that used a fixed z critical value
+    regardless of n: that understated the true sampling uncertainty for a
+    small sample (using the same 1.645 the Central Limit Theorem only
+    really justifies near n=30), which skewed toward rejecting H0 too
+    easily for a customer who simply didn't have much history yet. The
+    t-distribution's own critical value shrinks toward that same z-value
+    as degrees of freedom grow, converging by df=30
+    (CONFIDENCE_TEST_Z_CRITICAL is the fallback once a sample exceeds the
+    table), so this subsumes the old behavior for a full sample while
+    being properly conservative for a partial one -- no separate
+    small-sample special case needed.
+
+    Below MIN_SCORED_SUBQUERIES_FOR_CONFIDENCE_TRUST the test doesn't run
+    at all (assumes H0) -- not because the t-distribution is invalid below
+    that in general, but because a subquery grade only ever takes one of
+    three discrete values (1.0/0.5/0.0), and how close population_mean_h0
+    sits to that scale's 1.0 ceiling directly controls how badly a small
+    sample of such scores miscalibrates this test (confirmed by Monte
+    Carlo -- see that constant's own comment for the current numbers,
+    which change whenever population_mean_h0 does). A brand-new or
+    thin-history customer gets the unconditional floor (rounds 1-2) and
+    nothing past it from this mechanism until the floor's sample size
+    accumulates, the same "not enough track record to judge" stance this
+    codebase takes elsewhere.
+
+    Returns (reject_h0, diagnostics) so the decision is always inspectable
+    (n, mean, std_dev, t, critical_t, df), never just a bare boolean.
+    """
+    n = len(sample)
+    if n < MIN_SCORED_SUBQUERIES_FOR_CONFIDENCE_TRUST:
+        # Still report the raw sample mean even though the test itself
+        # doesn't run -- callers displaying this as a live confidence
+        # figure need a number for a thin-history customer too, just not
+        # a reject/extend decision drawn from it.
+        return False, {"n": n, "mean": sum(sample) / n if n else None, "reason": "insufficient_sample"}
+    mean = sum(sample) / n
+    variance = sum((x - mean) ** 2 for x in sample) / (n - 1) if n > 1 else 0.0
+    std_dev = variance ** 0.5
+    df = n - 1
+    if std_dev == 0.0:
+        # No variability in the sample at all (e.g. every recent turn
+        # graded identically) -- the t statistic is undefined by division.
+        # The only unambiguous call a variance-based test can make here is
+        # whether that constant value is itself already below the null.
+        return mean < population_mean_h0, {"n": n, "mean": mean, "std_dev": 0.0, "t": None, "df": df}
+    standard_error = std_dev / (n ** 0.5)
+    t = (mean - population_mean_h0) / standard_error
+    critical_t = CONFIDENCE_TEST_T_CRITICAL.get(alpha, {}).get(df) or CONFIDENCE_TEST_Z_CRITICAL.get(
+        alpha, CONFIDENCE_TEST_Z_CRITICAL[0.05]
+    )
+    reject = t < -critical_t
+    return reject, {
+        "n": n, "df": df, "mean": mean, "std_dev": std_dev, "t": t, "critical_t": critical_t, "alpha": alpha,
+    }
+
+
 def node_03c_sufficiency_auditor(state: AgentState):
     print("🟢 [NODE 03c] Executing Task-Level Sufficiency & Evidence Selection")
     # OLD (removed): a session's rolling historical confidence alone used
@@ -3043,15 +3242,19 @@ def node_03c_sufficiency_auditor(state: AgentState):
     # purely on a well-established track record from OTHER, unrelated past
     # turns rather than on how *this* task's own retrieval is actually
     # going -- a single real failure this turn couldn't override a
-    # confident session's history at all. Replaced with a per-turn
-    # dilution average (see the "Dilution check" below) that blends this
-    # task's own live dynamic confidence with that same rolling historical
-    # signal as one equal-weight vote, not a pre-decided override: a real
-    # current failure still drags the average down regardless of history,
-    # but a confident session's track record now gives real ballast
-    # against extending effort on a merely-partial result. Static rolling
-    # confidence is otherwise untouched and still exclusively feeds
-    # node_08's soft-escalation chip. See RAG_RETRY_EFFORT_v1.0.md.
+    # confident session's history at all, and a raw average-vs-threshold
+    # check couldn't distinguish genuine decline from a couple of noisy
+    # turns either way. Replaced with a formal one-tailed hypothesis test
+    # (_reject_confidence_null_hypothesis, further below): H0: the
+    # population mean of recent turn grades is >= 0.7 (things are fine);
+    # H1: it has genuinely dropped below 0.7. The sample is up to
+    # HYPOTHESIS_TEST_SAMPLE_SIZE (30) recent turn grades, each itself the
+    # average of that turn's own subquery grades (see provisional_turn_grade
+    # below) -- this turn's own in-progress grade occupies the sample's
+    # newest slot, which is how current retrieval quality enters what is
+    # otherwise a historical test. Rejecting H0 extends effort; static
+    # rolling confidence is otherwise untouched and still exclusively
+    # feeds node_08's soft-escalation chip. See RAG_RETRY_EFFORT_v1.0.md.
     NORMAL_EFFORT_RAG_ATTEMPTS = 2
     pending_decisions = []
     tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", [])}
@@ -3359,47 +3562,97 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "requested_status": requested_status,
         })
 
-    # Dilution check: a task that has finished NORMAL_EFFORT_RAG_ATTEMPTS
-    # without a full answer only actually continues into rounds 3-4 if the
-    # WHOLE turn's live confidence -- averaging in every task's
-    # current-round result, including ones already finalized SUFFICIENT
-    # above -- would read below EXTRA_EFFORT_CONFIDENCE_THRESHOLD if
-    # everyone stopped right now. One struggling task among several
-    # successful siblings in the same turn doesn't automatically win extra
-    # effort for itself if the turn overall still reads confidently
-    # resolved; a lone struggling task (or a turn whose siblings are also
-    # struggling) does. _dynamic_task_confidence's tiers are identical
-    # whether a task ends up RETRY or finalized terminal this round, so
-    # this same aggregate is also exactly the number logged/streamed
-    # further below -- no separate "provisional vs final" computation
-    # needed.
+    # This turn's own predicted grade: every financial subquery in the
+    # turn gets a 1.0/0.5/0.0 score, the same rule _score_subquery applies
+    # everywhere else in this codebase -- not just the RAG tasks node_03c
+    # happens to be auditing this round. A subquery resolved by a
+    # different tool entirely (deeplink/service_request/api) previously
+    # had no representation anywhere in this calculation: a turn with one
+    # subquery resolved instantly via deeplink (1.0) and another still
+    # being chased by RAG would have silently dropped the deeplink
+    # subquery's contribution, understating the turn's true grade.
     #
-    # The session's rolling historical confidence joins this same average
-    # as one more equal-weight vote, when it's trustworthy enough to
-    # count at all (same MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST guard
-    # node_08 uses) -- not a separate blending formula, and not a
-    # pre-decided override: a lone task's own real failure this turn (0.0)
-    # still drags a confident session's average below threshold and
-    # extends (0.0 averaged with a 0.9 history is 0.45), but a confident
-    # session's history now gives real ballast against extending on a
-    # merely-partial result (0.5 averaged with 0.9 history is 0.7 -- right
-    # at the line, no longer automatically extended). This is exactly
-    # where this feature's cost savings come back for the common
-    # single-subquery turn, without reintroducing the old flaw of history
-    # alone overriding what this turn's own evidence actually shows.
-    provisional_confidences = [1.0 for result in current_results.values() if result.get("status") == "SUFFICIENT"]
+    # A subquery RAG has touched at all this turn (this round or an
+    # earlier one) must use the rollup-aware score here, never
+    # _score_subquery directly: _finalize_rag_attempts (which pushes a
+    # settled RAG result into financial_subqueries' own tool_attempts)
+    # only runs once every task in the turn is fully terminal, so a
+    # sibling task still mid-ladder would make _score_subquery read this
+    # one's rag attempt as still "pending" even after it has actually
+    # resolved -- the same staleness _resolved_by_other_tool exists to
+    # work around elsewhere (DECLINE_CLARIFICATION_DESIGN_v1.0.md §6).
+    rag_task_scores_by_subquery_id = {}
+    for result in current_results.values():
+        subquery_id = tasks_by_id.get(result.get("task_id"), {}).get("subquery_id")
+        if subquery_id:
+            rag_task_scores_by_subquery_id[subquery_id] = _dynamic_task_confidence(result, partial_evidence)
     for decision in pending_decisions:
-        provisional_confidences.append(0.5 if decision["partial_ids"] else 0.0)
+        subquery_id = tasks_by_id.get(decision["task_id"], {}).get("subquery_id")
+        if subquery_id:
+            rag_task_scores_by_subquery_id[subquery_id] = 0.5 if decision["partial_ids"] else 0.0
+
+    all_subqueries = state.get("financial_subqueries", state.get("triaged_subqueries", []))
+    subquery_scores = []
+    for subquery in all_subqueries:
+        if not isinstance(subquery, dict):
+            continue
+        subquery_id = subquery.get("subquery_id")
+        if subquery_id in rag_task_scores_by_subquery_id:
+            subquery_scores.append(rag_task_scores_by_subquery_id[subquery_id])
+        else:
+            # Never touched by RAG this turn -- resolved entirely by
+            # another tool, whose tool_attempts are always accurately
+            # terminal already (no mid-ladder "pending" state to worry
+            # about), so _score_subquery reads it correctly and directly.
+            subquery_scores.append(_score_subquery(subquery))
+    provisional_turn_grade = sum(subquery_scores) / len(subquery_scores) if subquery_scores else None
+
+    # A task that has finished NORMAL_EFFORT_RAG_ATTEMPTS without a full
+    # answer only actually continues into rounds 3-4 if a formal
+    # hypothesis test finds significant evidence that recent quality has
+    # genuinely dropped below CONFIDENCE_TEST_POPULATION_MEAN_H0, rather
+    # than a raw sample-average-vs-threshold check that can't distinguish
+    # real decline from a couple of noisy data points. H0: population mean
+    # >= population_mean_h0 (things are fine). H1: population mean <
+    # population_mean_h0 (evidence of real decline) -- see
+    # _reject_confidence_null_hypothesis.
+    #
+    # The sample's unit is one SUBQUERY's own 1.0/0.5/0.0 grade, not a
+    # turn's averaged grade: this turn's own subquery_scores (computed
+    # above) supply every one of THIS turn's own newest points, not just
+    # one averaged value, and _historical_subquery_scores flattens every
+    # prior turn's subqueries the same way. A subquery's own score is
+    # already never touched by the customer's thumbs rating (only
+    # _turn_confidence's turn-level average does that, for node_08's
+    # unrelated escalation judgment), so no separate rating-free variant
+    # is needed here the way a turn-level design would require -- a
+    # customer could thumbs-down a turn for reasons that have nothing to
+    # do with whether RAG found the right evidence, and that domain stays
+    # entirely out of this sample already, at the source.
     turn_escalation_history = state.get("turn_escalation_history", [])
-    rolling_confidence = _rolling_bot_confidence(turn_escalation_history)
-    scored_turn_count = sum(1 for entry in turn_escalation_history if _turn_confidence(entry) is not None)
-    if scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST and rolling_confidence is not None:
-        provisional_confidences.append(rolling_confidence)
-    provisional_turn_confidence = (
-        sum(provisional_confidences) / len(provisional_confidences) if provisional_confidences else None
-    )
-    extend_if_optional = (
-        provisional_turn_confidence is not None and provisional_turn_confidence < EXTRA_EFFORT_CONFIDENCE_THRESHOLD
+    historical_subquery_scores = _historical_subquery_scores(turn_escalation_history)
+    hypothesis_test_sample = (historical_subquery_scores + subquery_scores)[-HYPOTHESIS_TEST_SAMPLE_SIZE:]
+    reject_null_hypothesis, test_diagnostics = _reject_confidence_null_hypothesis(hypothesis_test_sample)
+    # A repeated need this turn (triage's own repetitive_issue_detected,
+    # already computed before node_03c runs) always unlocks extra effort
+    # regardless of what the statistical test concludes -- a deliberate
+    # satisfaction-driven boost, not a statistical one: a customer
+    # visibly re-asking or rephrasing the same thing is worth trying
+    # harder for on its own terms, independent of whether recent quality
+    # has genuinely declined by the test's standard.
+    has_repeated_need_this_turn = bool(state.get("repeated_need_detected_this_turn", False))
+    extend_if_optional = reject_null_hypothesis or has_repeated_need_this_turn
+    # Logged every round regardless of extend/stop -- previously only
+    # logged at the terminal boundary (evidence.boundary.terminal_unresolved),
+    # which meant a task that kept extending across several rounds left no
+    # record anywhere of what confidence was actually shown at each of
+    # those rounds.
+    log_event(
+        "task.turn_confidence.computed",
+        provisional_turn_grade=provisional_turn_grade,
+        repeated_need_override=has_repeated_need_this_turn,
+        reject_null_hypothesis=reject_null_hypothesis,
+        **test_diagnostics,
     )
 
     for decision in pending_decisions:
@@ -3442,7 +3695,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
                 task_id=task_id,
                 status=current_results[task_id]["status"],
                 approved_parent_ids=partial_ids,
-                turn_confidence_if_stopped=provisional_turn_confidence,
+                turn_confidence_if_stopped=provisional_turn_grade,
             )
             feedback.pop(task_id, None)
         else:
@@ -3511,12 +3764,11 @@ def node_03c_sufficiency_auditor(state: AgentState):
         next_stage = next((item for item in retry_expansion if item.get("task_id") == result.get("task_id")), {})
         log_event(event, task_id=result.get("task_id"), status=result.get("status"), approved_parent_ids=result.get("approved_parent_ids", []), reason=result.get("reason", ""), retry_count=retry_counts.get(result.get("task_id"), 0), next_expansion_stage=next_stage.get("stage", ""))
     # Per-task dynamic confidence, logged individually for future analysis
-    # (see RAG_RETRY_EFFORT_v1.0.md) -- numerically identical to the
-    # dilution check's provisional_confidences above (same 0/0.5/1.0 tiers
-    # applied to the same final statuses), so the turn-level aggregate
-    # used for the retry/stop decision and the one streamed live to the
-    # frontend below are deliberately the same number, not two
-    # independently-computed ones that could quietly drift apart.
+    # (see RAG_RETRY_EFFORT_v1.0.md) -- each one already folded into
+    # provisional_turn_grade above via rag_task_scores_by_subquery_id, so
+    # this is purely an additional observability record, not a second,
+    # independently-computed aggregate that could quietly drift apart
+    # from the one that actually drove the retry/stop decision.
     for result in current_results.values():
         task_id = result.get("task_id")
         log_event(
@@ -3526,11 +3778,31 @@ def node_03c_sufficiency_auditor(state: AgentState):
             status=result.get("status"),
             confidence=_dynamic_task_confidence(result, partial_evidence),
         )
-    live_task_confidence = provisional_turn_confidence
-    # "Thinking harder" now tracks this live signal, not a pre-decided
-    # session-level one: it should reflect whether extra effort is
-    # actually happening on this task right now.
-    is_low_confidence = live_task_confidence is not None and live_task_confidence < EXTRA_EFFORT_CONFIDENCE_THRESHOLD
+    # The number displayed live to the customer as "confidence" is the
+    # hypothesis test's OWN sample mean -- up to 29 historical turns' worth
+    # of response quality plus this turn's own volatile, still-updating
+    # grade as the sample's newest point -- not this turn's own grade in
+    # isolation. Showing this turn's raw grade alone reads as "the bot has
+    # no idea" the moment a single hard question fails, even when the
+    # other ~29 samples are healthy; the aggregate is what the hypothesis
+    # test itself reasons about, so displaying anything else would let the
+    # number the customer watches drift apart from the number that
+    # actually drives the retry/stop decision below. Recomputed fresh
+    # every time this node runs within a turn (this turn's own grade keeps
+    # changing as subqueries resolve round over round), so the customer
+    # sees the sample mean move live as retrieval progresses. Falls back
+    # to this turn's own grade only when there is no sample at all yet
+    # (mean is None only when the sample itself is empty).
+    live_task_confidence = test_diagnostics.get("mean")
+    if live_task_confidence is None:
+        live_task_confidence = provisional_turn_grade
+    # "Thinking harder" reflects whether extra effort is ACTIVELY being
+    # spent right now: both that the hypothesis test found significant
+    # evidence to reject H0, AND that there's an actual pending task this
+    # round for that finding to apply to -- a round where everything
+    # already resolved SUFFICIENT has nothing left to extend, regardless
+    # of what the test concludes from history.
+    is_low_confidence = bool(pending_decisions) and extend_if_optional
     # The RAG subgraph is an implementation detail of a generic tool
     # attempt. Only terminal, approved IDs cross this boundary; raw
     # candidates and retry evidence remain inside RAG.
@@ -5788,7 +6060,11 @@ def _append_failed_turn_escalation_history(state: AgentState) -> list:
         "subqueries": failed_turn_subqueries,
         "user_rating": None,
     })
-    return escalation_history[-MAX_ESCALATION_HISTORY_TURNS:]
+    # Stored at the longer HYPOTHESIS_TEST_SAMPLE_SIZE, not
+    # MAX_ESCALATION_HISTORY_TURNS -- node_03c's hypothesis test needs up
+    # to 30 turns of history; node_08 explicitly slices back down to its
+    # own shorter window when it reads this same list.
+    return escalation_history[-HYPOTHESIS_TEST_SAMPLE_SIZE:]
 
 
 def _turn_confidence(entry: dict) -> float | None:
@@ -5804,6 +6080,29 @@ def _turn_confidence(entry: dict) -> float | None:
         return float(user_rating)
     scores = [sq["score"] for sq in entry.get("subqueries", [])]
     return sum(scores) / len(scores) if scores else None
+
+
+def _historical_subquery_scores(turn_escalation_history: list) -> list[float]:
+    """Every individual subquery's own 1.0/0.5/0.0 grade across
+    turn_escalation_history, in chronological order -- the sampling unit
+    node_03c's RAG-effort hypothesis test (RAG_RETRY_EFFORT_v1.0.md) draws
+    on, one point per subquery rather than one averaged point per turn.
+    Averaging within a turn first (the earlier design) threw away
+    information the schema already tracks at finer grain, and collapsed a
+    turn's several subqueries down to a single, more discrete data point --
+    worse for a test whose whole validity depends on how many independent
+    observations it has. A subquery's own score is never touched by the
+    customer's thumbs rating (only _turn_confidence's turn-level average
+    is, for node_08's unrelated escalation judgment), so unlike the
+    turn-level design this needed no separate rating-free variant to stay
+    out of node_08's subjective-satisfaction domain -- it already is.
+    """
+    return [
+        sq["score"]
+        for entry in turn_escalation_history
+        for sq in entry.get("subqueries", [])
+        if isinstance(sq, dict) and sq.get("score") is not None
+    ]
 
 
 def _rolling_bot_confidence(turn_escalation_history: list) -> float | None:
@@ -5870,7 +6169,10 @@ def node_08_soft_escalation_analyzer(state: AgentState):
         "subqueries": turn_subqueries,
         "user_rating": None,
     })
-    history = history[-MAX_ESCALATION_HISTORY_TURNS:]
+    # Stored at the longer HYPOTHESIS_TEST_SAMPLE_SIZE for node_03c's own
+    # use (see there); this node's own signals below still explicitly
+    # window down to MAX_ESCALATION_HISTORY_TURNS, their original size.
+    history = history[-HYPOTHESIS_TEST_SAMPLE_SIZE:]
 
     # A thumbs prompt is offered only when THIS turn's own (unwindowed)
     # confidence sits in the band the schema itself is ambiguous about --
@@ -5902,15 +6204,20 @@ def node_08_soft_escalation_analyzer(state: AgentState):
     same_intent_streak_count = state.get("same_intent_streak_count", 0)
     same_intent_triggered = same_intent_streak_count > SOFT_ESCALATION_SAME_INTENT_STREAK
 
-    scored_turn_count = sum(1 for entry in history if _turn_confidence(entry) is not None)
-    confidence = _rolling_bot_confidence(history)
+    # This node's own signals stay windowed to their original, shorter
+    # recency size even though `history` itself is now stored longer for
+    # node_03c's hypothesis test -- a confidence dip or a repeated need
+    # from 20+ turns ago is no longer an active pattern for either signal.
+    recent_history = history[-MAX_ESCALATION_HISTORY_TURNS:]
+    scored_turn_count = sum(1 for entry in recent_history if _turn_confidence(entry) is not None)
+    confidence = _rolling_bot_confidence(recent_history)
     confidence_triggered = (
         scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST
         and confidence is not None
         and confidence < SOFT_ESCALATION_CONFIDENCE_THRESHOLD
     )
 
-    repeated_need_turns = sum(1 for entry in history if entry.get("had_repeated_need"))
+    repeated_need_turns = sum(1 for entry in recent_history if entry.get("had_repeated_need"))
     repeated_need_triggered = repeated_need_turns >= SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT
 
     triggered_rules = []

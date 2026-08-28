@@ -412,6 +412,72 @@ class LongTermMemoryManager:
             return []
 
     @staticmethod
+    def fetch_recent_turn_resolutions(customer_id: str, limit: int) -> list[Dict[str, Any]]:
+        """The customer's `limit` most recent durably-logged turn
+        resolutions, across every past session, oldest first -- seeds
+        node_03c's confidence hypothesis-test sample at login so it
+        reflects this customer's real standing track record instead of
+        restarting empty every time they log back in. The population the
+        test reasons about is this customer's turns generally, past and
+        future, not just the turns that happen to fall within whichever
+        session is currently open, so the sample it draws on shouldn't
+        reset on every login either.
+
+        Reads Turn_Resolution_Feedback (see persist_turn_resolution),
+        keyed by customer_id directly rather than by any one session_id --
+        this table already spans every session a customer has ever had.
+        Returns the raw per-turn shape (turn_number, financial_subqueries,
+        user_rating); scoring each subquery into a turn_escalation_history
+        entry happens in nodes.py, which already owns _score_subquery --
+        this module cannot import it without an import cycle (nodes.py
+        already imports LongTermMemoryManager from here).
+
+        had_repeated_need is not persisted in this table at all (it was
+        never part of Turn_Resolution_Feedback's schema), so a
+        reconstructed entry from a past session cannot know whether that
+        turn had one. This is a narrow, accepted gap: node_08's own
+        repeated-need signal only ever looks at the last
+        MAX_ESCALATION_HISTORY_TURNS (10) turns, so it only matters if a
+        customer's login boundary falls within that recent a window --
+        the caller defaults this field to False for every rehydrated row.
+
+        Excludes rows with no financial content at all
+        (`financial_subqueries = '[]'`) directly in the query, not just
+        after the fact: persist_turn_resolution writes a row every turn
+        unconditionally, including pure chitchat/greeting/non-financial
+        ones, which _turn_response_quality would score as None anyway
+        (no data point either way) -- but `LIMIT` has to apply to turns
+        that can actually contribute a grade, or a customer whose recent
+        history includes a run of chitchat gets a thinner sample than
+        `limit` for no real reason. Confirmed live: 169 total rows for one
+        heavily-tested account, 65 of them empty -- fetching the raw last
+        29 rows before this fix could return as few as ~20 usable ones.
+        """
+        ensure_db_dir_exists()
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                ensure_memory_schema(conn)
+                rows = conn.execute("""
+                    SELECT turn_number, financial_subqueries, user_rating FROM Turn_Resolution_Feedback
+                    WHERE customer_id = ? AND financial_subqueries != '[]'
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """, (customer_id, limit)).fetchall()
+            resolutions = [
+                {
+                    "turn_number": row[0],
+                    "financial_subqueries": json.loads(row[1]) if row[1] else [],
+                    "user_rating": row[2],
+                }
+                for row in rows
+            ]
+            resolutions.reverse()  # oldest first, matching turn_escalation_history's own append order
+            return resolutions
+        except Exception as error:
+            print(f"⚠️ [MEMORY SERVICE] Recent turn-resolution read failed: {error}")
+            return []
+
+    @staticmethod
     def summarize_trimmed_history(existing_summary: str, messages: List[BaseMessage]) -> str:
         """Merge evicted messages into compact context, excluding UI metadata."""
         if not messages:

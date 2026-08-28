@@ -212,13 +212,24 @@ new `scored_turn_count` field on `escalation.soft.triggered` — this part
 is still exactly as described.
 
 `node_03c`'s own use of the *rolling/historical* signal was subsequently
-replaced with a live, per-task dynamic confidence instead (see
-`RAG_RETRY_EFFORT_v1.0.md` — the rolling signal decided RAG's effort based
-on how *other, unrelated* past turns went, which could deny a genuinely
-struggling task extra effort in an otherwise-confident session). This
-node's `confidence_triggered` rule, and the guard fixed above, are
-unaffected by that change — the rolling/historical confidence computed
-here still exists and still does exactly this one job.
+replaced, and has since gone through a couple of further iterations —
+most recently a formal one-tailed hypothesis test over up to 30 recent
+turn grades, with this turn's own in-progress grade as the sample's
+newest point (see `RAG_RETRY_EFFORT_v1.0.md` for the full current design
+and the reasoning that led there). This node's `confidence_triggered`
+rule, and the guard fixed above, are unaffected by any of that — a plain
+rolling average is the right tool for node_08's session-level judgment
+("should a human be offered"), even though `node_03c` needed something
+more rigorous for its own, differently-shaped decision.
+
+One storage detail worth knowing: `turn_escalation_history` is now stored
+at a longer 30-turn window (`HYPOTHESIS_TEST_SAMPLE_SIZE`, needed by
+`node_03c`'s test), not the 10-turn `MAX_ESCALATION_HISTORY_TURNS` it used
+to be capped at. This node's own signals are unaffected — it explicitly
+slices `history[-MAX_ESCALATION_HISTORY_TURNS:]` before computing its own
+rolling confidence and repeated-need count, so a confidence dip or a
+repeated need from 20+ turns ago still ages out of *this* node's view
+exactly as before, even though the underlying stored list is now longer.
 
 Also see `DECLINE_CLARIFICATION_DESIGN_v1.0.md` §10: a turn that ends in
 `node_09`/`node_11`'s exhausted-retry fallback now always appends a

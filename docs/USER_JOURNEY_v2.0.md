@@ -19,13 +19,20 @@ selects the customer-facing presentation.
 - `TEXT` — factual answer, explanation, or concise topic sections.
 - `PROGRESS` — one supported, multi-step FAQ procedure displayed as an expandable progress payload. All grounded step details are delivered together; the first step is expanded initially and customers may open any other step.
 - `LIST` — a titled checklist of three or more independent, grounded items, such as eligibility criteria, required documents, prerequisites, fees, limits, or security checks. Each item has a green check marker.
+- `COMPARISON` — a side-by-side table (2-3 products, rates, or account types), rendered as `{headers, rows: [{feature, values}], actions}`.
+- `ACCORDION` — multiple detailed FAQ/policy sections collapsed into a collapsible drawer (`sections: [{title, content}]`), used to present depth without cluttering chat height.
+- `TIMELINE` — request/application milestone progress across past, current, and future stages (`steps: [{title, description, status, date}]`, `status` one of `completed|active|pending`).
+- `CAROUSEL` — multiple options, offers, or cards shown horizontally (`items: [{title, subtitle, badge, highlight, details, actionLabel, actionMessage}]`).
+- `ALERT` — an important security notice, scam warning, or compliance caution (`severity` one of `warning|security|info|success`; the generator maps a would-be `critical` down to `security` before the block is built, since the frontend has no separate style for it).
 - `ESCALATION_CONFIRMATION` — a separate handoff-confirmation block when human assistance is required or explicitly requested.
+
+Every element type — new or original — produces the same three things from one code path in `_generate_response_blocks` (`nodes.py`): a `responseBlocks` entry in the type's own shape, a flattened `rendered_text` contribution folded into `answer_text`/`final_draft` (so the groundedness/compliance audit sees a textual account of a comparison row or an alert's message exactly as it would plain prose), and a `sourceTaskIds` entry feeding the same omitted-task completeness net every other element type already uses. Precision-token (`{{faq_*}}`) substitution and the deeplink-token cleanup in `node_07` are also fully generic over the block structure (`substitute_nested`), so a token embedded in a `COMPARISON` row or a `TIMELINE` step's description is substituted exactly like one in plain text — no per-type special-casing needed anywhere downstream of generation.
 
 Clarification is response content, not a presentation type. It can appear after any answer block while retaining its separate groundedness and compliance checks. A response may contain several independently useful blocks; the UI structure is not constrained to the number or order of retrieval tasks.
 
 ## Presentation decision principle
 
-The Response Generator visualizes the mental model the customer needs at that moment. A need to understand uses `TEXT`; a need to scan or remember independent items uses `LIST`; and a need to know where they are in, or complete, a process uses `PROGRESS`. Supported choices may be appended as up to two chips when the customer needs to choose a next action or topic. A comparison remains organised `TEXT` until a dedicated comparison component is introduced.
+The Response Generator visualizes the mental model the customer needs at that moment. A need to understand uses `TEXT`; a need to scan or remember independent items uses `LIST`; a need to know where they are in, or complete, a process uses `PROGRESS`; and a need to weigh 2-3 named options against each other uses `COMPARISON`. Supported choices may be appended as up to two chips when the customer needs to choose a next action or topic.
 
 When multiple tasks are supported, the generator organises aggregate approved evidence around the customer’s cognitive need, not a one-task/one-block rule. A block may draw on the union of its internally recorded source tasks; an unmapped block may use aggregate approved evidence. The response must remain coherent, avoid mixing unrelated facts into a misleading title or list, and preserve task provenance internally for auditing.
 

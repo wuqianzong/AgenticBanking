@@ -71,6 +71,7 @@ VOLATILE_STATE_RESET = {
     "last_session_transcript": [],
     "personal_data_reveal_map": {},
     "repeated_need_detected_this_turn": False,
+    "low_confidence_mode": False,
 }
 
 MAX_VERIFIED_TASK_HISTORY_TURNS = 10
@@ -83,6 +84,25 @@ SOFT_ESCALATION_SESSION_DURATION_SECONDS = 10 * 60
 SOFT_ESCALATION_SAME_INTENT_STREAK = 20
 SOFT_ESCALATION_CONFIDENCE_THRESHOLD = 0.5
 SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT = 3
+# Shared by every consumer of _rolling_bot_confidence (node_03c's
+# extra-effort gate and node_08's escalation trigger): don't trust the
+# rolling average until at least this many scored turns exist. Confirmed
+# live that 1-2 turns of history swings the average by a full 0.5 on a
+# single result, which is noise, not a track record -- true whether that
+# noisy average is being used to cut retrieval effort or to offer a human
+# agent. Below this count, node_03c defaults to the safer full ladder and
+# node_08 never fires its confidence rule, regardless of what the raw
+# (unreliable) average says.
+MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST = 4
+# Deliberately higher than SOFT_ESCALATION_CONFIDENCE_THRESHOLD, not the same
+# value: an extra RAG round is cheap and invisible to the customer, while
+# offering human escalation is not, so the cheap lever should trigger
+# earlier (at a less severe confidence dip) than the expensive/visible one.
+# This guarantees extra effort is always already active by the time
+# escalation is offered (0.7 > 0.5), never the other way around, and gives
+# the bot a silent chance to recover in the 0.5-0.7 band before anything
+# customer-facing changes.
+EXTRA_EFFORT_CONFIDENCE_THRESHOLD = 0.7
 # A turn's own (unwindowed) confidence lands in this band exactly when
 # Tool Calling v3.0's own schema is itself ambiguous about whether the
 # response was good enough -- not confidently RESOLVED, not confidently
@@ -869,7 +889,15 @@ def _build_user_baseline_context(state: AgentState) -> str:
     return baseline or "None"
 
 
-def _build_deterministic_greeting(customer_id: str, user_profile: dict) -> tuple[str, list[dict]]:
+def _natural_join(items: list[str]) -> str:
+    """Join 2+ strings as "A and B" or "A, B, and C" -- never used for a
+    single item, so no 1-item case is handled."""
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return f"{', '.join(items[:-1])}, and {items[-1]}"
+
+
+def _build_deterministic_greeting(customer_id: str, user_profile: dict) -> str:
     """Assemble a login greeting from on-demand, deterministic checks only.
 
     The project does not require carrying conversation content across
@@ -891,23 +919,49 @@ def _build_deterministic_greeting(customer_id: str, user_profile: dict) -> tuple
         record for record in service_request_service.list_registrations(customer_id)
         if record.get("status") == service_request_service.PENDING
     ]
-    # For each greeting, only follow the single most recent pending service request (if any).
-    # (list_registrations returns newest-first by created_at DESC)
-    service_request_actions = []
+    # This is a short text reminder pointing at the header's requests icon,
+    # not an attached serviceRequestActions entry: the embedded service-
+    # request form (see renderEmbeddedServiceRequest in the frontend) was
+    # changed from a compact shortcut into a full inline form, which would
+    # otherwise occupy the entire chat screen immediately after login, on
+    # every single session. The pending count/badge is already refreshed
+    # independently via fetchServiceRequestList, so nothing is lost by not
+    # attaching the form here -- the customer opens it deliberately instead.
+    #
+    # The true total is reported, not just the single latest one: a
+    # customer can easily accumulate several pending requests (repeated
+    # address-update submissions, plus a separate KYC resubmission, etc.),
+    # and silently naming only the most recent one understates what is
+    # actually outstanding. Distinct request *types* are named (deduplicated
+    # by service_request_id), not each individual pending row -- naming
+    # nine near-identical "Change Address" entries separately would be far
+    # less readable than a single count.
     if pending_requests:
-        latest_record = pending_requests[0]
-        contract = get_service_request_contract(latest_record.get("service_request_id", ""))
-        if contract is not None:
-            greeting = f"{greeting}\n\n{get_message(language, 'service_request_intro_single')}"
-            service_request_actions.append({
-                "label": contract.get("action_label", "Complete Form"),
-                "specialId": latest_record.get("special_id"),
-                "serviceRequestId": latest_record.get("service_request_id"),
-                "description": contract.get("description", ""),
-                "formSchema": contract["form_schema"],
-            })
+        labels_by_type = {}
+        for record in pending_requests:
+            service_request_id = record.get("service_request_id", "")
+            if service_request_id in labels_by_type:
+                continue
+            contract = get_service_request_contract(service_request_id)
+            if contract is not None:
+                labels_by_type[service_request_id] = contract.get("action_label", "your request")
+        distinct_labels = list(labels_by_type.values())
+        total_count = len(pending_requests)
 
-    return greeting, service_request_actions
+        if distinct_labels:
+            if total_count == 1:
+                reminder = get_message(language, "service_request_reminder_single").format(label=distinct_labels[0])
+            elif len(distinct_labels) == 1:
+                reminder = get_message(language, "service_request_reminder_plural_same").format(
+                    count=total_count, label=distinct_labels[0]
+                )
+            else:
+                reminder = get_message(language, "service_request_reminder_plural_mixed").format(
+                    count=total_count, labels=_natural_join(distinct_labels)
+                )
+            greeting = f"{greeting} {reminder}"
+
+    return greeting
 
 
 # --- PHASE 0: INGESTION & INGEST GUARDS ---
@@ -917,19 +971,21 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
     customer_id = state.get("user_id", "USR_999")
     user_profile = LongTermMemoryManager.get_user_preferences(customer_id)
 
-    greeting, service_request_actions = _build_deterministic_greeting(customer_id, user_profile)
+    greeting = _build_deterministic_greeting(customer_id, user_profile)
 
     ui_action_payload = {"uiType": "text", "options": []}
-    if service_request_actions:
-        ui_action_payload["serviceRequestActions"] = service_request_actions
 
     # Read fresh, not stored: the raw last-session transcript is only ever
     # used by n00b (a follow-up check straight after this node), never
     # carried forward past this turn. If there's nothing to check (no prior
-    # session beyond the last login's own greeting, and no pending service
-    # request), n00b is skipped entirely -- see route_n00 in graph.py.
+    # session beyond the last login's own greeting), n00b is skipped
+    # entirely -- see route_n00 in graph.py. A pending service request no
+    # longer factors in here: the greeting's own deterministic reminder
+    # (see _build_deterministic_greeting) already covers it without an LLM
+    # call, so it's never a reason on its own to run n00b's generated,
+    # audited follow-up.
     last_session_transcript = LongTermMemoryManager.fetch_last_session_transcript(customer_id)
-    has_followup_candidate = bool(last_session_transcript) or bool(service_request_actions)
+    has_followup_candidate = bool(last_session_transcript)
 
     return {
         # A new login begins a clean graph. No plan, task evidence, retry
@@ -968,10 +1024,13 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
 
 
 def node_00b_followup_check(state: AgentState):
-    """On-demand login follow-up: only runs when n00 found something worth
-    checking (a prior session's transcript, a pending service request, or
-    both). Unlike the deterministic greeting itself, this content is
-    generated -- it has to read and interpret last session's actual
+    """On-demand login follow-up: only runs when n00 found a prior session's
+    transcript worth checking. A pending service request is no longer a
+    reason to run this node -- n00's own deterministic greeting reminder
+    already covers it without an LLM call (see _build_deterministic_greeting)
+    -- so this is purely about whether last session left a conversational
+    topic unresolved. Unlike the deterministic greeting itself, this content
+    is generated -- it has to read and interpret last session's actual
     transcript -- so unlike the greeting, it goes through the full
     evidence-groundedness and conduct-compliance audit before ever reaching
     the customer. On any audit failure, or when the model correctly finds
@@ -982,28 +1041,19 @@ def node_00b_followup_check(state: AgentState):
     """
     print("🟢 [NODE 00b] Executing Login Follow-Up Check")
     greeting = state.get("final_draft", "")
-    payload = dict(state.get("ui_action_payload", {}))
     transcript = state.get("last_session_transcript", [])
-    pending_shortcuts = [
-        {"label": action.get("label", ""), "topic": action.get("description", "")}
-        for action in payload.get("serviceRequestActions", [])
-    ]
 
     language = state.get("user_profile", {}).get("language") or "English"
     prompt = f"""
     LOGIN FOLLOW-UP CHECK
     You are Horizon, a banking assistant. The customer has just logged back
-    in. Below is the raw transcript of their most recently completed session
-    (if any) and any service requests still pending from before. Decide
-    whether a brief, natural follow-up is warranted.
+    in. Below is the raw transcript of their most recently completed
+    session, if any. Decide whether a brief, natural follow-up is warranted.
 
     Last session's transcript (trusted messages only; empty if this is the
     customer's first session, or if it was itself just a login greeting with
     nothing else in it):
     {json.dumps(transcript, ensure_ascii=False)}
-
-    Pending service requests carried over from before (label/topic only):
-    {json.dumps(pending_shortcuts, ensure_ascii=False)}
 
     Natively generate response in: {language}
 
@@ -1017,15 +1067,10 @@ def node_00b_followup_check(state: AgentState):
     - If a topic is unresolved, name it in your own words (never quote
       internal ids) and ask, in one sentence, whether the customer would
       like to continue it.
-    - If "Pending service requests" is non-empty, you may add one sentence
-      mentioning them by label only (never inventing what they contain
-      beyond the given topic) and asking if the customer still wants to
-      complete them. The button for each is attached automatically and
-      separately; do not claim to attach, open, or complete anything.
     - Do not repeat or restate the login greeting itself.
-    - If neither an unresolved topic nor a pending request applies, or the
-      transcript is empty, return an empty string -- an empty follow-up is
-      the normal, expected outcome for most logins, not a failure.
+    - If there is no unresolved topic, or the transcript is empty, return an
+      empty string -- an empty follow-up is the normal, expected outcome for
+      most logins, not a failure.
     - Keep it to at most two sentences. Do not invent any fact, banking
       procedure, or policy not present above.
 
@@ -1042,24 +1087,21 @@ def node_00b_followup_check(state: AgentState):
 
     evidence_bundle = {
         "last_session_transcript": transcript,
-        "pending_service_requests": pending_shortcuts,
     }
     route_specific_rules = """
     This is a login follow-up, not an answer to a customer question. It is
     grounded only if every claim about "what happened last time" is directly
-    supported by "last_session_transcript", and every mention of a pending
-    request uses only the label/topic supplied in
-    "pending_service_requests". It must not state or imply that anything is
-    being executed, attached, or completed by this message itself -- it may
-    only ask whether the customer wants to continue. Reject it if it
-    describes an unresolved topic not actually visible in the transcript,
-    invents detail about a pending request beyond its label/topic, or claims
-    the last session concluded differently than the transcript shows.
+    supported by "last_session_transcript". It must not state or imply that
+    anything is being executed, attached, or completed by this message
+    itself -- it may only ask whether the customer wants to continue.
+    Reject it if it describes an unresolved topic not actually visible in
+    the transcript, or claims the last session concluded differently than
+    the transcript shows.
     """
     evidence_audit = check_evidence_groundedness(
         followup,
         evidence_bundle=evidence_bundle,
-        evidence_description="Last Session Transcript and Pending Service Requests",
+        evidence_description="Last Session Transcript",
         route_specific_rules=route_specific_rules,
     )
     conduct_audit = check_conduct_compliance(followup)
@@ -1603,6 +1645,16 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","angle_groups":[{{"group_id":"base","procedural":"unchanged","policy":"unchanged","conceptual":"unchanged"}},{{"group_id":"retry_2","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"valid matrix product or ordered product array during PRODUCT_EXPANSION","target_intent":["existing target_intent, unchanged"]}},"clarification":null}}]}}
         """
 
+    # Set wherever a component's SEARCH/DECLINE resolution is rejected or
+    # withheld for a subquery that a non-rag tool (e.g. a deeplink) already
+    # fully answered this same round -- see _resolved_by_other_tool. A
+    # subquery already fully resolved elsewhere should never also grow a
+    # failure-shaped entry (no_info, decline, or the generic "please
+    # clarify" fallback further below); the response generator would
+    # otherwise be handed both the correct answer and a contradiction of it
+    # for the exact same request.
+    any_subquery_resolved_by_other_tool = False
+
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE)) if (not retry_tasks or llm_retry_tasks) else {"components": []}
         # The model returns a mutually exclusive component partition. Derive
@@ -1632,6 +1684,17 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             elif resolution == "CLARIFY" and isinstance(component.get("clarification"), dict):
                 formulated_clarifications.append(component["clarification"])
             elif resolution == "DECLINE":
+                # A component the formulator declined as out-of-scope can
+                # still be the same subquery a different tool (deeplink,
+                # service_request, api) already fully resolved this same
+                # round -- the formulator's own SEARCH/DECLINE judgment
+                # doesn't see other tools' results. Skip manufacturing a
+                # decline for a subquery that's already answered, same
+                # guard as the SEARCH-side scope-rejection below.
+                owning_subquery = subqueries_by_id.get(str(component.get("component_id", "")).strip())
+                if _resolved_by_other_tool(owning_subquery):
+                    any_subquery_resolved_by_other_tool = True
+                    continue
                 decline = component.get("decline") if isinstance(component.get("decline"), dict) else {}
                 # Only these two categories are ever valid from this node's own
                 # DECLINE resolution -- non_compliant/non_financial belong to
@@ -1714,7 +1777,9 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 # the reason the first version of this same fix did not
                 # actually change anything.
                 owning_subquery = subqueries_by_id.get(task.get("subquery_id"))
-                if not _resolved_by_other_tool(owning_subquery):
+                if _resolved_by_other_tool(owning_subquery):
+                    any_subquery_resolved_by_other_tool = True
+                else:
                     resolved_subquery = task.get("customer_component", "") or task.get("direct_query", "")
                     unresolvable_search_tasks.append({
                         "task_id": f"unresolvable_{task_id or 'unknown'}",
@@ -1879,6 +1944,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         if (
             not intent_clarification_tasks
             and not unresolvable_search_tasks
+            and not any_subquery_resolved_by_other_tool
             and not (active_plan.get("steps") or has_retrieved_knowledge)
         ):
             # A valid request reached the formulator but no usable structured
@@ -1887,7 +1953,12 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             # would make this generic fallback a redundant second, weaker
             # message about the same missing answer. Abstain safely instead
             # of allowing a later generation node to infer a product or
-            # invent a search task.
+            # invent a search task. Also skipped when a scope-rejected
+            # subquery was already fully answered by another tool (e.g. a
+            # deeplink) -- that isn't "no usable output," it's already
+            # resolved, and asking the customer to clarify a request the
+            # bot just answered is exactly the self-contradiction this
+            # guard exists to prevent.
             intent_clarification_tasks = [{
                 "clarification_id": "intent_clarification_1",
                 "source": "intent_formulator",
@@ -1906,7 +1977,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 "financial_subqueries": terminal_financial_subqueries,
                 "same_intent_streak_count": same_intent_streak_count,
             }
-        if active_plan.get("steps") or has_retrieved_knowledge:
+        if any_subquery_resolved_by_other_tool or active_plan.get("steps") or has_retrieved_knowledge:
             return {"preflight_status": "continue_plan", "search_tasks": [], "decline_tasks": decline_tasks, "unresolvable_search_tasks": unresolvable_search_tasks, "financial_subqueries": terminal_financial_subqueries, "same_intent_streak_count": same_intent_streak_count}
         return {"preflight_status": "intent_clarification_needed", "search_tasks": [], "decline_tasks": decline_tasks, "unresolvable_search_tasks": unresolvable_search_tasks, "financial_subqueries": terminal_financial_subqueries, "same_intent_streak_count": same_intent_streak_count}
 
@@ -2945,6 +3016,95 @@ def node_03b_deeplink_worker(state: AgentState):
 
 def node_03c_sufficiency_auditor(state: AgentState):
     print("🟢 [NODE 03c] Executing Task-Level Sufficiency & Evidence Selection")
+    # Confidence-scaled retry depth: a session with a strong, well-
+    # established recent track record (rolling bot-confidence over the
+    # last MAX_ESCALATION_HISTORY_TURNS completed turns -- the same metric
+    # node_08 uses for the soft-escalation chip) is capped at DIRECT +
+    # INTENT_EXPANSION ("normal effort") instead of continuing into the
+    # PRODUCT_EXPANSION/ANGLE_EXPANSION rounds ("extra effort"): those two
+    # rounds are RAG's most expensive attempts (each a full retrieval +
+    # sufficiency LLM round-trip) for the lowest marginal payoff, and a
+    # session that's been finding what it needs lately doesn't need that
+    # insurance spent on every task by default.
+    #
+    # Three guards, all added after a live trace showed the naive version
+    # (confidence >= 0.5 -> lean) fail exactly the case it should have
+    # protected: a customer asked to open an account (resolved, score
+    # 1.0), then asked how to apply for a loan -- with only that one
+    # prior turn on record, rolling confidence was already 1.0, so the
+    # loan question got the lean path, found nothing, and gave up
+    # immediately. The customer's next message was "why, can you try
+    # harder?" -- and confidence was now exactly 0.5 (one success, one
+    # failure), which the naive ">=" check still classified as
+    # confident-enough-to-go-lean, so the retried question got the exact
+    # same under-effort treatment and failed the exact same way.
+    #
+    # 1. Require a real sample before trusting the average at all: 1-2
+    #    turns of history can swing the rolling average by a full 0.5 on a
+    #    single result, which is noise, not a track record.
+    # 2. Exactly at the threshold is not "confident" -- it's a 50/50
+    #    record, which is precisely what SOFT_ESCALATION_CONFIDENCE_
+    #    THRESHOLD itself treats as low-confidence-adjacent for
+    #    escalation (node_08's own check is a strict "<", never "<="), so
+    #    the lean path uses a strict ">" for symmetry: only a genuinely
+    #    good record, not a coin flip, earns the lean path.
+    # 3. A repeated need this turn (triage's own repetitive_issue_detected,
+    #    already computed before node_03c runs) always forces the full
+    #    ladder regardless of rolling confidence -- the customer visibly
+    #    re-asking or rephrasing the same thing is a fresher, more
+    #    relevant signal than a multi-turn rolling average, and is exactly
+    #    the moment more effort is warranted, not less.
+    #
+    # Reads only already-completed prior turns (state's turn_escalation
+    # history, before node_08 appends this turn's own outcome at the very
+    # end of the graph), so this is available and correct mid-turn.
+    turn_escalation_history = state.get("turn_escalation_history", [])
+    rolling_confidence = _rolling_bot_confidence(turn_escalation_history)
+    scored_turn_count = sum(1 for entry in turn_escalation_history if _turn_confidence(entry) is not None)
+    has_repeated_need_this_turn = bool(state.get("repeated_need_detected_this_turn", False))
+    eligible_for_lean_retry = (
+        not has_repeated_need_this_turn
+        and scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST
+        and rolling_confidence is not None
+        and rolling_confidence > EXTRA_EFFORT_CONFIDENCE_THRESHOLD
+    )
+    # DIRECT + INTENT_EXPANSION (round 2) are "normal effort" and are never
+    # gated: round 2 is deterministic (no extra LLM call) and, per historical
+    # log analysis, rounds 1-2 together already capture ~94% of everything
+    # this ladder ever rescues. Only PRODUCT_EXPANSION/ANGLE_EXPANSION
+    # (rounds 3-4) -- the two paid-LLM-call rounds with a combined ~11%
+    # marginal rescue rate -- are withheld from high-confidence sessions.
+    # Rounds 3 and 4 are gated as a single "extra effort" tier, not two
+    # separate ones: their rescue-rate confidence intervals overlap, and a
+    # historical backtest of rolling confidence against which round a turn
+    # actually needed showed no separation between the two populations --
+    # there's no data basis for picking a second threshold between them.
+    NORMAL_EFFORT_RAG_ATTEMPTS = 2
+    effective_max_rag_attempts = NORMAL_EFFORT_RAG_ATTEMPTS if eligible_for_lean_retry else MAX_RAG_ATTEMPTS
+    # Distinct from "gets the full ladder": a brand-new or thin-history
+    # session also gets the full ladder, but isn't "low confidence" --
+    # there's not yet enough of a track record to be confident or
+    # unconfident about. Only a genuinely low, well-established rolling
+    # score means the bot has actually been struggling lately, which is
+    # the one case worth surfacing to the customer as "thinking harder"
+    # (see api_gateway.py's progress stream). Tracks EXTRA_EFFORT_
+    # CONFIDENCE_THRESHOLD, not SOFT_ESCALATION_CONFIDENCE_THRESHOLD: this
+    # label's job is to reflect whether extra retrieval effort is actually
+    # happening right now, so it must move with the threshold that gates
+    # that effort, not with the (lower, separately-tuned) threshold that
+    # gates the human-escalation offer.
+    is_low_confidence = (
+        scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST
+        and rolling_confidence is not None
+        and rolling_confidence < EXTRA_EFFORT_CONFIDENCE_THRESHOLD
+    )
+    if effective_max_rag_attempts < MAX_RAG_ATTEMPTS:
+        log_event(
+            "task.retry_depth.reduced",
+            rolling_confidence=rolling_confidence,
+            scored_turn_count=scored_turn_count,
+            effective_max_rag_attempts=effective_max_rag_attempts,
+        )
     tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", [])}
     subqueries_by_id = {
         subquery.get("subquery_id"): subquery
@@ -3238,7 +3398,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         # A partial task remains retryable with its retained evidence until the
         # configured final attempt. At the boundary it is answerable for the supported
         # part and carries a clarification only for the unresolved part.
-        if attempt_count >= MAX_RAG_ATTEMPTS:
+        if attempt_count >= effective_max_rag_attempts:
             if partial_ids:
                 current_results[task_id] = {
                     "task_id": task_id,
@@ -3354,6 +3514,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         "task_rejected_parent_ids": rejected_parent_ids,
         "task_resolution_instructions": task_resolution_instructions,
         "financial_subqueries": financial_subqueries,
+        "low_confidence_mode": is_low_confidence,
     }
 
 
@@ -3382,7 +3543,26 @@ def node_04a_resolution_planner(state: AgentState):
     ]
     planning_round = int(state.get("tool_planning_round", 0))
     total_attempts = sum(len(sq.get("tool_attempts", [])) for sq in financial_subqueries)
-    budget_exhausted = planning_round >= MAX_TOOL_PLANNING_ROUNDS or total_attempts >= MAX_TOOL_TASKS_PER_TURN
+    # node_03a already computes, every round, whether that round's own full
+    # relevance judgment added anything new for any subquery at all
+    # (tool_plan_status "exhausted" when it didn't) -- this was previously
+    # written but never read anywhere, so a subquery with genuinely nothing
+    # left to try still burned 1-2 more full LLM round-trips reconfirming
+    # that empty answer before the fixed MAX_TOOL_PLANNING_ROUNDS budget
+    # caught up. Reading it here makes the round budget end as soon as
+    # node_03a itself signals there is nothing left worth planning, instead
+    # of always spending the full fixed budget regardless. Safe by
+    # construction: node_03a's single call already covers every open
+    # subquery together each round, so "nothing new this round" means
+    # nothing new for anyone, not just the subquery that happens to be
+    # checked here; VOLATILE_STATE_RESET defaults this to "continue" before
+    # node_03a has run at all this turn, so a fresh turn is never affected.
+    planner_found_nothing_new = state.get("tool_plan_status") == "exhausted"
+    budget_exhausted = (
+        planning_round >= MAX_TOOL_PLANNING_ROUNDS
+        or total_attempts >= MAX_TOOL_TASKS_PER_TURN
+        or planner_found_nothing_new
+    )
 
     open_subquery_ids = []
     subquery_status = {}
@@ -3396,13 +3576,14 @@ def node_04a_resolution_planner(state: AgentState):
     needs_tools = bool(open_subquery_ids) and not budget_exhausted
     preflight_status = "needs_tools" if needs_tools else "presentation_ready"
 
-    print(f"   🧭 [GLOBAL RESOLUTION]: {len(open_subquery_ids)} open subquery(ies){' (budget exhausted)' if budget_exhausted and open_subquery_ids else ''} -> {preflight_status}")
+    print(f"   🧭 [GLOBAL RESOLUTION]: {len(open_subquery_ids)} open subquery(ies){' (budget exhausted' + (', planner found nothing new' if planner_found_nothing_new else '') + ')' if budget_exhausted and open_subquery_ids else ''} -> {preflight_status}")
     log_event(
         "resolution.planned",
         open_subquery_ids=open_subquery_ids,
         subquery_status=subquery_status,
         needs_tools=needs_tools,
         budget_exhausted=budget_exhausted,
+        planner_found_nothing_new=planner_found_nothing_new,
         planning_round=planning_round,
     )
     return {
@@ -3925,8 +4106,18 @@ def _generate_response_blocks(state: AgentState) -> dict:
       independently supported remainder. If it contains
       `CLARIFY_FROM_ALLOWED_CONTEXT`, ask only the permitted clarification.
 
+    - UI ELEMENT SELECTION GUIDELINES:
+      * Use TEXT as default for general explanations, advice, or short answers.
+      * Use LIST only for independent, scannable items/features.
+      * Use PROGRESS only for sequential multi-step processes.
+      * Use COMPARISON when comparing 2-3 products, rates, or account types side-by-side.
+      * Use ACCORDION when presenting multiple detailed FAQ/policy sections without cluttering chat height.
+      * Use TIMELINE when showing request/application milestone progress (past, current, future).
+      * Use CAROUSEL when showcasing multiple options, cards, or promotional perks horizontally.
+      * Use ALERT when delivering an important security notice, scam warning, or compliance caution.
+
     Output JSON only:
-    {{"elements":[{{"type":"TEXT|LIST|PROGRESS","source_task_ids":["task_1"],"context_text":"optional natural connector","answer":"grounded prose","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":""}}
+    {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":""}}
     """
     try:
         generated = _parse_json_robustly(call_groq_lpu(prompt))
@@ -3946,6 +4137,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
         context_text = _llm_text(element, "context_text")
         answer = _llm_text(element, "answer")
         extended_text = _llm_text(element, "extended_text")
+        title = _llm_text(element, "title")
         options = _normalize_ui_options(element.get("options", []))
         list_items = [item.strip() for item in _llm_list(element, "list_items") if isinstance(item, str) and item.strip()][:8]
         progress_steps = [
@@ -3953,6 +4145,130 @@ def _generate_response_blocks(state: AgentState) -> dict:
             for step in _llm_list(element, "progress_steps") if isinstance(step, dict)
             and _llm_text(step, "title") and _llm_text(step, "detail")
         ]
+
+        if requested_type == "COMPARISON":
+            headers = [_llm_text(h) for h in _llm_list(element, "headers") if _llm_text(h)]
+            rows = []
+            for r in _llm_list(element, "rows"):
+                if isinstance(r, dict):
+                    feat = _llm_text(r, "feature") or _llm_text(r, "label")
+                    vals = [_llm_text(v) for v in _llm_list(r, "values")]
+                    if feat and vals:
+                        rows.append({"feature": feat, "values": vals})
+            actions = [
+                {"label": _llm_text(a, "label"), "message": _llm_text(a, "message") or _llm_text(a, "action")}
+                for a in _llm_list(element, "actions") if isinstance(a, dict) and _llm_text(a, "label")
+            ]
+            if rows:
+                rendered_text = "\n".join([title, *[f"{r['feature']}: {', '.join(r['values'])}" for r in rows], extended_text]).strip()
+                block = {
+                    "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                    "type": "comparison", "title": title, "headers": headers, "rows": rows, "actions": actions,
+                    "options": options, "extendedText": extended_text,
+                }
+                response_blocks.append(block)
+                answer_parts.append(rendered_text)
+                element_sources.append(source_ids)
+                continue
+
+        elif requested_type == "ACCORDION":
+            sections = []
+            for s in (_llm_list(element, "sections") or _llm_list(element, "items")):
+                if isinstance(s, dict):
+                    st = _llm_text(s, "title") or _llm_text(s, "heading")
+                    sc = _llm_text(s, "content") or _llm_text(s, "detail") or _llm_text(s, "text")
+                    if st and sc:
+                        sections.append({"title": st, "content": sc})
+            if sections:
+                rendered_text = "\n".join([title, *[f"{s['title']}: {s['content']}" for s in sections], extended_text]).strip()
+                block = {
+                    "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                    "type": "accordion", "title": title, "sections": sections,
+                    "options": options, "extendedText": extended_text,
+                }
+                response_blocks.append(block)
+                answer_parts.append(rendered_text)
+                element_sources.append(source_ids)
+                continue
+
+        elif requested_type == "TIMELINE":
+            steps = []
+            for st in (_llm_list(element, "steps") or _llm_list(element, "items")):
+                if isinstance(st, dict):
+                    st_title = _llm_text(st, "title")
+                    st_desc = _llm_text(st, "description") or _llm_text(st, "detail")
+                    st_status = str(st.get("status", "pending")).lower()
+                    st_date = _llm_text(st, "date")
+                    if st_title:
+                        steps.append({"title": st_title, "description": st_desc, "status": st_status, "date": st_date})
+            if steps:
+                subtitle = _llm_text(element, "subtitle")
+                rendered_text = "\n".join([title, subtitle, *[f"{st['title']}: {st['description']}" for st in steps], extended_text]).strip()
+                block = {
+                    "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                    "type": "timeline", "title": title, "subtitle": subtitle, "steps": steps,
+                    "options": options, "extendedText": extended_text,
+                }
+                response_blocks.append(block)
+                answer_parts.append(rendered_text)
+                element_sources.append(source_ids)
+                continue
+
+        elif requested_type == "CAROUSEL":
+            c_items = []
+            for it in _llm_list(element, "items"):
+                if isinstance(it, dict):
+                    it_title = _llm_text(it, "title")
+                    it_sub = _llm_text(it, "subtitle")
+                    it_badge = _llm_text(it, "badge")
+                    it_hi = _llm_text(it, "highlight")
+                    it_dets = [_llm_text(d) for d in _llm_list(it, "details") if _llm_text(d)]
+                    it_act_lbl = _llm_text(it, "actionLabel") or _llm_text(it, "action_label") or "Select"
+                    it_act_msg = _llm_text(it, "actionMessage") or _llm_text(it, "action_message") or it_title
+                    if it_title:
+                        c_items.append({
+                            "title": it_title, "subtitle": it_sub, "badge": it_badge,
+                            "highlight": it_hi, "details": it_dets,
+                            "actionLabel": it_act_lbl, "actionMessage": it_act_msg,
+                        })
+            if c_items:
+                rendered_text = "\n".join([title, *[f"{it['title']}: {it['highlight']}" for it in c_items], extended_text]).strip()
+                block = {
+                    "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                    "type": "carousel", "title": title, "items": c_items,
+                    "options": options, "extendedText": extended_text,
+                }
+                response_blocks.append(block)
+                answer_parts.append(rendered_text)
+                element_sources.append(source_ids)
+                continue
+
+        elif requested_type == "ALERT":
+            a_msg = _llm_text(element, "message") or _llm_text(element, "text") or answer
+            a_sev = str(element.get("severity", "warning")).lower()
+            if a_sev not in {"warning", "security", "info", "success", "critical"}:
+                a_sev = "warning"
+            if a_sev == "critical":
+                a_sev = "security"
+            act_obj = element.get("action")
+            action_data = None
+            if isinstance(act_obj, dict) and _llm_text(act_obj, "label"):
+                action_data = {
+                    "label": _llm_text(act_obj, "label"),
+                    "message": _llm_text(act_obj, "message") or _llm_text(act_obj, "action"),
+                }
+            if title or a_msg:
+                rendered_text = "\n".join([title, a_msg, extended_text]).strip()
+                block = {
+                    "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                    "type": "alert", "title": title, "message": a_msg, "severity": a_sev, "action": action_data,
+                    "options": options, "extendedText": extended_text,
+                }
+                response_blocks.append(block)
+                answer_parts.append(rendered_text)
+                element_sources.append(source_ids)
+                continue
+
         block_type = "text"
         if requested_type == "PROGRESS" and len(progress_steps) >= 2:
             block_type = "stepper"
@@ -3973,7 +4289,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
             block = {
                 "blockId": f"element_{index}", "sourceTaskIds": source_ids,
                 "type": "stepper", "contextText": lead_text, "text": "", "items": items,
-                "options": options, "progressTitle": _llm_text(element, "progress_title"),
+                "options": options, "progressTitle": _llm_text(element, "progress_title") or title,
                 "stepDetails": [], "currentStep": 1, "totalSteps": len(progress_steps),
                 "listTitle": "", "listIntro": "", "extendedText": extended_text,
             }
@@ -3984,7 +4300,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
                 "blockId": f"element_{index}", "sourceTaskIds": source_ids,
                 "type": "checklist", "contextText": "", "text": "", "items": list_items,
                 "options": options, "progressTitle": "", "stepDetails": [], "currentStep": None,
-                "totalSteps": None, "listTitle": _llm_text(element, "list_title"),
+                "totalSteps": None, "listTitle": _llm_text(element, "list_title") or title,
                 "listIntro": list_intro, "extendedText": extended_text,
             }
         else:
@@ -5400,6 +5716,40 @@ def _score_subquery(subquery: dict) -> float:
     return 0.5 if has_partial_rag_evidence else 0.0
 
 
+def _append_failed_turn_escalation_history(state: AgentState) -> list:
+    """Used by node_11_deterministic_clarification_fallback ("n25"),
+    route_n20/route_n21's sole exhaustion destination after
+    MAX_SAFETY_RETRIES failed generation/audit attempts, reached directly
+    from "n20"/"n21" -- which SKIPS node_08_soft_escalation_analyzer, the
+    only place turn_escalation_history normally gets an entry. Without
+    this, a turn the customer experienced as a total failure (whatever
+    deterministic content n25 ends up showing -- real clarification/
+    decline/no-info evidence, or the plain "I can't answer that right now"
+    apology -- neither of which is the answer the customer actually asked
+    for) silently contributes no data point to the rolling-confidence
+    window, instead of the 0.0 it deserves -- confirmed live: a turn whose
+    subqueries were internally RESOLVED (e.g. via a deeplink) but whose
+    generated response never passed the outbound audit was invisible to
+    the confidence metric rather than dragging it down. Every financial
+    subquery this turn is force-scored 0.0 here, never read from
+    _score_subquery, since internal resolution state is exactly what the
+    customer did NOT end up receiving."""
+    financial_subqueries = state.get("financial_subqueries", state.get("triaged_subqueries", []))
+    failed_turn_subqueries = [
+        {"text": sq.get("customer_component", ""), "score": 0.0}
+        for sq in financial_subqueries
+        if isinstance(sq, dict) and sq.get("customer_component")
+    ]
+    escalation_history = list(state.get("turn_escalation_history", []))
+    escalation_history.append({
+        "turn_number": state.get("turn_count", 0),
+        "had_repeated_need": bool(state.get("repeated_need_detected_this_turn", False)),
+        "subqueries": failed_turn_subqueries,
+        "user_rating": None,
+    })
+    return escalation_history[-MAX_ESCALATION_HISTORY_TURNS:]
+
+
 def _turn_confidence(entry: dict) -> float | None:
     """One turn's confidence contribution: a user rating (see
     /api/feedback/turn-rating), when present, replaces the schema-derived
@@ -5413,6 +5763,18 @@ def _turn_confidence(entry: dict) -> float | None:
         return float(user_rating)
     scores = [sq["score"] for sq in entry.get("subqueries", [])]
     return sum(scores) / len(scores) if scores else None
+
+
+def _rolling_bot_confidence(turn_escalation_history: list) -> float | None:
+    """Average _turn_confidence over up to MAX_ESCALATION_HISTORY_TURNS
+    prior turns -- the same rolling metric node_08 uses to decide the soft
+    escalation chip, factored out so node_03c can also read it mid-turn
+    (before the current turn's own outcome is known, since this only ever
+    looks at already-completed turns already sitting in state). None when
+    there is no scored history yet (a brand-new session, or one that has
+    been pure chitchat so far)."""
+    confidences = [c for c in (_turn_confidence(entry) for entry in turn_escalation_history) if c is not None]
+    return sum(confidences) / len(confidences) if confidences else None
 
 
 def node_08_soft_escalation_analyzer(state: AgentState):
@@ -5499,9 +5861,13 @@ def node_08_soft_escalation_analyzer(state: AgentState):
     same_intent_streak_count = state.get("same_intent_streak_count", 0)
     same_intent_triggered = same_intent_streak_count > SOFT_ESCALATION_SAME_INTENT_STREAK
 
-    turn_confidences = [c for c in (_turn_confidence(entry) for entry in history) if c is not None]
-    confidence = sum(turn_confidences) / len(turn_confidences) if turn_confidences else None
-    confidence_triggered = confidence is not None and confidence < SOFT_ESCALATION_CONFIDENCE_THRESHOLD
+    scored_turn_count = sum(1 for entry in history if _turn_confidence(entry) is not None)
+    confidence = _rolling_bot_confidence(history)
+    confidence_triggered = (
+        scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST
+        and confidence is not None
+        and confidence < SOFT_ESCALATION_CONFIDENCE_THRESHOLD
+    )
 
     repeated_need_turns = sum(1 for entry in history if entry.get("had_repeated_need"))
     repeated_need_triggered = repeated_need_turns >= SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT
@@ -5526,6 +5892,7 @@ def node_08_soft_escalation_analyzer(state: AgentState):
             elapsed_seconds=elapsed_seconds,
             same_intent_streak_count=same_intent_streak_count,
             confidence=confidence,
+            scored_turn_count=scored_turn_count,
             repeated_need_turns=repeated_need_turns,
         )
 
@@ -5553,15 +5920,6 @@ def _escalation_case_request(state: AgentState) -> str:
     return get_message(state.get("user_profile", {}).get("language", "English"), "esc_fallback_desc")
 
 
-def _escalation_case_problem(state: AgentState) -> str:
-    """Provide a concise deterministic handoff reason without exposing diagnostics."""
-    if state.get("triage_status") == "ESCALATION":
-        return get_message(state.get("user_profile", {}).get("language", "English"), "esc_user_asked")
-    if state.get("safety_retry_count", 0) >= 3:
-        return get_message(state.get("user_profile", {}).get("language", "English"), "esc_safety_retry")
-    return get_message(state.get("user_profile", {}).get("language", "English"), "esc_default_review")
-
-
 def _build_current_session_escalation_context(state: AgentState) -> str:
     """Expose only trusted current-session material to the handoff summarizer."""
     rolling_summary = str(state.get("compacted_history_summary", "")).strip()
@@ -5585,7 +5943,6 @@ def _build_current_session_escalation_context(state: AgentState) -> str:
 def _build_escalation_case_summary(state: AgentState) -> dict:
     """Create a bounded, source-only handoff summary for the confirmation UI."""
     fallback_request = _escalation_case_request(state)
-    fallback_problem = _escalation_case_problem(state)
     unresolved_inputs = {
         "intent_clarifications": [
             str(item.get("unresolved_request", "")).strip()
@@ -5684,7 +6041,6 @@ def _build_escalation_case_summary(state: AgentState) -> dict:
                 )
                 return {
                     "request": main_pursuit,
-                    "problem": fallback_problem,
                     "unresolvedIssues": unresolved_issues,
                     "source": "current_session_summary",
                 }
@@ -5702,7 +6058,6 @@ def _build_escalation_case_summary(state: AgentState) -> dict:
 
     return {
         "request": fallback_request,
-        "problem": fallback_problem,
         "unresolvedIssues": [],
         "source": "deterministic_fallback",
     }
@@ -5731,7 +6086,6 @@ def node_09_hard_escalation_broker(state: AgentState):
         trigger_status=state.get("preflight_status", ""),
         triage_status=state.get("triage_status", ""),
         request_summary=case_summary["request"],
-        problem_summary=case_summary["problem"],
         unresolved_issues=case_summary["unresolvedIssues"],
         summary_source=case_summary["source"],
     )
@@ -5746,7 +6100,6 @@ def node_09_hard_escalation_broker(state: AgentState):
                 "blockId": "escalation-confirmation",
                 "type": "escalation_confirmation",
                 "request": case_summary["request"],
-                "problem": case_summary["problem"],
                 "unresolvedIssues": case_summary["unresolvedIssues"],
                 "confirmation": {
                     "message": ESCALATION_CONFIRMATION_MESSAGE,
@@ -5787,19 +6140,26 @@ def node_10_standard_rejection(state: AgentState):
 
 def node_11_deterministic_clarification_fallback(state: AgentState):
     """Terminal safety net after three failed generation/audit retries (see
-    route_n21 in graph.py) -- the only trigger for this node; a turn with a
-    pending clarification/decline and nothing else to search now goes
-    through node_04b's own narrower sub-prompt instead (see
-    _generate_evidence_only_response), sharing node_06's audit like every
-    other turn.
+    route_n20/route_n21 in graph.py) -- the only trigger for this node,
+    for every exhausted-retry turn, not just clarification-shaped ones:
+    hard escalation (node_09/n23) is reserved for a customer's own explicit
+    request for a human, never for the bot's own repeated inability to
+    pass its own audit.
 
-    By the time this node runs, that shared audit has already had three
-    chances to validate a generated draft and failed every time. Rather
-    than attempt a fourth generation, this renders the already-deterministic
-    clarification_evidence/decline_evidence/no_info_evidence directly --
-    fixed templates, never LLM-generated, independent of whatever caused
-    the surrounding draft to keep failing, and therefore trustworthy
-    without a further audit here.
+    By the time this node runs, node_06's shared audit has already had
+    three chances to validate a generated draft and failed every time.
+    Rather than attempt a fourth generation, this renders whatever
+    deterministic evidence already exists -- clarification_evidence/
+    decline_evidence/no_info_evidence -- directly: fixed templates, never
+    LLM-generated, independent of whatever caused the surrounding draft to
+    keep failing, and therefore trustworthy without a further audit here.
+    When none of that evidence exists at all (a real generated answer that
+    simply never passed compliance/groundedness, with no clarification,
+    decline, or no-info entry to fall back on), there is nothing safe left
+    to show, so this apologizes plainly and invites the customer to retry
+    or rephrase instead -- never a fabricated answer, and never a hard
+    escalation for what may just be a phrasing or evidence gap rather than
+    something only a human can resolve.
     """
     print("🟡 [NODE 11] Executing Deterministic Clarification Fallback")
     answer = state.get("safe_answer_for_fallback", "").strip()
@@ -5873,7 +6233,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
         clarification_parts.append(text)
 
     response = "\n\n".join(answer_parts) if answer_parts else (
-        "Sorry, I couldn't find relevant FAQ details to answer that. Could you clarify what information you are looking for?"
+        "I'm sorry, I'm not able to answer that right now. Could you try again, or ask in a different way?"
     )
     if not response_blocks:
         response_blocks.append({
@@ -5897,7 +6257,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
         block_count=len(response_blocks),
         safety_retry_count=state.get("safety_retry_count", 0),
     )
-    return {
+    result = {
         "final_response": response,
         "final_answer": answer,
         "final_clarification": "\n\n".join(clarification_parts),
@@ -5905,3 +6265,12 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
         "chat_history": history,
         "pending_advance": False,
     }
+    # This node is now the sole destination for an exhausted-retry turn
+    # (route_n20/route_n21 never send one to n23 anymore) -- see
+    # _append_failed_turn_escalation_history for why every such turn is
+    # scored 0 for the rolling confidence signal, regardless of which
+    # deterministic content (real evidence or the plain apology) it ends
+    # up showing the customer.
+    if state.get("safety_retry_count", 0) >= 3:
+        result["turn_escalation_history"] = _append_failed_turn_escalation_history(state)
+    return result

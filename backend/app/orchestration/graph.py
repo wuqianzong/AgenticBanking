@@ -109,8 +109,8 @@ def build_agent_graph():
         # _generate_evidence_only_response in nodes.py), whose schema has no
         # alternative field to substitute a different answer into -- so this
         # case goes through n8 like any other turn, sharing the same node_06
-        # audit. n25 (node_11) is reachable only via route_n21's own
-        # three-failed-retries condition now.
+        # audit. n25 (node_11) is reachable only via route_n20/route_n21's
+        # own three-failed-retries condition now.
         return "n8"
 
     def route_n20(state: AgentState):
@@ -119,7 +119,7 @@ def build_agent_graph():
             return "n21_audit"
         if state.get("triage_status") == "NON_FINANCIAL":
             return "n26"
-        return "n8" if count < 3 else "n23"
+        return "n8" if count < 3 else "n25"
 
     def route_n21(state: AgentState):
         count = state.get("safety_retry_count", 0)
@@ -127,9 +127,15 @@ def build_agent_graph():
             return "n22"
         if state.get("triage_status") == "NON_FINANCIAL":
             return "n26"
-        if count >= 3 and state.get("clarification_fallback_required"):
-            return "n25"
-        return "n8" if count < 3 else "n23"
+        # Exhausted retries never hard-escalate anymore: n23 is reserved for
+        # a customer's own explicit request for a human (triage's ESCALATION
+        # status, or an accepted transfer confirmation), never for the bot's
+        # own repeated inability to pass its own audit. n25 renders whatever
+        # deterministic evidence actually exists (clarification/decline/
+        # no-info) when there is any, or a plain "I can't answer that right
+        # now" apology when there genuinely is none -- see node_11's
+        # docstring.
+        return "n8" if count < 3 else "n25"
 
     workflow.set_conditional_entry_point(route_start, {"n00": "n00", "n3": "n3", "n_svc": "n_svc"})
     workflow.add_edge("n_svc", END)
@@ -160,11 +166,11 @@ def build_agent_graph():
             "n21_audit": "n21_audit",
             "n8": "n8",
             "n26": "n26",
-            "n23": "n23",
+            "n25": "n25",
         },
     )
     workflow.add_edge("n21_audit", "n21")
-    workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n23": "n23", "n25": "n25", "n26": "n26"})
+    workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n25": "n25", "n26": "n26"})
     workflow.add_edge("n22", "n24")
     workflow.add_edge("n24", END)
     workflow.add_edge("n26", "n20")

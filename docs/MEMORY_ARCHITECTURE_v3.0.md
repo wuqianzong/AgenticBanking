@@ -77,11 +77,10 @@ node_00
           optionally with the customer's nickname substituted in)
   2. service_request_service.list_registrations(customer_id)
        filtered to status == PENDING
-       -> if non-empty: appends the existing deterministic
-          service_request_intro_single/plural line, and attaches
-          serviceRequestActions to the greeting turn's ui_action_payload
-          exactly as node_07 already does mid-conversation, so a pending
-          form is immediately actionable from the greeting itself.
+       -> if non-empty: appends a deterministic one-sentence reminder
+          naming the true total and distinct request types, pointing at
+          the header's requests icon (see below) -- never attaches
+          serviceRequestActions to the greeting turn itself.
 ```
 
 Both checks are direct reads of durable, verifiable state -- never a
@@ -89,6 +88,45 @@ generated claim -- so the greeting needs no groundedness or conduct audit.
 `node_00` now routes straight to `END` in `graph.py`, bypassing the entire
 outbound audit / precision-substitution / escalation-analysis chain, the
 same way the service-request special route (`n_svc`) already does.
+
+**The pending-request reminder no longer attaches the form itself.**
+Originally step 2 also attached `serviceRequestActions` to the greeting's
+`ui_action_payload`, exactly as `node_07` does mid-conversation, so the
+form was immediately actionable from the greeting. This stopped being
+correct once the frontend's embedded service-request rendering changed
+from a compact shortcut into a full inline form (`renderEmbeddedServiceRequest`):
+attaching it to the greeting meant the form occupied the entire chat
+screen immediately after every single login. The pending badge/count is
+already refreshed independently via the frontend's own
+`fetchServiceRequestList` poll, so nothing is lost by leaving the greeting
+as a pointer rather than an attachment -- the customer opens the form
+deliberately from the header icon instead.
+
+**The reminder also now reports the true total, not just the latest
+item.** `_build_deterministic_greeting` (`nodes.py`) previously followed
+only `pending_requests[0]` (newest-first), silently ignoring any others --
+live-observed to undercount by a factor of 11 on one heavily-tested
+account (nine `Change Address` resubmissions plus one each of two other
+types, reported as just "one pending request"). It now groups all pending
+records by `service_request_id`, resolves each distinct type's
+`action_label` once, and picks one of three deterministic templates:
+singular (`service_request_reminder_single`), same-type plural
+(`..._plural_same`, count + one label), or mixed-type plural
+(`..._plural_mixed`, count + a natural "A, B, and C" join of distinct
+labels via `_natural_join`) -- never one sentence per individual pending
+row, which would be unreadable for a customer with several duplicates of
+the same request.
+
+**`node_00b_followup_check` narrowed to transcript-only.** It previously
+also read `pending_shortcuts` off the greeting's `serviceRequestActions`
+to let its own LLM-generated follow-up mention them again -- now dead
+weight, since `node_00`'s reminder above already covers pending requests
+deterministically and unconditionally, before `node_00b` even runs.
+`has_followup_candidate` (which decides whether `node_00b` runs at all,
+via `route_n00`) now depends only on `last_session_transcript`; the node's
+prompt, evidence bundle, and groundedness rules were all trimmed to match,
+leaving it solely responsible for surfacing an unresolved conversational
+topic from the customer's last session.
 
 This also means a session that produces no substantive conversation (e.g.
 a login immediately followed by a logout) no longer has any way to degrade

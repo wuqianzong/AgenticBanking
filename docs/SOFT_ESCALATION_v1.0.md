@@ -195,6 +195,29 @@ user_rating (nullable), created_at, rated_at
 PRIMARY KEY (session_id, turn_number)
 ```
 
+## 5a. Shared with a second confidence-gated consumer, and a matching bug fix
+
+The same rolling-confidence primitive (`_rolling_bot_confidence`,
+`_turn_confidence`) now also gates `node_03c`'s RAG retry-depth decision —
+see `RAG_RETRY_EFFORT_v1.0.md`. That work's minimum-sample guard
+(`MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST`, previously
+`MIN_SCORED_TURNS_FOR_LEAN_RAG_RETRY`) was originally applied only to that
+one consumer; live tracing then found this node's own `confidence_triggered`
+rule had never had an equivalent guard, so a single bad first turn (score
+0.0, n=1) could trigger the "Talk to Agent" chip's low-confidence signal
+immediately, before any real track record existed. Fixed identically:
+`confidence_triggered` now also requires
+`scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST`, logged via a
+new `scored_turn_count` field on `escalation.soft.triggered`.
+
+Also see `DECLINE_CLARIFICATION_DESIGN_v1.0.md` §10: a turn that ends in
+`node_09`/`node_11`'s exhausted-retry fallback now always appends a
+force-scored 0.0 entry to `turn_escalation_history` via
+`_append_failed_turn_escalation_history`, since neither of those nodes
+passes through this node to get one otherwise — previously such a turn
+was invisible to the rolling-confidence window instead of dragging it
+down.
+
 ## 6. Files touched
 
 `backend/app/core/llm_service.py` (`repetitive_issue_detected` on

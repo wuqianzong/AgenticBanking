@@ -22,8 +22,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "non_compliant": "I’m unable to help with that request.",
         "non_financial_rejection": "I’m Horizon, and I can help with Horizon Bank questions whenever you need.",
         "fail": "Sorry, I’m unable to respond to that right now. Please try again or rephrase your question.",
-        "service_request_intro_single": "You can fulfil your request using the form below.",
-        "service_request_intro_plural": "You can fulfil these requests using the forms below.",
+        "service_request_reminder_single": "Also, you still have a pending {label} request — you can check it anytime from the requests icon in the top right.",
+        "service_request_reminder_plural_same": "Also, you still have {count} pending {label} requests — you can check them anytime from the requests icon in the top right.",
+        "service_request_reminder_plural_mixed": "Also, you still have {count} pending requests ({labels}) — you can check them anytime from the requests icon in the top right.",
     },
     "Mandarin": {
         "greeting_new": "欢迎来到 Horizon!请问今天有什么银行业务需要我协助的吗?",
@@ -40,8 +41,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "non_compliant": "很抱歉,我无法协助处理该请求。",
         "non_financial_rejection": "我是 Horizon,随时为您解答 Horizon 银行相关的问题。",
         "fail": "抱歉,我目前无法回应。请重试或重新表述您的问题。",
-        "service_request_intro_single": "您可以通过下方的表单完成您的请求。",
-        "service_request_intro_plural": "您可以通过下方的表单完成这些请求。",
+        "service_request_reminder_single": "另外,您还有一项待处理的{label}请求 — 您可以随时点击右上角的请求图标查看。",
+        "service_request_reminder_plural_same": "另外,您还有 {count} 项待处理的{label}请求 — 您可以随时点击右上角的请求图标查看。",
+        "service_request_reminder_plural_mixed": "另外,您还有 {count} 项待处理的请求({labels})— 您可以随时点击右上角的请求图标查看。",
     },
     "Spanish": {
         "greeting_new": "¡Bienvenido a Horizon! ¿Cómo puedo ayudarle hoy con su banca?",
@@ -58,8 +60,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "non_compliant": "No puedo ayudar con esa solicitud.",
         "non_financial_rejection": "Soy Horizon y puedo ayudarle con preguntas de Horizon Bank cuando lo necesite.",
         "fail": "Lo siento, no puedo responder en este momento. Intente nuevamente o reformule su pregunta.",
-        "service_request_intro_single": "Puede completar su solicitud usando el formulario a continuación.",
-        "service_request_intro_plural": "Puede completar estas solicitudes usando los formularios a continuación.",
+        "service_request_reminder_single": "Además, todavía tiene una solicitud pendiente de {label} — puede consultarla en cualquier momento desde el icono de solicitudes en la esquina superior derecha.",
+        "service_request_reminder_plural_same": "Además, todavía tiene {count} solicitudes pendientes de {label} — puede consultarlas en cualquier momento desde el icono de solicitudes en la esquina superior derecha.",
+        "service_request_reminder_plural_mixed": "Además, todavía tiene {count} solicitudes pendientes ({labels}) — puede consultarlas en cualquier momento desde el icono de solicitudes en la esquina superior derecha.",
     },
 }
 

@@ -5,7 +5,7 @@ import {
   CreditCard, Wallet, Landmark, ShieldCheck,
   FileText, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
   Loader2, Settings, ClipboardList, Clock, XCircle, ArrowRight, ArrowLeft, LayoutDashboard,
-  ThumbsUp, ThumbsDown, Copy, Check, Sparkles
+  ThumbsUp, ThumbsDown, Copy, Check, Sparkles, ChevronDown, ChevronUp, AlertTriangle, ShieldAlert, Info, Layers
 } from 'lucide-react';
 
 // 1. THE NODE CAPTION DICTIONARY
@@ -23,8 +23,7 @@ const NODE_CAPTIONS = {
   "n19": "caption.n19",
   "n8": "caption.n8",
   "n20": "caption.n20",
-  "n21_compliance": "caption.n21_compliance",
-  "n21_groundedness": "caption.n21_groundedness",
+  "n21_audit": "caption.n21_audit",
   "n21": "caption.n21",
   "n22": "caption.n22",
   "n24": "caption.n24"
@@ -83,8 +82,10 @@ export default function BankingBotUI() {
   const [isTyping, setIsTyping] = useState(false);
   const [isCompactingMemory, setIsCompactingMemory] = useState(false);
   const [loadingCaption, setLoadingCaption] = useState(t("English", "caption.processing")); // <-- NEW STATE FOR TRACKER
+  const [isLowConfidenceMode, setIsLowConfidenceMode] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [expandedProgressSteps, setExpandedProgressSteps] = useState({});
+  const [expandedAccordions, setExpandedAccordions] = useState({});
   const [copiedKey, setCopiedKey] = useState(null);
   const [showPreferences, setShowPreferences] = useState(false);
   const [preferences, setPreferences] = useState({
@@ -233,7 +234,14 @@ export default function BankingBotUI() {
       if (!replace) shouldAutoScrollRef.current = false;
 
       setMessages((currentMessages) => {
-        if (replace) return historyMessages;
+        if (replace) {
+          // Never clobber messages that arrived after this fetch was kicked
+          // off -- this call is fire-and-forget on the init path, so a
+          // customer message (and its reply) sent while it was still in
+          // flight must not be wiped out by an authoritative-looking but
+          // now-stale page once this resolves.
+          return currentMessages.length > historyMessages.length ? currentMessages : historyMessages;
+        }
         const knownIds = new Set(currentMessages.map((message) => message.id));
         return [...historyMessages.filter((message) => !knownIds.has(message.id)), ...currentMessages];
       });
@@ -736,6 +744,7 @@ export default function BankingBotUI() {
     }
     setIsTyping(true);
     setLoadingCaption(t(preferences.language, "caption.understanding"));
+    setIsLowConfidenceMode(false);
 
     try {
       const response = await fetch("http://localhost:8000/api/chat", {
@@ -812,6 +821,9 @@ export default function BankingBotUI() {
               const translatedCaption = t(preferences.language, captionKey);
               console.log("🔄 [UPDATING UI STATE TO]:", translatedCaption);
               setLoadingCaption(translatedCaption);
+              if (parsedData.lowConfidenceMode) {
+                setIsLowConfidenceMode(true);
+              }
             }
 
             // Check if the payload contains the final response
@@ -882,8 +894,14 @@ export default function BankingBotUI() {
         // Turn 0 is a plain greeting, so it is safe to replace it with the
         // persisted version here. This also obtains the prior-history metadata
         // needed to show the "Load earlier messages" control on a fresh login.
+        // Fire-and-forget, not awaited: the greeting is already visible from
+        // finalBotData above, so there is nothing left for the customer to
+        // wait on -- this reconciliation and the pagination-metadata fetch
+        // can finish quietly in the background instead of holding the
+        // loading spinner up through a second full network round-trip that,
+        // for a brand-new login, returns the exact same single message.
         if (isInitialization) {
-          await loadHistoryPage(targetSessionId, null, true);
+          void loadHistoryPage(targetSessionId, null, true);
         }
       }
 
@@ -1255,6 +1273,282 @@ export default function BankingBotUI() {
     );
   };
 
+  // 1. Mini Comparison Table (Side-by-Side Product/Plan Comparison)
+  const renderComparisonTable = (block) => {
+    const headers = block.headers || [];
+    const rows = block.rows || [];
+    const actions = block.actions || [];
+    return (
+      <div className="mt-2.5 w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+        {block.title && (
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-3.5 py-2.5">
+            <Layers size={15} className="text-blue-600 shrink-0" />
+            <h4 className="text-[13px] font-semibold text-slate-800">{block.title}</h4>
+          </div>
+        )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            {headers.length > 0 && (
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-100/70">
+                  {headers.map((head, idx) => (
+                    <th key={idx} className={`p-2.5 font-bold text-slate-700 ${idx === 0 ? 'bg-slate-100/90' : 'text-center'}`}>
+                      {head}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+            )}
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((row, rIdx) => (
+                <tr key={rIdx} className={rIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                  <td className="p-2.5 font-semibold text-slate-700 bg-slate-50/60 border-r border-slate-100 whitespace-nowrap">
+                    {row.feature || row.label}
+                  </td>
+                  {(row.values || []).map((val, vIdx) => (
+                    <td key={vIdx} className="p-2.5 text-center text-slate-600 leading-snug">
+                      {renderTextWithDataChips(String(val))}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {actions.length > 0 && (
+          <div className="border-t border-slate-100 bg-slate-50/60 p-2.5 flex items-center justify-end gap-2 flex-wrap">
+            {actions.map((act, aIdx) => (
+              <button
+                key={aIdx}
+                type="button"
+                onClick={() => handleSend(act.message || act.action || act.label)}
+                disabled={isTyping}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors shadow-2xs disabled:opacity-50"
+              >
+                {act.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // 3. Accordion FAQ (Collapsible Policy & Details Drawer)
+  const renderAccordionFaq = (block, blockId) => {
+    const sections = block.sections || block.items || [];
+    return (
+      <div className="mt-2.5 w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+        {block.title && (
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-3.5 py-2.5">
+            <FileText size={15} className="text-blue-600 shrink-0" />
+            <h4 className="text-[13px] font-semibold text-slate-800">{block.title}</h4>
+          </div>
+        )}
+        <div className="divide-y divide-slate-100">
+          {sections.map((section, sIdx) => {
+            const itemKey = `${blockId}-sec-${sIdx}`;
+            const isOpen = expandedAccordions[itemKey] ?? (sIdx === 0);
+            return (
+              <div key={sIdx} className="transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setExpandedAccordions(prev => ({ ...prev, [itemKey]: !isOpen }))}
+                  className="w-full px-3.5 py-2.5 flex items-center justify-between text-left hover:bg-slate-50/70 transition-colors"
+                >
+                  <span className="text-[13px] font-medium text-slate-800">{section.title || section.heading}</span>
+                  {isOpen ? <ChevronUp size={15} className="text-slate-400 shrink-0" /> : <ChevronDown size={15} className="text-slate-400 shrink-0" />}
+                </button>
+                {isOpen && (
+                  <div className="px-3.5 pb-3 text-xs leading-relaxed text-slate-600 whitespace-pre-wrap bg-slate-50/30 border-t border-slate-50">
+                    {renderTextWithDataChips(section.content || section.detail || section.text || '')}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // 5. Timeline Tracker (Application / Request Milestone Status Tracker)
+  const renderTimelineTracker = (block) => {
+    const steps = block.steps || block.items || [];
+    return (
+      <div className="mt-2.5 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3.5">
+          <div className="flex items-center gap-2">
+            <Clock size={16} className="text-blue-600 shrink-0" />
+            <div>
+              <h4 className="text-[13px] font-semibold text-slate-800">{block.title || "Status Tracker"}</h4>
+              {block.subtitle && <p className="text-[11px] text-slate-400 mt-0.5">{block.subtitle}</p>}
+            </div>
+          </div>
+        </div>
+        <div className="space-y-3 relative pl-1">
+          {steps.map((step, idx) => {
+            const isCompleted = step.status === 'completed' || step.status === 'done';
+            const isActive = step.status === 'active' || step.status === 'current' || step.status === 'in_progress';
+            const isLast = idx === steps.length - 1;
+            return (
+              <div key={idx} className="relative flex items-start gap-3">
+                {!isLast && (
+                  <div
+                    className={`absolute left-[9px] top-5 bottom-0 w-0.5 ${isCompleted ? 'bg-emerald-400' : 'bg-slate-200'}`}
+                  />
+                )}
+                <div className="relative z-10 mt-0.5">
+                  {isCompleted ? (
+                    <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+                      <Check size={11} className="stroke-[3]" />
+                    </div>
+                  ) : isActive ? (
+                    <div className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center animate-pulse shadow-xs">
+                      <div className="w-2 h-2 rounded-full bg-white" />
+                    </div>
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 pb-1">
+                  <div className="flex items-center justify-between">
+                    <h5 className={`text-xs font-semibold ${isActive ? 'text-blue-600' : isCompleted ? 'text-slate-800' : 'text-slate-400'}`}>
+                      {step.title}
+                    </h5>
+                    {step.date && <span className="text-[10px] text-slate-400">{step.date}</span>}
+                  </div>
+                  {step.description && (
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                      {renderTextWithDataChips(step.description)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // 6. Horizontal Swipeable Carousel (Product & Offers Gallery)
+  const renderHorizontalCarousel = (block) => {
+    const items = block.items || [];
+    return (
+      <div className="mt-2.5 w-full max-w-sm space-y-2">
+        {block.title && (
+          <div className="flex items-center gap-1.5 px-1">
+            <Sparkles size={14} className="text-blue-600" />
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">{block.title}</h4>
+          </div>
+        )}
+        <div className="flex gap-2.5 overflow-x-auto pb-2 pt-0.5 px-0.5 snap-x hide-scrollbar">
+          {items.map((item, idx) => (
+            <div
+              key={idx}
+              className="min-w-[220px] max-w-[240px] shrink-0 snap-start rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs flex flex-col justify-between"
+            >
+              <div>
+                {item.badge && (
+                  <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 mb-2">
+                    {item.badge}
+                  </span>
+                )}
+                <h5 className="text-sm font-bold text-slate-800 line-clamp-1">{item.title}</h5>
+                {item.subtitle && <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{item.subtitle}</p>}
+                {item.highlight && (
+                  <div className="mt-2 rounded-lg bg-blue-50/80 p-2 text-xs font-semibold text-blue-700 border border-blue-100/60">
+                    {item.highlight}
+                  </div>
+                )}
+                {item.details?.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {item.details.map((det, dIdx) => (
+                      <li key={dIdx} className="text-[11px] text-slate-600 flex items-start gap-1.5 leading-snug">
+                        <CheckCircle2 size={12} className="text-emerald-500 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2">{det}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSend(item.actionMessage || item.actionLabel || item.title)}
+                disabled={isTyping}
+                className="mt-3 w-full rounded-xl bg-slate-900 hover:bg-blue-600 text-white text-xs font-semibold py-2 transition-colors shadow-2xs"
+              >
+                {item.actionLabel || "Select"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // 7. Actionable Alert Callout Banner
+  const renderActionableAlert = (block) => {
+    const severity = block.severity || 'warning';
+    const styles = {
+      security: {
+        bg: 'bg-red-50',
+        border: 'border-red-200',
+        text: 'text-red-900',
+        icon: <ShieldAlert size={18} className="text-red-600 shrink-0 mt-0.5" />,
+        btn: 'bg-red-600 hover:bg-red-700 text-white',
+      },
+      warning: {
+        bg: 'bg-amber-50',
+        border: 'border-amber-200',
+        text: 'text-amber-900',
+        icon: <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />,
+        btn: 'bg-amber-600 hover:bg-amber-700 text-white',
+      },
+      info: {
+        bg: 'bg-blue-50',
+        border: 'border-blue-200',
+        text: 'text-blue-900',
+        icon: <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />,
+        btn: 'bg-blue-600 hover:bg-blue-700 text-white',
+      },
+      success: {
+        bg: 'bg-emerald-50',
+        border: 'border-emerald-200',
+        text: 'text-emerald-900',
+        icon: <CheckCircle2 size={18} className="text-emerald-600 shrink-0 mt-0.5" />,
+        btn: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+      }
+    };
+    const currentStyle = styles[severity] || styles.warning;
+    return (
+      <div className={`mt-2.5 w-full max-w-sm rounded-2xl border ${currentStyle.border} ${currentStyle.bg} p-3.5 shadow-xs`}>
+        <div className="flex items-start gap-2.5">
+          {currentStyle.icon}
+          <div className="flex-1 min-w-0">
+            {block.title && <h4 className={`text-xs font-bold ${currentStyle.text}`}>{block.title}</h4>}
+            <p className="text-xs text-slate-700 mt-1 leading-relaxed whitespace-pre-wrap">
+              {renderTextWithDataChips(block.message || block.text || '')}
+            </p>
+            {block.action && (
+              <button
+                type="button"
+                onClick={() => handleSend(block.action.message || block.action.action || block.action.label)}
+                disabled={isTyping}
+                className={`mt-2.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-2xs ${currentStyle.btn}`}
+              >
+                {block.action.label}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderResponseBlock = (block, messageId, index, precisionSubstituted = false, personalDataSubstituted = false) => {
     const blockId = `${messageId}-${block.blockId || index}`;
     const expandedStep = expandedProgressSteps[blockId] ?? 1;
@@ -1295,6 +1589,11 @@ export default function BankingBotUI() {
           </div>
         )}
         {block.type === 'checklist' && renderChecklist(block.items, block.listTitle, block.options)}
+        {block.type === 'comparison' && renderComparisonTable(block)}
+        {block.type === 'accordion' && renderAccordionFaq(block, blockId)}
+        {block.type === 'timeline' && renderTimelineTracker(block)}
+        {block.type === 'carousel' && renderHorizontalCarousel(block)}
+        {block.type === 'alert' && renderActionableAlert(block)}
         {block.type === 'escalation_confirmation' && renderEscalationConfirmation(block)}
         {block.extendedText && (
           <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
@@ -2375,7 +2674,13 @@ export default function BankingBotUI() {
           
           {/* 3. UI RENDERING REQUIREMENT: Agentic Processing Tracker */}
           {isTyping && (
-            <div className="flex justify-start">
+            <div className="flex flex-col items-start gap-1.5">
+              {isLowConfidenceMode && (
+                <div className="flex items-center gap-1 pl-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600">
+                  <Sparkles size={11} className="shrink-0" />
+                  <span>{t(preferences.language, "caption.thinkingHarder")}</span>
+                </div>
+              )}
               <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3.5 flex items-center gap-3 shadow-sm max-w-[88%]">
                 <Loader2 size={16} className="text-blue-600 animate-spin shrink-0" />
                 <span className="text-[13px] text-slate-600 font-medium tracking-wide">

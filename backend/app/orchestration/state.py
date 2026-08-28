@@ -47,6 +47,7 @@ class AgentState(TypedDict):
     deeplink_payload: str                        # Buffer for Deeplink agent
     triage_status: str                           # 'NON_COMPLIANT', 'ESCALATION', 'NON_FINANCIAL', or 'VALID_REQUEST'
     repeated_need_detected_this_turn: bool       # Set by node_02d/triage: true when any of this turn's financial subqueries substantially repeats a recent prior one. Consumed only by node_08's soft-escalation rollup.
+    low_confidence_mode: bool                    # Set by node_03c when the rolling bot-confidence over recent turns is genuinely below threshold (not merely a session with no track record yet) -- surfaced to the frontend progress stream as "Thinking harder" (see api_gateway.py's chat_stream).
 
     # Tool Calling v3.0: financial-only triage, each subquery owning its own
     # tool attempts. See docs/TOOL_CALLING_v3.0.md. financial_subqueries

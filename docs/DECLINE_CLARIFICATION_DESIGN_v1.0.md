@@ -213,6 +213,38 @@ this exact fix silently did nothing: it checked
 `_compute_subquery_status(...) == "RESOLVED"`, which could never be true
 at that point in the round.
 
+**Two more sites needed the identical guard, found via live tracing after
+this fix shipped.** The pattern generalizes to *any* place that manufactures
+a failure-shaped entry for a subquery without first checking whether some
+other tool already resolved it this round -- not just RAG's own no-info
+paths:
+
+- **The formulator's own `DECLINE` resolution.** A component the intent
+  formulator judges out-of-scope can be the same subquery a different tool
+  (`deeplink`, `service_request`, `api`) already fully resolved this same
+  round -- the formulator's `SEARCH`/`CLARIFY`/`DECLINE` partition never
+  sees other tools' results. `node_02e`'s `DECLINE` branch now checks
+  `_resolved_by_other_tool(owning_subquery)` before appending to
+  `decline_tasks`, skipping the decline (and setting the same
+  `any_subquery_resolved_by_other_tool` flag used below) when it fires.
+- **The generic "no valid retrieval task could be formed" fallback.** When
+  `node_02e` produces zero `search_tasks` and zero real
+  `intent_clarification_tasks`/`unresolvable_search_tasks`, it manufactures
+  a catch-all `intent_clarification_1` entry asking the customer to
+  clarify their whole request -- correct when nothing at all resolved the
+  turn, but wrong when a scope-rejected RAG formulation's subquery was
+  already fully answered by a deeplink: confirmed live, "how can I manage
+  my profile info" produced a working `profile-personal-details` deeplink
+  *and* a fabricated "please clarify" task for the same subquery, and the
+  response generator surfaced both -- a customer-visible self-contradiction
+  (an answer plus a request to clarify the thing just answered) that then
+  failed groundedness three times in a row before falling through to the
+  exhausted-retry fallback, for a turn that was never actually stuck.
+  `node_02e` now tracks `any_subquery_resolved_by_other_tool` across the
+  scope-rejection loop and skips manufacturing the fallback clarification
+  whenever it's set, falling through to the same `"continue_plan"` status
+  already used for "nothing new to search, but not stuck" turns instead.
+
 ## 7. What this replaced
 
 - **`_audit_clarification_decline_blocks`** (a bespoke combined
@@ -232,11 +264,63 @@ at that point in the round.
   `node_11_deterministic_clarification_fallback`) — reverted.
   `_generate_evidence_only_response` (§5) now handles that exact shape of
   turn within `n8` itself, sharing the normal audit; `node_11` is reachable
-  only via `route_n21`'s own three-failed-retries condition now, and its
-  own rendering was simplified to relay `clarification_evidence`/
-  `decline_evidence`/`no_info_evidence` directly with no generation or
-  audit call of its own (see `TOOL_CALLING_v3.0.md` for the retry-budget
-  mechanics that lead here).
+  only via `route_n20`/`route_n21`'s own three-failed-retries condition
+  now (see §10 — that condition's *destination* changed again since this
+  was first written), and its own rendering was simplified to relay
+  `clarification_evidence`/`decline_evidence`/`no_info_evidence` directly
+  with no generation or audit call of its own (see `TOOL_CALLING_v3.0.md`
+  for the retry-budget mechanics that lead here).
+
+## 10. Hard escalation reserved for explicit requests only
+
+`route_n20`/`route_n21` originally sent an exhausted-retry turn
+(`safety_retry_count >= 3`) to `node_09_hard_escalation_broker` ("n23")
+unless a separately-computed `clarification_fallback_required` flag was
+set, in which case it went to `node_11` ("n25") instead. This meant a
+turn's own repeated inability to pass its own audit — nothing to do with
+the customer asking for a human — could still end a conversation in a
+hard-escalation handoff screen. Confirmed live as an unnecessary outcome:
+a turn whose RAG ladder had already produced a real, deterministic
+`CLARIFICATION_REQUIRED` no-info entry still routed to `n23`, because
+`clarification_fallback_required` (`preserve_answer` in
+`node_05_outbound_deterministic_gate`) also requires the *answer* portion
+to have separately passed compliance/groundedness — under the audit's
+fail-closed default (see `GROUNDEDNESS_v2.0.md`), a transient error (e.g.
+an upstream rate limit) makes that condition false too, even though `n25`
+already had a perfectly good deterministic no-info entry ready to render.
+
+Both routers now send *every* exhausted-retry turn to `n25`, unconditionally:
+
+```
+route_n20 / route_n21: return "n8" if count < 3 else "n25"
+```
+
+`n23` is reachable only via a customer's own explicit request now — triage's
+`ESCALATION` status (`route_n2d`) or an accepted transfer confirmation
+(`route_n3`) — never via the generation/audit retry loop. `node_11`
+absorbs the difference: it already rendered real
+`clarification_evidence`/`decline_evidence`/`no_info_evidence` directly
+when any existed; for the one case that has none at all — a real
+generated answer that simply never passed compliance/groundedness, with
+no clarification, decline, or no-info entry to fall back on — it now
+apologizes plainly instead ("I'm sorry, I'm not able to answer that right
+now. Could you try again, or ask in a different way?") rather than
+escalating a case that may just be a phrasing or evidence gap, not
+something only a human agent can resolve.
+
+**Every turn routed to `n25` is scored 0.0 for the rolling confidence
+signal**, regardless of which of the two deterministic contents it ends
+up showing. This closes a related gap found via the same live tracing:
+`n23`/`n25` both reach `END` directly, skipping
+`node_08_soft_escalation_analyzer` — the only node that normally appends
+to `turn_escalation_history` — so a turn this badly failed previously
+contributed *no* data point to the rolling-confidence window instead of
+the 0.0 it deserved, quietly inflating the average by shrinking the
+sample rather than dragging it down. `_append_failed_turn_escalation_history`
+(`nodes.py`) force-scores every financial subquery 0.0 (never read from
+`_score_subquery`, since internal resolution state is exactly what the
+customer did not end up receiving) and appends the entry itself. See
+`SOFT_ESCALATION_v1.0.md` §2 for the scoring model this feeds.
 
 ## 8. Files touched
 
@@ -246,10 +330,13 @@ at that point in the round.
 `_decline_evidence_text`/`_clarification_evidence_text`/
 `_no_info_evidence_text`, `_generate_response_blocks`,
 `_generate_evidence_only_response`, `_split_terminal_markers`,
-`_resolved_by_other_tool`, `node_02e`'s scope-rejection handling,
-`node_03c`'s `_rag_gap_still_matters`, `node_11`'s simplified rendering),
+`_resolved_by_other_tool`, `node_02e`'s scope-rejection and `DECLINE`
+handling, `node_03c`'s `_rag_gap_still_matters`, `node_09`'s simplified
+scope (explicit-escalation only), `node_11`'s generalized rendering plus
+its plain-apology fallback, `_append_failed_turn_escalation_history`),
 `backend/app/orchestration/state.py` (`unresolvable_search_tasks`),
-`backend/app/orchestration/graph.py` (`route_n19` reverted).
+`backend/app/orchestration/graph.py` (`route_n19` reverted; `route_n20`/
+`route_n21` no longer route to `n23` on retry exhaustion — see §10).
 
 ## 9. Verification
 

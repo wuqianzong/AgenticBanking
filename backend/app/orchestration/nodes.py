@@ -5303,9 +5303,15 @@ def _generate_response_blocks(state: AgentState) -> dict:
         kind_label = "clarification_evidence" if evidence_key is None else evidence_key
         print(f"   ⚠️ [ENTRY OMITTED IN DRAFT]: {task_id} ({kind_label}) missing from generated elements — inserting deterministic fallback")
         log_event("response.flexible.entry_omitted", task_id=task_id, kind=kind_label)
+        # Only a genuine clarification renders as the "clarification" block
+        # type (chip-capable, per the frontend's renderClarificationCard) --
+        # decline/no-info are plain statements with no options, and belong
+        # on the same "text" type every other plain statement in this
+        # response uses.
+        block_type = "clarification" if evidence_key is None else "text"
         response_blocks.append({
             "blockId": f"element_fallback_{task_id}", "sourceTaskIds": [task_id],
-            "type": "clarification", "text": evidence_text, "options": [],
+            "type": block_type, "text": evidence_text, "options": [],
         })
         answer_parts.append(evidence_text)
         element_sources.append([task_id])
@@ -5562,7 +5568,8 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
         if task_id not in entries_by_id or not text or task_id in covered_ids:
             continue
         covered_ids.add(task_id)
-        response_blocks.append({"blockId": task_id, "sourceTaskIds": [task_id], "type": "clarification", "text": text, "options": []})
+        block_type = "clarification" if entries_by_id[task_id]["kind"] == "clarification" else "text"
+        response_blocks.append({"blockId": task_id, "sourceTaskIds": [task_id], "type": block_type, "text": text, "options": []})
         parts.append(text)
 
     # Deterministic completeness net: node_06's own audit already fails a
@@ -5575,7 +5582,8 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     for entry in entries:
         if entry["task_id"] in covered_ids:
             continue
-        response_blocks.append({"blockId": entry["task_id"], "sourceTaskIds": [entry["task_id"]], "type": "clarification", "text": entry["fallback_text"], "options": []})
+        block_type = "clarification" if entry["kind"] == "clarification" else "text"
+        response_blocks.append({"blockId": entry["task_id"], "sourceTaskIds": [entry["task_id"]], "type": block_type, "text": entry["fallback_text"], "options": []})
         parts.append(entry["fallback_text"])
 
     # Clarification-guess chips are deterministic UI data straight from
@@ -7258,7 +7266,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
         text = str(task.get("decline_evidence", "")).strip() or _decline_message([task], fallback_scope)
         response_blocks.append({
             "blockId": f"decline_{task.get('task_id') or index}",
-            "sourceTaskIds": [], "type": "clarification", "text": text, "options": [],
+            "sourceTaskIds": [], "type": "text", "text": text, "options": [],
         })
         answer_parts.append(text)
         clarification_parts.append(text)
@@ -7269,7 +7277,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
         text = _no_info_evidence_text(marker.get("resolved_subquery", ""))
         response_blocks.append({
             "blockId": f"no_info_{marker.get('task_id')}",
-            "sourceTaskIds": [], "type": "clarification", "text": text, "options": [],
+            "sourceTaskIds": [], "type": "text", "text": text, "options": [],
         })
         answer_parts.append(text)
         clarification_parts.append(text)
@@ -7280,7 +7288,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
         text = str(entry.get("no_info_evidence", "")).strip() or _no_info_evidence_text(entry.get("resolved_subquery", ""))
         response_blocks.append({
             "blockId": f"unresolvable_{entry.get('task_id')}",
-            "sourceTaskIds": [], "type": "clarification", "text": text, "options": [],
+            "sourceTaskIds": [], "type": "text", "text": text, "options": [],
         })
         answer_parts.append(text)
         clarification_parts.append(text)

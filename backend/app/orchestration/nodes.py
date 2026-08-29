@@ -5015,15 +5015,34 @@ def _generate_response_blocks(state: AgentState) -> dict:
       independently supported remainder. If it contains
       `CLARIFY_FROM_ALLOWED_CONTEXT`, ask only the permitted clarification.
 
-    - UI ELEMENT SELECTION GUIDELINES:
-      * Use TEXT as default for general explanations, advice, or short answers.
-      * Use LIST only for independent, scannable items/features.
-      * Use PROGRESS only for sequential multi-step processes.
-      * Use COMPARISON when comparing 2-3 products, rates, or account types side-by-side.
-      * Use ACCORDION when presenting multiple detailed FAQ/policy sections without cluttering chat height.
-      * Use TIMELINE when showing request/application milestone progress (past, current, future).
-      * Use CAROUSEL when showcasing multiple options, cards, or promotional perks horizontally.
-      * Use ALERT when delivering an important security notice, scam warning, or compliance caution.
+    - UI ELEMENT TYPE SELECTION (apply in this priority order BEFORE
+      falling back to TEXT -- at least one element MUST use a non-TEXT type
+      when any trigger below matches):
+      * COMPARISON (MANDATORY when the customer asks to compare, contrast,
+        or choose between 2+ products, plans, rates, card types, or account
+        features): structure the approved evidence into "headers" (product
+        names) and "rows" (feature/value pairs). Never flatten a comparison
+        into prose TEXT.
+      * ACCORDION (PREFERRED when your response covers 2+ distinct policy
+        sections, rule categories, eligibility criteria, or FAQ topics --
+        each with its own heading and substantive detail): use "sections"
+        with title/content pairs. Collapsing multi-section answers into
+        one TEXT paragraph loses scannability.
+      * TIMELINE (MANDATORY when showing application progress, delivery
+        tracking, request status, or any milestone sequence with
+        past/current/future stages): use "steps" with status fields.
+      * CAROUSEL (PREFERRED when listing 2+ product options, card offers,
+        or promotions that each have a title, highlight, and optional
+        action button): use "items" with title/subtitle/details.
+      * ALERT (MANDATORY for security warnings, scam notices, fraud alerts,
+        compliance cautions, or urgent system notices): set "severity" and
+        "message".
+      * PROGRESS (use for sequential multi-step how-to procedures with 2+
+        steps): use "progress_steps" with title/detail pairs.
+      * LIST (use for independent, scannable items, features, or
+        requirements that are NOT a comparison or FAQ sections).
+      * TEXT (use ONLY when none of the above types match the content --
+        short single-topic explanations, advice, or greetings).
 
     Output JSON only:
     {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":""}}
@@ -6825,11 +6844,11 @@ def _rolling_bot_confidence(turn_escalation_history: list) -> float | None:
 
 
 def node_08_soft_escalation_analyzer(state: AgentState):
-    """Offers the non-blocking "Talk to Agent" chip on evidence of a
-    customer possibly struggling, even though nothing explicit demands it
-    (an explicit request is the separate, hard node_09 path). Four
-    independent, deterministically-evaluated signals, each individually
-    logged so the reason a chip appeared is always inspectable:
+    """Signals evidence of a customer possibly struggling, even though
+    nothing explicit demands it (an explicit request is the separate, hard
+    node_09 path). Four independent, deterministically-evaluated signals,
+    each individually logged so the reason a signal fired is always
+    inspectable:
 
     1. Long session: elapsed time since login.
     2. Same product/intent dwelt on for many consecutive turns
@@ -6857,8 +6876,17 @@ def node_08_soft_escalation_analyzer(state: AgentState):
 
     None of these are separately persisted as a sticky "escalation active"
     flag -- all four are recomputed fresh every turn from live/windowed
-    state, so a pattern that stops recurring naturally stops offering the
-    chip once it ages out of the window.
+    state, so a pattern that stops recurring naturally stops being
+    signaled once it ages out of the window.
+
+    Never appended as a chat-history chip: a chip baked into a past
+    message stays visible forever, even once the underlying signal is long
+    gone. Instead this sets `ui_action_payload["softEscalationAvailable"]`,
+    a plain boolean surfaced on every turn's response (see api_gateway.py)
+    -- the frontend renders it as a banner above the input box, driven by
+    the latest turn's own value, so it disappears the moment a turn comes
+    back with nothing triggered, the same way every other signal here
+    already decays.
     """
     print("🟢 [NODE 08] Executing Soft Escalation Analyzer")
     payload = state.get("ui_action_payload", {})
@@ -6937,10 +6965,11 @@ def node_08_soft_escalation_analyzer(state: AgentState):
     if repeated_need_triggered:
         triggered_rules.append("repeated_need")
 
-    # Clarification responses intentionally have no UI actions. Do not let the
-    # soft-escalation chip reintroduce one after Node 04b removed it.
-    if triggered_rules and not state.get("final_clarification", "").strip():
-        payload["options"].append("Talk to Agent")
+    # Clarification responses intentionally have no UI actions -- the same
+    # reason this never touched payload["options"] even when it was a chip.
+    soft_escalation_available = bool(triggered_rules) and not state.get("final_clarification", "").strip()
+    payload["softEscalationAvailable"] = soft_escalation_available
+    if soft_escalation_available:
         log_event(
             "escalation.soft.triggered",
             rules=triggered_rules,

@@ -5,7 +5,7 @@ import {
   CreditCard, Wallet, Landmark, ShieldCheck,
   FileText, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
   Loader2, Settings, ClipboardList, Clock, XCircle, ArrowRight, ArrowLeft, LayoutDashboard,
-  ThumbsUp, ThumbsDown, Copy, Check, Sparkles, ChevronDown, ChevronUp, AlertTriangle, ShieldAlert, Info, Layers
+  ThumbsUp, ThumbsDown, Copy, Check, Sparkles, ChevronDown, ChevronUp, AlertTriangle, ShieldAlert, Info, Layers, HelpCircle
 } from 'lucide-react';
 
 // 1. THE NODE CAPTION DICTIONARY
@@ -84,6 +84,12 @@ export default function BankingBotUI() {
   const [loadingCaption, setLoadingCaption] = useState(t("English", "caption.processing")); // <-- NEW STATE FOR TRACKER
   const [isLowConfidenceMode, setIsLowConfidenceMode] = useState(false);
   const [taskConfidence, setTaskConfidence] = useState(null);
+  // Driven by the LATEST turn's own value only (see setSoftEscalationAvailable
+  // below), never attached to a past message -- unlike a chip baked into
+  // chat history, this banner disappears the moment a turn comes back with
+  // node_08's signal no longer triggered, matching how the backend itself
+  // recomputes it fresh every turn rather than persisting a sticky flag.
+  const [softEscalationAvailable, setSoftEscalationAvailable] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [expandedProgressSteps, setExpandedProgressSteps] = useState({});
   const [expandedAccordions, setExpandedAccordions] = useState({});
@@ -747,6 +753,7 @@ export default function BankingBotUI() {
     setLoadingCaption(t(preferences.language, "caption.understanding"));
     setIsLowConfidenceMode(false);
     setTaskConfidence(null);
+    setSoftEscalationAvailable(false);
 
     try {
       const response = await fetch("http://localhost:8000/api/chat", {
@@ -846,6 +853,7 @@ export default function BankingBotUI() {
 
       // 4. Map the final backend data to our React UI state
       if (finalBotData) {
+        setSoftEscalationAvailable(finalBotData.softEscalationAvailable || false);
         if (finalBotData.personalDataReveals?.length) {
           setPersonalDataStore(prev => {
             const next = { ...prev };
@@ -965,24 +973,39 @@ export default function BankingBotUI() {
     </div>
   );
 
-  const renderChips = (options) => (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {options?.map((opt, idx) => {
-        const label = typeof opt === 'string' ? opt : (opt?.label || opt?.message || t(preferences.language, "misc.continue"));
-        const message = typeof opt === 'string' ? opt : (opt?.message || opt?.label || '');
-        return (
-          <button
-            key={idx}
-            onClick={() => message && handleSend(message)}
-            disabled={!message || isTyping || isCompactingMemory}
-            className="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
+  const renderChips = (options) => {
+    if (!options || options.length === 0) return null;
+    return (
+      <div className="relative mt-2 pl-3.5 max-w-sm">
+        {/* Continuous vertical connector stem line from response bubble down through options */}
+        <div className="absolute left-1 top-0 bottom-2.5 w-0.5 bg-slate-300 rounded-full" />
+        
+        <div className="flex flex-col gap-1 relative">
+          {options.map((opt, idx) => {
+            const label = typeof opt === 'string' ? opt : (opt?.label || opt?.message || t(preferences.language, "misc.continue"));
+            const message = typeof opt === 'string' ? opt : (opt?.message || opt?.label || '');
+            return (
+              <div key={idx} className="relative flex items-center min-h-[24px]">
+                {/* Horizontal branch line */}
+                <div className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-2.5 h-0.5 bg-slate-300 rounded-full" />
+
+                <button
+                  type="button"
+                  onClick={() => message && handleSend(message)}
+                  disabled={!message || isTyping || isCompactingMemory}
+                  className="group flex items-center text-left text-[13px] font-medium text-slate-600 hover:text-blue-600 active:text-blue-700 transition-colors py-0.5 pl-1 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <span className="group-hover:underline underline-offset-2 transition-all leading-snug">
+                    {label}
+                  </span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   const renderTurnFeedback = (msg) => {
     if (!msg.showFeedbackPrompt) return null;
@@ -1202,12 +1225,14 @@ export default function BankingBotUI() {
   );
 
   const renderClarificationCard = (text, options = []) => (
-    <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 shadow-sm">
-      <div className="flex items-start gap-2.5">
-        <AlertCircle size={16} className="mt-1 shrink-0 text-blue-600" aria-hidden="true" />
-        <span className="whitespace-pre-wrap">{renderTextWithDataChips(text)}</span>
+    <div className="mt-3">
+      <div className="max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 shadow-sm">
+        <div className="flex items-start gap-2.5">
+          <HelpCircle size={17} className="mt-0.5 shrink-0 text-blue-600" aria-hidden="true" />
+          <span className="whitespace-pre-wrap">{renderTextWithDataChips(text)}</span>
+        </div>
       </div>
-      {options?.length > 0 && <div className="mt-2 pl-[26px]">{renderChips(options)}</div>}
+      {options?.length > 0 && <div className="mt-2.5">{renderChips(options)}</div>}
     </div>
   );
 
@@ -2712,6 +2737,28 @@ export default function BankingBotUI() {
           onMouseEnter={handleInputMouseEnter}
           onMouseLeave={handleInputMouseLeave}
         >
+          {/* Soft-escalation banner: reflects only the LATEST turn's own
+              signal (softEscalationAvailable), never a chip baked into a
+              past message -- it disappears on its own the moment a turn
+              comes back without the signal, instead of lingering in chat
+              history forever. */}
+          {softEscalationAvailable && (
+            <div className="mb-2.5 flex items-center gap-2.5 rounded-xl border border-blue-100 bg-blue-50 px-3.5 py-2.5">
+              <UserCheck size={16} className="shrink-0 text-blue-600" aria-hidden="true" />
+              <span className="flex-1 text-[13px] font-medium text-blue-800">
+                {t(preferences.language, "misc.softEscalationBanner")}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleSend("Talk to Agent")}
+                disabled={isTyping || isCompactingMemory}
+                className="shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              >
+                {t(preferences.language, "misc.softEscalationAction")}
+              </button>
+            </div>
+          )}
+
           {/* Floating Next Action Suggestions (shown only when input is hovered, max 3, semi-transparent) */}
           {isInputHovered && !inputValue.trim() && !isTyping && isLoggedIn && !activeDeeplink && suggestedNextActions.length > 0 && (
             <div

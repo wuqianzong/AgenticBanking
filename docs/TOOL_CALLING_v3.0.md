@@ -64,11 +64,19 @@ invoked only for the one subquery nothing else covered).
 resolution (base-product identification, DECLINE's honest category
 wording, and how a CLARIFY/DECLINE-only turn is presented to the customer)
 was substantially reworked after this document's initial migration -- see
-`docs/DECLINE_CLARIFICATION_DESIGN_v1.0.md`. This also added a new
-`route_n19` branch straight to `node_11` (the deterministic clarification
-fallback) for a turn with a pending `intent_clarification_task` and no
-`search_tasks` at all, independent of the three-failed-retry path that
-node already existed for.
+`docs/DECLINE_CLARIFICATION_DESIGN_v1.0.md`. **Stale as of a later
+revision, corrected here**: this originally also added a `route_n19`
+branch straight to `node_11` for a turn with a pending
+`intent_clarification_task` and no `search_tasks` at all. That branch no
+longer exists -- `route_n19`'s conditional-edge map still lists `"n25"` as
+a legal mapping key, but `route_n19`'s own function body never returns it;
+`node_11` is reachable only via `route_n20`/`route_n21`'s three-failed-
+retry condition now, for every exhausted-retry turn, not specifically
+clarification-shaped ones. See `RAG_RETRY_EFFORT_v1.0.md` and
+`DECLINE_CLARIFICATION_DESIGN_v1.0.md` §4a for the current clarification
+pipeline, including `node_03c`'s own evidence-authored clarifications --
+unified with `node_02e`'s into one `clarification_tasks` contract, added
+after this passage was written.
 
 ## Why this exists
 

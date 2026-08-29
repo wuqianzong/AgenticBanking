@@ -80,11 +80,12 @@ has approved answer evidence.
 
 ### Intent-Formulation Clarification (Clarification v2.0)
 
-Node 02e may return valid `search_tasks` and user-derived
-`intent_clarification_tasks` in the same turn. An intent clarification task is
-used only when a component of a valid banking request cannot be safely mapped
-to a Product and Intent retrieval task. It retains the exact unresolved
-customer wording and an internal reason; it never guesses a product merely to
+Node 02e may return valid `search_tasks` and user-derived entries in the
+unified `clarification_tasks` list (originator `intent_formulator`) in the
+same turn. An intent clarification entry is used only when a component of
+a valid banking request cannot be safely mapped to a Product and Intent
+retrieval task. It retains the exact unresolved customer wording and an
+internal `clarification_reason`; it never guesses a product merely to
 create a search task.
 
 Durable memory is advisory only. Node 02e must not revive a clarification from

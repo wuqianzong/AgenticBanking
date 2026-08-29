@@ -73,6 +73,13 @@ def build_agent_graph():
             return "n5"
         if status == "NON_FINANCIAL":
             return "n26"
+        if status == "CLARIFICATION_NEEDED":
+            # Same destination node_02e's own clarification-only turns
+            # already reach (route_n2e's "intent_clarification" branch) --
+            # there are no financial_subqueries to plan tools for, so skip
+            # n14 (tool planning) entirely and let n19 (node_04a) route
+            # straight to generation the same proven way.
+            return "n19"
         return "n14"
 
     def route_n2e(state: AgentState):
@@ -151,7 +158,7 @@ def build_agent_graph():
     workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n23": "n23", "n5": "n5"})
     workflow.add_conditional_edges("n16", route_n16, {"n1b": "n1b", "n5": "n5"})
     workflow.add_edge("n1b", "n2d")
-    workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n14": "n14", "n5": "n5", "n26": "n26"})
+    workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n14": "n14", "n5": "n5", "n26": "n26", "n19": "n19"})
     workflow.add_conditional_edges("n2e", route_n2e, {"n17_rag": "n17_rag", "n19": "n19", "n8": "n8", "n5": "n5"})
     workflow.add_conditional_edges("n14", route_tool_planner, {"n17_dispatch": "n17_dispatch", "n19": "n19"})
     workflow.add_conditional_edges("n17_dispatch", route_tool_dispatcher, {"n2e": "n2e", "n19": "n19"})

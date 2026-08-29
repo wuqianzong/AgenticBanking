@@ -14,6 +14,7 @@ from backend.app.services.memory_service import LongTermMemoryManager
 from backend.app.core.llm_service import (
     call_groq_lpu,
     parse_json_robustly as _parse_json_robustly,
+    ClarificationGuess,
     MODEL_B_AUDITOR,
     MODEL_C_PLANNER,
     MODEL_D_PROMPT_GUARD,
@@ -55,10 +56,9 @@ VOLATILE_STATE_RESET = {
     "task_sufficiency_history": {},
     "task_partial_evidence": {},
     "task_rejected_parent_ids": {},
-    "intent_clarification_tasks": [],
+    "clarification_tasks": [],
     "task_resolution_instructions": [],
     "safe_answer_for_fallback": "",
-    "clarification_fallback_required": False,
     "final_answer": "",
     "final_clarification": "",
     "selected_ux_journey": "TEXT",
@@ -658,16 +658,98 @@ def _decline_evidence_text(category: str) -> str:
 
 
 def _clarification_evidence_text(unresolved_request: str) -> str:
-    """The deterministic, standalone clarifying question for an unresolved
+    """A deterministic, standalone clarifying question for an unresolved
     term. Never LLM-generated -- unresolved_request is already a trusted,
     extracted term (not free prose), so this is exactly as safe as a fixed
-    template, while still naming the specific thing that's ambiguous.
-    Phrased as a complete, ready-to-relay question -- not as an internal
-    status note like "clarification needed on X" -- so a response-
-    generation or groundedness-audit model has nothing to interpret beyond
-    quoting or lightly connecting it.
+    template.
+
+    NOT used as the primary customer-facing text for a normal turn -- see
+    _clarification_fallback_text below. Generation composes its own
+    question from unresolved_request/scope/clarification_guesses instead,
+    so the customer's own language, tone, and style-personalization
+    actually apply, rather than every clarification reading identically
+    regardless of context. This template exists only as the deterministic
+    safety net (node_11's final fallback, and the completeness net for a
+    turn whose generation step omitted or malformed an entry) -- reachable
+    without any LLM call, exactly like decline/no-info evidence.
     """
     return f"Could you clarify what you mean by \"{unresolved_request}\"?"
+
+
+def _evidence_gap_clarification_text(unresolved_term: str) -> str:
+    """The deterministic fallback question for node_03c's evidence-authored
+    clarifications -- deliberately NOT the same template as
+    _clarification_evidence_text above, and subject to the same "fallback
+    only" scoping described there.
+
+    unresolved_term names a gap the sufficiency auditor identified while
+    reviewing evidence (e.g. "documents for online submission," "which
+    loan type you mean") -- it is the auditor's own characterization of
+    what's missing, not necessarily a term the customer ever said. Wrapping
+    it in "Could you clarify what you mean by X?" (node_02e's template)
+    would falsely imply the customer said something vague; this phrasing
+    instead asks for the missing detail directly, which reads correctly
+    whether or not the customer's own wording resembles unresolved_term.
+    """
+    return f"Could you tell us more about {unresolved_term}?"
+
+
+def _clarification_fallback_text(entry: dict) -> str:
+    """The deterministic customer-facing sentence for a clarification entry,
+    computed on demand -- never precomputed or stored on the persisted
+    `clarification_tasks` contract itself. Used only by node_11's final
+    fallback and the deterministic completeness nets in
+    `_generate_response_blocks`/`_generate_evidence_only_response`, when
+    generation genuinely produced nothing usable for this entry.
+
+    Keeping this out of the stored contract (and out of every generation
+    prompt) is deliberate: a ready-made sentence sitting in the prompt
+    invites the model to just parrot it, which is exactly why clarification
+    used to read identically ("Could you clarify what you mean by X?")
+    regardless of context or the customer's own style. The normal path
+    composes fresh from `unresolved_request`/`scope`/`clarification_guesses`
+    instead; this function exists only for the rare case nothing was
+    composed at all.
+    """
+    unresolved_request = entry.get("unresolved_request", "")
+    if entry.get("originator") == "sufficiency_auditor":
+        return _evidence_gap_clarification_text(unresolved_request)
+    return _clarification_evidence_text(unresolved_request)
+
+
+def _normalize_clarification_guesses(raw_guesses: list) -> list[dict]:
+    """Validate and cap a model-supplied clarification_guesses list to at
+    most 3 entries, each requiring label + message; reason survives
+    (internal only -- see ClarificationGuess in llm_service.py) so node_06's
+    audit can check it, but every customer-facing or generation-prompt-
+    facing site that reads a normalized entry rebuilds {label, message}
+    explicitly and discards reason at that point, never passing this dict
+    through as-is. Shared by every node that can author a clarification
+    (node_02e, node_03c) so the same validation can't quietly diverge
+    between them.
+    """
+    clarification_guesses = []
+    for guess in raw_guesses or []:
+        if not isinstance(guess, dict):
+            continue
+        label = str(guess.get("label", "")).strip()
+        message = str(guess.get("message", "")).strip()
+        reason = str(guess.get("reason", "")).strip()
+        if label and message:
+            clarification_guesses.append({"label": label, "message": message, "reason": reason})
+    return clarification_guesses[:3]
+
+
+_CLARIFICATION_SCOPE_BY_ORIGINATOR = {
+    # Fixed, one-line statement of the originating node's own job -- shown
+    # to the response generator and node_06's audit so both can see exactly
+    # what task the ambiguity is blocking, without needing their own
+    # hardcoded originator -> scope mapping.
+    "triage": "Classifying whether this request is a compliant banking question, an explicit request for a human agent, or something outside what this assistant can help with, before any decomposition into components was attempted.",
+    "intent_formulator": "Identifying the correct product and intent for this request, before any evidence retrieval was attempted.",
+    "task_dispatcher": "Choosing which registered capability (app navigation, a submitted request, or an account lookup) actually addresses this request.",
+    "sufficiency_auditor": "Reviewing whether retrieved evidence fully answers this request.",
+}
 
 
 def _no_info_evidence_text(resolved_subquery: str) -> str:
@@ -682,19 +764,86 @@ def _no_info_evidence_text(resolved_subquery: str) -> str:
     return "I don't have information available for this specific request."
 
 
-def _build_intent_clarification_context(state: AgentState) -> list[dict]:
-    """Intent-clarification entries shared verbatim by the response
-    generator and node_06's audit context (_normal_outbound_grounding_context)
-    -- one definition so the two can never silently diverge on what an
-    entry looks like."""
+def _build_clarification_context(state: AgentState) -> list[dict]:
+    """Clarification entries shared verbatim by the response generator and
+    node_06's audit context (_normal_outbound_grounding_context) -- one
+    definition so the two can never silently diverge on what an entry
+    looks like.
+
+    Single source, `clarification_tasks`: one standard contract regardless
+    of which node authored the entry --
+
+    - subquery_id: the sole link back to the originating subquery (mutual
+      exclusivity in node_02e's SEARCH/CLARIFY/DECLINE resolution and in
+      node_03c's per-task terminal decision guarantees at most one
+      clarification per subquery_id, so this alone is already unique).
+      For a triage-originated entry there is no real subquery yet (triage's
+      own ambiguity is whole-turn, before decomposition even happens) --
+      it uses a synthetic subquery_id, safe because triage returns zero
+      real financial_subqueries whenever it raises this kind of entry.
+    - originator: one of four, one per genuine judgment-making node in the
+      pipeline -- "triage" (node_02d, classifying the whole turn as
+      NON_COMPLIANT/ESCALATION/VALID_REQUEST/NON_FINANCIAL, before any
+      decomposition), "intent_formulator" (node_02e, before any retrieval
+      was attempted -- the request itself was too ambiguous to form a
+      search task), "task_dispatcher" (node_03a, choosing which registered
+      tool capability actually addresses an otherwise well-formed
+      subquery), or "sufficiency_auditor" (node_03c, after reviewing
+      retrieved evidence -- either a PARTIALLY_SUFFICIENT task's remaining
+      gap was judged worth asking about, or an INSUFFICIENT task's total
+      failure was judged to be genuine ambiguity rather than a coverage
+      gap). Every other node in the pipeline is deliberately excluded --
+      node_04b/node_11 relay only, node_06 audits someone else's output,
+      node_04a/node_08/node_09 make no judgment call about what the
+      customer wants.
+    - scope: fixed one-line statement of the originator's own job (see
+      _CLARIFICATION_SCOPE_BY_ORIGINATOR) -- where in the pipeline the
+      ambiguity is blocking fulfilment.
+    - unresolved_request: the specific ambiguous/unresolved part, in the
+      originating node's own words -- what generation composes its
+      question about.
+    - clarification_reason: authoring-time-only. This is purely a forcing
+      function on the AUTHORING node ("if you cannot state a concrete
+      reason, don't offer this at all" -- see node_02e/node_03c's own
+      prompts) -- it is never shown to generation or to node_06's audit
+      (see _clarification_prompt_view below). Kept on the full entry only
+      for logs/observability/debugging.
+    - clarification_guesses: 0-3 grounded guesses at the likely customer
+      intent, each with its own internal reason.
+
+    No `clarification_evidence` field is stored here -- see
+    _clarification_fallback_text.
+    """
+    return list(state.get("clarification_tasks", []))
+
+
+def _clarification_prompt_view(entries: list) -> list[dict]:
+    """The subset of a clarification entry any LLM call is ever allowed to
+    see -- used identically for the response generator's prompt and
+    node_06's audit context, so the two can never drift onto different
+    views of the same entry.
+
+    Deliberately excludes `originator` and `clarification_reason`:
+    `clarification_reason` is an authoring-time-only forcing function (see
+    _build_clarification_context), never anything generation composed
+    from -- an auditor checking the final text against information
+    generation never had access to would be judging against an unfair,
+    invisible ground truth, and could veto an otherwise correct response
+    over a mismatch that was never generation's to get right.
+    `originator` is dropped too, on the same principle: generation was
+    never shown it, so the audit shouldn't privilege it either -- `scope`'s
+    own descriptive text already carries whatever distinction matters
+    (e.g. whether Product/Intent Matrix grounding is appropriate for a
+    guess's reason).
+    """
     return [
         {
-            "task_id": f"clarification_{task.get('clarification_id')}",
-            "unresolved_request": task.get("unresolved_request", ""),
-            "clarification_evidence": task.get("clarification_evidence", ""),
-            "candidate_replies": task.get("candidate_replies", []),
+            "subquery_id": entry.get("subquery_id"),
+            "scope": entry.get("scope", ""),
+            "unresolved_request": entry.get("unresolved_request", ""),
+            "clarification_guesses": entry.get("clarification_guesses", []),
         }
-        for task in state.get("intent_clarification_tasks", [])
+        for entry in entries
     ]
 
 
@@ -734,6 +883,12 @@ def _split_terminal_markers(
     treatment; a task with some retained partial evidence (any other
     status) stays on the looser terminal-marker path, since its real
     evidence is already covered elsewhere as normal approved evidence.
+
+    A CLARIFICATION_REQUIRED task the sufficiency auditor judged genuinely
+    ambiguous never reaches this function at all -- node_03c routes it into
+    its own clarification_tasks entry instead (see node_03c's docstring),
+    fully representing it there rather than as either a no_info statement
+    or a terminal marker here.
 
     unresolvable_search_tasks (node_02e's own scope-rejected fresh SEARCH
     resolutions, see the scope-rejection handling there) are already in
@@ -908,6 +1063,11 @@ def _terminal_retrieval_feedback(
     but they never cross this boundary into planning, generation, or outbound
     groundedness.  The resolved customer request is sufficient to produce a
     safe, non-factual availability notice when the retry budget is exhausted.
+
+    A task the sufficiency auditor already turned into its own evidence-
+    authored clarification (see node_03c's clarification_tasks entries)
+    never reaches this function at all -- it's fully represented by that
+    clarification instead, with nothing left for a terminal marker to add.
     """
     return {
         "task_id": task_id,
@@ -1435,17 +1595,52 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     4. NON_FINANCIAL — Otherwise, when the resolved TRUE REQUEST contains no
        compliant banking need and no escalation. Return no components.
 
+    5. CLARIFICATION_NEEDED — This is YOUR OWN classification job's
+       ambiguity, never a downstream node's (never which product, service,
+       or document the customer means -- that is the intent formulator's
+       job once you've already decided VALID_REQUEST). Use this only when,
+       after resolving the TRUE REQUEST, you are still genuinely torn
+       between two of the categories 1-4 above for that SAME resolved
+       request -- not merely unsure about a detail, but unsure which
+       top-level category applies. Return no components. Concrete cases:
+       (a) unsure whether the customer wants a human agent (ESCALATION) or
+       is just venting while still wanting an answer (VALID_REQUEST);
+       (b) unsure whether the request asks for general factual information
+       (compliant, VALID_REQUEST) or personalized advice/a recommendation
+       (NON_COMPLIANT); (c) unsure whether the request concerns a banking
+       matter at all (VALID_REQUEST) or is unrelated small talk
+       (NON_FINANCIAL). Do not use this merely because wording is casual or
+       brief -- only when the category itself is genuinely undecidable.
+       Set `clarification.unresolved_request` by reasoning directly against
+       Latest User Input and Trusted Conversation Context: name the
+       specific tension (e.g. "whether you'd like to speak with a human
+       agent about this or continue with your question about the loan
+       rate"). Set `clarification.clarification_reason`: name the specific
+       detail that makes it genuinely ambiguous between those two
+       categories -- not a generic restatement. Set
+       `clarification.clarification_guesses`: 0-3 guesses, each a complete,
+       natural sentence the customer might actually send back, most likely
+       first -- e.g. for the escalation case, one guess continuing toward
+       escalation and one guess continuing with the original question.
+
     For VALID_REQUEST components:
     - A component is one independently answerable banking topic; do not split
       a coherent topic artificially and do not impose a numerical cap.
     - Express each component as a self-contained statement of the resolved
-      TRUE REQUEST. Resolve pronouns and short continuations from Trusted
-      Conversation Context into that wording.
+      TRUE REQUEST in `customer_component`. Resolve pronouns and short
+      continuations from Trusted Conversation Context freely into this
+      wording -- a fully resolved, retrieval-ready statement is exactly
+      what downstream search needs, so do not hold back here out of
+      caution. (A later clarifying question about this component, if one is
+      ever needed, is authored by reasoning directly against the Latest
+      User Input and Trusted Conversation Context, not by quoting this
+      field back -- you do not need to preserve customer-facing fidelity
+      here.)
     - A casual greeting accompanying a financial request is not a component.
     - Do not determine product, intent, availability, or a tool. Those are
       downstream responsibilities.
 
-    5. REPETITIVE ISSUE SIGNAL — Independent of triage_status above: look at
+    6. REPETITIVE ISSUE SIGNAL — Independent of triage_status above: look at
        the Trusted Conversation Context's recent turns (not just the Latest
        User Input) and set repetitive_issue_detected=true only when the
        customer has been repeatedly raising substantially the same
@@ -1461,7 +1656,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
        Latest User Input, is never enough on its own.
 
     Output JSON only:
-    {{"triage_status":"NON_COMPLIANT" | "ESCALATION" | "VALID_REQUEST" | "NON_FINANCIAL", "financial_subqueries":[{{"subquery_id":"subquery_1","customer_component":"..."}}], "has_non_financial_content":true | false, "non_financial_context":["short internal attention cue"], "repetitive_issue_detected":true | false}}
+    {{"triage_status":"NON_COMPLIANT" | "ESCALATION" | "VALID_REQUEST" | "NON_FINANCIAL" | "CLARIFICATION_NEEDED", "financial_subqueries":[{{"subquery_id":"subquery_1","customer_component":"..."}}], "has_non_financial_content":true | false, "non_financial_context":["short internal attention cue"], "repetitive_issue_detected":true | false, "clarification":null | {{"unresolved_request":"...", "clarification_reason":"...", "clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}}}
     """
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
@@ -1473,6 +1668,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
             if isinstance(item, str) and str(item).strip()
         ][:3]
         repeated_need_detected_this_turn = bool(res.get("repetitive_issue_detected", False))
+        clarification_data = res.get("clarification") if isinstance(res.get("clarification"), dict) else {}
     except Exception as e:
         print(f"🚨 [NODE 02d EXCEPTION]: {e}")
         triage_status = "NON_FINANCIAL"
@@ -1480,7 +1676,8 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
         repeated_need_detected_this_turn = False
         has_non_financial_content = False
         non_financial_context = []
-    if triage_status not in {"NON_COMPLIANT", "ESCALATION", "VALID_REQUEST", "NON_FINANCIAL"}:
+        clarification_data = {}
+    if triage_status not in {"NON_COMPLIANT", "ESCALATION", "VALID_REQUEST", "NON_FINANCIAL", "CLARIFICATION_NEEDED"}:
         triage_status = "NON_FINANCIAL"
 
     print(f"   🧠 [TRIAGE STATUS]: {triage_status}")
@@ -1503,7 +1700,35 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
         has_non_financial_content = False
         non_financial_context = []
 
-    mapped_preflight = "tool_planning" if triage_status == "VALID_REQUEST" else triage_status.lower()
+    # Whole-turn clarification: triage's own classification-boundary
+    # ambiguity, scoped strictly to rules 1-4 above -- never product/intent
+    # (the intent formulator's job, once a real subquery exists). No real
+    # financial_subqueries exist yet at this point in the pipeline, so
+    # subquery_id is synthetic -- safe, since a CLARIFICATION_NEEDED turn
+    # always returns zero real subqueries, guaranteeing no collision.
+    clarification_tasks = []
+    if triage_status == "CLARIFICATION_NEEDED":
+        unresolved_request = str(clarification_data.get("unresolved_request", "")).strip()
+        if unresolved_request:
+            clarification_tasks = [{
+                "subquery_id": "subquery_1",
+                "originator": "triage",
+                "scope": _CLARIFICATION_SCOPE_BY_ORIGINATOR["triage"],
+                "unresolved_request": unresolved_request,
+                "clarification_reason": str(clarification_data.get("clarification_reason", "The request's category is genuinely ambiguous.")).strip(),
+                "clarification_guesses": _normalize_clarification_guesses(clarification_data.get("clarification_guesses", [])),
+            }]
+        else:
+            # A malformed CLARIFICATION_NEEDED cannot be allowed through
+            # with nothing to actually ask -- same fail-safe pattern as the
+            # malformed VALID_REQUEST guard above.
+            triage_status = "NON_FINANCIAL"
+
+    mapped_preflight = (
+        "tool_planning" if triage_status == "VALID_REQUEST"
+        else "intent_clarification" if triage_status == "CLARIFICATION_NEEDED"
+        else triage_status.lower()
+    )
     print(f"   🔎 [TRIAGE DECOMPOSITION]: {len(financial_subqueries)} financial subquery(ies) | non-financial content={has_non_financial_content}")
     log_event(
         "triage.financial_boundary",
@@ -1512,6 +1737,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
         has_non_financial_content=has_non_financial_content,
         non_financial_context=non_financial_context,
         repeated_need_detected_this_turn=repeated_need_detected_this_turn,
+        clarification_needed=bool(clarification_tasks),
     )
 
     return {
@@ -1522,6 +1748,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
         "has_non_financial_content": has_non_financial_content,
         "non_financial_context": non_financial_context,
         "decline_tasks": [],
+        "clarification_tasks": clarification_tasks,
         "repeated_need_detected_this_turn": repeated_need_detected_this_turn,
     }
 
@@ -1618,6 +1845,12 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     
     prompt = f"""
     PRE-DECOMPOSED CUSTOMER COMPONENTS (from Triage; already screened for financial relevance and compliance): {triaged_subqueries}
+    Each has `customer_component`, the retrieval-ready, context-resolved
+    wording -- use this for SEARCH tasks. For a CLARIFY component, do not
+    quote `customer_component` back to the customer (it may already be
+    elaborated with retrieval-oriented wording they never actually said) --
+    author `clarification.unresolved_request` by reasoning directly against
+    Latest User Input and Recent Conversation instead (see Rule 6 below).
     This list is the complete, final partition of the customer's request. Do NOT merge, split, drop, or invent components — process every one exactly as given.
 
     PRODUCT/INTENT MATRIX (Valid Nouns and Verbs):
@@ -1666,6 +1899,17 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
            assistant's information is scoped exclusively to individual
            banking regardless of whether the underlying base product exists.
        - INTENT: a specific request type that maps to an intent in the PRODUCT/INTENT MATRIX.
+         A clearly-named product with NO discernible request type is exactly
+         as ambiguous as a request type with no product -- do not treat
+         PRODUCT as the only axis worth scrutinizing. If the component names
+         a product but gives no verb, action, or outcome at all (e.g. "I
+         have a question about my loan", "something about my credit card"),
+         or gives one so generic it could map to several genuinely different
+         intents for that same product with no basis to prefer one (e.g.
+         "help with my loan" could mean Application, Repayment, or
+         Eligibility), INTENT is missing/ambiguous here just as surely as an
+         unnamed product would be -- do not default to the most common or
+         most recently-discussed intent to avoid asking.
        Determine these foundations from the component and, only when unambiguous, the permitted current-session context in Rule 1.
     3. Assign EVERY component exactly one resolution:
        - SEARCH: use only when BOTH Product and Intent are available and form a valid pair in the Product/Intent Matrix.
@@ -1681,13 +1925,14 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        - "conceptual": A phrase describing what the product, feature, or service in this specific component is and how it works. Should sound like it comes from an FAQ answer's explanatory introduction for this topic.
        DO NOT use comma-separated keywords. DO NOT paraphrase the customer's original question. Use common banking vocabulary only — do not invent specific product names, amounts, dates, or branch details. Each angle MUST target a structurally different part of a hypothetical FAQ answer about the component's topic.
     5. For EACH SEARCH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed. In RETRY MODE preserve the supplied task_id and use its task-specific sufficiency feedback to change the search terms, product, or intent.
-    6. INTENT CLARIFICATION: For a CLARIFY component, copy only the ambiguous customer term into clarification.unresolved_request and explain internally whether Product, Intent, or both are missing or ambiguous. Do not guess a product or create a generic task merely to fill the array. The customer-facing question itself is generated deterministically downstream from unresolved_request -- do not draft one here.
-       Also set clarification.candidate_replies: 0-3 plausible guesses at what the customer means, most likely first -- about the Product, the Intent, or whatever specifically is ambiguous here, not necessarily a product. Populate this only when genuinely inferable (e.g. an unresolved term with only one plausible matrix match given the customer's wording); leave it empty when you have no real basis to guess (e.g. a term identifying no plausible product or intent at all). Each entry needs a short "label" (e.g. "Personal Loan") and a "message" that is a complete, natural sentence a customer would actually send (e.g. "I'm asking about a personal loan.") -- never a bare word or phrase as the message.
+    6. INTENT CLARIFICATION: You are one of several nodes in this pipeline authorized to raise a clarification, and the standing rule is who raises it, who provides the evidence and reason -- scoped strictly to YOUR OWN job here (identifying the correct Product and Intent for this request, before any evidence retrieval is even attempted). Never author a clarification about something outside that scope (e.g. whether retrieved evidence answers the question -- that is the sufficiency auditor's job later in the pipeline, not yours).
+       For a CLARIFY component, set clarification.unresolved_request by reasoning directly against Latest User Input and Recent Conversation yourself -- never by quoting `customer_component`, which may already be elaborated with retrieval-oriented wording the customer never actually said. If Latest User Input itself names the ambiguous part clearly, use that wording directly. If it's a short continuation (e.g. "yes") whose own ambiguity is really about what it's confirming, use Recent Conversation to identify specifically what was being confirmed and name that (e.g. "whether you meant the personal loan or the credit card discussed earlier," grounded in an actual prior turn) rather than a generic "which product this refers to" -- and never a guessed product name of your own invention. Also set `clarification.clarification_reason`: name the specific detail in Latest User Input or Recent Conversation that makes Product, Intent, or both missing/ambiguous (e.g. "customer named no product; Recent Conversation has no prior product either") -- never a generic restatement like "the request is too vague," and never reference the Matrix alone without tying it to what the customer actually said or didn't say. Do not guess a product or create a generic task merely to fill the array. The customer-facing question itself is generated deterministically downstream from unresolved_request -- do not draft one here.
+       Also set clarification.clarification_guesses: 0-3 entries, each a reasonable, grounded PREDICTION of what the customer likely means -- never a report of anything the customer has actually said -- offered as a tappable option that would unblock this task if correct. Order most likely first. Populate this only when genuinely inferable (e.g. an unresolved term with only one plausible matrix match given the customer's wording); leave it empty when you have no real basis to guess (e.g. a term identifying no plausible product or intent at all). Each entry needs a short "label" (e.g. "Personal Loan"), a "message" that is a complete, natural sentence a customer would actually send (e.g. "I'm asking about a personal loan.") -- never a bare word or phrase as the message -- and a "reason": a concise, internal-only justification naming the specific Matrix fact or conversation detail that makes this guess plausible (e.g. "Personal_Loan is the only loan-type Matrix product" or "customer named credit cards two turns ago"). A guess you cannot state a concrete reason for is not genuinely inferable -- do not offer it; this is not a customer-facing field, but writing it forces the same discipline as populating clarification_guesses at all.
     7. SCOPE DECLINE: For a DECLINE component, set decline.reason to a short, factual internal statement and decline.category per Rule 3's two cases. For category="out_of_scope_product", only decline when the matrix confirms no matching BASE product family exists at all — never guess, and never decline merely because a qualified or branded variant of an existing base product is unfamiliar. For category="individual_customers_only", name the non-individual segment (e.g., business, corporate) in decline.reason without asserting whether Horizon does or does not serve that segment in reality — only that this assistant's information does not cover it. The customer-facing decline sentence itself is generated deterministically downstream from decline.category -- do not draft one here.
     8. Use "ALL" only when a component is genuinely universal and its Intent is a valid intent listed under "ALL" in the Product/Intent Matrix. "ALL" is not a fallback for an unknown product.
 
     Output JSON ONLY:
-    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"clarification_id":"intent_clarification_1","unresolved_request":"the fee","reason":"No product or service is identified.","candidate_replies":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"clarification_id":"intent_clarification_2","unresolved_request":"loan","reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","candidate_replies":[{{"label":"Personal Loan","message":"I'm asking about a personal loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
+    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"the fee","clarification_reason":"No product or service is identified.","clarification_guesses":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"loan","clarification_reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","clarification_guesses":[{{"label":"Personal Loan","message":"I'm asking about a personal loan.","reason":"Personal_Loan is the only loan-type Matrix product."}}]}},"decline":null}},{{"component_id":"component_6","customer_component":"I have a question about my loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"a question about my loan","clarification_reason":"Product (Personal_Loan) is unambiguous, but no verb, action, or outcome is given -- Application, Repayment, and Eligibility are all equally plausible intents with no basis to prefer one.","clarification_guesses":[{{"label":"Applying","message":"I want to know how to apply for a loan.","reason":"Application is a valid Matrix intent for Personal_Loan."}},{{"label":"Repayment","message":"I want to know about repaying my loan.","reason":"Repayment is a valid Matrix intent for Personal_Loan."}},{{"label":"Eligibility","message":"I want to know if I'm eligible for a loan.","reason":"Eligibility is a valid Matrix intent for Personal_Loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
     {retry_context}
     """
 
@@ -1807,7 +2052,9 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 search_task["subquery_id"] = str(component.get("component_id", "")).strip() or f"subquery_{index}"
                 formulated_tasks.append(search_task)
             elif resolution == "CLARIFY" and isinstance(component.get("clarification"), dict):
-                formulated_clarifications.append(component["clarification"])
+                clarification = dict(component["clarification"])
+                clarification["subquery_id"] = str(component.get("component_id", "")).strip() or f"subquery_{index}"
+                formulated_clarifications.append(clarification)
             elif resolution == "DECLINE":
                 # A component the formulator declined as out-of-scope can
                 # still be the same subquery a different tool (deeplink,
@@ -1976,30 +2223,22 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     # Retries refine only failed retrieval tasks. Intent-level ambiguity was
     # already identified from the original request and remains in state while
     # the searchable components complete their independent RAG loop.
-    intent_clarification_tasks = state.get("intent_clarification_tasks", []) if retry_tasks else formulated_clarifications
+    clarification_tasks = state.get("clarification_tasks", []) if retry_tasks else formulated_clarifications
     if not retry_tasks:
         normalized_clarifications = []
-        for index, task in enumerate(intent_clarification_tasks, start=1):
+        for index, task in enumerate(clarification_tasks, start=1):
             unresolved_request = str(task.get("unresolved_request", "")).strip()
             if not unresolved_request:
                 continue
-            candidate_replies = []
-            for reply in task.get("candidate_replies", []) or []:
-                if not isinstance(reply, dict):
-                    continue
-                label = str(reply.get("label", "")).strip()
-                message = str(reply.get("message", "")).strip()
-                if label and message:
-                    candidate_replies.append({"label": label, "message": message})
             normalized_clarifications.append({
-                "clarification_id": str(task.get("clarification_id", "")).strip() or f"intent_clarification_{index}",
-                "source": "intent_formulator",
+                "subquery_id": str(task.get("subquery_id", "")).strip() or f"subquery_{index}",
+                "originator": "intent_formulator",
+                "scope": _CLARIFICATION_SCOPE_BY_ORIGINATOR["intent_formulator"],
                 "unresolved_request": unresolved_request,
-                "reason": str(task.get("reason", "The request component is too ambiguous to search safely.")).strip(),
-                "clarification_evidence": _clarification_evidence_text(unresolved_request),
-                "candidate_replies": candidate_replies[:3],
+                "clarification_reason": str(task.get("clarification_reason", "The request component is too ambiguous to search safely.")).strip(),
+                "clarification_guesses": _normalize_clarification_guesses(task.get("clarification_guesses", [])),
             })
-        intent_clarification_tasks = normalized_clarifications
+        clarification_tasks = normalized_clarifications
 
     # Keep task identity deterministic even if a model response omits or
     # duplicates an identifier. Retries always retain the original IDs.
@@ -2044,8 +2283,8 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     else:
         same_intent_streak_count = 1
 
-    print(f"   🔎 [SEARCH TASKS]: {len(search_tasks)} tasks | Matrix: {new_matrix} | Intent clarifications: {len(intent_clarification_tasks)}")
-    log_event("task.formulated", task_ids=[task.get("task_id") for task in search_tasks], task_count=len(search_tasks), intent_clarification_count=len(intent_clarification_tasks), retry_mode=bool(retry_tasks))
+    print(f"   🔎 [SEARCH TASKS]: {len(search_tasks)} tasks | Matrix: {new_matrix} | Intent clarifications: {len(clarification_tasks)}")
+    log_event("task.formulated", task_ids=[task.get("task_id") for task in search_tasks], task_count=len(search_tasks), intent_clarification_count=len(clarification_tasks), retry_mode=bool(retry_tasks))
 
     if not search_tasks:
         # RAG was requested for these financial subqueries, but the intent
@@ -2053,13 +2292,13 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         # generic RAG tasks rather than leaving a running ledger entry while
         # clarification proceeds directly to resolution planning.
         terminal_financial_subqueries = _finalize_rag_attempts(state, [])
-        if not intent_clarification_tasks and decline_tasks:
+        if not clarification_tasks and decline_tasks:
             # Every component the formulator received resolved to DECLINE
             # (out-of-scope product). Nothing valid remains for this turn.
             return {
                 "preflight_status": "declined",
                 "search_tasks": [],
-                "intent_clarification_tasks": [],
+                "clarification_tasks": [],
                 "task_results": [],
                 "decline_tasks": decline_tasks,
                 "unresolvable_search_tasks": unresolvable_search_tasks,
@@ -2067,7 +2306,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 "same_intent_streak_count": same_intent_streak_count,
             }
         if (
-            not intent_clarification_tasks
+            not clarification_tasks
             and not unresolvable_search_tasks
             and not any_subquery_resolved_by_other_tool
             and not (active_plan.get("steps") or has_retrieved_knowledge)
@@ -2084,18 +2323,23 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             # resolved, and asking the customer to clarify a request the
             # bot just answered is exactly the self-contradiction this
             # guard exists to prevent.
-            intent_clarification_tasks = [{
-                "clarification_id": "intent_clarification_1",
-                "source": "intent_formulator",
-                "unresolved_request": user_msg.strip() or "your banking request",
-                "reason": "No valid retrieval task could be formed from the request.",
-                "clarification_evidence": _clarification_evidence_text(user_msg.strip() or "your banking request"),
+            fallback_unresolved_request = user_msg.strip() or "your banking request"
+            fallback_subquery_id = (
+                all_financial_subqueries[0]["subquery_id"] if all_financial_subqueries else "subquery_1"
+            )
+            clarification_tasks = [{
+                "subquery_id": fallback_subquery_id,
+                "originator": "intent_formulator",
+                "scope": _CLARIFICATION_SCOPE_BY_ORIGINATOR["intent_formulator"],
+                "unresolved_request": fallback_unresolved_request,
+                "clarification_reason": "No valid retrieval task could be formed from the request.",
+                "clarification_guesses": [],
             }]
-        if intent_clarification_tasks:
+        if clarification_tasks:
             return {
                 "preflight_status": "intent_clarification",
                 "search_tasks": [],
-                "intent_clarification_tasks": intent_clarification_tasks,
+                "clarification_tasks": clarification_tasks,
                 "task_results": [],
                 "decline_tasks": decline_tasks,
                 "unresolvable_search_tasks": unresolvable_search_tasks,
@@ -2130,7 +2374,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     return {
         "preflight_status": "retrieve",
         "search_tasks": search_tasks,
-        "intent_clarification_tasks": intent_clarification_tasks,
+        "clarification_tasks": clarification_tasks,
         "task_results": task_results if retry_tasks else [],
         "task_retry_counts": new_retry_counts if retry_tasks else {},
         "deferred_retry_task_ids": fast_forward_task_ids,
@@ -2207,9 +2451,17 @@ def _tool_calling_plan_schema(capabilities: list[dict]) -> type:
         input=(tool_task_input, ...),
         rag_role=(str, ""),
     )
+    tool_selection_clarification = create_model(
+        "DynamicToolSelectionClarification",
+        subquery_id=(str, ...),
+        unresolved_request=(str, ...),
+        clarification_reason=(str, ...),
+        clarification_guesses=(list[ClarificationGuess], []),
+    )
     return create_model(
         "DynamicToolCallingPlan",
         tool_tasks=(list[tool_calling_task], []),
+        clarifications=(list[tool_selection_clarification], []),
     )
 
 
@@ -2250,9 +2502,21 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         seq_key = (attempt.get("subquery_id"), attempt.get("tool_name"))
         sequence_counter[seq_key] = sequence_counter.get(seq_key, 0) + 1
     planning_round = int(state.get("tool_planning_round", 0)) + 1
+    # A subquery any node has already flagged for clarification this turn
+    # is excluded from further planning -- asking the customer a second,
+    # unrelated question about the same subquery (or re-litigating this
+    # node's own already-decided tool-selection ambiguity every round)
+    # would be confusing, and re-evaluating it risks the exact spurious
+    # match this exclusion exists to prevent (see
+    # DECLINE_CLARIFICATION_DESIGN_v1.0.md's tool-dispatcher section).
+    already_clarified_subquery_ids = {
+        entry.get("subquery_id") for entry in state.get("clarification_tasks", [])
+        if isinstance(entry, dict)
+    }
     open_subquery_ids = [
         item["subquery_id"] for item in financial_subqueries
         if _compute_subquery_status(item) == "OPEN"
+        and item["subquery_id"] not in already_clarified_subquery_ids
     ]
 
     if planning_round > MAX_TOOL_PLANNING_ROUNDS or len(existing_attempts) >= MAX_TOOL_TASKS_PER_TURN:
@@ -2264,6 +2528,7 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         }
 
     candidates = []
+    clarification_candidates = []
     if not existing_attempts or open_subquery_ids:
         validated_attempts_view = [
             {
@@ -2375,17 +2640,48 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
           available_requests, never generated or paraphrased.
           Apply this same right-vs-wrong distinction to "deeplink"
           (destination_id) and "api" (field_id) tasks.
+        - TOOL-SELECTION CLARIFICATION: this is your own scope, not node_02e's
+          or the sufficiency auditor's -- you decide which registered
+          capability actually addresses each subquery, so ambiguity in THAT
+          choice is yours to raise, never ambiguity about product/intent or
+          evidence sufficiency. Add an entry to `clarifications` for a
+          subquery_id -- instead of a `tool_tasks` entry for it -- only when
+          two or more registered capabilities are each independently
+          plausible for the SAME subquery, their outcomes for the customer
+          are materially different (e.g. one is self-service in the app,
+          the other submits a request for staff to action), and nothing in
+          the subquery's own wording lets you confidently prefer one over
+          the other. Never use this merely because a candidate's fit is
+          imperfect, or because no capability matches at all -- an
+          imperfect or non-existent match still means "return no task,"
+          not a clarification; this is reserved for a genuine tie between
+          two or more real options. Never propose both a `tool_tasks` entry
+          and a `clarifications` entry for the same subquery_id in the same
+          response.
+          Set `unresolved_request`: reasoning directly against this
+          subquery's own wording, name the specific choice that's unclear
+          (e.g. "whether you want to update this yourself in the app or
+          have us submit a request for you").
+          Set `clarification_reason`: name the specific capabilities in
+          tension and why neither is clearly preferable.
+          Set `clarification_guesses`: one guess per plausible option, each
+          a complete, natural sentence the customer might actually send,
+          grounded in that option's own registered description -- never
+          inventing an outcome it doesn't actually have.
 
         Output JSON only:
-        {{"tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}},"rag_role":"needed"|"complementary"|"redundant"}}]}}
+        {{"tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}},"rag_role":"needed"|"complementary"|"redundant"}}], "clarifications":[{{"subquery_id":"...","unresolved_request":"...","clarification_reason":"...","clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}]}}
         """
         try:
-            candidates = _parse_json_robustly(
+            planner_result = _parse_json_robustly(
                 call_groq_lpu(prompt, model_id=MODEL_C_PLANNER, response_schema_override=_tool_calling_plan_schema(capabilities))
-            ).get("tool_tasks", [])
+            )
+            candidates = planner_result.get("tool_tasks", [])
+            clarification_candidates = planner_result.get("clarifications", [])
         except Exception as error:
             print(f"⚠️ [TOOL PLANNER ERROR]: {error}")
             candidates = []
+            clarification_candidates = []
 
     new_attempts_by_subquery: dict[str, list[dict]] = {}
     for candidate in candidates if isinstance(candidates, list) else []:
@@ -2485,6 +2781,36 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         new_attempts_by_subquery.setdefault(subquery_id, []).append(new_attempt)
         existing_keys.add(key)
 
+    # Tool-selection clarifications: node_03a's own scope (which capability
+    # applies), never product/intent or evidence sufficiency. A subquery
+    # that got a real tool task this same round takes priority -- a
+    # decisive answer beats asking, and the prompt already instructs the
+    # model not to propose both, this is only a defensive backstop.
+    subquery_ids_with_new_task_this_round = set(new_attempts_by_subquery.keys())
+    new_tool_selection_clarifications = []
+    for candidate in clarification_candidates if isinstance(clarification_candidates, list) else []:
+        if not isinstance(candidate, dict):
+            continue
+        subquery_id = str(candidate.get("subquery_id", "")).strip()
+        unresolved_request = str(candidate.get("unresolved_request", "")).strip()
+        if (
+            subquery_id not in known_subqueries
+            or subquery_id in subquery_ids_with_new_task_this_round
+            or subquery_id in already_clarified_subquery_ids
+            or subquery_id in {c["subquery_id"] for c in new_tool_selection_clarifications}
+            or not unresolved_request
+        ):
+            continue
+        new_tool_selection_clarifications.append({
+            "subquery_id": subquery_id,
+            "originator": "task_dispatcher",
+            "scope": _CLARIFICATION_SCOPE_BY_ORIGINATOR["task_dispatcher"],
+            "unresolved_request": unresolved_request,
+            "clarification_reason": str(candidate.get("clarification_reason", "Two or more registered capabilities are each plausible, with no basis to prefer one.")).strip(),
+            "clarification_guesses": _normalize_clarification_guesses(candidate.get("clarification_guesses", [])),
+        })
+    clarification_tasks = list(state.get("clarification_tasks", [])) + new_tool_selection_clarifications
+
     # Deterministic cost tiebreak: a "redundant" rag candidate -- one a
     # cheaper tool already fully covers -- is only worth including if a RAG
     # batch is already happening this round anyway for some other "needed"
@@ -2519,13 +2845,25 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         for attempt in additions:
             log_event("tool.task.created", tool_task_id=attempt["attempt_id"], subquery_id=attempt["subquery_id"], tool_name=attempt["tool_name"], operation=attempt["operation"], planning_round=attempt["planning_round"])
 
-    print(f"   🧰 [TOOL PLAN]: round {planning_round} added {total_new} attempt(s)")
+    for entry in new_tool_selection_clarifications:
+        log_event("task.dispatcher.clarification_raised", subquery_id=entry["subquery_id"], planning_round=planning_round)
+    # A new clarification counts as real progress this round too, same as a
+    # new tool attempt -- otherwise a round that clarifies subquery A but
+    # finds nothing yet for a still-genuinely-open subquery B would read as
+    # "the planner found nothing new" (node_04a's own exhaustion signal),
+    # artificially cutting off B's remaining rounds over A's unrelated
+    # outcome. preflight_status stays keyed on total_new alone: a
+    # clarification is never dispatched to node_03b, only a real tool
+    # attempt is.
+    made_progress = bool(total_new or new_tool_selection_clarifications)
+    print(f"   🧰 [TOOL PLAN]: round {planning_round} added {total_new} attempt(s), {len(new_tool_selection_clarifications)} clarification(s)")
     log_event("tool.plan.created", planning_round=planning_round, capability_count=len(enabled_tool_capabilities()))
     return {
         "preflight_status": "tool_dispatch" if total_new else "tool_results_ready",
         "financial_subqueries": financial_subqueries,
         "tool_planning_round": planning_round,
-        "tool_plan_status": "continue" if total_new else "exhausted",
+        "tool_plan_status": "continue" if made_progress else "exhausted",
+        "clarification_tasks": clarification_tasks,
         "rag_payload": "",
         "api_payload": "",
         "deeplink_payload": "",
@@ -3350,7 +3688,13 @@ def node_03c_sufficiency_auditor(state: AgentState):
         - Each Task Input contains `task.customer_component`: the intent
           formulator's resolved sub-query for that task. Evaluate a task ONLY
           against its own `customer_component` and that task's candidate
-          parents.
+          parents. `customer_component` may already be elaborated with
+          retrieval-oriented wording the customer never actually said, so
+          if you set `unresolved_term` below, derive it by reasoning
+          directly against Original User Message and Trusted Conversation
+          Context instead -- never by quoting `customer_component` back --
+          a clarifying question must quote something the customer will
+          recognize as their own.
         - Each Task Input may include `prior_sufficiency_audit_history` from
           earlier attempts for the same task in this turn. Read it before
           judging the current candidates and remain consistent with its prior
@@ -3408,6 +3752,89 @@ def node_03c_sufficiency_auditor(state: AgentState):
         - INSUFFICIENT: the supplied parents provide no grounded, materially
           relevant information that could be usefully presented in response to
           the `customer_component`.
+        - For INSUFFICIENT, also set `likely_ambiguous_request`: true only
+          when the retrieval genuinely failed because `customer_component`
+          itself is under-specified or could reasonably mean one of several
+          different things (e.g. "the fee" without naming which fee, "the
+          loan" without naming which loan type) -- the request needs more
+          detail before any evidence search could succeed. False when the
+          request was already specific and clear but the documentation
+          simply does not cover it (a real coverage gap, not an ambiguity).
+          Always false for SUFFICIENT or PARTIALLY_SUFFICIENT. This decides
+          whether the backend later offers the customer a clarifying
+          question instead of a flat "not available" statement -- reserve
+          true for genuine ambiguity, not merely for "no matching content."
+        - CLARIFICATION AUTHORING: you are the node closest to the actual
+          evidence gap, so YOU decide whether a clarifying question is
+          warranted and what to ask -- the backend only relays what you set
+          here verbatim, it makes no separate judgment call of its own. This
+          follows the same standing rule every clarification-raising node in
+          this pipeline follows: who raises it, who provides the evidence
+          and reason -- scoped strictly to YOUR OWN job (reviewing whether
+          retrieved evidence fully answers this request). Never author a
+          clarification about something outside that scope (e.g. which
+          product or intent the customer meant in the first place -- that
+          was already decided before this task ever reached you).
+          Set `unresolved_term` (else leave it as an empty string) in
+          exactly two cases:
+          (a) status is PARTIALLY_SUFFICIENT and the unresolved part is
+              something an additional customer detail could plausibly
+              disambiguate or unlock a materially different answer for --
+              not merely "more evidence would be nice." A gap that's simply
+              undocumented, where no customer detail would change the
+              outcome, does not warrant this; leave it empty and let the
+              backend's own neutral availability notice handle it instead.
+          (b) status is INSUFFICIENT and you just set likely_ambiguous_request
+              to true. In this case always set unresolved_term too --
+              naming the specific ambiguous part is exactly what
+              likely_ambiguous_request=true already asserts.
+          `unresolved_term` must be a concise phrase naming exactly the
+          ambiguous or unresolved part, derived by reasoning directly
+          against Original User Message and Trusted Conversation Context
+          yourself -- never by quoting `task.customer_component` back (see
+          above), which may already be elaborated with retrieval-oriented
+          wording the customer never actually said. If the raw input/
+          history reveals exactly which earlier turn the ambiguity traces
+          back to, name that specifically -- you have the same conversation
+          visibility node_02e does, so use it the same way. Never the whole
+          `customer_component` restated unless the whole thing is genuinely
+          what's unresolved. Phrase it as a noun phrase that reads naturally
+          completing "Could you tell us more about ___?" (e.g. "which loan
+          type you mean," "whether you're applying online or in person") --
+          this is a request for a missing detail, not a claim that the
+          customer used this exact wording, so never phrase it as if quoting
+          the customer (e.g. not "the term X you used").
+        - When `unresolved_term` is non-empty, also set
+          `clarification_reason`: distinct from `reason` above (which
+          explains the evidence verdict generally, for every status, not
+          just this one) -- this field explains specifically why THIS part
+          needs clarification, naming the specific detail in Original User
+          Message or Trusted Conversation Context that makes it ambiguous
+          or incomplete (e.g. "the customer asked about documents but never
+          specified online vs in-person submission, and neither did prior
+          turns"). Never a restatement of what the candidate parents
+          contained -- that belongs in `reason`, not here. If you cannot
+          point to a specific real detail in the user's own input or
+          history, `unresolved_term` is not genuinely justified either --
+          leave both empty instead.
+        - When `unresolved_term` is non-empty, also set
+          `clarification_guesses`: 0-3 entries, each a reasonable, grounded
+          PREDICTION of what the customer likely means -- never a report of
+          anything the customer has actually said -- offered as a tappable
+          option that would unblock this task if correct. Order most likely
+          first, using Trusted Conversation Context and the specific
+          candidate parents you just reviewed as your grounding (e.g. two
+          retrieved parents cover different sub-topics the customer might
+          have meant; the customer named a related product two turns ago)
+          -- never the Product/Intent Matrix directly, that is not this
+          call's job. Leave empty when you have no real, statable basis to
+          guess, even though the question itself is still worth asking.
+          Each entry needs a short "label" (chip text), a "message" that is
+          a complete, natural sentence a customer would actually send, and
+          a "reason": a concise, internal-only justification naming the
+          specific evidence or conversation detail behind that guess. A
+          guess you cannot state a concrete reason for is not genuinely
+          inferable -- leave it out.
         - Use the ordinary meaning of explicit policy boundaries, quantities,
           conditions, and restrictions when deciding whether a task is
           response-ready. Do not require a parent to restate the customer's
@@ -3448,7 +3875,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
           approved answer evidence.
         - Never invent a parent ID, fact, or instruction.
 
-        Output JSON only: {{"task_results": [{{"task_id": "...", "status": "SUFFICIENT" | "PARTIALLY_SUFFICIENT" | "INSUFFICIENT", "approved_parent_ids": ["..."], "reason": "...", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}]}}]}}
+        Output JSON only: {{"task_results": [{{"task_id": "...", "status": "SUFFICIENT" | "PARTIALLY_SUFFICIENT" | "INSUFFICIENT", "approved_parent_ids": ["..."], "reason": "...", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "likely_ambiguous_request": true|false, "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
         """
         try:
             auditor_results.update({
@@ -3560,6 +3987,24 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "reason": reason,
             "refinement": refinement,
             "requested_status": requested_status,
+            # Only meaningful if this decision ends up terminal (see the
+            # PARTIALLY_SUFFICIENT and CLARIFICATION_REQUIRED branches
+            # below) -- carries the auditor's own judgment of why retrieval
+            # failed and, when it decided a clarifying question is
+            # warranted, the actual question content it authored, from
+            # whichever round actually terminates this task, forward to
+            # finalization. The response generator makes no clarification
+            # judgment of its own; it only relays what's built here.
+            "likely_ambiguous_request": bool(audit.get("likely_ambiguous_request", False)),
+            "unresolved_term": str(audit.get("unresolved_term", "")).strip(),
+            # Distinct from `reason` above: reason explains the evidence
+            # verdict generally (used for every status); clarification_reason
+            # is specific to why THIS part needs clarification, required to
+            # name a real detail from the user's own input/history rather
+            # than restate evidence coverage -- see TaskSufficiencyItem in
+            # llm_service.py.
+            "clarification_reason": str(audit.get("clarification_reason", "")).strip(),
+            "clarification_guesses": _normalize_clarification_guesses(audit.get("clarification_guesses", [])),
         })
 
     # This turn's own predicted grade: every financial subquery in the
@@ -3662,6 +4107,10 @@ def node_03c_sufficiency_auditor(state: AgentState):
         reason = decision["reason"]
         refinement = decision["refinement"]
         requested_status = decision["requested_status"]
+        likely_ambiguous_request = decision["likely_ambiguous_request"]
+        unresolved_term = decision["unresolved_term"]
+        clarification_reason = decision["clarification_reason"]
+        clarification_guesses = decision["clarification_guesses"]
         # A partial task remains retryable with its retained evidence until
         # the applicable boundary. At the boundary it is answerable for the
         # supported part and carries a clarification only for the
@@ -3676,6 +4125,9 @@ def node_03c_sufficiency_auditor(state: AgentState):
                     "status": "PARTIALLY_SUFFICIENT",
                     "approved_parent_ids": partial_ids,
                     "reason": reason,
+                    "unresolved_term": unresolved_term,
+                    "clarification_reason": clarification_reason,
+                    "clarification_guesses": clarification_guesses,
                 }
                 log_event(
                     "evidence.boundary.approved",
@@ -3689,6 +4141,10 @@ def node_03c_sufficiency_auditor(state: AgentState):
                     "status": "CLARIFICATION_REQUIRED",
                     "approved_parent_ids": [],
                     "reason": reason,
+                    "likely_ambiguous_request": likely_ambiguous_request,
+                    "unresolved_term": unresolved_term,
+                    "clarification_reason": clarification_reason,
+                    "clarification_guesses": clarification_guesses,
                 }
             log_event(
                 "evidence.boundary.terminal_unresolved",
@@ -3696,6 +4152,8 @@ def node_03c_sufficiency_auditor(state: AgentState):
                 status=current_results[task_id]["status"],
                 approved_parent_ids=partial_ids,
                 turn_confidence_if_stopped=provisional_turn_grade,
+                likely_ambiguous_request=likely_ambiguous_request,
+                unresolved_term=unresolved_term,
             )
             feedback.pop(task_id, None)
         else:
@@ -3738,6 +4196,76 @@ def node_03c_sufficiency_auditor(state: AgentState):
         owning_subquery = subqueries_by_id.get(subquery_id)
         return not _resolved_by_other_tool(owning_subquery)
 
+    # Evidence-authored clarifications: the sufficiency auditor -- not the
+    # response generator -- decides whether a clarifying question is
+    # warranted and writes the actual question + guesses, since it's the
+    # node that actually reviewed the evidence and knows precisely what's
+    # missing or ambiguous ("who raises it, who asks it," the same
+    # principle every clarification-raising node in this pipeline follows,
+    # sharing one standard contract -- see _build_clarification_context).
+    # Same _rag_gap_still_matters guard as no_info gets: a CLARIFICATION_
+    # REQUIRED task another tool already resolved this round must not also
+    # surface a clarifying question about something already answered.
+    new_evidence_clarifications = [
+        {
+            "subquery_id": tasks_by_id.get(result.get("task_id"), {}).get("subquery_id"),
+            "originator": "sufficiency_auditor",
+            "scope": _CLARIFICATION_SCOPE_BY_ORIGINATOR["sufficiency_auditor"],
+            # clarification_reason, never the general `reason`: reason
+            # explains the evidence verdict (used for every status --
+            # SUFFICIENT/PARTIALLY_SUFFICIENT/INSUFFICIENT alike), not
+            # specifically why this counts as needing clarification.
+            # clarification_reason is required to name a real detail from
+            # the customer's own input/history -- see TaskSufficiencyItem.
+            "clarification_reason": result.get("clarification_reason") or result.get("reason", "The retrieved evidence left a materially unresolved gap."),
+            # Contract field name is unresolved_request regardless of
+            # originator, even though node_03c's own model-facing field is
+            # named unresolved_term -- unresolved_term is the auditor's own
+            # characterization of a gap in the evidence, not necessarily a
+            # term the customer said, which is exactly why the fallback
+            # text for this originator uses a different template (see
+            # _clarification_fallback_text: "Could you tell us more about
+            # X?", never node_02e's "Could you clarify what you mean by X?"
+            # -- that would falsely accuse the customer of having said X).
+            "unresolved_request": result.get("unresolved_term", ""),
+            "clarification_guesses": result.get("clarification_guesses", []),
+        }
+        for result in current_results.values()
+        if result.get("status") in {"CLARIFICATION_REQUIRED", "PARTIALLY_SUFFICIENT"}
+        and result.get("unresolved_term")
+        and _rag_gap_still_matters(result)
+        and tasks_by_id.get(result.get("task_id"), {}).get("subquery_id")
+    ]
+    # De-duplicate by subquery_id, keeping the FIRST (earliest-round)
+    # occurrence. new_evidence_clarifications is rebuilt from the FULL
+    # current_results every time this node runs -- not scoped to only the
+    # tasks decided this specific round -- so a task that already finalized
+    # with a clarification in an earlier round (and sits unchanged in
+    # current_results while a *different* task keeps retrying) would
+    # otherwise be regenerated and re-appended identically on every
+    # subsequent invocation. Mutual exclusivity (a subquery resolves to
+    # exactly one of SEARCH/CLARIFY/DECLINE, and a SEARCH task terminates
+    # with at most one clarification) guarantees subquery_id is already
+    # unique across the whole clarification_tasks list, making it the
+    # natural dedupe key -- no separate clarification_id needed at all.
+    existing_clarification_subquery_ids = {
+        entry.get("subquery_id") for entry in state.get("clarification_tasks", [])
+        if isinstance(entry, dict)
+    }
+    clarification_tasks = list(state.get("clarification_tasks", [])) + [
+        entry for entry in new_evidence_clarifications
+        if entry["subquery_id"] not in existing_clarification_subquery_ids
+    ]
+    # A CLARIFICATION_REQUIRED task now fully represented by its own
+    # evidence-authored clarification above needs no separate no_info
+    # statement -- there's no partial answer to caveat and nothing else to
+    # say about it, unlike PARTIALLY_SUFFICIENT (which keeps its terminal
+    # marker regardless, for the neutral availability notice covering
+    # whatever the clarifying question doesn't).
+    clarified_task_ids = {
+        result.get("task_id") for result in current_results.values()
+        if result.get("status") == "CLARIFICATION_REQUIRED" and result.get("unresolved_term")
+    }
     task_resolution_instructions = [
         _terminal_retrieval_feedback(
             result.get("task_id"),
@@ -3745,7 +4273,9 @@ def node_03c_sufficiency_auditor(state: AgentState):
             result.get("status", "CLARIFICATION_REQUIRED"),
         )
         for result in current_results.values()
-        if result.get("status") in {"CLARIFICATION_REQUIRED", "PARTIALLY_SUFFICIENT"} and _rag_gap_still_matters(result)
+        if result.get("status") in {"CLARIFICATION_REQUIRED", "PARTIALLY_SUFFICIENT"}
+        and result.get("task_id") not in clarified_task_ids
+        and _rag_gap_still_matters(result)
     ]
     full_count = sum(result.get("status") == "SUFFICIENT" for result in current_results.values())
     partial_count = sum(result.get("status") == "PARTIALLY_SUFFICIENT" for result in current_results.values())
@@ -3825,6 +4355,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         "task_partial_evidence": partial_evidence,
         "task_rejected_parent_ids": rejected_parent_ids,
         "task_resolution_instructions": task_resolution_instructions,
+        "clarification_tasks": clarification_tasks,
         "financial_subqueries": financial_subqueries,
         "low_confidence_mode": is_low_confidence,
         "live_task_confidence": live_task_confidence,
@@ -3886,7 +4417,23 @@ def node_04a_resolution_planner(state: AgentState):
         if status == "OPEN":
             open_subquery_ids.append(subquery.get("subquery_id"))
 
-    needs_tools = bool(open_subquery_ids) and not budget_exhausted
+    # A subquery already flagged for clarification (by node_02e or
+    # node_03a) is reported as OPEN above for accurate observability, but
+    # it must not trigger another tool-planning round on its own -- it's
+    # parked pending the customer's answer, not genuinely still in
+    # progress. Without this, a turn whose only open subquery just got
+    # clarified with no new tool_attempts (so tool_plan_status stays
+    # "continue") would burn a wasted extra round-trip back to node_03a,
+    # which would immediately exclude it anyway.
+    already_clarified_subquery_ids = {
+        entry.get("subquery_id") for entry in state.get("clarification_tasks", [])
+        if isinstance(entry, dict)
+    }
+    genuinely_open_subquery_ids = [
+        subquery_id for subquery_id in open_subquery_ids
+        if subquery_id not in already_clarified_subquery_ids
+    ]
+    needs_tools = bool(genuinely_open_subquery_ids) and not budget_exhausted
     preflight_status = "needs_tools" if needs_tools else "presentation_ready"
 
     print(f"   🧭 [GLOBAL RESOLUTION]: {len(open_subquery_ids)} open subquery(ies){' (budget exhausted' + (', planner found nothing new' if planner_found_nothing_new else '') + ')' if budget_exhausted and open_subquery_ids else ''} -> {preflight_status}")
@@ -3987,7 +4534,14 @@ def _generate_response_blocks(state: AgentState) -> dict:
         }
         for entry in evidence_by_task
     ]
-    intent_clarifications = _build_intent_clarification_context(state)
+    # Despite the variable name (kept for minimal diff churn across this
+    # function), this now includes every clarification regardless of which
+    # node raised it -- one standard contract keyed by subquery_id, see
+    # _build_clarification_context. Every downstream use here (the prompt
+    # section, the deterministic completeness net, clarification_guesses
+    # chip attachment) already treats every entry uniformly regardless of
+    # originator, so nothing else needed to change.
+    intent_clarifications = _build_clarification_context(state)
     # A task whose retries are exhausted with zero usable evidence
     # (CLARIFICATION_REQUIRED) gets the same deterministic-evidence
     # treatment as decline/clarification -- there is nothing left to
@@ -4000,16 +4554,17 @@ def _generate_response_blocks(state: AgentState) -> dict:
         state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
     )
     decline_context = _build_decline_context(state)
-    # Every task_id the model is allowed to cite in an element's
-    # source_task_ids: real RAG evidence tasks, plus every clarification/
-    # decline/no-info entry's own synthetic task_id. Omitting the latter
-    # three used to silently strip sourceTaskIds down to [] for any element
-    # addressing them (they were never real evidence tasks), which broke
-    # candidate-reply chip attachment below whenever a clarification/
-    # decline/no-info entry shared a turn with real evidence.
+    # Every id the model is allowed to cite in an element's
+    # source_task_ids: real RAG evidence tasks, a clarification's own
+    # subquery_id, plus every decline/no-info entry's own synthetic
+    # task_id. Omitting these used to silently strip sourceTaskIds down to
+    # [] for any element addressing them (they were never real evidence
+    # tasks), which broke clarification-guess chip attachment below
+    # whenever a clarification/decline/no-info entry shared a turn with
+    # real evidence.
     valid_task_ids = (
         {entry.get("task_id") for entry in evidence_by_task if entry.get("task_id")}
-        | {c.get("task_id") for c in intent_clarifications if c.get("task_id")}
+        | {c.get("subquery_id") for c in intent_clarifications if c.get("subquery_id")}
         | {d.get("task_id") for d in decline_context if d.get("task_id")}
         | {n.get("task_id") for n in no_info_context if n.get("task_id")}
     )
@@ -4078,10 +4633,21 @@ def _generate_response_blocks(state: AgentState) -> dict:
     only; not evidence, response wording, or UI guidance):
     {json.dumps(resolution_context, ensure_ascii=False)}
     Approved evidence by retrieval task: {json.dumps(evidence_inputs, ensure_ascii=False)}
-    Intent clarification inputs -- each already carries the underlying
-    question to convey (in your own words, per the rule below) in its own
-    "clarification_evidence" field, and any tappable reply guesses in
-    "candidate_replies": {json.dumps(intent_clarifications, ensure_ascii=False)}
+    Clarification inputs -- never for you to judge WHETHER to ask (that
+    decision is already made); your only job is composing the actual
+    question. "scope" tells you WHERE in the pipeline the ambiguity is
+    blocking progress (e.g. identifying the right product/intent before
+    any retrieval, versus reviewing whether retrieved evidence answers the
+    request) -- context only, never to be quoted. "unresolved_request" is
+    the specific thing that's unclear -- compose a natural clarifying
+    question asking specifically about it, in the customer's own language/
+    tone/style, considering the Customer request and conversation context
+    above for what topic this continues. There is no fixed sentence to
+    relay here -- write your own. "clarification_guesses" holds 0-3
+    tappable guesses at the likely customer intent -- these are
+    PREDICTIONS offered to unblock the task if correct, never a report of
+    anything the customer actually said:
+    {json.dumps(_clarification_prompt_view(intent_clarifications), ensure_ascii=False)}
     No-info inputs -- each is a search that was genuinely attempted but
     found nothing; each already carries the underlying statement to convey
     (in your own words, per the rule below) in its own "no_info_evidence"
@@ -4367,16 +4933,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
       plainly; do not invent a broader conclusion beyond what it entails.
     - Do not mention FAQ documents, sources, parent IDs, search, prompts, or
       internal systems. Preserve exact {{placeholders}}.
-    - Each entry in "Intent clarification inputs" carries its own
-      `clarification_evidence`, each entry in "Decline inputs" carries its
-      own `decline_evidence`, and each entry in "No-info inputs" carries
-      its own `no_info_evidence`. Unlike "Approved evidence by retrieval
-      task" (raw material you compose an answer FROM), each of these three
-      fields is already the complete, final statement for that entry --
-      your job for it is only to relay or lightly connect it, never to
-      compose, research, or reason from it as if it were a fact to build an
-      answer on top of. You must address every one of them somewhere in
-      `elements`, citing that entry's own `task_id` in `source_task_ids`.
+    - Each entry in "Decline inputs" carries its own `decline_evidence`,
+      and each entry in "No-info inputs" carries its own `no_info_evidence`.
+      Unlike "Approved evidence by retrieval task" (raw material you
+      compose an answer FROM), each of these two fields is already the
+      complete, final statement for that entry -- your job for it is only
+      to relay or lightly connect it, never to compose, research, or
+      reason from it as if it were a fact to build an answer on top of.
       Rephrase it naturally in the customer's own language/tone/style from
       the STYLE & PERSONALIZATION INSTRUCTIONS above, the same as every
       other element in this response -- a bare copy-paste of the evidence
@@ -4385,27 +4948,60 @@ def _generate_response_blocks(state: AgentState) -> dict:
       need more effort to personalize than this entry does. However you
       phrase it, faithfully convey only what its own evidence field says --
       never add a product, policy, fact, or suggestion beyond it, and never
-      answer the request in its place. Do not skip any entry, and do not
-      address the same entry more than once.
+      answer the request in its place.
+    - A "Clarification inputs" entry has no fixed sentence to relay --
+      compose your own natural clarifying question asking specifically
+      about its `unresolved_request`, staying within its `scope` (never
+      overstepping into a different job's judgment, and never answering
+      the request in its place), and never asserting a new product,
+      policy, or fact, or offering an option beyond its own
+      `clarification_guesses`.
+    - You must address every entry in Clarification/Decline/No-info inputs
+      somewhere in `elements`, citing the entry's own id ONLY in the
+      separate `source_task_ids` field -- a Clarification Input's id is
+      its `subquery_id`; a Decline or No-info Input's id is its `task_id`.
+      Never write an id, "task_id", "subquery_id", or any bracketed/
+      internal identifier inside `answer`/customer-facing text itself --
+      that field is prose the customer reads; the id is structural
+      metadata they never see. Do not skip any entry, and do not address
+      the same entry more than once.
+    - When a Clarification Input's own `clarification_guesses` is
+      non-empty, don't leave your restatement of it as a bare question --
+      naturally work a brief mention of what those options actually are
+      into the same sentence or the one right after it (e.g. "...are you
+      asking about applying, checking eligibility, or the fees involved?"),
+      using each guess's own `label`/`message` as the TOPIC to mention,
+      never inventing an option not listed there. A guess's `message` is
+      written in the CUSTOMER's own voice (what they would send if they
+      tapped it) -- never copy or closely paraphrase its sentence
+      structure into your own question, which is YOUR voice speaking to
+      the customer ("I"/"you" reversed from the guess's own phrasing).
+      For example, a guess message "Can you list the other banking
+      services you can help me with?" becomes, in your voice, "...are you
+      looking for other banking services I can help you with...", never
+      reused with its own "you"/"me" left as-is. Tappable chips for these
+      same options render automatically right after your text -- without
+      this, they appear with nothing in the message explaining what
+      they're for. When `clarification_guesses` is empty, ask a plain
+      open question as before; there is nothing to mention.
     - `clarification` here is ONLY for a terminal unresolved marker still
-      listed under "Terminal unresolved task markers" below (a search that
-      was genuinely attempted but only partially resolved) -- never for an
-      Intent clarification input, a Decline input, or a No-info input,
+      listed under "Terminal unresolved task markers" below (always
+      `PARTIALLY_SUFFICIENT` -- a genuinely ambiguous zero-evidence task is
+      instead fully represented as its own Clarification Input above,
+      composed the same way, not judged here) -- never for an
+      Intent/Clarification input, a Decline input, or a No-info input,
       which are always addressed as their own elements per the rule above.
-    - Decide whether a clarification question would genuinely help the
-      customer. Ask one only when an additional customer detail could
-      materially disambiguate the request or enable a different grounded
-      response. It is not required merely because a terminal unresolved
-      marker exists.
-    - A terminal unresolved marker means the available information did not
-      resolve an otherwise clear request. In that case, normally provide a
-      concise, neutral availability notice using the customer's wording and
-      leave `clarification` empty. Do not state that Horizon does not offer a
-      product or feature, and do not ask the customer to repeat an already
-      clear request.
-    - When a clarification is useful, it belongs after useful supported
-      information and must name the unresolved customer term, using only
-      the terminal unresolved markers as its source.
+    - A terminal unresolved marker means a search was genuinely attempted
+      and some evidence exists (already reflected in the "Approved
+      evidence by retrieval task" elements above) -- this marker names the
+      part that evidence didn't cover. Provide a concise, neutral
+      availability notice using the customer's wording and leave
+      `clarification` empty -- do not ask a clarifying question here or
+      guess what the customer might mean; that judgment already belongs to
+      the sufficiency auditor (see the Clarification Inputs rule above),
+      not to this generation step. Never state that Horizon does not offer
+      a product or feature, and never ask the customer to repeat an
+      already clear request.
     - Correct every failed-audit issue by removing or narrowing only the
       flagged unsupported content. Audit feedback is never a source of facts.
     - If Failed outbound-audit feedback contains
@@ -4691,16 +5287,22 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # when each entry's own already-trusted evidence text is sitting right
     # there to fall back to verbatim.
     for entry, evidence_key in (
-        [(c, "clarification_evidence") for c in intent_clarifications]
+        [(c, None) for c in intent_clarifications]
         + [(d, "decline_evidence") for d in decline_context]
         + [(n, "no_info_evidence") for n in no_info_context]
     ):
-        task_id = entry.get("task_id")
-        evidence_text = entry.get(evidence_key, "")
+        # A clarification entry's id is its subquery_id (the unified
+        # contract's sole link field); decline/no-info entries still use
+        # their own synthetic task_id. A clarification entry has no stored
+        # evidence field (see _clarification_fallback_text) -- compute the
+        # fallback sentence on demand, only when actually needed here.
+        task_id = entry.get("task_id") or entry.get("subquery_id")
+        evidence_text = _clarification_fallback_text(entry) if evidence_key is None else entry.get(evidence_key, "")
         if not task_id or not evidence_text or task_id in covered_task_ids:
             continue
-        print(f"   ⚠️ [ENTRY OMITTED IN DRAFT]: {task_id} ({evidence_key}) missing from generated elements — inserting deterministic fallback")
-        log_event("response.flexible.entry_omitted", task_id=task_id, kind=evidence_key)
+        kind_label = "clarification_evidence" if evidence_key is None else evidence_key
+        print(f"   ⚠️ [ENTRY OMITTED IN DRAFT]: {task_id} ({kind_label}) missing from generated elements — inserting deterministic fallback")
+        log_event("response.flexible.entry_omitted", task_id=task_id, kind=kind_label)
         response_blocks.append({
             "blockId": f"element_fallback_{task_id}", "sourceTaskIds": [task_id],
             "type": "clarification", "text": evidence_text, "options": [],
@@ -4720,30 +5322,39 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # service requests at all, since every prior attempt at it (citing a
     # special_id for detection) became its own source of bugs.
 
-    # `clarification` here covers only a terminal unresolved marker (see the
-    # prompt rule above). Every intent-clarification and decline is instead
-    # rendered by the same generic builder node_11 uses -- same audited,
-    # chip-capable blocks regardless of which route a turn takes.
-    clarification_texts = []
+    # `clarification` here covers only a terminal unresolved marker -- a
+    # plain neutral availability notice, per the prompt rule above, never a
+    # question or a guess: the sufficiency auditor already made that
+    # judgment call and pre-authored the question+guesses itself for any
+    # task worth asking about (see node_03c's own clarification_tasks
+    # entries), which flows through the SAME Clarification Inputs /
+    # clarification_guesses mechanism as an intent-clarification, rendered
+    # by the same generic builder node_11 uses -- same audited, chip-
+    # capable blocks regardless of which node authored the clarification or
+    # which route a turn takes.
     terminal_clarification = _llm_text(generated, "clarification")
+    clarification_texts = []
     if terminal_clarification:
-        response_blocks.append({"blockId": "clarification", "sourceTaskIds": [], "type": "clarification", "text": terminal_clarification})
+        response_blocks.append({
+            "blockId": "clarification", "sourceTaskIds": [], "type": "clarification",
+            "text": terminal_clarification, "options": [],
+        })
         clarification_texts.append(terminal_clarification)
     clarification = "\n\n".join(clarification_texts)
 
-    # Candidate reply chips are deterministic UI data straight from
-    # node_02d/node_02e's own already-trusted output -- attach them to
-    # whichever block ended up citing that clarification's task_id, so a
-    # chip only ever appears alongside content actually addressing it.
-    replies_by_task_id = {
-        c["task_id"]: [{"label": r["label"], "message": r["message"]} for r in c.get("candidate_replies", [])]
-        for c in intent_clarifications if c.get("candidate_replies")
+    # Clarification-guess chips are deterministic UI data straight from
+    # whichever node authored the clarification -- attach them to
+    # whichever block ended up citing that clarification's subquery_id, so
+    # a chip only ever appears alongside content actually addressing it.
+    guesses_by_subquery_id = {
+        c["subquery_id"]: [{"label": g["label"], "message": g["message"]} for g in c.get("clarification_guesses", [])]
+        for c in intent_clarifications if c.get("clarification_guesses")
     }
-    if replies_by_task_id:
+    if guesses_by_subquery_id:
         for block in response_blocks:
             for task_id in block.get("sourceTaskIds", []):
-                if task_id in replies_by_task_id:
-                    block["options"] = list(block.get("options", [])) + replies_by_task_id[task_id]
+                if task_id in guesses_by_subquery_id:
+                    block["options"] = list(block.get("options", [])) + guesses_by_subquery_id[task_id]
 
     # Deterministic completeness net for shortcuts, mirroring the one
     # above for clarification/decline/no-info entries. The prompt already
@@ -4798,21 +5409,22 @@ def _generate_response_blocks(state: AgentState) -> dict:
 def _generate_evidence_only_response(intent_clarifications: list, decline_context: list, no_info_context: list, state: AgentState) -> dict:
     """The same response-generator role as _generate_response_blocks, just
     dispatched to a narrower sub-prompt for a turn with no real evidence at
-    all -- only clarification_evidence/decline_evidence/no_info_evidence
-    entries (see node_02e and _terminal_retrieval_feedback). Its only job
-    is composing these already-decided, already-deterministic statements
-    into one coherent customer message; its schema has no alternative
-    field to substitute a different answer into, which is what removes the
-    reliability risk a fully open-ended prompt would have here (unlike
-    node_02e's own resolution decision, or node_04b's flexible answer
-    composition, there is no judgment call left to make -- only phrasing
-    already-decided content).
+    all -- only clarification/decline_evidence/no_info_evidence entries
+    (see node_02e and _terminal_retrieval_feedback). Its only job is
+    composing these already-decided statements into one coherent customer
+    message; its schema has no alternative field to substitute a different
+    answer into, which is what removes the reliability risk a fully
+    open-ended prompt would have here (unlike node_02e's own resolution
+    decision, or node_04b's flexible answer composition, there is no
+    judgment call left to make -- only phrasing already-decided content,
+    and for clarification specifically, composing the actual question from
+    already-decided ingredients rather than a pre-phrased sentence).
 
     Deliberately omits PRECISION_REFERENCE_CONTRACT and
     PERSONAL_DATA_REFERENCE_CONTRACT, unlike _generate_response_blocks:
-    _decline_evidence_text/_clarification_evidence_text/_no_info_evidence_text
-    never emit a `{{faq_*}}` or `{{data-*}}` token, so neither contract has
-    anything to apply to here -- not an oversight to "fix" by adding them.
+    _decline_evidence_text/_no_info_evidence_text never emit a `{{faq_*}}`
+    or `{{data-*}}` token, so neither contract has anything to apply to
+    here -- not an oversight to "fix" by adding them.
 
     Shares node_06's outbound audit with the main flexible-generation path
     (see _normal_outbound_grounding_context's evidence fields and the
@@ -4820,13 +5432,20 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     audit call of its own.
     """
     entries = [
-        {"task_id": c["task_id"], "kind": "clarification", "evidence": c["clarification_evidence"]}
-        for c in intent_clarifications if c.get("clarification_evidence")
+        {
+            "task_id": c["subquery_id"], "kind": "clarification",
+            "scope": c.get("scope", ""), "unresolved_request": c.get("unresolved_request", ""),
+            "clarification_guesses": [{"label": g["label"], "message": g["message"]} for g in c.get("clarification_guesses", [])],
+            # Never shown to the model -- only used by the completeness net
+            # below if generation produces nothing usable for this entry.
+            "fallback_text": _clarification_fallback_text(c),
+        }
+        for c in intent_clarifications if c.get("unresolved_request")
     ] + [
-        {"task_id": d["task_id"], "kind": "decline", "evidence": d["decline_evidence"]}
+        {"task_id": d["task_id"], "kind": "decline", "evidence": d["decline_evidence"], "fallback_text": d["decline_evidence"]}
         for d in decline_context if d.get("decline_evidence")
     ] + [
-        {"task_id": n["task_id"], "kind": "no_info", "evidence": n["no_info_evidence"]}
+        {"task_id": n["task_id"], "kind": "no_info", "evidence": n["no_info_evidence"], "fallback_text": n["no_info_evidence"]}
         for n in no_info_context if n.get("no_info_evidence")
     ]
     if not entries:
@@ -4841,6 +5460,11 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
         }
 
     user_profile = state.get("user_profile", {})
+    conversation_context = _build_conversation_context(state)
+    # Never send fallback_text to the model -- it's the deterministic
+    # safety net used only by the completeness net below if this call
+    # produces nothing usable, not something to be seen or parroted.
+    model_entries = [{k: v for k, v in entry.items() if k != "fallback_text"} for entry in entries]
 
     prompt = f"""
     PRE-DECIDED STATEMENT COMPOSITION
@@ -4853,35 +5477,71 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
 
     {_GENERATION_CONDUCT_GUARDRAILS}
 
-    Each statement's "evidence" text is already the complete, final
-    content for it -- not a fact to research, verify, or build a new
-    answer from. Your only job is to relay each one, in your own words and
-    in the style above, if there is more than one, never to add to, verify,
-    question, or reason beyond what it already says. A "kind" of
-    "clarification" is a question to ask; "decline" is a scope boundary to
-    state; "no_info" is an availability notice to state -- none of the
-    three is something for you to answer, resolve, or improve upon.
+    Customer request: {state.get("user_input", "")}
+    Trusted conversation context (use only to understand what topic this
+    continues, and the customer's own language/tone; never as factual
+    banking evidence):
+    {conversation_context}
+
+    A "kind" of "decline" is a scope boundary to state; "no_info" is an
+    availability notice to state -- each of these two carries its own
+    "evidence" field, already the complete, final content for it, not a
+    fact to research, verify, or build a new answer from. Your job for it
+    is only to relay it, in your own words and in the style above, never
+    to add to, verify, question, resolve, or improve upon what it already
+    says.
+
+    A "kind" of "clarification" is different: it has no fixed sentence to
+    relay. Compose your own natural question asking specifically about its
+    "unresolved_request", grounded in the Customer request and
+    conversation context above for what topic this continues -- never
+    answer the request in its place, never assert a new product, policy,
+    or fact, and stay within its "scope" (never overstepping into a
+    different job's judgment than the one named there).
 
     Pre-decided statements (the ONLY permitted content; combine them into
     ONE short, natural, coherent customer message):
-    {json.dumps(entries, ensure_ascii=False)}
+    {json.dumps(model_entries, ensure_ascii=False)}
 
     Rules:
-    - Address every statement listed, citing its task_id. Do not skip any.
-    - Rephrase every statement naturally in the customer's own
-      language/tone/style from the STYLE & PERSONALIZATION INSTRUCTIONS
-      above. Copying a statement's "evidence" text word-for-word is a last
-      resort only, never the default -- the customer should not be able to
-      tell this message was assembled from fixed internal text.
-    - Do not add a new claim, apology, product, policy, or suggestion
-      beyond what a statement's own "evidence" text says.
+    - Address every statement listed, using its task_id ONLY in the
+      separate "task_id" JSON field below -- never write "task_id",
+      "subquery_id", the literal id value, or any bracketed/internal
+      identifier inside "text" itself. "text" is customer-facing prose
+      only; the id is structural metadata the customer never sees. Do not
+      skip any statement.
+    - For "decline"/"no_info" kinds: rephrase naturally in the customer's
+      own language/tone/style from the STYLE & PERSONALIZATION
+      INSTRUCTIONS above. Copying the "evidence" text word-for-word is a
+      last resort only, never the default. Do not add a new claim,
+      apology, product, policy, or suggestion beyond what it says.
     - You may add brief natural connecting language between statements, but
       never change what any statement means.
     - Never mention "the matrix," an internal schema, a tool, or a process
       name.
+    - When a "clarification" statement's own "clarification_guesses" is
+      non-empty, don't just ask the bare question -- naturally work a
+      brief mention of what those options actually are into the same
+      sentence or the one right after it (e.g. "...are you asking about
+      applying, checking eligibility, or the fees involved?"), using each
+      guess's own "label" or "message" as the TOPIC to mention, never
+      inventing an option not listed there. A guess's "message" is written
+      in the CUSTOMER's own voice (what they would send if they tapped
+      it) -- never copy or closely paraphrase its sentence structure into
+      your own text, which is YOUR voice speaking to the customer
+      ("I"/"you" reversed from the guess's own phrasing). For example, a
+      guess message "Can you list the other banking services you can help
+      me with?" becomes, in your voice, "...are you looking for other
+      banking services I can help you with...", never reused with its own
+      "you"/"me" left as-is. Tappable chips for these same options render
+      automatically right after your text -- without this, the chips
+      appear with nothing in the message explaining what they're for,
+      which reads as abrupt and unnatural. When "clarification_guesses" is
+      empty, ask a plain open question as before; there is nothing to
+      mention.
 
     Output JSON only:
-    {{"elements": [{{"task_id": "the exact task_id from a statement above", "text": "a warm, natural restatement of that statement in the style above -- never a bare copy of its evidence text"}}]}}
+    {{"elements": [{{"task_id": "the exact task_id from a statement above", "text": "a warm, natural statement or question for this entry, in the style above"}}]}}
     """
     try:
         result = _parse_json_robustly(call_groq_lpu(prompt))
@@ -4908,24 +5568,26 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     # Deterministic completeness net: node_06's own audit already fails a
     # draft that silently omits an entry (forcing a retry), but a malformed
     # or empty model response here still needs every statement represented
-    # immediately -- fall back to its own evidence text verbatim, exactly
-    # as trustworthy as what node_06 would otherwise be checking against.
+    # immediately -- fall back to its own fallback_text verbatim (decline/
+    # no_info: the same evidence text just shown to the model; clarification:
+    # computed on demand, see _clarification_fallback_text), exactly as
+    # trustworthy as what node_06 would otherwise be checking against.
     for entry in entries:
         if entry["task_id"] in covered_ids:
             continue
-        response_blocks.append({"blockId": entry["task_id"], "sourceTaskIds": [entry["task_id"]], "type": "clarification", "text": entry["evidence"], "options": []})
-        parts.append(entry["evidence"])
+        response_blocks.append({"blockId": entry["task_id"], "sourceTaskIds": [entry["task_id"]], "type": "clarification", "text": entry["fallback_text"], "options": []})
+        parts.append(entry["fallback_text"])
 
-    # Candidate reply chips are deterministic UI data straight from
-    # node_02e's own already-trusted output -- attach to whichever block
-    # ended up representing that clarification either way.
-    replies_by_task_id = {
-        c["task_id"]: [{"label": r["label"], "message": r["message"]} for r in c.get("candidate_replies", [])]
-        for c in intent_clarifications if c.get("candidate_replies")
+    # Clarification-guess chips are deterministic UI data straight from
+    # whichever node authored the clarification -- attach to whichever
+    # block ended up representing that clarification either way.
+    guesses_by_subquery_id = {
+        c["subquery_id"]: [{"label": g["label"], "message": g["message"]} for g in c.get("clarification_guesses", [])]
+        for c in intent_clarifications if c.get("clarification_guesses")
     }
     for block in response_blocks:
-        if block["blockId"] in replies_by_task_id:
-            block["options"] = replies_by_task_id[block["blockId"]]
+        if block["blockId"] in guesses_by_subquery_id:
+            block["options"] = guesses_by_subquery_id[block["blockId"]]
 
     final_text = "\n\n".join(parts)
     log_event(
@@ -5188,13 +5850,16 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
     no_info_context, terminal_context = _split_terminal_markers(
         state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
     )
-    intent_context = _build_intent_clarification_context(state)
+    # _clarification_prompt_view, the exact same projection the generator's
+    # own prompt uses -- so the audit can never check the response against
+    # information (originator, clarification_reason) generation never saw.
+    intent_context = _clarification_prompt_view(_build_clarification_context(state))
     decline_context = _build_decline_context(state)
     return {
         "approved_by_task": approved_by_task,
         "response_block_map": response_block_map,
         "terminal_clarifications": terminal_context,
-        "intent_clarifications": intent_context,
+        "clarification_inputs": intent_context,
         "decline_inputs": decline_context,
         "no_info_inputs": no_info_context,
         "available_shortcuts": _available_response_shortcuts(state),
@@ -5449,8 +6114,15 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         Optional Internal Response-Element Provenance (not customer-facing):
         {json.dumps(grounding_context["response_block_map"], ensure_ascii=False)}
 
-        Intent Clarification Inputs (the only source for intent clarification):
-        {json.dumps(grounding_context["intent_clarifications"], ensure_ascii=False)}
+        Clarification Inputs (the only source for what a clarifying
+        question may be about -- exactly what the generator itself was
+        given, nothing more: "scope" names where in the pipeline the
+        ambiguity blocks progress, "unresolved_request" is the specific
+        thing that's unclear -- the generator composed its own question
+        from this, there is no fixed sentence to compare against -- and
+        0-3 "clarification_guesses" are PREDICTIONS of likely customer
+        intent, never reports of anything actually said):
+        {json.dumps(grounding_context["clarification_inputs"], ensure_ascii=False)}
 
         Terminal Unresolved Task Markers (topic/status only; never evidence):
         {json.dumps(grounding_context["terminal_clarifications"], ensure_ascii=False)}
@@ -5517,33 +6189,62 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           never support, soften, or justify a financial claim.
 
         Clarification Rules:
-        - Each Intent Clarification Input, Decline Input, and No-Info Input
-          carries its own `clarification_evidence`/`decline_evidence`/
-          `no_info_evidence` field -- the sole permitted source for that
-          entry's content, and already the complete, final statement for
-          it. Unlike Task-Level Approved Evidence (which the answer is
-          composed FROM), these three are never raw material to reason
-          from or build a new conclusion on top of -- a visible statement
-          about one of these entries must faithfully convey only what its
-          own evidence field says (verbatim or a natural paraphrase
-          preserving its exact meaning), never inferring a product,
-          policy, or banking fact beyond it.
-        - An Intent Clarification Input's statement must not attempt to
+        - Each Decline Input and No-Info Input carries its own
+          `decline_evidence`/`no_info_evidence` field -- the sole permitted
+          source for that entry's content, and already the complete, final
+          statement for it. Unlike Task-Level Approved Evidence (which the
+          answer is composed FROM), these two are never raw material to
+          reason from or build a new conclusion on top of -- a visible
+          statement about one of these entries must faithfully convey only
+          what its own evidence field says (verbatim or a natural
+          paraphrase preserving its exact meaning), never inferring a
+          product, policy, or banking fact beyond it.
+        - A Clarification Input has no fixed evidence field -- the
+          generator composed its own question from `unresolved_request`
+          and `scope`. Grade it the way you would a bridge inference from
+          real evidence, not a paraphrase-of-a-fixed-sentence: it is
+          grounded when it clearly asks about `unresolved_request` (or
+          something the customer would recognize as the same ambiguity),
+          stays inside its own `scope` (never a judgment call that belongs
+          to a different job), and does not assert a new product, policy,
+          or fact, or offer an option beyond that entry's own
+          `clarification_guesses`.
+        - A Clarification Input's statement must not attempt to
           answer the request. A Decline Input's statement must never
           provide the declined advice, action, or information itself. A
           No-Info Input's statement must not imply a banking fact,
           procedure, product alternative, policy, or next action beyond
           what its own `no_info_evidence` says.
-        - For a terminal unresolved task (partial evidence retained, not a
-          No-Info Input), a neutral statement that available information
-          does not fully resolve its named request is grounded. It must
-          not state, suggest, or imply a banking fact, procedure, product
-          alternative, policy, or next action unless supported by Task-Level
-          Approved Evidence.
+        - A Terminal Unresolved Task Marker is always `PARTIALLY_SUFFICIENT`
+          here (a `CLARIFICATION_REQUIRED` task the sufficiency auditor
+          judged ambiguous is instead fully represented as its own
+          Clarification Input above, never as a marker here): a neutral
+          statement that available information does not fully resolve its
+          named request is grounded; it must not state, suggest, or imply
+          a banking fact, procedure, product alternative, policy, or next
+          action unless supported by Task-Level Approved Evidence.
         - A generic apology and a general request for clarification are grounded.
         - A clarification following an answer must identify its unresolved term
           instead of using an ambiguous reference such as "that" or "it".
-        - Every entry in Decline Inputs, Intent Clarification Inputs, and
+        - A Clarification Input's own clarification_guesses each carry their
+          own internal `reason` (never customer-facing) -- check that
+          reason itself, not just the label/message: it must state why
+          this is a plausible customer intention given the current
+          context -- Trusted Conversation Context, the Original Customer
+          Message, or -- when `scope` describes reviewing retrieved
+          evidence rather than identifying a product/intent -- Task-Level
+          Approved Evidence / the candidate parents reviewed for that task.
+          A guess may additionally ground in a Product/Intent Matrix fact
+          only when `scope` describes product/intent identification; when
+          `scope` describes evidence review, a guess may never invent a
+          Matrix fact of its own, since that job is evidence review, not
+          product classification. Each guess is a PREDICTION, never a
+          report of anything the customer actually said -- a guess that
+          does not fit the current context is unsupported content, exactly
+          as if the guess itself were ungrounded, and so is the guess's
+          label/message if it introduces a new product, policy, fact, or
+          answer beyond what its reason actually supports.
+        - Every entry in Decline Inputs, Clarification Inputs, and
           No-Info Inputs must be explicitly, faithfully represented
           somewhere in the response, not silently omitted — treat a
           missing entry the same as an unsupported claim for grounding
@@ -5747,7 +6448,7 @@ def node_06_outbound_audit_join(state: AgentState):
                 )
         history = list(state.get("draft_feedback_history", []))
         history.extend(failed_feedback)
-        unresolved_clarification = bool(state.get("task_resolution_instructions") or state.get("intent_clarification_tasks") or state.get("decline_tasks") or state.get("unresolvable_search_tasks"))
+        unresolved_clarification = bool(state.get("task_resolution_instructions") or state.get("clarification_tasks") or state.get("decline_tasks") or state.get("unresolvable_search_tasks"))
         preserve_answer = (
             unresolved_clarification
             and clarification_failed
@@ -5762,7 +6463,6 @@ def node_06_outbound_audit_join(state: AgentState):
             "preflight_status": "fail",
             "pending_advance": False,
             "safe_answer_for_fallback": safe_answer,
-            "clarification_fallback_required": preserve_answer,
         }
 
     print("   ✅ [OUTBOUND AUDIT PASS]: Response is MAS-compliant and evidence-grounded.")
@@ -5798,7 +6498,6 @@ def node_06_outbound_audit_join(state: AgentState):
         "pending_advance": False,
         "verified_task_history": verified_task_history,
         "safe_answer_for_fallback": "",
-        "clarification_fallback_required": False,
     }
 
 
@@ -6294,7 +6993,7 @@ def _build_escalation_case_summary(state: AgentState) -> dict:
     unresolved_inputs = {
         "intent_clarifications": [
             str(item.get("unresolved_request", "")).strip()
-            for item in state.get("intent_clarification_tasks", [])
+            for item in state.get("clarification_tasks", [])
             if isinstance(item, dict) and str(item.get("unresolved_request", "")).strip()
         ],
         "terminal_retrieval_reasons": [
@@ -6497,8 +7196,11 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
     By the time this node runs, node_06's shared audit has already had
     three chances to validate a generated draft and failed every time.
     Rather than attempt a fourth generation, this renders whatever
-    deterministic evidence already exists -- clarification_evidence/
-    decline_evidence/no_info_evidence -- directly: fixed templates, never
+    deterministic evidence already exists -- decline_evidence/
+    no_info_evidence, plus a clarification's fallback text computed
+    on demand (_clarification_fallback_text) from clarification_tasks
+    regardless of which node (node_02e or node_03c) authored a given
+    entry, treated identically -- directly: fixed templates, never
     LLM-generated, independent of whatever caused the surrounding draft to
     keep failing, and therefore trustworthy without a further audit here.
     When none of that evidence exists at all (a real generated answer that
@@ -6511,7 +7213,14 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
     """
     print("🟡 [NODE 11] Executing Deterministic Clarification Fallback")
     answer = state.get("safe_answer_for_fallback", "").strip()
-    intent_tasks = state.get("intent_clarification_tasks", [])
+    # One standard contract (subquery_id, originator, scope,
+    # unresolved_request, clarification_reason, clarification_guesses)
+    # regardless of which node authored the entry -- a "sufficiency_auditor"
+    # clarification (node_03c) is exactly as final and trustworthy as an
+    # "intent_formulator" one (node_02e); dropping either here would
+    # silently lose a customer's clarification on the one path meant to be
+    # the most reliable fallback in the whole pipeline.
+    clarification_tasks = state.get("clarification_tasks", [])
     decline_tasks = state.get("decline_tasks", [])
 
     response_blocks = []
@@ -6527,21 +7236,17 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
         answer_parts.append(answer)
 
     clarification_parts = []
-    for index, task in enumerate(intent_tasks, start=1):
-        unresolved_request = str(task.get("unresolved_request", "")).strip()
-        if not unresolved_request:
+    for index, task in enumerate(clarification_tasks, start=1):
+        text = _clarification_fallback_text(task)
+        if not text or not task.get("unresolved_request"):
             continue
-        text = str(task.get("clarification_evidence", "")).strip() or (
-            f"Sorry, I'm not yet sure what banking information you need about {unresolved_request}. "
-            "Could you tell me the product or service you're asking about and what you would like to know?"
-        )
         options = [
-            {"label": r["label"], "message": r["message"]}
-            for r in task.get("candidate_replies", []) or []
-            if isinstance(r, dict) and r.get("label") and r.get("message")
+            {"label": g["label"], "message": g["message"]}
+            for g in task.get("clarification_guesses", []) or []
+            if isinstance(g, dict) and g.get("label") and g.get("message")
         ]
         response_blocks.append({
-            "blockId": f"clarification_{task.get('clarification_id') or index}",
+            "blockId": f"clarification_{task.get('subquery_id') or index}",
             "sourceTaskIds": [], "type": "clarification", "text": text, "options": options,
         })
         answer_parts.append(text)
@@ -6596,7 +7301,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
     log_event(
         "clarification.deterministic_fallback",
         retained_answer=bool(answer),
-        intent_clarification_count=len(intent_tasks),
+        clarification_count=len(intent_tasks),
         decline_count=len(decline_tasks),
         no_info_count=sum(
             1 for m in state.get("task_resolution_instructions", [])

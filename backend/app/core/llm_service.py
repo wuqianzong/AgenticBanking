@@ -87,6 +87,16 @@ class RetryEvidenceDeltaItem(BaseModel):
     )
 
 
+class ClarificationGuess(BaseModel):
+    """A possible customer intention, based on the current context, that
+    could resolve this ambiguity if correct -- a prediction of what the
+    customer wants, not a report of what they've said. Reusable by any
+    node that triggers a clarification, not specific to product
+    ambiguity."""
+    label: str = Field(description="Short chip label shown to the customer, e.g. 'Personal Loan'.")
+    message: str = Field(description="The complete, natural sentence sent to the assistant if this chip is tapped, e.g. 'I'm asking about a personal loan.' Must read as something a customer would actually say -- never a bare word or phrase.")
+    reason: str = Field(description="Internal only, never shown to the customer. A concise justification for why this is a plausible customer intention given the current context -- grounded in the Product/Intent Matrix or the conversation so far. If no concrete basis fits the current context, do not offer this guess at all -- leave clarification_guesses empty instead.")
+
 class TaskSufficiencyItem(BaseModel):
     task_id: str = Field(description="The exact task_id supplied in the task input.")
     status: str = Field(description="Must be SUFFICIENT, PARTIALLY_SUFFICIENT, or INSUFFICIENT.")
@@ -97,6 +107,58 @@ class TaskSufficiencyItem(BaseModel):
         description=(
             "For PARTIALLY_SUFFICIENT or INSUFFICIENT only: newly observed, materially task-relevant facts from "
             "supplied candidate parents. Empty when no such fact exists."
+        ),
+    )
+    likely_ambiguous_request: bool = Field(
+        default=False,
+        description=(
+            "For INSUFFICIENT only: true when the task genuinely failed because the resolved "
+            "customer_component itself is under-specified or could reasonably mean one of several different "
+            "things (e.g. 'the fee' without naming which fee, 'the loan' without naming which loan type) -- the "
+            "retrieval failed because the request needs more detail, not because the topic is simply "
+            "undocumented. False when the request was already specific and clear but the documentation "
+            "genuinely does not cover it. Always false for SUFFICIENT or PARTIALLY_SUFFICIENT."
+        ),
+    )
+    unresolved_term: str = Field(
+        default="",
+        description=(
+            "Non-empty only when this task's own evidence review revealed something worth asking the customer "
+            "about directly -- either (a) status is PARTIALLY_SUFFICIENT and one meaningful part of the request "
+            "has no supporting evidence at all, and an additional customer detail could plausibly unlock a "
+            "different, more complete answer for that specific part; or (b) status is INSUFFICIENT and "
+            "likely_ambiguous_request is true. A concise phrase naming exactly the ambiguous or unresolved part "
+            "-- never the whole customer_component verbatim unless the whole thing is what's unresolved. Leave "
+            "empty whenever asking would not genuinely help (e.g. a PARTIALLY_SUFFICIENT gap that's simply "
+            "undocumented, not disambiguatable by any customer detail) -- a clarifying question is not required "
+            "just because a task didn't fully resolve."
+        ),
+    )
+    clarification_reason: str = Field(
+        default="",
+        description=(
+            "Populate only when unresolved_term is non-empty. A concise, internal-only explanation of why THIS "
+            "specific part needs clarification -- distinct from `reason` above, which explains the evidence "
+            "verdict generally (what the candidate parents did or didn't cover) and is used for every status, "
+            "not just this one. This field must name the specific detail in Original User Message or Trusted "
+            "Conversation Context that makes the request ambiguous or incomplete -- e.g. 'the customer asked "
+            "about documents but Original User Message never specifies online vs in-person submission' -- not "
+            "a restatement of what the evidence contained. If you cannot point to a specific real detail in the "
+            "user's own input or history, unresolved_term is not genuinely justified -- leave both empty."
+        ),
+    )
+    clarification_guesses: List[ClarificationGuess] = Field(
+        default_factory=list,
+        description=(
+            "Populate only when unresolved_term is non-empty, and only when genuinely inferable: 0-3 entries, "
+            "each a reasonable, grounded PREDICTION of what the customer likely means by the unresolved part -- "
+            "never a report of anything the customer has actually said -- offered as a tappable option that "
+            "would unblock this task if correct. Order most likely first. Ground each guess in the specific "
+            "candidate evidence you just reviewed for this task (e.g. two of the retrieved parents cover "
+            "different sub-topics the customer might have meant) or in Trusted Conversation Context -- never in "
+            "the Product/Intent Matrix directly, since this auditor's job is evidence review, not product "
+            "classification. Leave empty when unresolved_term is empty, or when you have no real basis to guess "
+            "even though a clarifying question is still worth asking."
         ),
     )
 
@@ -113,14 +175,20 @@ class TriageComponentResolution(BaseModel):
 
 class FinancialSubquery(BaseModel):
     subquery_id: str = Field(description="Stable identifier for one financial subquery.")
-    customer_component: str = Field(description="Standalone compliant banking request component.")
+    customer_component: str = Field(description="Standalone compliant banking request component, resolved from context as needed -- optimized for retrieval. Whichever node later authors a clarification for this component reasons directly against the raw user message and conversation history itself, rather than relying on this field.")
+
+class IntentClarificationTask(BaseModel):
+    unresolved_request: str = Field(description="The exact ambiguous product, service, or request component from the user's wording.")
+    clarification_reason: str = Field(description="A concise, internal-only explanation of why a valid search task cannot be formed without clarification -- scoped to this node's own job (product/intent identification against the Matrix), and naming the specific detail in Latest User Input or Recent Conversation that makes Product, Intent, or both missing/ambiguous -- e.g. 'customer named no product; Recent Conversation has no prior product either' -- not a generic restatement like 'the request is too vague.'")
+    clarification_guesses: List[ClarificationGuess] = Field(default_factory=list, description="0-3 entries, each a reasonable, grounded PREDICTION of what the customer likely means -- about the product, the intent, or whatever is actually ambiguous here -- never a report of anything the customer has actually said, offered as a tappable option that would unblock this request if correct. Order most likely first. Populate only when genuinely inferable from context (e.g. a term with only one plausible matrix match); leave empty when there is no real basis to guess.")
 
 class TriageEvaluation(BaseModel):
-    triage_status: str = Field(description="Must be NON_COMPLIANT, ESCALATION, VALID_REQUEST, or NON_FINANCIAL.")
+    triage_status: str = Field(description="Must be NON_COMPLIANT, ESCALATION, VALID_REQUEST, NON_FINANCIAL, or CLARIFICATION_NEEDED.")
     financial_subqueries: List[FinancialSubquery] = Field(default_factory=list, description="For VALID_REQUEST only: financial banking components. Empty otherwise.")
     has_non_financial_content: bool = Field(default=False, description="True only when a VALID_REQUEST also contained unrelated wording that was omitted from financial_subqueries.")
     non_financial_context: List[str] = Field(default_factory=list, description="For VALID_REQUEST only: short internal attention cues for non-factual conversational asides omitted from financial_subqueries. Empty otherwise; never customer-facing source text.")
     repetitive_issue_detected: bool = Field(default=False, description="True only when the Trusted Conversation Context shows the customer repeatedly raising substantially the same underlying banking need or issue across multiple recent turns, especially if it still appears unresolved. Judge by meaning, not wording. Independent of triage_status.")
+    clarification: IntentClarificationTask | None = Field(default=None, description="Present only when triage_status is CLARIFICATION_NEEDED; otherwise null. Scoped strictly to triage's own classification boundary (NON_COMPLIANT vs ESCALATION vs VALID_REQUEST vs NON_FINANCIAL) -- never a product/intent question, which is a downstream node's job.")
 
 # 4. 2D MATRIX QUERY FORMULATOR (Node 02e) -> NESTED SCHEMA
 class SearchTask(BaseModel):
@@ -130,18 +198,6 @@ class SearchTask(BaseModel):
     conceptual: str = Field(description="Comma-separated definition nouns.")
     target_commercial_product: str = Field(description="The exact Noun from the Product Matrix.")
     target_intent: List[str] = Field(description="List of 1-3 Verbs from the Intent Matrix.")
-
-class ClarificationReply(BaseModel):
-    """A tappable guess at what the customer means -- reusable by any node
-    that triggers a clarification, not specific to product ambiguity."""
-    label: str = Field(description="Short chip label shown to the customer, e.g. 'Personal Loan'.")
-    message: str = Field(description="The complete, natural sentence sent to the assistant if this chip is tapped, e.g. 'I'm asking about a personal loan.' Must read as something a customer would actually say -- never a bare word or phrase.")
-
-class IntentClarificationTask(BaseModel):
-    clarification_id: str = Field(description="Stable identifier, e.g. intent_clarification_1.")
-    unresolved_request: str = Field(description="The exact ambiguous product, service, or request component from the user's wording.")
-    reason: str = Field(description="A concise internal explanation of why a valid search task cannot be formed without clarification.")
-    candidate_replies: List[ClarificationReply] = Field(default_factory=list, description="0-3 plausible guesses at what the customer means -- about the product, the intent, or whatever is actually ambiguous here -- most likely first. Populate only when genuinely inferable from context (e.g. a term with only one plausible matrix match); leave empty when there is no real basis to guess.")
 
 class DeclineTask(BaseModel):
     reason: str = Field(description="A short, factual statement for the decline.")

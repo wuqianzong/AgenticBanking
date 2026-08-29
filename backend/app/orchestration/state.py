@@ -79,10 +79,30 @@ class AgentState(TypedDict):
     task_sufficiency_history: Dict[str, List[Dict[str, Any]]]  # Current-turn audit trail used to keep repeated sufficiency judgments consistent
     task_partial_evidence: Dict[str, List[str]]  # Parent IDs retained while a task is only partly answerable and continues retrieval
     task_rejected_parent_ids: Dict[str, List[str]]  # Parent IDs a prior sufficiency audit explicitly judged not relevant; excluded from future candidate pools for the same task so a widened retry can't waste a selection slot re-surfacing known-bad evidence
-    intent_clarification_tasks: List[Dict[str, Any]]  # Unresolved user-derived components that cannot form a valid retrieval task
+    # One standard clarification contract regardless of which node raised
+    # it -- see docs/DECLINE_CLARIFICATION_DESIGN_v1.0.md. Entries are
+    # {subquery_id, originator, scope, unresolved_request,
+    # clarification_reason, clarification_guesses}. subquery_id is the
+    # sole link back to financial_subqueries -- mutual exclusivity (a
+    # subquery resolves to exactly one of SEARCH/CLARIFY/DECLINE in
+    # node_02e, and a SEARCH task terminates with at most one clarification
+    # in node_03c) guarantees it is already unique across this list, so no
+    # separate clarification id is needed. originator is "intent_formulator"
+    # (node_02e, before any retrieval was attempted) or "sufficiency_auditor"
+    # (node_03c, after reviewing retrieved evidence). Only subquery_id,
+    # scope, unresolved_request, and clarification_guesses are ever shown
+    # to an LLM (generation or node_06's audit, via
+    # _clarification_prompt_view) -- originator and clarification_reason
+    # stay internal, the latter being purely a forcing function on the
+    # authoring node's own prompt, never a fact for anything downstream to
+    # check. There is no stored clarification_evidence field: the
+    # customer-facing question is composed fresh by generation from
+    # unresolved_request/scope/clarification_guesses every time, with a
+    # deterministic fallback template (_clarification_fallback_text)
+    # computed on demand only if generation produces nothing usable.
+    clarification_tasks: List[Dict[str, Any]]
     task_resolution_instructions: List[Dict[str, Any]]  # Terminal retrieval feedback for natural clarification generation
     safe_answer_for_fallback: str                 # Individually approved answer retained for deterministic clarification fallback
-    clarification_fallback_required: bool         # True only when clarification retries exhausted while answer remains safe
     selected_ux_journey: str                     # FLEXIBLE UX guidance (legacy TEXT/PROGRESS/LIST values may complete in-flight sessions)
     presentation_plan: Dict[str, Any]            # Internal UX guidance; never a required customer-visible task/block plan
     outbound_compliance_result: Dict[str, Any]    # Focused outbound MAS-compliance audit result

@@ -7309,7 +7309,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
     log_event(
         "clarification.deterministic_fallback",
         retained_answer=bool(answer),
-        clarification_count=len(intent_tasks),
+        clarification_count=len(clarification_tasks),
         decline_count=len(decline_tasks),
         no_info_count=sum(
             1 for m in state.get("task_resolution_instructions", [])

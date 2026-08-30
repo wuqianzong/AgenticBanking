@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { t } from './translations';
 import {
   Send, Bot, ChevronRight, CheckCircle2,
@@ -79,6 +79,13 @@ export default function BankingBotUI() {
 
   const [inputValue, setInputValue] = useState('');
   const [isInputHovered, setIsInputHovered] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  // Backend-generated only (node_04b), never a static/mock list -- each
+  // suggestion is required to trace back to a specific piece of this
+  // turn's own already-approved evidence that the response didn't feature,
+  // so tapping one can never dead-end into "I don't have that." Driven by
+  // the LATEST turn's own value, same lifecycle as softEscalationAvailable.
+  const [nextActions, setNextActions] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isCompactingMemory, setIsCompactingMemory] = useState(false);
   const [loadingCaption, setLoadingCaption] = useState(t("English", "caption.processing")); // <-- NEW STATE FOR TRACKER
@@ -102,36 +109,6 @@ export default function BankingBotUI() {
     emoji: "enabled",
     financial_literacy: "intermediate"
   });
-
-  // Suggested next actions (max 3, shown floating above the input on focus)
-  const suggestedNextActions = useMemo(() => {
-    // 1. Check if any recent bot message has options
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      if (msg.sender === 'bot' && msg.options && msg.options.length > 0) {
-        return msg.options.slice(0, 3);
-      }
-    }
-    // 2. Default banking starter prompts based on user language preference
-    const defaults = {
-      English: [
-        "Check my account balance",
-        "Recent transactions",
-        "How to change my address"
-      ],
-      Mandarin: [
-        "查询账户余额",
-        "查看近期交易",
-        "如何更改地址"
-      ],
-      Spanish: [
-        "Consultar saldo de cuenta",
-        "Transacciones recientes",
-        "Cómo cambiar dirección"
-      ]
-    };
-    return defaults[preferences.language] || defaults.English;
-  }, [messages, preferences.language]);
 
   // --- WP-7: Embedded Interactive Service Request state ---
   // embeddedFormStates holds in-place step indices, values, submission states,
@@ -754,6 +731,7 @@ export default function BankingBotUI() {
     setIsLowConfidenceMode(false);
     setTaskConfidence(null);
     setSoftEscalationAvailable(false);
+    setNextActions([]);
 
     try {
       const response = await fetch("http://localhost:8000/api/chat", {
@@ -854,6 +832,7 @@ export default function BankingBotUI() {
       // 4. Map the final backend data to our React UI state
       if (finalBotData) {
         setSoftEscalationAvailable(finalBotData.softEscalationAvailable || false);
+        setNextActions(finalBotData.nextActions || []);
         if (finalBotData.personalDataReveals?.length) {
           setPersonalDataStore(prev => {
             const next = { ...prev };
@@ -2759,27 +2738,37 @@ export default function BankingBotUI() {
             </div>
           )}
 
-          {/* Floating Next Action Suggestions (shown only when input is hovered, max 3, semi-transparent) */}
-          {isInputHovered && !inputValue.trim() && !isTyping && isLoggedIn && !activeDeeplink && suggestedNextActions.length > 0 && (
+          {/* Next-action suggestions: backend-generated only (node_04b), never
+              a mock/static fallback -- each one is grounded in this turn's
+              own already-approved evidence, so tapping it can't dead-end.
+              Shown on hover OR focus (not just hover, so a keyboard/touch
+              user typing into the box sees them too), stacked vertically
+              stemming from the input box rather than a horizontal chip row --
+              the closest item to the box is the most relevant suggestion. */}
+          {(isInputHovered || isInputFocused) && !isTyping && isLoggedIn && !activeDeeplink && nextActions.length > 0 && (
             <div
-              className="absolute bottom-full pb-2.5 left-3 right-3 flex items-center gap-1.5 overflow-x-auto hide-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-200 z-30 pointer-events-auto"
+              className="absolute bottom-full left-3 right-3 pb-2.5 flex flex-col-reverse items-start gap-1 animate-in fade-in slide-in-from-bottom-2 duration-200 z-30 pointer-events-auto"
               onMouseEnter={handleInputMouseEnter}
               onMouseLeave={handleInputMouseLeave}
             >
-              {suggestedNextActions.map((action, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleSend(action)}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    handleSend(action);
-                  }}
-                  className="flex items-center gap-1.5 rounded-full border border-slate-200/70 bg-white/90 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-md backdrop-blur-md transition-all hover:border-blue-400 hover:bg-blue-50/95 hover:text-blue-700 hover:shadow-lg active:scale-95 shrink-0 cursor-pointer"
-                >
-                  <Sparkles size={11} className="text-blue-500 shrink-0" />
-                  <span className="truncate max-w-[200px]">{action}</span>
-                </button>
+              {/* Stem connecting the stack down into the input box */}
+              <div className="absolute left-2.5 bottom-0 top-0 w-0.5 bg-slate-200 rounded-full" />
+              {nextActions.map((action, idx) => (
+                <div key={idx} className="relative pl-6 pr-1">
+                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 w-2.5 h-0.5 bg-slate-200 rounded-full" />
+                  <button
+                    type="button"
+                    onClick={() => handleSend(action)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSend(action);
+                    }}
+                    className="group flex items-center gap-1.5 rounded-xl border border-slate-200/70 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-md backdrop-blur-md transition-all hover:border-blue-400 hover:bg-blue-50/95 hover:text-blue-700 hover:shadow-lg active:scale-[0.98] cursor-pointer max-w-full"
+                  >
+                    <Sparkles size={11} className="text-blue-500 shrink-0" />
+                    <span className="truncate">{action}</span>
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -2791,6 +2780,8 @@ export default function BankingBotUI() {
               maxLength={1000}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
+              onFocus={() => setIsInputFocused(true)}
+              onBlur={() => setIsInputFocused(false)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();

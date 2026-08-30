@@ -496,6 +496,36 @@ failed exchange. Fixed by requiring
 that rule can fire, logged via a `scored_turn_count` field on
 `escalation.soft.triggered`.
 
+## 8b. A round-1 ambiguity read is provisional, not a verdict — the ladder still runs to its own boundary
+
+A subquery whose round-1 sufficiency audit sets `likely_ambiguous_request:
+true` (with a full `unresolved_term`/`clarification_reason`/
+`clarification_guesses`) is *not* short-circuited into an immediate
+clarification, even though the judgment already looks complete. This is
+deliberate, not an oversight: `INTENT_EXPANSION`/`PRODUCT_EXPANSION`/
+`ANGLE_EXPANSION` each retry with a genuinely different search strategy
+specifically because a plain first-round search missing the right content
+does not mean the content isn't in the KB — a later round's reformulation
+can still rescue it. Treating round 1's "likely ambiguous" as final would
+mean never giving those later strategies the chance they exist for.
+
+The retry-continuation check itself (`should_retry`, `nodes.py`) reflects
+this on purpose — it depends only on `attempt_count` versus
+`NORMAL_EFFORT_RAG_ATTEMPTS`/`MAX_RAG_ATTEMPTS` and the hypothesis test
+above; it does not read `likely_ambiguous_request` at all. The actual
+clarification only gets authored once the loop reaches its own boundary
+(floor met with no statistical case to extend, or the ceiling), inside the
+`if not should_retry:` branch — and at that point it uses *that round's*
+own fresh audit output (`decision["likely_ambiguous_request"]` etc.,
+appended new every round from `audit`), never a stale carry-over from
+round 1. So when a turn ends in a clarification after all four rounds ran,
+it's because every search strategy independently reached the same
+conclusion, confirmed as of the final round — not because the system
+ignored three rounds of contrary evidence to act on the first one. See
+`DECLINE_CLARIFICATION_DESIGN_v1.0.md` §4a for who authors this
+clarification (`node_03c`, as one of the four originators) and the
+standard contract shape it's written into.
+
 ## 9. Exhausted retries and hard escalation
 
 What happens when even the full ladder exhausts is covered in

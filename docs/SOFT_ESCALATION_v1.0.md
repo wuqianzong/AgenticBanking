@@ -7,12 +7,18 @@ living document — update it in place as anything changes.
 
 ## 1. What this is
 
-`node_08_soft_escalation_analyzer` offers a non-blocking `"Talk to Agent"`
-chip alongside a normal answer whenever there is evidence — but not
-necessarily an explicit request — that the customer might be struggling.
-This is distinct from `node_09_hard_escalation_broker`, which handles an
-explicit "transfer me to a human" request; soft escalation is always the
-bot's own suggestion, never forced, and the customer is free to ignore it.
+`node_08_soft_escalation_analyzer` surfaces a non-blocking offer alongside
+a normal answer whenever there is evidence — but not necessarily an
+explicit request — that the customer might be struggling. This is
+distinct from `node_09_hard_escalation_broker`, which handles an explicit
+"transfer me to a human" request; soft escalation is always the bot's own
+suggestion, never forced, and the customer is free to ignore it.
+
+**Surfaced as a banner above the input box, not a chat-history chip** (see
+§1a) — the description below still refers to it as "the chip" in a few
+places inherited from the original design; read that as "the soft-
+escalation offer" throughout, since the underlying four-signal trigger
+logic this section describes is unchanged by the banner rework.
 
 It previously fired on a single flat rule: `turn_count >= 5`. That has been
 replaced with four independent, deterministically-evaluated signals, each
@@ -39,6 +45,25 @@ are recomputed fresh every turn from live or windowed state, so a pattern
 that stops recurring naturally stops offering the chip once it ages out of
 the window (or, for the streak/duration signals, once the customer moves on
 or the session ends).
+
+## 1a. Banner, not a chat-history chip
+
+Originally rendered by appending `"Talk to Agent"` to `payload["options"]`
+— the same mechanism as any other response chip, which meant it was baked
+into that turn's message and stayed visible in the chat history forever,
+even long after the triggering signal was gone. Replaced: `node_08` now
+sets a plain boolean, `ui_action_payload["softEscalationAvailable"]`,
+surfaced on every turn's response (`api_gateway.py`,
+`softEscalationAvailable` on `final_payload`). The frontend renders this as
+a banner above the input box, driven strictly by the *latest* turn's own
+value — never a sticky flag, never attached to a specific past message —
+so it appears and disappears turn-by-turn exactly as the underlying signals
+do. Tapping the banner's action sends `"Talk to Agent"` as a normal message,
+same downstream effect as the old chip tap.
+
+The existing guard is unchanged: a turn ending in `final_clarification`
+still never sets this (clarification responses intentionally carry no UI
+actions, banner included).
 
 ## 2. Bot confidence: a continuous score, not a binary count
 
@@ -238,6 +263,16 @@ force-scored 0.0 entry to `turn_escalation_history` via
 passes through this node to get one otherwise — previously such a turn
 was invisible to the rolling-confidence window instead of dragging it
 down.
+
+**Banner rework (§1a):** `backend/app/orchestration/nodes.py` (`node_08`
+no longer appends to `payload["options"]`; sets
+`payload["softEscalationAvailable"]` unconditionally every turn, logs
+`escalation.soft.triggered` only when true), `backend/app/api_gateway.py`
+(`softEscalationAvailable` on `final_payload`), `frontend/src/App.jsx`
+(`softEscalationAvailable` state, reset on send; banner JSX above the
+input box with its own action button; deleted the old options-array chip
+rendering path for this specific chip), `frontend/src/translations.js`
+(`misc.softEscalationBanner`/`misc.softEscalationAction` keys).
 
 ## 6. Files touched
 

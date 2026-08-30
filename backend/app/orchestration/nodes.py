@@ -4677,11 +4677,14 @@ def _generate_response_blocks(state: AgentState) -> dict:
     real value, only an opaque insert_token):
     {json.dumps(personal_data_placeholders, ensure_ascii=False)}
     Failed outbound-audit feedback (constraints only, never evidence). Each
-    entry identifies one specific claim or instruction to remove — it is
-    never permission to abandon the topic it came from. After removing
-    exactly what is flagged, re-apply every Design Principle below to still
-    give the most complete, honestly-scoped response the remaining approved
-    evidence supports:
+    entry identifies one specific claim or instruction to remove -- it is
+    never permission to abandon the topic it came from, and it is never
+    permission to narrow your job to only the answer. Remove exactly what
+    is flagged, then follow every rule below exactly as you would on a
+    first attempt, in full -- every Clarification/Decline/No-info entry
+    still needs its own element citing its own id, evidence still gets
+    composed the same way, and nothing here is more important than
+    anything else you were already asked to do:
     {json.dumps(audit_feedback, ensure_ascii=False)}
 
     {PRECISION_REFERENCE_CONTRACT}
@@ -5044,8 +5047,29 @@ def _generate_response_blocks(state: AgentState) -> dict:
       * TEXT (use ONLY when none of the above types match the content --
         short single-topic explanations, advice, or greetings).
 
+    - NEXT ACTION SUGGESTIONS (optional, 0-3): if the Approved evidence
+      given to you for a task contains a distinct sub-topic, fact, or
+      section you did NOT feature in your response text, you may suggest
+      it as something the customer could naturally ask about next -- e.g.
+      if the approved evidence covers both application steps and
+      eligibility criteria but your response only used the application
+      steps, suggest "What are the eligibility requirements?". Each
+      suggestion MUST trace back to a specific piece of Approved evidence
+      you were already given this turn -- never invent a topic beyond it,
+      and never suggest something you have no evidence for; this is not a
+      guess about what the customer might want, it is a pointer to real
+      content already sitting in front of you that you chose not to use.
+      This is optional: leave `next_actions` empty when everything
+      materially relevant in your approved evidence was already covered,
+      or there is no genuine unfeatured content to point to -- do not
+      invent a suggestion merely to fill the array. Phrase each as a
+      short, natural question or request in the customer's own voice, the
+      way they would actually type it (never a bare topic label) -- e.g.
+      "What are the eligibility requirements for this loan?" not
+      "Eligibility".
+
     Output JSON only:
-    {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":""}}
+    {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"","next_actions":["short natural next question, grounded in unfeatured approved evidence"]}}
     """
     try:
         generated = _parse_json_robustly(call_groq_lpu(prompt))
@@ -5292,49 +5316,33 @@ def _generate_response_blocks(state: AgentState) -> dict:
         element_sources.append([task_id])
         covered_task_ids.add(task_id)
 
-    # Deterministic completeness net for clarification/decline/no-info
-    # entries, the same idea as the RAG-task net just above and the one
-    # _generate_evidence_only_response already has for its narrower case.
-    # The model has been observed dropping one of these entries even though
-    # its own prompt explicitly forbids skipping any of them, and the
-    # outbound audit meant to catch that omission has also been observed
-    # rationalizing it away ("acceptable since not yet resolved by the
-    # customer") instead of failing the draft. Two LLM calls both being
-    # unreliable about the same thing is exactly the case this module
-    # otherwise always resolves with a deterministic fallback -- there is
-    # no reason completeness here should depend on either model behaving,
-    # when each entry's own already-trusted evidence text is sitting right
-    # there to fall back to verbatim.
+    # Completeness check for clarification/decline/no-info entries --
+    # DETECTION ONLY, bypassed as of this revision: it used to also insert a
+    # deterministic fallback block for any entry it found uncited, which
+    # traded a real reliability guarantee for a real coherence cost. The
+    # false-positive case (a coherent response legitimately blended a
+    # clarification's substance into a broader element without citing that
+    # entry's id) produced a visible, confusing double-clarification --
+    # live-confirmed. Deliberate tradeoff: a genuine omission is uncommon
+    # (most turns carry a single subquery, so there is rarely more than one
+    # entry to lose track of in the first place) and low-severity (the
+    # customer can just ask again), whereas the false-positive duplication
+    # degraded otherwise-good responses. Detection stays -- logged here --
+    # so real frequency data can inform whether a better-targeted fix (e.g.
+    # requiring accurate multi-id citation on blended elements) is worth
+    # building, without that decision being made blind.
     for entry, evidence_key in (
         [(c, None) for c in intent_clarifications]
         + [(d, "decline_evidence") for d in decline_context]
         + [(n, "no_info_evidence") for n in no_info_context]
     ):
-        # A clarification entry's id is its subquery_id (the unified
-        # contract's sole link field); decline/no-info entries still use
-        # their own synthetic task_id. A clarification entry has no stored
-        # evidence field (see _clarification_fallback_text) -- compute the
-        # fallback sentence on demand, only when actually needed here.
         task_id = entry.get("task_id") or entry.get("subquery_id")
         evidence_text = _clarification_fallback_text(entry) if evidence_key is None else entry.get(evidence_key, "")
         if not task_id or not evidence_text or task_id in covered_task_ids:
             continue
         kind_label = "clarification_evidence" if evidence_key is None else evidence_key
-        print(f"   ⚠️ [ENTRY OMITTED IN DRAFT]: {task_id} ({kind_label}) missing from generated elements — inserting deterministic fallback")
-        log_event("response.flexible.entry_omitted", task_id=task_id, kind=kind_label)
-        # Only a genuine clarification renders as the "clarification" block
-        # type (chip-capable, per the frontend's renderClarificationCard) --
-        # decline/no-info are plain statements with no options, and belong
-        # on the same "text" type every other plain statement in this
-        # response uses.
-        block_type = "clarification" if evidence_key is None else "text"
-        response_blocks.append({
-            "blockId": f"element_fallback_{task_id}", "sourceTaskIds": [task_id],
-            "type": block_type, "text": evidence_text, "options": [],
-        })
-        answer_parts.append(evidence_text)
-        element_sources.append([task_id])
-        covered_task_ids.add(task_id)
+        print(f"   ℹ️ [ENTRY NOT EXPLICITLY CITED]: {task_id} ({kind_label}) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)")
+        log_event("response.flexible.entry_omitted", task_id=task_id, kind=kind_label, fallback_inserted=False)
 
     # No equivalent fallback is needed for a pending service request: unlike
     # a RAG task's answer, node_07 attaches every registered form's button
@@ -5367,6 +5375,20 @@ def _generate_response_blocks(state: AgentState) -> dict:
         clarification_texts.append(terminal_clarification)
     clarification = "\n\n".join(clarification_texts)
 
+    # Next-action suggestions: never a guess about what the customer might
+    # want (that risks a dead-end tap the pipeline can't answer) -- each is
+    # required by the prompt above to point at real, already-approved
+    # evidence this turn that the composed answer simply didn't feature.
+    # Optional by design; an empty list here is the expected common case,
+    # not a fallback failure.
+    next_actions = []
+    if isinstance(generated.get("next_actions"), list):
+        for item in generated["next_actions"]:
+            text = str(item).strip() if isinstance(item, str) else ""
+            if text and text not in next_actions:
+                next_actions.append(text)
+    next_actions = next_actions[:3]
+
     # Clarification-guess chips are deterministic UI data straight from
     # whichever node authored the clarification -- attach them to
     # whichever block ended up citing that clarification's subquery_id, so
@@ -5379,7 +5401,22 @@ def _generate_response_blocks(state: AgentState) -> dict:
         for block in response_blocks:
             for task_id in block.get("sourceTaskIds", []):
                 if task_id in guesses_by_subquery_id:
-                    block["options"] = list(block.get("options", [])) + guesses_by_subquery_id[task_id]
+                    # A block that already blended the clarification into its
+                    # own composed content may already carry equivalent
+                    # options of its own (e.g. the model wrote its own
+                    # Savings/Credit Card choice into a checklist it also
+                    # cited subquery_id on) -- dedupe by (label, message) so
+                    # the same guess never renders as two identical chips.
+                    existing = list(block.get("options", []))
+                    existing_keys = {
+                        (opt.get("label"), opt.get("message")) for opt in existing if isinstance(opt, dict)
+                    }
+                    for guess in guesses_by_subquery_id[task_id]:
+                        key = (guess.get("label"), guess.get("message"))
+                        if key not in existing_keys:
+                            existing.append(guess)
+                            existing_keys.add(key)
+                    block["options"] = existing
 
     # Deterministic completeness net for shortcuts, mirroring the one
     # above for clarification/decline/no-info entries. The prompt already
@@ -5419,14 +5456,14 @@ def _generate_response_blocks(state: AgentState) -> dict:
     answer_text = "\n\n".join(part for part in answer_parts if part)
     draft = "\n\n".join(part for part in [answer_text, clarification] if part) or "Sorry, I don't have an answer for that right now."
     print(f"   💬 [FLEXIBLE RESPONSE GENERATED]: {len(response_blocks)} element(s)")
-    log_event("response.flexible.generated", element_types=[block.get("type") for block in response_blocks], element_source_task_ids=element_sources)
+    log_event("response.flexible.generated", element_types=[block.get("type") for block in response_blocks], element_source_task_ids=element_sources, next_action_count=len(next_actions))
     return {
         "final_draft": draft,
         "final_answer": answer_text,
         "final_clarification": clarification,
         "active_plan": {},
         "completed_steps": [],
-        "ui_action_payload": {"uiType": "blocks", "responseBlocks": response_blocks, "options": []},
+        "ui_action_payload": {"uiType": "blocks", "responseBlocks": response_blocks, "options": [], "nextActions": next_actions},
         "pending_advance": False,
     }
 
@@ -5827,6 +5864,7 @@ def _outbound_response_content(state: AgentState) -> tuple[str, str, str]:
         "items": payload.get("items", []) if payload.get("uiType") == "checklist" else [],
         "extendedText": payload.get("extendedText", ""),
         "listClarificationText": payload.get("listClarificationText", ""),
+        "nextActions": payload.get("nextActions", []),
         # Block and task IDs are transport metadata, not customer-facing text.
         "responseBlocks": visible_response_blocks,
     }
@@ -5997,11 +6035,14 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         retained after removing the exact unsupported claim or instruction.
       * NARROW_TO_EVIDENCE_SCOPE when approved evidence is relevant but
         establishes only a conditional, partial, or narrower policy/process
-        than the customer's broader question. The next response must
-        restate only that explicit evidence scope and must not answer the
-        broader question, infer exclusivity, offer the conditional process
-        as the customer's path, add steps, recommend an action, or ask a
-        further question unless independently supported.
+        than the customer's broader question. The next response's answer
+        must restate only that explicit evidence scope and must not answer
+        the broader question, infer exclusivity, offer the conditional
+        process as the customer's path, add steps, recommend an action, or
+        invent a new follow-up question unless independently supported --
+        this constrains only the answer's own content, never whether an
+        already-authored Clarification Input for a different entry still
+        gets relayed, which remains required exactly as on any other turn.
       * CLARIFY_FROM_ALLOWED_CONTEXT only when a permitted clarification
         source genuinely contains an unresolved term whose answer could
         materially change a grounded response.
@@ -6013,6 +6054,13 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
       support channel, product, service, escalation path, or remedy.
     - The evidence_gap describes an absence in the permitted source. It is
       not evidence and must not be used to support a new customer claim.
+    - rewrite_instruction must name only the specific flagged claim or
+      instruction and how to correct or remove it -- nothing more. Never
+      restate, summarize, narrow, or imply the response's overall scope,
+      completeness, or purpose; the next generation attempt's standing
+      duties (addressing every Clarification/Decline/No-info entry,
+      citation, style, etc.) are unaffected by this feedback and are not
+      this field's job to reassert or redefine.
     """
     recovery_strategy_field = ', "response_recovery_strategy":"NO_STRATEGY" | "REMOVE_UNSUPPORTED_CONTENT" | "NARROW_TO_EVIDENCE_SCOPE" | "CLARIFY_FROM_ALLOWED_CONTEXT"'
 
@@ -6299,6 +6347,15 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         - Do not fail a response because it omits information from any available
           source. Assess whether visible claims use a permitted source only.
         - Every visible field in the payload is in scope.
+        - "nextActions" entries (0-3 short next-question suggestions) must
+          each be traceable to a specific fact or sub-topic actually present
+          in Task-Level Approved Evidence for this turn -- reject one only
+          if it names a product, policy, or topic with no basis anywhere in
+          that evidence. Unlike the answer itself, a next-action is
+          intentionally speculative about the customer's *interest*, never
+          about whether the underlying content exists -- so it is not held
+          to the same standard as an assertion of fact, only to "is this
+          genuinely something the approved evidence could answer."
         - "available_shortcuts" entries are a permitted source for a
           statement, in either of two roles, that: names a shortcut solely
           by its supplied `label`/`topic`; and never claims the assistant is

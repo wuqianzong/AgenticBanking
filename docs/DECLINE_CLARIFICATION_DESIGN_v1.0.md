@@ -447,6 +447,84 @@ neither is specific to clarification, but both surfaced through it:
   from the bot's own voice, with a concrete before/after example in both
   generation prompts.
 
+## 4g. The completeness net for uncited entries: detection only, insertion bypassed
+
+The response generator composes freely — it may blend a clarification, a
+decline, or a subquery's real evidence into one coherent element rather
+than one block per source, which is intentional (§5): coherence is the
+generator's job, not the underlying schema's shape. A deterministic
+completeness net used to sit after generation, inserting a fallback block
+verbatim for any clarification/decline/no-info entry whose `task_id`
+didn't appear in any generated element's `source_task_ids` — the same
+"don't trust two unreliable LLM calls to both remember" reasoning already
+used elsewhere in this module (§3).
+
+Live tracing surfaced a real false-positive cost: an element that
+correctly blended two sources into one coherent answer, while only citing
+one of their ids, looked to the net exactly like a dropped entry — the net
+then inserted a second, redundant clarification block, producing a visibly
+confusing double-clarification in the same response. The underlying
+citation gap (a blended element should list every contributing id, not
+just one) was real and separately fixed via a prompt instruction, but the
+net's insertion behavior was a bigger, more visible failure mode than the
+omission it was guarding against.
+
+Decision: bypass insertion, keep detection. An entry the generator
+genuinely dropped now only gets logged (`response.flexible.entry_omitted`,
+`fallback_inserted: False`) — nothing is appended to the response.
+Reasoning: most turns carry a single subquery, so there is rarely more
+than one entry to lose track of in the first place; a genuine omission is
+low-severity (the customer can just ask again), while the net's own
+false-positive was actively degrading otherwise-good, coherent responses.
+Detection stays on specifically so real frequency data — how often this
+actually fires in practice — can inform whether a more targeted fix (e.g.
+enforcing complete multi-id citation on blended elements, rather than
+reintroducing a blunt fallback) is worth building later, without that call
+being made blind.
+
+## 4h. Audit-feedback scoping: fixing what's flagged must not narrow the whole job
+
+A failed outbound audit produces `rewrite_instruction` (§6) alongside a
+recovery strategy — free-form guidance on what to change. Live tracing
+found this feedback silently re-scoping the *entire* next generation
+attempt: a redraft asked only to remove one unsupported claim would also
+drop an already-correctly-authored clarification for a *different*
+subquery in the same turn, as if fixing the flagged problem had become the
+model's whole job rather than one instruction among many still-standing
+ones. The generator's first attempt had no trouble handling clarification
++ evidence together; only the *redraft* lost that scope, which pointed at
+the feedback-handling instruction biasing attention toward the fix alone.
+
+Fixed with three coordinated, narrowly-targeted changes rather than a
+single broad one:
+1. `_generate_response_blocks`'s "how to use feedback" instruction now
+   states explicitly that removing the flagged content is not permission
+   to narrow the job — every standing duty (citing every Clarification/
+   Decline/No-info entry, composing evidence the same way, etc.) still
+   applies in full, exactly as on a first attempt.
+2. `node_06`'s own prompt now constrains what `rewrite_instruction` itself
+   is allowed to say: name only the specific flagged claim and how to fix
+   it, never restate or imply the response's overall scope or
+   completeness — that reassertion is not this field's job.
+3. `NARROW_TO_EVIDENCE_SCOPE`'s existing "don't ask a further question"
+   rule gained an explicit carve-out: it constrains only the *answer's*
+   own content, never whether an already-authored Clarification Input for
+   a different entry still gets relayed, which remains required exactly
+   as on any other turn.
+
+Verified live: a turn whose blended element cited both a clarification's
+and a decline's ids survived a real audit-triggered redraft with both
+still present and correctly cited.
+
+**A second bug surfaced during the same verification, unrelated to the
+above but in the same code path**: once citation correctly covered both
+ids on one blended element, the auto-attached official
+`clarification_guesses` chips (§4b) stacked on top of options the model
+had already written into that same element itself, producing duplicate
+chips. Fixed by deduplicating by `(label, message)` before combining the
+model's own options with the auto-attached guesses, in the chip-attachment
+loop in `_generate_response_blocks`.
+
 ## 5. Unified response generation: one generator role, two sub-prompts
 
 `node_04b_response_generator` always calls `_generate_response_blocks`.
@@ -658,6 +736,50 @@ sample rather than dragging it down. `_append_failed_turn_escalation_history`
 customer did not end up receiving) and appends the entry itself. See
 `SOFT_ESCALATION_v1.0.md` §2 for the scoring model this feeds.
 
+## 11. Next-action suggestions: grounded pointers to unfeatured evidence, not guesses
+
+`_generate_response_blocks` also returns 0-3 `next_actions` — short,
+customer-voiced next-question suggestions rendered above the input box on
+the frontend (stacked vertically, closest-to-input = most relevant),
+generated by the same call as the response itself, no extra LLM round
+trip.
+
+The design constraint that matters most here came directly from a real
+failure mode: an earlier, unconstrained attempt at this feature let the
+model suggest topics it merely guessed the customer *might* want, with no
+guarantee the KB actually covered them — tapping one could dead-end into
+"I don't have that," which is worse than offering nothing. The fix is a
+narrow evidence requirement, not a prompt-tone fix: every suggestion must
+trace back to a specific fact or sub-topic already present in *this
+turn's own approved evidence* that the composed answer simply didn't
+feature (e.g. evidence covers both application steps and eligibility, the
+response only used the steps — suggest asking about eligibility).
+Retrieval for a next action is not literally deterministic, but close to
+it in practice: this codebase's verified-session-parent RRF matching
+(`Search Strategy v2.8`) preferentially re-surfaces a parent already
+approved earlier in the same session, so a follow-up tap very reliably
+finds the same evidence again.
+
+This is a categorically different kind of "guess" from `ClarificationGuess`
+(§4e): a clarification guess predicts customer *intent* to resolve a
+present ambiguity; a next-action suggestion predicts customer *interest*
+in content that is already known, with certainty, to exist. `node_06`'s
+audit holds the two to different standards accordingly — a next-action is
+rejected only if it names a topic with no basis anywhere in the approved
+evidence, not against the same factual-assertion bar the answer text
+itself is held to.
+
+Optional by design: an empty list is the expected common case whenever
+nothing materially relevant was left unfeatured, not a fallback failure.
+Capped at 3, deduplicated, and — like every other customer-facing field in
+this design — never carries a raw id/subquery_id/bracketed token (§4f
+applies here too).
+
+Frontend: replaces an earlier static/mock suggestion list entirely (fixed
+per-language defaults, or reusing the last message's own chip options) —
+deleted outright rather than kept as a fallback, since a mock suggestion
+carries exactly the dead-end risk this feature exists to avoid.
+
 ## 8. Files touched
 
 `backend/app/core/llm_service.py` (`ClarificationGuess`, renamed from
@@ -721,6 +843,23 @@ the `clarification_reason` check entirely -- no longer shown to the audit
 `backend/app/orchestration/graph.py` (`route_n2d` gains a
 `CLARIFICATION_NEEDED -> n19` branch, reusing `node_02e`'s own proven
 clarification-only path).
+
+**Third round (§4g/§4h/§11):** `backend/app/orchestration/nodes.py`
+(`_generate_response_blocks`'s completeness net for clarification/decline/
+no-info entries changed from inserting a fallback block to detection-only
+logging (`fallback_inserted: False`); its "failed outbound-audit feedback"
+instruction rewritten to preserve full standing duties on a redraft;
+`next_actions` field added to its output schema, prompt rule, parsing
+(cap 3, dedupe), and `ui_action_payload`; its chip-attachment loop
+deduplicated by `(label, message)`; `node_06`'s audit-feedback rules gained
+a `rewrite_instruction`-scoping constraint and a next-actions evidence
+check; `NARROW_TO_EVIDENCE_SCOPE`'s definition gained the Clarification-
+Input carve-out), `backend/app/api_gateway.py` (`nextActions` on the
+response payload), `frontend/src/App.jsx` (deleted the static/mock
+`suggestedNextActions` fallback; new `nextActions`/`isInputFocused` state;
+next-action suggestions redesigned from a horizontal chip row to a
+vertical stacked list stemming from the input box, shown on hover or
+focus).
 
 ## 9. Verification
 

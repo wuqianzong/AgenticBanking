@@ -592,6 +592,7 @@ async def process_chat(payload: ChatPayload):
                 "personalDataSubstituted": execution_result.get("ui_action_payload", {}).get("personalDataSubstituted", False),
                 "showFeedbackPrompt": execution_result.get("ui_action_payload", {}).get("showFeedbackPrompt", False),
                 "softEscalationAvailable": execution_result.get("ui_action_payload", {}).get("softEscalationAvailable", False),
+                "nextActions": execution_result.get("ui_action_payload", {}).get("nextActions", []),
                 "turnNumber": execution_result.get("turn_count", 0),
             }
             yield json.dumps(final_payload) + "\n"

@@ -2554,11 +2554,7 @@ export default function BankingBotUI() {
           onScroll={handleHistoryScroll}
           className="flex-1 overflow-y-auto p-4 space-y-5 bg-slate-50/50"
         >
-          
-          <div className="bg-white/80 backdrop-blur-sm text-slate-600 text-[11px] p-3 rounded-xl border border-slate-200 flex items-start gap-2 mb-4 shadow-sm">
-             <ShieldCheck size={16} className="text-blue-600 shrink-0 mt-0.5" />
-             <p><span dangerouslySetInnerHTML={{ __html: t(preferences.language, "chat.mvpTip") }} /></p>
-          </div>
+
 
           {isLoggedIn && hasMoreHistory && (
             <div className="flex justify-center pb-1">
@@ -2763,10 +2759,9 @@ export default function BankingBotUI() {
                       e.preventDefault();
                       handleSend(action);
                     }}
-                    className="group flex items-center gap-1.5 rounded-xl border border-slate-200/70 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-md backdrop-blur-md transition-all hover:border-blue-400 hover:bg-blue-50/95 hover:text-blue-700 hover:shadow-lg active:scale-[0.98] cursor-pointer max-w-full"
+                    className="group flex items-center py-1 text-xs font-normal text-slate-600 transition-all hover:text-blue-600 hover:underline active:scale-[0.98] cursor-pointer max-w-full text-left"
                   >
-                    <Sparkles size={11} className="text-blue-500 shrink-0" />
-                    <span className="truncate">{action}</span>
+                    <span className="whitespace-normal break-words">{action}</span>
                   </button>
                 </div>
               ))}

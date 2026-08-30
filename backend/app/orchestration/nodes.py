@@ -5482,6 +5482,14 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     and for clarification specifically, composing the actual question from
     already-decided ingredients rather than a pre-phrased sentence).
 
+    Elements may cite more than one statement's task_id (`source_task_ids`,
+    a list, mirroring _generate_response_blocks) -- the customer-facing
+    text must read as one coherent message free from the internal schema's
+    shape, never as a mechanical one-block-per-entry transcript, so two
+    genuinely related statements (e.g. two clarifications about the same
+    underlying ambiguity) may be composed together in a single element when
+    that reads more naturally than two separate ones.
+
     Deliberately omits PRECISION_REFERENCE_CONTRACT and
     PERSONAL_DATA_REFERENCE_CONTRACT, unlike _generate_response_blocks:
     _decline_evidence_text/_no_info_evidence_text never emit a `{{faq_*}}`
@@ -5567,11 +5575,20 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
 
     Rules:
     - Address every statement listed, using its task_id ONLY in the
-      separate "task_id" JSON field below -- never write "task_id",
+      separate "source_task_ids" JSON field below -- never write "task_id",
       "subquery_id", the literal id value, or any bracketed/internal
       identifier inside "text" itself. "text" is customer-facing prose
       only; the id is structural metadata the customer never sees. Do not
       skip any statement.
+    - "source_task_ids" is a list: when two or more statements are
+      genuinely related and reads more naturally composed together (most
+      commonly two "clarification" statements about the same underlying
+      ambiguity), write ONE element covering all of them and list every
+      one of their task_ids in "source_task_ids" -- not one the element is
+      primarily about. An id left out of every element's "source_task_ids"
+      is treated as never addressed. Keep unrelated statements (e.g. a
+      clarification alongside an unrelated decline) in separate elements
+      rather than forcing them into one.
     - For "decline"/"no_info" kinds: rephrase naturally in the customer's
       own language/tone/style from the STYLE & PERSONALIZATION
       INSTRUCTIONS above. Copying the "evidence" text word-for-word is a
@@ -5603,7 +5620,7 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
       mention.
 
     Output JSON only:
-    {{"elements": [{{"task_id": "the exact task_id from a statement above", "text": "a warm, natural statement or question for this entry, in the style above"}}]}}
+    {{"elements": [{{"source_task_ids": ["the exact task_id(s) from the statement(s) above this element addresses"], "text": "a warm, natural statement or question, in the style above"}}]}}
     """
     try:
         result = _parse_json_robustly(call_groq_lpu(prompt))
@@ -5619,45 +5636,72 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     for element in generated_elements:
         if not isinstance(element, dict):
             continue
-        task_id = str(element.get("task_id", "")).strip()
+        source_ids = list(dict.fromkeys(
+            tid for tid in (str(raw).strip() for raw in _llm_list(element, "source_task_ids"))
+            if tid in entries_by_id and tid not in covered_ids
+        ))
         text = str(element.get("text", "")).strip()
-        if task_id not in entries_by_id or not text or task_id in covered_ids:
+        if not source_ids or not text:
             continue
-        covered_ids.add(task_id)
-        block_type = "clarification" if entries_by_id[task_id]["kind"] == "clarification" else "text"
-        response_blocks.append({"blockId": task_id, "sourceTaskIds": [task_id], "type": block_type, "text": text, "options": []})
+        covered_ids.update(source_ids)
+        block_type = "clarification" if any(entries_by_id[tid]["kind"] == "clarification" for tid in source_ids) else "text"
+        response_blocks.append({"blockId": f"element_{'_'.join(source_ids)}", "sourceTaskIds": source_ids, "type": block_type, "text": text, "options": []})
         parts.append(text)
+    model_covered_count = len(covered_ids)
 
-    # Deterministic completeness net: node_06's own audit already fails a
-    # draft that silently omits an entry (forcing a retry), but a malformed
-    # or empty model response here still needs every statement represented
-    # immediately -- fall back to its own fallback_text verbatim (decline/
-    # no_info: the same evidence text just shown to the model; clarification:
-    # computed on demand, see _clarification_fallback_text), exactly as
-    # trustworthy as what node_06 would otherwise be checking against.
+    # Completeness check -- detection only, the same tradeoff already made
+    # for _generate_response_blocks (see DECLINE_CLARIFICATION_DESIGN_v1.0.md
+    # §4g): a coherent element may legitimately blend two related statements
+    # into one "source_task_ids" list, so an id absent from any element is
+    # not automatically a dropped statement, and mechanically inserting a
+    # duplicate fallback for it risks the same false-positive double-
+    # clarification found in that other function. Insertion is reserved
+    # for the genuine defensive case below, not for every individually-
+    # uncited entry.
     for entry in entries:
         if entry["task_id"] in covered_ids:
             continue
-        block_type = "clarification" if entry["kind"] == "clarification" else "text"
-        response_blocks.append({"blockId": entry["task_id"], "sourceTaskIds": [entry["task_id"]], "type": block_type, "text": entry["fallback_text"], "options": []})
-        parts.append(entry["fallback_text"])
+        print(f"   ℹ️ [ENTRY NOT EXPLICITLY CITED]: {entry['task_id']} ({entry['kind']}) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)")
+        log_event("response.evidence_only.entry_omitted", task_id=entry["task_id"], kind=entry["kind"], fallback_inserted=False)
+
+    # Defensive only: a malformed/empty model response (parse failure, or a
+    # response that covered nothing at all) still needs every statement
+    # represented -- there is no coherent draft here to protect from
+    # mechanical duplication in the first place, so this is the one case
+    # insertion remains for.
+    if not parts:
+        for entry in entries:
+            block_type = "clarification" if entry["kind"] == "clarification" else "text"
+            response_blocks.append({"blockId": entry["task_id"], "sourceTaskIds": [entry["task_id"]], "type": block_type, "text": entry["fallback_text"], "options": []})
+            parts.append(entry["fallback_text"])
+        covered_ids = {entry["task_id"] for entry in entries}
 
     # Clarification-guess chips are deterministic UI data straight from
     # whichever node authored the clarification -- attach to whichever
-    # block ended up representing that clarification either way.
+    # block ended up citing that clarification's subquery_id, combining
+    # guesses from every id a block cites (a block may cite more than one
+    # clarification now) and deduping in case the same guess is reachable
+    # from more than one cited id.
     guesses_by_subquery_id = {
         c["subquery_id"]: [{"label": g["label"], "message": g["message"]} for g in c.get("clarification_guesses", [])]
         for c in intent_clarifications if c.get("clarification_guesses")
     }
     for block in response_blocks:
-        if block["blockId"] in guesses_by_subquery_id:
-            block["options"] = guesses_by_subquery_id[block["blockId"]]
+        combined, seen_keys = [], set()
+        for task_id in block.get("sourceTaskIds", []):
+            for guess in guesses_by_subquery_id.get(task_id, []):
+                key = (guess.get("label"), guess.get("message"))
+                if key not in seen_keys:
+                    combined.append(guess)
+                    seen_keys.add(key)
+        if combined:
+            block["options"] = combined
 
     final_text = "\n\n".join(parts)
     log_event(
         "response.evidence_only.generated",
         entry_count=len(entries),
-        model_covered_count=len(covered_ids),
+        model_covered_count=model_covered_count,
         fallback_count=len(entries) - len(covered_ids),
     )
     return {

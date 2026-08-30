@@ -482,6 +482,24 @@ enforcing complete multi-id citation on blended elements, rather than
 reintroducing a blunt fallback) is worth building later, without that call
 being made blind.
 
+**Extended to `_generate_evidence_only_response`**, the sibling generator
+used when a turn has no real evidence at all (§4a) — it had inherited the
+same one-block-per-entry structure this section describes for the main
+path, never updated when the main path was fixed. Its schema changed from
+a single `task_id` per element to a `source_task_ids` list (matching the
+main path's field name), so it can now compose two related statements
+(most commonly two clarifications about the same ambiguity) into one
+coherent element instead of two separate ones. Its own completeness net
+follows the identical detection-only decision above, with one addition
+specific to this function: since *every* entry it handles is of the kind
+the main path bypasses (there is no separate evidence-task net standing
+behind it the way there is in the main path), insertion is still used, but
+only as a genuine defensive fallback — when the model call fails or parses
+to nothing at all, not for an individually-uncited entry in an otherwise
+coherent response. Chip attachment was updated the same way: a block
+citing more than one clarification's `subquery_id` now combines and
+dedupes guesses from all of them, not just the first.
+
 ## 4h. Audit-feedback scoping: fixing what's flagged must not narrow the whole job
 
 A failed outbound audit produces `rewrite_instruction` (§6) alongside a

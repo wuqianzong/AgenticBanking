@@ -443,6 +443,74 @@ the fix (`_resolved_by_other_tool`) — it belongs to the no-info/decline
 design, not the dispatch mechanics here, but the trigger condition is
 exactly the multi-tool-per-subquery planning this section describes.
 
+## Triage decomposes per-component, not per-turn (node_02d)
+
+`financial_subqueries` used to only exist on a whole-turn `VALID_REQUEST`
+classification — any non-financial or ambiguous content elsewhere in the
+same turn was reduced to a thin, discarded label (`non_financial_context`)
+with no real content, since triage's gate operated on the *entire turn* at
+once. A mixed turn ("how to apply for a loan, and have you got my answer
+for the question I asked earlier?") meant the financial part got decomposed
+normally while the rest was silently unaddressable downstream — traced live
+as a real bug (a customer's deliberate follow-up reference was dropped
+entirely, with no mechanism able to answer, resolve, or clarify it).
+
+Fixed by moving the gate from whole-turn to per-component: `node_02d`
+always decomposes the turn into one or more components (an exhaustive
+partition, same principle as `node_02e`'s own `SEARCH`/`CLARIFY`/`DECLINE`
+split one node downstream), each tagged its own `resolution` —
+`TOOL_ELIGIBLE` (any real banking ask, however vague — proceeds exactly as
+before), `NON_FINANCIAL` (tone-only content with no ask — a greeting,
+thanks, feeling, or genuinely unrelated remark), or `CLARIFICATION`
+(reserved narrowly for when the category itself, for one component, is
+genuinely undecidable between the other two — not merely because its
+content is unclear, which is `TOOL_ELIGIBLE`'s job to carry downstream).
+`NON_COMPLIANT`/`ESCALATION` remain whole-turn vetoes, deliberately not
+folded into this — that would change customer-visible compliance/
+escalation behavior and needs its own product decision, not a side effect
+of this refactor.
+
+Only `TOOL_ELIGIBLE` components ever populate `financial_subqueries` and
+proceed to `node_02e`/RAG/tool-calling — this is what preserves triage's
+original cost-saving purpose (keeping expensive RAG away from content that
+doesn't need it), now enforced per-component instead of per-turn.
+`NON_FINANCIAL`-tagged components populate a new list,
+`conversational_tasks` (`{subquery_id, customer_component}`, same shape as
+a financial subquery, never carrying `tool_attempts`), and
+`CLARIFICATION`-tagged components become a `clarification_tasks` entry
+(originator `"triage"`, see `DECLINE_CLARIFICATION_DESIGN_v1.0.md` §4b) --
+keyed to that component's own real `subquery_id` now, not a synthetic one,
+since triage always decomposes before tagging.
+
+Both bypass lanes rejoin at final response generation and audit as their
+own entry kind (`_build_conversational_context`, mirroring
+`_build_decline_context`/`_build_clarification_context`) -- the same
+"compose, don't relay" treatment `clarification_tasks` already gets, and
+the same coherent-blending mechanism (`source_task_ids` as a list) already
+proven for clarification. A turn that's *entirely* `NON_FINANCIAL` still
+gets the same cheap, narrow audit path and 3-strikes deterministic apology
+fallback it always did -- see `_is_pure_conversational_turn` in `node_06`,
+which replaces the old whole-turn `triage_status == "NON_FINANCIAL"` check
+now that that status no longer exists (`triage_status` narrows to
+`NON_COMPLIANT` / `ESCALATION` / `DECOMPOSED`). `node_12_non_financial_response`/
+`_generate_conversational_response`/graph node `n26` were removed entirely
+-- no longer reachable, since a pure-conversational turn now flows through
+the same `n19` → `n8` (response generator) → `n20`/`n21` (audit) path as
+any other turn.
+
+**Verified live**, including a real three-way mixed turn ("how to apply for
+a stock account? and have you watched startrek last night? also what's
+your answer for the question we discussed last time?"): triage correctly
+split it into a `TOOL_ELIGIBLE` stock-account component (real evidence
+answer), a `NON_FINANCIAL` Star Trek component (honest tone-only reply, no
+invented banking content), and a `TOOL_ELIGIBLE` cross-session reference
+component that -- correctly not resolvable by any downstream node -- became
+a genuine `intent_formulator`-originated clarification instead of being
+silently dropped. Also confirmed: a pure-chitchat turn still skips `n14`
+entirely (zero RAG/tool-calling cost); a pure product-decline turn is
+unaffected; a pure-conversational turn that fails audit three times still
+lands on the same deterministic apology fallback as before.
+
 ## What this replaces
 
 - **Removed entirely**: `tool_tasks`, `tool_results` (flat, `AgentState`-level

@@ -33,7 +33,6 @@ def build_agent_graph():
     workflow.add_node("n23", nodes.node_09_hard_escalation_broker)
     workflow.add_node("n5", nodes.node_10_standard_rejection)
     workflow.add_node("n25", nodes.node_11_deterministic_clarification_fallback)
-    workflow.add_node("n26", nodes.node_12_non_financial_response)
     workflow.add_node("n_svc", nodes.node_svc_service_request_resolver)
 
     def route_start(state: AgentState):
@@ -71,16 +70,18 @@ def build_agent_graph():
             return "n23"
         if status == "NON_COMPLIANT":
             return "n5"
-        if status == "NON_FINANCIAL":
-            return "n26"
-        if status == "CLARIFICATION_NEEDED":
-            # Same destination node_02e's own clarification-only turns
-            # already reach (route_n2e's "intent_clarification" branch) --
-            # there are no financial_subqueries to plan tools for, so skip
-            # n14 (tool planning) entirely and let n19 (node_04a) route
-            # straight to generation the same proven way.
-            return "n19"
-        return "n14"
+        # DECOMPOSED: triage always partitions the turn into components
+        # (TOOL_ELIGIBLE / NON_FINANCIAL / CLARIFICATION -- see node_02d).
+        # Only a turn with at least one TOOL_ELIGIBLE component needs n14
+        # (tool planning) at all; a turn that's entirely NON_FINANCIAL/
+        # CLARIFICATION has nothing for n14 to plan, so it skips straight to
+        # n19 (node_04a) the same way node_02e's own clarification-only
+        # turns already reach it (route_n2e's "intent_clarification"
+        # branch) -- this is what keeps a pure-chitchat or pure-ambiguous
+        # turn from ever reaching the RAG/tool-calling loop at all.
+        if state.get("financial_subqueries"):
+            return "n14"
+        return "n19"
 
     def route_n2e(state: AgentState):
         status = state.get("preflight_status")
@@ -124,16 +125,12 @@ def build_agent_graph():
         count = state.get("safety_retry_count", 0)
         if state.get("preflight_status") == "pass":
             return "n21_audit"
-        if state.get("triage_status") == "NON_FINANCIAL":
-            return "n26"
         return "n8" if count < 3 else "n25"
 
     def route_n21(state: AgentState):
         count = state.get("safety_retry_count", 0)
         if state.get("preflight_status") == "pass":
             return "n22"
-        if state.get("triage_status") == "NON_FINANCIAL":
-            return "n26"
         # Exhausted retries never hard-escalate anymore: n23 is reserved for
         # a customer's own explicit request for a human (triage's ESCALATION
         # status, or an accepted transfer confirmation), never for the bot's
@@ -158,7 +155,7 @@ def build_agent_graph():
     workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n23": "n23", "n5": "n5"})
     workflow.add_conditional_edges("n16", route_n16, {"n1b": "n1b", "n5": "n5"})
     workflow.add_edge("n1b", "n2d")
-    workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n14": "n14", "n5": "n5", "n26": "n26", "n19": "n19"})
+    workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n14": "n14", "n5": "n5", "n19": "n19"})
     workflow.add_conditional_edges("n2e", route_n2e, {"n17_rag": "n17_rag", "n19": "n19", "n8": "n8", "n5": "n5"})
     workflow.add_conditional_edges("n14", route_tool_planner, {"n17_dispatch": "n17_dispatch", "n19": "n19"})
     workflow.add_conditional_edges("n17_dispatch", route_tool_dispatcher, {"n2e": "n2e", "n19": "n19"})
@@ -172,15 +169,13 @@ def build_agent_graph():
         {
             "n21_audit": "n21_audit",
             "n8": "n8",
-            "n26": "n26",
             "n25": "n25",
         },
     )
     workflow.add_edge("n21_audit", "n21")
-    workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n25": "n25", "n26": "n26"})
+    workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n25": "n25"})
     workflow.add_edge("n22", "n24")
     workflow.add_edge("n24", END)
-    workflow.add_edge("n26", "n20")
     workflow.add_edge("n23", END)
     workflow.add_edge("n5", END)
     workflow.add_edge("n25", END)

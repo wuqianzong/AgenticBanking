@@ -45,7 +45,7 @@ class AgentState(TypedDict):
     rag_payload: str                             # Buffer for RAG agent
     api_payload: str                             # Buffer for API agent
     deeplink_payload: str                        # Buffer for Deeplink agent
-    triage_status: str                           # 'NON_COMPLIANT', 'ESCALATION', 'NON_FINANCIAL', or 'VALID_REQUEST'
+    triage_status: str                           # 'NON_COMPLIANT', 'ESCALATION', or 'DECOMPOSED'
     repeated_need_detected_this_turn: bool       # Set by node_02d/triage: true when any of this turn's financial subqueries substantially repeats a recent prior one. Consumed only by node_08's soft-escalation rollup.
     low_confidence_mode: bool                    # Set by node_03c when this task's own live dynamic confidence is genuinely below threshold (not merely a session with no track record yet) -- surfaced to the frontend progress stream as "Thinking harder" (see api_gateway.py's chat_stream).
     live_task_confidence: float | None            # Set by node_03c each round: average _dynamic_task_confidence across this round's tasks, 0.0-1.0. None when RAG hasn't run this turn. Streamed live to the frontend progress bar, updating once per retry round -- see RAG_RETRY_EFFORT_v1.0.md.
@@ -61,10 +61,23 @@ class AgentState(TypedDict):
     # tool_gaps ledgers this superseded are gone; a `rag` attempt's `result`
     # is a terminal-only projection of RAG's own internal search_tasks/
     # task_results world below, written once by _finalize_rag_attempts.
+    #
+    # node_02d always decomposes the whole turn into components and tags
+    # each one TOOL_ELIGIBLE / NON_FINANCIAL / CLARIFICATION (an exhaustive
+    # partition, the same principle node_02e's own SEARCH/CLARIFY/DECLINE
+    # split already uses one node downstream). Only TOOL_ELIGIBLE
+    # components ever land here -- a bypass-tagged component never appears
+    # in financial_subqueries; it lives in conversational_tasks or
+    # clarification_tasks instead and never enters the RAG/tool-calling
+    # loop at all.
     triaged_subqueries: List[Dict[str, Any]]     # Legacy alias for financial_subqueries during in-flight sessions
-    financial_subqueries: List[Dict[str, Any]]   # n2d-resolved, compliant banking components; see the schema note above
-    has_non_financial_content: bool              # Triage marker; never carries discarded wording downstream
-    non_financial_context: List[str]             # Safe conversational asides; never a tool input or factual evidence source
+    financial_subqueries: List[Dict[str, Any]]   # n2d-resolved TOOL_ELIGIBLE components only; see the schema note above
+    # NON_FINANCIAL-tagged components: {subquery_id, customer_component},
+    # same shape as a financial subquery. No tool_attempts, never enters
+    # the RAG loop -- joins final response generation/audit as its own
+    # entry kind (see _build_conversational_context), the same way
+    # decline_tasks/clarification_tasks already do for their own lanes.
+    conversational_tasks: List[Dict[str, Any]]
     tool_planning_round: int                     # Bounded outer orchestration-loop count
     tool_plan_status: str                        # continue | resolved | exhausted
     decline_tasks: List[Dict[str, Any]]          # Legacy downstream scope-decline compatibility only

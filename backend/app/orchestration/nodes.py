@@ -42,8 +42,7 @@ VOLATILE_STATE_RESET = {
     "draft_feedback_history": [],
     "triaged_subqueries": [],
     "financial_subqueries": [],
-    "has_non_financial_content": False,
-    "non_financial_context": [],
+    "conversational_tasks": [],
     "tool_planning_round": 0,
     "tool_plan_status": "continue",
     "decline_tasks": [],
@@ -745,7 +744,7 @@ _CLARIFICATION_SCOPE_BY_ORIGINATOR = {
     # to the response generator and node_06's audit so both can see exactly
     # what task the ambiguity is blocking, without needing their own
     # hardcoded originator -> scope mapping.
-    "triage": "Classifying whether this request is a compliant banking question, an explicit request for a human agent, or something outside what this assistant can help with, before any decomposition into components was attempted.",
+    "triage": "Classifying whether this specific part of the request is a genuine banking need or a non-financial, tone-only aside.",
     "intent_formulator": "Identifying the correct product and intent for this request, before any evidence retrieval was attempted.",
     "task_dispatcher": "Choosing which registered capability (app navigation, a submitted request, or an account lookup) actually addresses this request.",
     "sufficiency_auditor": "Reviewing whether retrieved evidence fully answers this request.",
@@ -774,17 +773,18 @@ def _build_clarification_context(state: AgentState) -> list[dict]:
     of which node authored the entry --
 
     - subquery_id: the sole link back to the originating subquery (mutual
-      exclusivity in node_02e's SEARCH/CLARIFY/DECLINE resolution and in
-      node_03c's per-task terminal decision guarantees at most one
-      clarification per subquery_id, so this alone is already unique).
-      For a triage-originated entry there is no real subquery yet (triage's
-      own ambiguity is whole-turn, before decomposition even happens) --
-      it uses a synthetic subquery_id, safe because triage returns zero
-      real financial_subqueries whenever it raises this kind of entry.
+      exclusivity in triage's own TOOL_ELIGIBLE/NON_FINANCIAL/CLARIFICATION
+      split, node_02e's SEARCH/CLARIFY/DECLINE resolution, and node_03c's
+      per-task terminal decision guarantees at most one clarification per
+      subquery_id, so this alone is already unique). A triage-originated
+      entry uses that same component's own real subquery_id -- triage
+      decomposes the whole turn into components before tagging any of
+      them, so a CLARIFICATION-tagged component always has one.
     - originator: one of four, one per genuine judgment-making node in the
-      pipeline -- "triage" (node_02d, classifying the whole turn as
-      NON_COMPLIANT/ESCALATION/VALID_REQUEST/NON_FINANCIAL, before any
-      decomposition), "intent_formulator" (node_02e, before any retrieval
+      pipeline -- "triage" (node_02d, classifying one component of the
+      turn as a genuine banking need vs. a non-financial aside, when that
+      category is itself genuinely undecidable for that component),
+      "intent_formulator" (node_02e, before any retrieval
       was attempted -- the request itself was too ambiguous to form a
       search task), "task_dispatcher" (node_03a, choosing which registered
       tool capability actually addresses an otherwise well-formed
@@ -865,6 +865,40 @@ def _build_decline_context(state: AgentState) -> list[dict]:
         for task in state.get("decline_tasks", [])
         if task.get("subquery", "")
     ]
+
+
+def _build_conversational_context(state: AgentState) -> list[dict]:
+    """Conversational-input entries shared verbatim by the response
+    generator and node_06's audit context -- triage's NON_FINANCIAL-tagged
+    components (see node_02d). Unlike a Decline/No-Info Input, there is no
+    fixed evidence field to relay: `customer_component` is only a resolved
+    restatement of the aside (a greeting, thanks, feeling, or off-topic
+    remark), and generation composes its own brief, natural reply from it,
+    the same "compose, don't relay" treatment a Clarification Input already
+    gets."""
+    return [
+        {"subquery_id": task.get("subquery_id"), "customer_component": task.get("customer_component", "")}
+        for task in state.get("conversational_tasks", [])
+        if task.get("subquery_id") and task.get("customer_component")
+    ]
+
+
+def _is_pure_conversational_turn(state: AgentState) -> bool:
+    """True only when this turn is entirely non-financial content -- zero
+    TOOL_ELIGIBLE subqueries, zero clarifications, zero declines, and at
+    least one conversational entry. Replaces the old whole-turn
+    `triage_status == "NON_FINANCIAL"` check (that status no longer exists
+    now that triage decomposes per-component): a *mixed* turn (real
+    evidence or a clarification alongside a conversational aside) must run
+    the normal audit path with the Conversational Rules carve-out instead
+    of this narrower one, so this check only fires for a turn that is
+    non-financial content and nothing else."""
+    return (
+        not state.get("financial_subqueries")
+        and not state.get("clarification_tasks")
+        and not state.get("decline_tasks")
+        and bool(state.get("conversational_tasks"))
+    )
 
 
 def _split_terminal_markers(
@@ -1515,12 +1549,21 @@ def node_02c_inbound_semantic_gate(state: AgentState):
 
 
 def node_02d_user_journey_classifier_and_triage(state: AgentState):
-    """Tool Calling v2.0 whole-turn gate and financial-subquery extractor.
-
-    Non-compliance is a whole-turn veto.  Only after that check does this node
-    recognise escalation, then emit *financial-only* subqueries.  The intent
-    formulator therefore never sees unrelated or non-compliant wording.
-    """
+    """Whole-turn compliance/escalation gate, then a per-component subquery
+    decomposition. Non-compliance and escalation remain whole-turn vetoes
+    (returning zero components) -- folding those into per-component lanes
+    changes customer-visible compliance/escalation behavior and is a
+    deliberately deferred, separate decision. Everything else always
+    decomposes into one or more components, each independently tagged
+    TOOL_ELIGIBLE / NON_FINANCIAL / CLARIFICATION -- the same "exhaustive,
+    mutually exclusive partition" principle node_02e's own SEARCH/CLARIFY/
+    DECLINE split already uses one node downstream, applied one node
+    earlier. Only TOOL_ELIGIBLE components ever reach node_02e/RAG/tool-
+    calling; NON_FINANCIAL and CLARIFICATION bypass that loop entirely
+    (see conversational_tasks/clarification_tasks) and rejoin at final
+    response generation and audit as one complete schema, the same way a
+    node_02e-authored DECLINE already does. See
+    docs/TOOL_CALLING_v3.0.md for the full rationale."""
     print("🟢 [NODE 02d] Executing Request Triage & Decomposition")
     user_msg = state.get("user_input", "")
     history_str = _build_conversation_context(state)
@@ -1575,72 +1618,72 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     2. ESCALATION — Only if compliant: if the resolved TRUE REQUEST is an
        explicit request or contextual confirmation to transfer to a human
        agent or manager, return ESCALATION with no components.
-    3. VALID_REQUEST — Only if compliant and not escalation: if the resolved
-       TRUE REQUEST contains at least one financial/banking need, decompose
-       that meaning into distinct components. Emit ONLY FINANCIAL components.
-       IMPORTANT LANGUAGE RULE: You MUST translate the semantic meaning of each
-       financial component into English, regardless of the language the user
-       typed in. This ensures downstream retrieval matches our English knowledge base.
-       A continuation of a preceding financial request remains financial even
-       when the latest wording supplies only its reason, preference, or
-       correction. Omit any genuinely casual or unrelated wording, set
-       has_non_financial_content=true when any was omitted, and never emit an
-       unrelated component. Preserve only a short `non_financial_context`
-       attention cue for a customer preference, feeling, greeting, thanks, or
-       other conversational aside when it would help the eventual reply feel
-       natural. It is not customer-facing source text: the original Latest
-       User Input remains the authoritative wording for any reply. This context
-       is never a banking request, tool input, factual evidence, or basis for a
-       banking claim.
-    4. NON_FINANCIAL — Otherwise, when the resolved TRUE REQUEST contains no
-       compliant banking need and no escalation. Return no components.
+    3. DECOMPOSED — Only if compliant and not escalation: decompose the
+       resolved TRUE REQUEST into one or more standalone components -- an
+       exhaustive partition covering every distinct part of it. Never
+       silently drop a part; every part of the resolved TRUE REQUEST
+       becomes exactly one component, tagged with its own `resolution`:
 
-    5. CLARIFICATION_NEEDED — This is YOUR OWN classification job's
-       ambiguity, never a downstream node's (never which product, service,
-       or document the customer means -- that is the intent formulator's
-       job once you've already decided VALID_REQUEST). Use this only when,
-       after resolving the TRUE REQUEST, you are still genuinely torn
-       between two of the categories 1-4 above for that SAME resolved
-       request -- not merely unsure about a detail, but unsure which
-       top-level category applies. Return no components. Concrete cases:
-       (a) unsure whether the customer wants a human agent (ESCALATION) or
-       is just venting while still wanting an answer (VALID_REQUEST);
-       (b) unsure whether the request asks for general factual information
-       (compliant, VALID_REQUEST) or personalized advice/a recommendation
-       (NON_COMPLIANT); (c) unsure whether the request concerns a banking
-       matter at all (VALID_REQUEST) or is unrelated small talk
-       (NON_FINANCIAL). Do not use this merely because wording is casual or
-       brief -- only when the category itself is genuinely undecidable.
-       Set `clarification.unresolved_request` by reasoning directly against
-       Latest User Input and Trusted Conversation Context: name the
-       specific tension (e.g. "whether you'd like to speak with a human
-       agent about this or continue with your question about the loan
-       rate"). Set `clarification.clarification_reason`: name the specific
-       detail that makes it genuinely ambiguous between those two
-       categories -- not a generic restatement. Set
-       `clarification.clarification_guesses`: 0-3 guesses, each a complete,
-       natural sentence the customer might actually send back, most likely
-       first -- e.g. for the escalation case, one guess continuing toward
-       escalation and one guess continuing with the original question.
+       - TOOL_ELIGIBLE: the component names or clearly implies an
+         actionable banking need -- including one that is vague,
+         ambiguous, or incompletely specified (e.g. a reference to an
+         unspecified earlier question, or a request whose exact target
+         isn't yet clear). Any real ask belongs here no matter how unclear
+         its specifics are; resolving what it specifically means is a
+         downstream node's job, never yours. A continuation of a preceding
+         financial request remains TOOL_ELIGIBLE even when the latest
+         wording supplies only its reason, preference, or correction.
+         IMPORTANT LANGUAGE RULE: translate a TOOL_ELIGIBLE component's
+         `customer_component` into English regardless of the language the
+         user typed in, since downstream retrieval matches our English
+         knowledge base.
+       - NON_FINANCIAL: the component is tone-only content with no ask
+         that could ever become an actionable banking need on its own --
+         a greeting, thanks, acknowledgement, reaction, an expressed
+         feeling or preference with nothing to act on, or wording clearly
+         and only about something outside what this assistant addresses.
+         Do not use this merely because a component is vague -- a vague
+         but real ask is TOOL_ELIGIBLE (see above). Still express it as a
+         self-contained `customer_component` (e.g. "Thanking the assistant
+         for the help", "Greeting the assistant") so a natural reply can
+         be composed for it later -- this is a real component like any
+         other, never discarded wording.
+       - CLARIFICATION: reserved narrowly for when you cannot tell whether
+         THIS component itself is TOOL_ELIGIBLE or NON_FINANCIAL -- not
+         merely because its content or target is unclear (that case is
+         TOOL_ELIGIBLE, see above), only when the category itself, for
+         this one component, is genuinely undecidable -- e.g. a remark
+         that could be read as either an unrelated aside or a genuine, if
+         oblique, banking question, with no way to tell which from Latest
+         User Input or Trusted Conversation Context. Set
+         `clarification.unresolved_request` by reasoning directly against
+         Latest User Input and Trusted Conversation Context: name the
+         specific tension. Set `clarification.clarification_reason`: name
+         the specific detail that makes it genuinely undecidable -- not a
+         generic restatement. Set `clarification.clarification_guesses`:
+         0-3 guesses, each a complete, natural sentence the customer might
+         actually send back, most likely first.
 
-    For VALID_REQUEST components:
-    - A component is one independently answerable banking topic; do not split
-      a coherent topic artificially and do not impose a numerical cap.
-    - Express each component as a self-contained statement of the resolved
-      TRUE REQUEST in `customer_component`. Resolve pronouns and short
-      continuations from Trusted Conversation Context freely into this
-      wording -- a fully resolved, retrieval-ready statement is exactly
-      what downstream search needs, so do not hold back here out of
-      caution. (A later clarifying question about this component, if one is
-      ever needed, is authored by reasoning directly against the Latest
-      User Input and Trusted Conversation Context, not by quoting this
-      field back -- you do not need to preserve customer-facing fidelity
-      here.)
-    - A casual greeting accompanying a financial request is not a component.
-    - Do not determine product, intent, availability, or a tool. Those are
-      downstream responsibilities.
+       For a TOOL_ELIGIBLE component:
+       - A component is one independently answerable banking topic; do not
+         split a coherent topic artificially and do not impose a numerical
+         cap.
+       - Express it as a self-contained statement of that part of the
+         resolved TRUE REQUEST in `customer_component`, with pronouns/
+         ellipsis resolved from Trusted Conversation Context -- a fully
+         resolved, retrieval-ready statement is exactly what downstream
+         search needs, so do not hold back here out of caution, even when
+         the resolved statement itself is necessarily vague (e.g.
+         "Follow-up on an unspecified earlier question, distinct from the
+         items already mentioned this session"). (A later clarifying
+         question about this component, if one is ever needed, is authored
+         by a downstream node reasoning directly against Latest User Input
+         and Trusted Conversation Context, not by quoting this field back
+         -- you do not need to preserve customer-facing fidelity here.)
+       - Do not determine product, intent, availability, or a tool. Those
+         are downstream responsibilities.
 
-    6. REPETITIVE ISSUE SIGNAL — Independent of triage_status above: look at
+    4. REPETITIVE ISSUE SIGNAL — Independent of triage_status above: look at
        the Trusted Conversation Context's recent turns (not just the Latest
        User Input) and set repetitive_issue_detected=true only when the
        customer has been repeatedly raising substantially the same
@@ -1656,86 +1699,88 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
        Latest User Input, is never enough on its own.
 
     Output JSON only:
-    {{"triage_status":"NON_COMPLIANT" | "ESCALATION" | "VALID_REQUEST" | "NON_FINANCIAL" | "CLARIFICATION_NEEDED", "financial_subqueries":[{{"subquery_id":"subquery_1","customer_component":"..."}}], "has_non_financial_content":true | false, "non_financial_context":["short internal attention cue"], "repetitive_issue_detected":true | false, "clarification":null | {{"unresolved_request":"...", "clarification_reason":"...", "clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}}}
+    {{"triage_status":"NON_COMPLIANT" | "ESCALATION" | "DECOMPOSED", "components":[{{"subquery_id":"subquery_1","customer_component":"...","resolution":"TOOL_ELIGIBLE" | "NON_FINANCIAL" | "CLARIFICATION","clarification":null | {{"unresolved_request":"...", "clarification_reason":"...", "clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}}}], "repetitive_issue_detected":true | false}}
     """
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
-        triage_status = str(res.get("triage_status", "NON_FINANCIAL")).upper()
-        components = res.get("financial_subqueries", []) if isinstance(res.get("financial_subqueries"), list) else []
-        has_non_financial_content = bool(res.get("has_non_financial_content", False))
-        non_financial_context = [
-            str(item).strip() for item in res.get("non_financial_context", [])
-            if isinstance(item, str) and str(item).strip()
-        ][:3]
+        triage_status = str(res.get("triage_status", "DECOMPOSED")).upper()
+        raw_components = res.get("components", []) if isinstance(res.get("components"), list) else []
         repeated_need_detected_this_turn = bool(res.get("repetitive_issue_detected", False))
-        clarification_data = res.get("clarification") if isinstance(res.get("clarification"), dict) else {}
     except Exception as e:
         print(f"🚨 [NODE 02d EXCEPTION]: {e}")
-        triage_status = "NON_FINANCIAL"
-        components = []
+        triage_status = "DECOMPOSED"
+        raw_components = []
         repeated_need_detected_this_turn = False
-        has_non_financial_content = False
-        non_financial_context = []
-        clarification_data = {}
-    if triage_status not in {"NON_COMPLIANT", "ESCALATION", "VALID_REQUEST", "NON_FINANCIAL", "CLARIFICATION_NEEDED"}:
-        triage_status = "NON_FINANCIAL"
+    if triage_status not in {"NON_COMPLIANT", "ESCALATION", "DECOMPOSED"}:
+        triage_status = "DECOMPOSED"
 
     print(f"   🧠 [TRIAGE STATUS]: {triage_status}")
 
+    # Exhaustive, mutually exclusive partition of this turn's components --
+    # the same principle node_02e's own SEARCH/CLARIFY/DECLINE split already
+    # uses one node downstream, applied here one node earlier. Only
+    # TOOL_ELIGIBLE components ever reach financial_subqueries (and, from
+    # there, node_02e/RAG/tool-calling); NON_FINANCIAL and CLARIFICATION
+    # bypass that loop entirely.
     financial_subqueries = []
-    if triage_status == "VALID_REQUEST":
-        for index, component in enumerate(components, start=1):
+    conversational_tasks = []
+    clarification_tasks = []
+    if triage_status == "DECOMPOSED":
+        for index, component in enumerate(raw_components, start=1):
             if not isinstance(component, dict):
                 continue
             customer_component = str(component.get("customer_component", "")).strip()
             if not customer_component:
                 continue
-            financial_subqueries.append({
-                "subquery_id": str(component.get("subquery_id", "")).strip() or f"subquery_{index}",
-                "customer_component": customer_component,
-            })
-    if triage_status == "VALID_REQUEST" and not financial_subqueries:
-        # A malformed VALID_REQUEST cannot be allowed to reach tools.
-        triage_status = "NON_FINANCIAL"
-        has_non_financial_content = False
-        non_financial_context = []
+            subquery_id = str(component.get("subquery_id", "")).strip() or f"subquery_{index}"
+            resolution = str(component.get("resolution", "")).strip().upper()
+            if resolution == "TOOL_ELIGIBLE":
+                financial_subqueries.append({"subquery_id": subquery_id, "customer_component": customer_component})
+            elif resolution == "CLARIFICATION":
+                clarification_data = component.get("clarification") if isinstance(component.get("clarification"), dict) else {}
+                unresolved_request = str(clarification_data.get("unresolved_request", "")).strip()
+                if unresolved_request:
+                    clarification_tasks.append({
+                        "subquery_id": subquery_id,
+                        "originator": "triage",
+                        "scope": _CLARIFICATION_SCOPE_BY_ORIGINATOR["triage"],
+                        "unresolved_request": unresolved_request,
+                        "clarification_reason": str(clarification_data.get("clarification_reason", "The component's category is genuinely ambiguous.")).strip(),
+                        "clarification_guesses": _normalize_clarification_guesses(clarification_data.get("clarification_guesses", [])),
+                    })
+                else:
+                    # A malformed CLARIFICATION component with nothing to
+                    # actually ask cannot be allowed through -- fall back to
+                    # NON_FINANCIAL rather than silently dropping it.
+                    conversational_tasks.append({"subquery_id": subquery_id, "customer_component": customer_component})
+            else:
+                # NON_FINANCIAL, or an unrecognized resolution -- default to
+                # the safest bucket rather than dropping the component.
+                conversational_tasks.append({"subquery_id": subquery_id, "customer_component": customer_component})
 
-    # Whole-turn clarification: triage's own classification-boundary
-    # ambiguity, scoped strictly to rules 1-4 above -- never product/intent
-    # (the intent formulator's job, once a real subquery exists). No real
-    # financial_subqueries exist yet at this point in the pipeline, so
-    # subquery_id is synthetic -- safe, since a CLARIFICATION_NEEDED turn
-    # always returns zero real subqueries, guaranteeing no collision.
-    clarification_tasks = []
-    if triage_status == "CLARIFICATION_NEEDED":
-        unresolved_request = str(clarification_data.get("unresolved_request", "")).strip()
-        if unresolved_request:
-            clarification_tasks = [{
-                "subquery_id": "subquery_1",
-                "originator": "triage",
-                "scope": _CLARIFICATION_SCOPE_BY_ORIGINATOR["triage"],
-                "unresolved_request": unresolved_request,
-                "clarification_reason": str(clarification_data.get("clarification_reason", "The request's category is genuinely ambiguous.")).strip(),
-                "clarification_guesses": _normalize_clarification_guesses(clarification_data.get("clarification_guesses", [])),
-            }]
-        else:
-            # A malformed CLARIFICATION_NEEDED cannot be allowed through
-            # with nothing to actually ask -- same fail-safe pattern as the
-            # malformed VALID_REQUEST guard above.
-            triage_status = "NON_FINANCIAL"
+    if triage_status == "DECOMPOSED" and not (financial_subqueries or conversational_tasks or clarification_tasks):
+        # A malformed/empty decomposition cannot be allowed through with
+        # nothing to act on -- same fail-safe pattern as the old malformed
+        # VALID_REQUEST guard: fall back to one neutral NON_FINANCIAL
+        # component so the customer still gets a natural reply instead of a
+        # silent dead end.
+        conversational_tasks = [{
+            "subquery_id": "subquery_1",
+            "customer_component": "General conversational remark with no specific banking request.",
+        }]
 
     mapped_preflight = (
-        "tool_planning" if triage_status == "VALID_REQUEST"
-        else "intent_clarification" if triage_status == "CLARIFICATION_NEEDED"
+        "tool_planning" if financial_subqueries
+        else "intent_clarification" if clarification_tasks
+        else "non_financial" if triage_status == "DECOMPOSED"
         else triage_status.lower()
     )
-    print(f"   🔎 [TRIAGE DECOMPOSITION]: {len(financial_subqueries)} financial subquery(ies) | non-financial content={has_non_financial_content}")
+    print(f"   🔎 [TRIAGE DECOMPOSITION]: {len(financial_subqueries)} tool-eligible | {len(conversational_tasks)} non-financial | {len(clarification_tasks)} clarification")
     log_event(
         "triage.financial_boundary",
         triage_status=triage_status,
         financial_subquery_ids=[item["subquery_id"] for item in financial_subqueries],
-        has_non_financial_content=has_non_financial_content,
-        non_financial_context=non_financial_context,
+        conversational_subquery_ids=[item["subquery_id"] for item in conversational_tasks],
         repeated_need_detected_this_turn=repeated_need_detected_this_turn,
         clarification_needed=bool(clarification_tasks),
     )
@@ -1745,8 +1790,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
         "preflight_status": mapped_preflight,
         "triaged_subqueries": financial_subqueries,
         "financial_subqueries": financial_subqueries,
-        "has_non_financial_content": has_non_financial_content,
-        "non_financial_context": non_financial_context,
+        "conversational_tasks": conversational_tasks,
         "decline_tasks": [],
         "clarification_tasks": clarification_tasks,
         "repeated_need_detected_this_turn": repeated_need_detected_this_turn,
@@ -4554,12 +4598,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
         state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
     )
     decline_context = _build_decline_context(state)
+    conversational_context = _build_conversational_context(state)
     # Every id the model is allowed to cite in an element's
     # source_task_ids: real RAG evidence tasks, a clarification's own
-    # subquery_id, plus every decline/no-info entry's own synthetic
-    # task_id. Omitting these used to silently strip sourceTaskIds down to
-    # [] for any element addressing them (they were never real evidence
-    # tasks), which broke clarification-guess chip attachment below
+    # subquery_id, plus every decline/no-info/conversational entry's own
+    # synthetic task_id. Omitting these used to silently strip sourceTaskIds
+    # down to [] for any element addressing them (they were never real
+    # evidence tasks), which broke clarification-guess chip attachment below
     # whenever a clarification/decline/no-info entry shared a turn with
     # real evidence.
     valid_task_ids = (
@@ -4567,6 +4612,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
         | {c.get("subquery_id") for c in intent_clarifications if c.get("subquery_id")}
         | {d.get("task_id") for d in decline_context if d.get("task_id")}
         | {n.get("task_id") for n in no_info_context if n.get("task_id")}
+        | {v.get("subquery_id") for v in conversational_context if v.get("subquery_id")}
     )
     # The LLM never sees a special_id, service_request_id, destination_id,
     # route, or form_schema -- only a sanitized label/topic per shortcut, via
@@ -4592,17 +4638,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
     has_real_evidence = bool(
         evidence_by_task or available_shortcuts or unavailable_service_requests or verified_api_context
     )
-    if not has_real_evidence and (intent_clarifications or decline_context or no_info_context):
-        return _generate_evidence_only_response(intent_clarifications, decline_context, no_info_context, state)
-    # This is deliberately separate from evidence and tool inputs.  It carries
-    # only small internal attention cues from an otherwise valid mixed turn
-    # (for example, a preference or feeling). The original user_input—not this
-    # derived cue—is the sole source for any customer-facing acknowledgement.
-    non_financial_context = [
-        str(item).strip()
-        for item in state.get("non_financial_context", [])
-        if isinstance(item, str) and str(item).strip()
-    ][:3]
+    if not has_real_evidence and (intent_clarifications or decline_context or no_info_context or conversational_context):
+        return _generate_evidence_only_response(intent_clarifications, decline_context, no_info_context, conversational_context, state)
     conversation_context = _build_conversation_context(state)
     user_baseline = _build_user_baseline_context(state)
     audit_feedback = state.get("draft_feedback_history", [])[-4:]
@@ -4627,8 +4664,15 @@ def _generate_response_blocks(state: AgentState) -> dict:
     User baseline (advisory communication context only; use only when clearly
     relevant to the current request and never as factual banking evidence):
     {user_baseline}
-    Non-financial conversational attention cues (tone only; not evidence, a banking request, or customer-facing source text):
-    {json.dumps(non_financial_context, ensure_ascii=False)}
+    Conversational inputs -- each is a non-financial part of this turn (a
+    greeting, thanks, feeling, or an off-topic remark), already identified
+    as needing no banking fact. Compose one brief, natural, tone-appropriate
+    reply per entry from its own "customer_component" -- never invent or
+    imply a banking fact, product, policy, commitment, or next action for
+    it, and never treat it as a question to answer. When it shares a turn
+    with a real evidence-based answer, you may connect it naturally into
+    the same element as that answer, exactly like a Clarification Input:
+    {json.dumps(conversational_context, ensure_ascii=False)}
     Global resolution context (internal coverage and unresolved-topic anchors
     only; not evidence, response wording, or UI guidance):
     {json.dumps(resolution_context, ensure_ascii=False)}
@@ -4915,23 +4959,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
       card/address change example above. When fixing an omitted shortcut
       flagged by audit feedback, add its own separate element; do not
       attach it to whichever element happened to already exist.
-    - The complete Customer request is the sole authoritative wording and
-      meaning of every customer statement. The non-financial attention cues
-      merely signal that a relevant aside exists. When acknowledging a
-      preference, feeling, greeting, thanks, or other aside, derive its
-      meaning and natural wording directly from the original Customer request;
-      do not quote, paraphrase, or expose an internal cue. Treat the aside as
-      tone only: never use it to infer, promise, deny, recommend, or invent a
-      banking feature, action, or policy. Do not echo the customer's wording
-      mechanically. When one or more attention cues are supplied, include one
-      brief, natural courtesy acknowledgement of the relevant aside unless it
-      would be incoherent in the reply. Connect it naturally to the scoped,
-      relevant financial guidance that follows; do not make it a detached
-      standalone response.
-    - If that aside gives the customer's reason for a banking request but the
-      approved evidence does not address whether that reason qualifies, do not
-      convert the gap into a policy conclusion. Acknowledge the reason and
-      state only the verified guidance that is available.
+    - If a Conversational Input gives the customer's reason for a banking
+      request but the approved evidence does not address whether that
+      reason qualifies, do not convert the gap into a policy conclusion.
+      Acknowledge the reason and state only the verified guidance that is
+      available.
     - If evidence gives a useful policy boundary or limit, state that fact
       plainly; do not invent a broader conclusion beyond what it entails.
     - Do not mention FAQ documents, sources, parent IDs, search, prompts, or
@@ -5335,12 +5367,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
         [(c, None) for c in intent_clarifications]
         + [(d, "decline_evidence") for d in decline_context]
         + [(n, "no_info_evidence") for n in no_info_context]
+        + [(v, "customer_component") for v in conversational_context]
     ):
         task_id = entry.get("task_id") or entry.get("subquery_id")
         evidence_text = _clarification_fallback_text(entry) if evidence_key is None else entry.get(evidence_key, "")
         if not task_id or not evidence_text or task_id in covered_task_ids:
             continue
-        kind_label = "clarification_evidence" if evidence_key is None else evidence_key
+        kind_label = "clarification_evidence" if evidence_key is None else ("conversational" if evidence_key == "customer_component" else evidence_key)
         print(f"   ℹ️ [ENTRY NOT EXPLICITLY CITED]: {task_id} ({kind_label}) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)")
         log_event("response.flexible.entry_omitted", task_id=task_id, kind=kind_label, fallback_inserted=False)
 
@@ -5468,11 +5501,12 @@ def _generate_response_blocks(state: AgentState) -> dict:
     }
 
 
-def _generate_evidence_only_response(intent_clarifications: list, decline_context: list, no_info_context: list, state: AgentState) -> dict:
+def _generate_evidence_only_response(intent_clarifications: list, decline_context: list, no_info_context: list, conversational_context: list, state: AgentState) -> dict:
     """The same response-generator role as _generate_response_blocks, just
     dispatched to a narrower sub-prompt for a turn with no real evidence at
-    all -- only clarification/decline_evidence/no_info_evidence entries
-    (see node_02e and _terminal_retrieval_feedback). Its only job is
+    all -- only clarification/decline_evidence/no_info_evidence/
+    conversational entries (see node_02d/node_02e and
+    _terminal_retrieval_feedback). Its only job is
     composing these already-decided statements into one coherent customer
     message; its schema has no alternative field to substitute a different
     answer into, which is what removes the reliability risk a fully
@@ -5498,8 +5532,8 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
 
     Shares node_06's outbound audit with the main flexible-generation path
     (see _normal_outbound_grounding_context's evidence fields and the
-    "Clarification Rules" it audits against) -- this function makes no
-    audit call of its own.
+    "Clarification Rules"/"Conversational Rules" it audits against) -- this
+    function makes no audit call of its own.
     """
     entries = [
         {
@@ -5517,6 +5551,17 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     ] + [
         {"task_id": n["task_id"], "kind": "no_info", "evidence": n["no_info_evidence"], "fallback_text": n["no_info_evidence"]}
         for n in no_info_context if n.get("no_info_evidence")
+    ] + [
+        {
+            "task_id": v["subquery_id"], "kind": "conversational",
+            "customer_component": v["customer_component"],
+            # Never shown to the model -- a generic, tone-neutral last
+            # resort, exactly as trustworthy as any other deterministic
+            # fallback here, used only if generation produces nothing
+            # usable for this entry.
+            "fallback_text": "Got it!",
+        }
+        for v in conversational_context if v.get("customer_component")
     ]
     if not entries:
         # Defensive only -- node_02d/node_02e already validated this turn
@@ -5568,6 +5613,14 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     answer the request in its place, never assert a new product, policy,
     or fact, and stay within its "scope" (never overstepping into a
     different job's judgment than the one named there).
+
+    A "kind" of "conversational" also has no fixed sentence to relay: it is
+    a non-financial part of this turn (a greeting, thanks, feeling, or an
+    off-topic remark), already identified as needing no banking fact.
+    Compose one brief, natural, tone-appropriate reply from its own
+    "customer_component" -- never invent or imply a banking fact, product,
+    policy, commitment, or next action for it, and never treat it as a
+    question to answer.
 
     Pre-decided statements (the ONLY permitted content; combine them into
     ONE short, natural, coherent customer message):
@@ -5714,103 +5767,6 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
         "pending_advance": False,
     }
 
-
-def _latest_assistant_message(state: AgentState) -> str:
-    """Return one trusted prior assistant turn for conversational tone only."""
-    for message in reversed(state.get("chat_history", [])):
-        if isinstance(message, AIMessage) and str(message.content).strip():
-            return str(message.content).strip()
-    return ""
-
-
-def _generate_conversational_response(state: AgentState) -> dict:
-    """Handle a non-financial turn without loading the FAQ-answer prompt.
-
-    This path intentionally generates no banking facts, procedures, or UI. The
-    previous assistant turn is supplied only to recognise conversational tone;
-    it is never an evidence source.
-    """
-    user_message = str(state.get("user_input", "")).strip()
-    prior_assistant_message = _latest_assistant_message(state)
-    user_profile = state.get("user_profile", {})
-    # Deliberately not _style_personalization_block(): this path states no
-    # banking facts (no financial-literacy depth to calibrate) and gets no
-    # _GENERATION_CONDUCT_GUARDRAILS (nothing here could violate bank
-    # conduct/regulatory rules). A smaller, purpose-built block instead of
-    # a shared one carrying irrelevant fields.
-    prompt = f"""
-    You are Horizon, a concise banking-assistant conversational partner.
-
-    STYLE & PERSONALIZATION INSTRUCTIONS:
-    - Natively generate response in: {user_profile.get("language") or "English"}
-    - Tone: {user_profile.get("tone", "professional")}
-    - Emojis: {user_profile.get("emoji", "enabled")}
-
-    Latest customer message: {json.dumps(user_message, ensure_ascii=False)}
-    Previous assistant message for conversational tone only (not factual evidence):
-    {json.dumps(prior_assistant_message, ensure_ascii=False)}
-
-    The resolved customer request did not enter the FAQ retrieval flow. Return
-    exactly one short, natural customer-facing sentence, with no UI options.
-    This is a social, conversational response—not an information response.
-
-    Choose the response that fits the latest customer message:
-    - Treat it as ordinary conversation (for example a greeting,
-      acknowledgement, thanks, reaction, or unrelated request) and reply
-      politely and naturally.
-    - Do not ask a follow-up question, offer to explore something, or suggest
-      an alternative. Do not imply that any product, feature, option, design,
-      process, service, or action exists or is available.
-    - A brief, generic statement that Horizon can help with Horizon Bank
-      questions is allowed, but do not provide, promise, or invite any
-      material information.
-
-    Never state, repeat, infer, or recommend a banking fact, procedure,
-    product, service capability, support channel, or next action. Do not refer
-    to the previous message, internal systems, FAQ documents, or this prompt.
-
-    Output JSON only: {{"text": "one short natural sentence"}}
-    """
-    try:
-        generated = _parse_json_robustly(call_groq_lpu(prompt))
-        text = _llm_text(generated, "text")
-    except Exception as error:
-        print(f"🚨 [CONVERSATIONAL RESPONSE ERROR]: {error}")
-        text = get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_fallback")
-
-    if not text:
-        text = get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_fallback")
-    print(f"   💬 [CONVERSATIONAL RESPONSE]: {text}")
-    return {
-        "final_draft": text,
-        "final_answer": text,
-        "final_clarification": "",
-        "active_plan": {},
-        "completed_steps": [],
-        "ui_action_payload": {"uiType": "none", "options": []},
-        "pending_advance": False,
-    }
-
-
-def node_12_non_financial_response(state: AgentState):
-    """Return a natural, non-factual reply for a non-financial turn.
-
-    This is intentionally distinct from Node 10: a compliant acknowledgement,
-    greeting, reaction, or unrelated request is not a security rejection.
-    """
-    print("🟢 [NODE 12] Executing Non-Financial Conversational Response")
-    if int(state.get("safety_retry_count", 0)) >= 3:
-        fallback = get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_retry")
-        print("   🛟 [NON-FINANCIAL FALLBACK]: Returning deterministic conversational reply")
-        log_event("non_financial.response.fallback", retry_count=state.get("safety_retry_count", 0))
-        return {
-            "final_draft": fallback,
-            "final_answer": fallback,
-            "final_clarification": "",
-            "ui_action_payload": {"uiType": "none", "options": []},
-            "pending_advance": False,
-        }
-    return _generate_conversational_response(state)
 
 def node_04b_response_generator(state: AgentState):
     print("🟢 [NODE 04b] Executing Response Generator")
@@ -5964,6 +5920,7 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
     # information (originator, clarification_reason) generation never saw.
     intent_context = _clarification_prompt_view(_build_clarification_context(state))
     decline_context = _build_decline_context(state)
+    conversational_context = _build_conversational_context(state)
     return {
         "approved_by_task": approved_by_task,
         "response_block_map": response_block_map,
@@ -5971,6 +5928,7 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
         "clarification_inputs": intent_context,
         "decline_inputs": decline_context,
         "no_info_inputs": no_info_context,
+        "conversational_inputs": conversational_context,
         "available_shortcuts": _available_response_shortcuts(state),
         "unavailable_service_requests": _unavailable_service_requests(state),
         "verified_api_context": _verified_api_context(state),
@@ -6051,7 +6009,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
     """
     print("🟢 [NODE 06] Executing Combined Outbound Compliance & Groundedness Audit")
     answer, clarification, rendered_payload = _outbound_response_content(state)
-    is_non_financial_response = state.get("triage_status") == "NON_FINANCIAL"
+    is_non_financial_response = _is_pure_conversational_turn(state)
 
     conduct_route_specific_rules = """
     Determine whether any customer-facing text, UI item, option, step, list
@@ -6252,6 +6210,12 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         No-Info Inputs (the only source for an unavailable-information statement):
         {json.dumps(grounding_context["no_info_inputs"], ensure_ascii=False)}
 
+        Conversational Inputs (each is a non-financial part of this turn --
+        a greeting, thanks, feeling, or off-topic remark -- the generator
+        composed its own brief reply from its "customer_component", there
+        is no fixed sentence to compare against):
+        {json.dumps(grounding_context["conversational_inputs"], ensure_ascii=False)}
+
         Customer-Facing Answer:
         "{answer}"
 
@@ -6363,11 +6327,24 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           as if the guess itself were ungrounded, and so is the guess's
           label/message if it introduces a new product, policy, fact, or
           answer beyond what its reason actually supports.
-        - Every entry in Decline Inputs, Clarification Inputs, and
-          No-Info Inputs must be explicitly, faithfully represented
-          somewhere in the response, not silently omitted — treat a
-          missing entry the same as an unsupported claim for grounding
-          purposes.
+        - Every entry in Decline Inputs, Clarification Inputs, No-Info
+          Inputs, and Conversational Inputs must be explicitly, faithfully
+          represented somewhere in the response, not silently omitted —
+          treat a missing entry the same as an unsupported claim for
+          grounding purposes.
+
+        Conversational Rules:
+        - A Conversational Input has no evidence-backed content -- it is
+          grounded when it faithfully and naturally responds to its own
+          `customer_component` (a greeting, thanks, feeling, or off-topic
+          remark) without asserting a new banking fact, procedure, product,
+          policy, commitment, or next action. Never fail it merely for
+          being absent from Task-Level Approved Evidence -- the same
+          principle as the Courtesy Context Rule above, now keyed to a
+          real entry instead of the raw Original Customer Message.
+        - A Conversational Input's statement must not answer, or appear to
+          answer, a banking question -- if it does, treat it as an
+          unsupported claim, the same as any other invented fact.
 
         {audit_feedback_rules}
         - For every material failure, identify the exact visible phrase in
@@ -6527,7 +6504,7 @@ def node_06_outbound_audit_join(state: AgentState):
     )
     if not (compliance_passed and groundedness_passed):
         count = state.get("safety_retry_count", 0) + 1
-        if state.get("triage_status") == "NON_FINANCIAL" and count >= 3:
+        if _is_pure_conversational_turn(state) and count >= 3:
             fallback = get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_retry")
             print("   🛟 [NON-FINANCIAL AUDIT FALLBACK]: Returning deterministic conversational reply")
             log_event(

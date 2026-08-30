@@ -166,29 +166,21 @@ class TaskSufficiencyEvaluation(BaseModel):
     task_results: List[TaskSufficiencyItem] = Field(description="One sufficiency result for every supplied task.")
 
 # 3. USER JOURNEY CLASSIFIER / TRIAGE (Node 02d) -> DECOMPOSITION + COMPLIANCE/RELEVANCE SCREEN
-class TriageComponentResolution(BaseModel):
-    component_id: str = Field(description="Stable identifier for one distinct component of the latest user input, e.g. component_1.")
-    customer_component: str = Field(description="A standalone, self-contained restatement of only that component, with pronouns/ellipsis resolved using conversation context.")
-    resolution: str = Field(description="Must be exactly VALID or DECLINE.")
-    decline_reason_category: str = Field(default="", description="Present only when resolution is DECLINE. Must be exactly non_compliant or non_financial, otherwise an empty string.")
-    decline_detail: str = Field(default="", description="Present only when resolution is DECLINE. A brief factual reason, otherwise an empty string.")
-
-class FinancialSubquery(BaseModel):
-    subquery_id: str = Field(description="Stable identifier for one financial subquery.")
-    customer_component: str = Field(description="Standalone compliant banking request component, resolved from context as needed -- optimized for retrieval. Whichever node later authors a clarification for this component reasons directly against the raw user message and conversation history itself, rather than relying on this field.")
-
 class IntentClarificationTask(BaseModel):
     unresolved_request: str = Field(description="The exact ambiguous product, service, or request component from the user's wording.")
     clarification_reason: str = Field(description="A concise, internal-only explanation of why a valid search task cannot be formed without clarification -- scoped to this node's own job (product/intent identification against the Matrix), and naming the specific detail in Latest User Input or Recent Conversation that makes Product, Intent, or both missing/ambiguous -- e.g. 'customer named no product; Recent Conversation has no prior product either' -- not a generic restatement like 'the request is too vague.'")
     clarification_guesses: List[ClarificationGuess] = Field(default_factory=list, description="0-3 entries, each a reasonable, grounded PREDICTION of what the customer likely means -- about the product, the intent, or whatever is actually ambiguous here -- never a report of anything the customer has actually said, offered as a tappable option that would unblock this request if correct. Order most likely first. Populate only when genuinely inferable from context (e.g. a term with only one plausible matrix match); leave empty when there is no real basis to guess.")
 
+class TriageComponent(BaseModel):
+    subquery_id: str = Field(description="Stable identifier for one distinct component of the resolved TRUE REQUEST, e.g. subquery_1.")
+    customer_component: str = Field(description="Standalone, self-contained restatement of only that component, with pronouns/ellipsis resolved using conversation context -- optimized for retrieval when resolution is TOOL_ELIGIBLE, or for composing a natural reply when resolution is NON_FINANCIAL.")
+    resolution: str = Field(description="Must be exactly TOOL_ELIGIBLE (a real banking need proceeding to retrieval/tools), NON_FINANCIAL (tone-only content with no ask that could ever become a banking need -- a greeting, thanks, feeling, or wording clearly and only about something outside what this assistant addresses), or CLARIFICATION (genuinely undecidable between TOOL_ELIGIBLE and NON_FINANCIAL for this specific component -- never used merely because the component's own content is vague or ambiguous in what it's asking, which is a downstream node's job once the component is treated as TOOL_ELIGIBLE).")
+    clarification: IntentClarificationTask | None = Field(default=None, description="Present only when resolution is CLARIFICATION; otherwise null.")
+
 class TriageEvaluation(BaseModel):
-    triage_status: str = Field(description="Must be NON_COMPLIANT, ESCALATION, VALID_REQUEST, NON_FINANCIAL, or CLARIFICATION_NEEDED.")
-    financial_subqueries: List[FinancialSubquery] = Field(default_factory=list, description="For VALID_REQUEST only: financial banking components. Empty otherwise.")
-    has_non_financial_content: bool = Field(default=False, description="True only when a VALID_REQUEST also contained unrelated wording that was omitted from financial_subqueries.")
-    non_financial_context: List[str] = Field(default_factory=list, description="For VALID_REQUEST only: short internal attention cues for non-factual conversational asides omitted from financial_subqueries. Empty otherwise; never customer-facing source text.")
+    triage_status: str = Field(description="Must be NON_COMPLIANT, ESCALATION, or DECOMPOSED.")
+    components: List[TriageComponent] = Field(default_factory=list, description="For DECOMPOSED only: an exhaustive partition of the resolved TRUE REQUEST into one or more standalone components, each tagged with its own resolution. Empty for NON_COMPLIANT/ESCALATION.")
     repetitive_issue_detected: bool = Field(default=False, description="True only when the Trusted Conversation Context shows the customer repeatedly raising substantially the same underlying banking need or issue across multiple recent turns, especially if it still appears unresolved. Judge by meaning, not wording. Independent of triage_status.")
-    clarification: IntentClarificationTask | None = Field(default=None, description="Present only when triage_status is CLARIFICATION_NEEDED; otherwise null. Scoped strictly to triage's own classification boundary (NON_COMPLIANT vs ESCALATION vs VALID_REQUEST vs NON_FINANCIAL) -- never a product/intent question, which is a downstream node's job.")
 
 # 4. 2D MATRIX QUERY FORMULATOR (Node 02e) -> NESTED SCHEMA
 class SearchTask(BaseModel):

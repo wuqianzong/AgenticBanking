@@ -337,21 +337,23 @@ node's own job" principle (§4) generalizes to every node in the pipeline
 that makes a judgment call about what the customer wants, not just the two
 that happened to need it first. The complete, closed inventory:
 
-1. **`node_02d` (triage)** -- ambiguity in its own whole-turn
-   classification (NON_COMPLIANT vs ESCALATION vs VALID_REQUEST vs
-   NON_FINANCIAL), never product/intent. New `triage_status` value
-   `CLARIFICATION_NEEDED`, checked only when the model is genuinely torn
-   between two of the four categories for the same resolved request (e.g.
-   "is this an escalation request or just venting while still wanting an
-   answer," "is this asking for general information or personalized
-   advice"). Since decomposition hasn't happened yet at this point in the
-   pipeline, there is no real subquery to link to -- the entry uses a
-   synthetic `subquery_id` ("subquery_1"), safe because a
-   `CLARIFICATION_NEEDED` turn always returns zero real
-   `financial_subqueries`, so there's nothing for it to collide with.
-   Routes straight to `n19` (skipping `n14` tool planning entirely, since
-   there's nothing to plan tools for), reusing the exact same proven
-   `n19 -> n8` path node_02e's own clarifications already took.
+1. **`node_02d` (triage)** -- ambiguity in its own per-component
+   classification. **Updated**: triage now always decomposes the whole
+   turn into components (`TOOL_ELIGIBLE`/`NON_FINANCIAL`/`CLARIFICATION`,
+   see `TOOL_CALLING_v3.0.md`'s "Triage decomposes per-component, not
+   per-turn" section) rather than picking one whole-turn `triage_status`
+   for everything -- `NON_COMPLIANT`/`ESCALATION` remain whole-turn vetoes,
+   but a component tagged `CLARIFICATION` is scoped narrowly to "is THIS
+   component itself a genuine banking need or a non-financial aside,"
+   never a content ambiguity (a vague-but-real ask is `TOOL_ELIGIBLE`
+   instead, letting `node_02e`/`node_03a`/`node_03c` resolve it downstream
+   exactly as this section's other three originators already do). Since
+   triage decomposes before tagging, a `CLARIFICATION` component always
+   has its own real `subquery_id` -- no synthetic id is needed anymore.
+   A turn with zero `TOOL_ELIGIBLE` components (all `NON_FINANCIAL`/
+   `CLARIFICATION`) routes straight to `n19` (skipping `n14` tool planning
+   entirely, since there's nothing to plan tools for), reusing the exact
+   same proven `n19 -> n8` path node_02e's own clarifications already took.
 2. **`node_02e`** -- product/intent (existing, §4).
 3. **`node_03a` (task dispatcher)** -- new: which registered tool
    capability actually addresses an otherwise well-formed subquery, when

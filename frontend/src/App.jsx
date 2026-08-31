@@ -2734,71 +2734,76 @@ export default function BankingBotUI() {
             </div>
           )}
 
-          {/* Next-action suggestions: backend-generated only (node_04b), never
-              a mock/static fallback -- each one is grounded in this turn's
-              own already-approved evidence, so tapping it can't dead-end.
-              Shown on hover OR focus (not just hover, so a keyboard/touch
-              user typing into the box sees them too), stacked vertically
-              stemming from the input box rather than a horizontal chip row --
-              the closest item to the box is the most relevant suggestion. */}
-          {(isInputHovered || isInputFocused) && !isTyping && isLoggedIn && !activeDeeplink && nextActions.length > 0 && (
-            <div
-              className="absolute bottom-full left-3 right-3 pb-2.5 flex flex-col-reverse items-start gap-1 animate-in fade-in slide-in-from-bottom-2 duration-200 z-30 pointer-events-auto"
-              onMouseEnter={handleInputMouseEnter}
-              onMouseLeave={handleInputMouseLeave}
-            >
-              {/* Stem connecting the stack down into the input box */}
-              <div className="absolute left-2.5 bottom-0 top-0 w-0.5 bg-slate-200 rounded-full" />
-              {nextActions.map((action, idx) => (
-                <div key={idx} className="relative pl-6 pr-1">
-                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 w-2.5 h-0.5 bg-slate-200 rounded-full" />
-                  <button
-                    type="button"
-                    onClick={() => handleSend(action)}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleSend(action);
+          {/* Next-action suggestions & Input Capsule: seamlessly unified */}
+          {(() => {
+            const showNextActions = (isInputHovered || isInputFocused) && !isTyping && isLoggedIn && !activeDeeplink && nextActions.length > 0;
+            return (
+              <div
+                className={`relative rounded-2xl transition-all ${
+                  showNextActions
+                    ? 'bg-white shadow-[0_4px_24px_rgba(0,0,0,0.06)] border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500/40 focus-within:border-blue-300'
+                    : 'bg-slate-100 border border-transparent focus-within:ring-2 focus-within:ring-blue-500/40 focus-within:bg-white focus-within:border-blue-200'
+                }`}
+                onMouseEnter={handleInputMouseEnter}
+                onMouseLeave={handleInputMouseLeave}
+              >
+                {showNextActions && (
+                  <div className="p-2.5 pb-2 border-b border-slate-100 flex flex-col gap-1 animate-in fade-in duration-150">
+                    <div className="px-2 pt-0.5 pb-1 flex items-center justify-between text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+                      <span>{t(preferences.language, "chat.suggestedFollowUps")}</span>
+                    </div>
+                    {nextActions.map((action, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSend(action)}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleSend(action);
+                        }}
+                        className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-800 hover:text-blue-700 hover:bg-slate-50 active:bg-slate-100 transition-all text-left group cursor-pointer border border-transparent hover:border-slate-200/60"
+                      >
+                        <span className="flex-1 whitespace-normal break-words leading-snug">{action}</span>
+                        <ArrowRight size={13} className="text-slate-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="relative flex items-end p-1.5">
+                  <textarea
+                    ref={inputRef}
+                    rows={1}
+                    maxLength={1000}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onFocus={() => setIsInputFocused(true)}
+                    onBlur={() => setIsInputFocused(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        if (inputValue.trim() && !isTyping && isLoggedIn && !activeDeeplink) {
+                          handleSend(inputValue);
+                        }
+                      }
                     }}
-                    className="group flex items-center py-1 text-xs font-normal text-slate-600 transition-all hover:text-blue-600 hover:underline active:scale-[0.98] cursor-pointer max-w-full text-left"
+                    placeholder={t(preferences.language, "chat.placeholder")}
+                    className="w-full bg-transparent text-slate-800 text-[15px] pl-3.5 pr-11 py-2 focus:outline-none resize-none leading-relaxed placeholder:text-slate-400 max-h-[140px] overflow-y-auto"
+                    style={{ minHeight: '40px' }}
+                    disabled={isTyping || !isLoggedIn || Boolean(activeDeeplink)}
+                  />
+                  <button
+                    onClick={() => handleSend(inputValue)}
+                    disabled={!inputValue.trim() || isTyping || !isLoggedIn || Boolean(activeDeeplink)}
+                    className="absolute right-1.5 bottom-1.5 bg-blue-600 text-white w-9 h-9 rounded-xl flex items-center justify-center disabled:opacity-40 disabled:bg-slate-300 hover:bg-blue-700 transition-all shadow-xs shrink-0"
+                    title="Send"
                   >
-                    <span className="whitespace-normal break-words">{action}</span>
+                    <Send size={16} className="ml-0.5" />
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
-
-          <div className="relative flex items-end bg-slate-100 rounded-2xl p-1.5 focus-within:ring-2 focus-within:ring-blue-500/40 focus-within:bg-white border border-transparent focus-within:border-blue-200 transition-all">
-            <textarea
-              ref={inputRef}
-              rows={1}
-              maxLength={1000}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onFocus={() => setIsInputFocused(true)}
-              onBlur={() => setIsInputFocused(false)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  if (inputValue.trim() && !isTyping && isLoggedIn && !activeDeeplink) {
-                    handleSend(inputValue);
-                  }
-                }
-              }}
-              placeholder={t(preferences.language, "chat.placeholder")}
-              className="w-full bg-transparent text-slate-800 text-[15px] pl-3.5 pr-11 py-2 focus:outline-none resize-none leading-relaxed placeholder:text-slate-400 max-h-[140px] overflow-y-auto"
-              style={{ minHeight: '40px' }}
-              disabled={isTyping || !isLoggedIn || Boolean(activeDeeplink)}
-            />
-            <button
-              onClick={() => handleSend(inputValue)}
-              disabled={!inputValue.trim() || isTyping || !isLoggedIn || Boolean(activeDeeplink)}
-              className="absolute right-1.5 bottom-1.5 bg-blue-600 text-white w-9 h-9 rounded-xl flex items-center justify-center disabled:opacity-40 disabled:bg-slate-300 hover:bg-blue-700 transition-all shadow-xs shrink-0"
-              title="Send"
-            >
-              <Send size={16} className="ml-0.5" />
-            </button>
-          </div>
+              </div>
+            );
+          })()}
           <div className="flex items-center justify-center gap-1 mt-2.5 mb-0.5">
              <LockIcon size={10} className="text-slate-400"/>
              <span className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">{t(preferences.language, "chat.footer")}</span>

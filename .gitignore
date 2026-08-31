@@ -3,3 +3,4 @@ backend/logs/system.jsonl
 *.pyc
 /backend/app/core/__pycache__
 /backend/app/orchestration/__pycache__
+docs/August_2026_Individual_Monthly_Log_Wu_Qianzong.docx

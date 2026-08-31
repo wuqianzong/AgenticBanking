@@ -49,6 +49,7 @@ class AgentState(TypedDict):
     repeated_need_detected_this_turn: bool       # Set by node_02d/triage: true when any of this turn's financial subqueries substantially repeats a recent prior one. Consumed only by node_08's soft-escalation rollup.
     low_confidence_mode: bool                    # Set by node_03c when this task's own live dynamic confidence is genuinely below threshold (not merely a session with no track record yet) -- surfaced to the frontend progress stream as "Thinking harder" (see api_gateway.py's chat_stream).
     live_task_confidence: float | None            # Set by node_03c each round: average _dynamic_task_confidence across this round's tasks, 0.0-1.0. None when RAG hasn't run this turn. Streamed live to the frontend progress bar, updating once per retry round -- see RAG_RETRY_EFFORT_v1.0.md.
+    territory_b_unlocked: bool                   # Extra Effort v2.1: set by node_03c each round via EFFORT_TIER_GATE/_attempt_unlocked(MAXIMUM_EFFORT_ATTEMPT, ...) -- whether node_02e may construct a Territory B (cross-topic) companion this retry pass, alongside Territory A's own unconditional filter-widen. Read only by node_02e's retry section.
 
     # Tool Calling v3.0: financial-only triage, each subquery owning its own
     # tool attempts. See docs/TOOL_CALLING_v3.0.md. financial_subqueries

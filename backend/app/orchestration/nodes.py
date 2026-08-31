@@ -15,6 +15,7 @@ from backend.app.core.llm_service import (
     call_groq_lpu,
     parse_json_robustly as _parse_json_robustly,
     ClarificationGuess,
+    TerritoryBPlan,
     MODEL_B_AUDITOR,
     MODEL_C_PLANNER,
     MODEL_D_PROMPT_GUARD,
@@ -209,11 +210,52 @@ TURN_FEEDBACK_SCORE_UPPER_BOUND = 0.85
 # UPPER_BOUND are left untouched below so reverting is a one-line change.
 TURN_FEEDBACK_SHOW_ON_ANY_SCORE = True
 ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "PARTIALLY_SUFFICIENT"}
-# One initial attempt plus three refinement stages (INTENT_EXPANSION,
-# PRODUCT_EXPANSION, ANGLE_EXPANSION — see _retry_expansion_plan). Must stay
-# in sync with the highest attempt number keyed in that function's stages
-# dict, or the final stage becomes unreachable.
-MAX_RAG_ATTEMPTS = 4
+# Extra Effort v2.1: three named effort tiers, each with its own explicit
+# gate -- "always" (unconditional) or "statistical" (requires
+# extend_if_optional, node_03c's confidence hypothesis test). Moving a
+# tier's gate (e.g. if production data someday shows Territory A needs
+# gating too) or adding a fourth tier is a change to this table alone,
+# never a restructuring of the should_retry logic that reads it. See
+# RAG_RETRY_EFFORT_v1.0.md §8c/§8d.
+#   Tier 1 (Wave 1): narrow product/intent, full 4-representation fusion
+#     (procedural/policy/conceptual/direct) -- see execute_multi_angle_search.
+#   Tier 2 (Territory A): SAME query representation, filter widened to
+#     include alternate_products (reasoned once, at fresh-formulation time,
+#     never re-derived here -- see SearchTask.alternate_products) and full
+#     intent scope across every included product. Deterministic, no LLM
+#     call. Unconditional: this tier's own cost dropped enough (no retry-time
+#     reasoning needed) that it no longer needs the statistical gate. This
+#     is also a task_id's own hard ceiling -- MAX_RAG_ATTEMPTS below --
+#     since a task never gets a further attempt on ITSELF past this tier.
+#   Tier 3 (Territory B): NOT a further attempt on the SAME task_id -- it
+#     always spawns a brand-new, separately-tracked companion task_id
+#     (f"{source}_scope"), constructed alongside Tier 2 in the SAME retry
+#     pass (node_02e), not a later, sequential round -- a task that
+#     terminates after Tier 2 has no live "RETRY" status left for a later
+#     round to hang off of. MAXIMUM_EFFORT_ATTEMPT therefore exists purely
+#     as an EFFORT_TIER_GATE key, checked directly via
+#     _attempt_unlocked(MAXIMUM_EFFORT_ATTEMPT, extend_if_optional) --
+#     never compared against any task's own attempt_count. The only tier
+#     that still needs an LLM call, and only for a task with no
+#     direct-adopt companion already covering it (see node_03c's
+#     direct-adopt block, which handles the evidence-grounded case for
+#     free, outside this tier system entirely, since it costs nothing).
+NORMAL_EFFORT_ATTEMPT = 1
+EXTRA_EFFORT_ATTEMPT = 2
+MAXIMUM_EFFORT_ATTEMPT = 3
+MAX_RAG_ATTEMPTS = EXTRA_EFFORT_ATTEMPT
+EFFORT_TIER_GATE = {
+    NORMAL_EFFORT_ATTEMPT: "always",
+    EXTRA_EFFORT_ATTEMPT: "always",
+    MAXIMUM_EFFORT_ATTEMPT: "statistical",
+}
+
+
+def _attempt_unlocked(next_attempt_number: int, extend_if_optional: bool) -> bool:
+    """Whether a task currently at (next_attempt_number - 1) attempts may
+    advance to next_attempt_number, per EFFORT_TIER_GATE above."""
+    gate = EFFORT_TIER_GATE.get(next_attempt_number, "statistical")
+    return gate == "always" or (gate == "statistical" and extend_if_optional)
 MAX_TOOL_PLANNING_ROUNDS = 3
 MAX_TOOL_TASKS_PER_TURN = 8
 
@@ -480,41 +522,37 @@ def _normalize_search_task_scope(task: dict) -> dict | None:
 
 
 def _retry_expansion_plan(retry_tasks: list[dict], retry_counts: dict[str, int]) -> list[dict]:
-    """Describe the deterministic precision-to-recall stage for each retry."""
-    stages = {
-        2: {
-            "stage": "INTENT_EXPANSION",
-            "instruction": "Deterministic: the backend expands intent scope to every valid intent for the task's current product(s). No model judgment is used for this stage.",
-        },
-        3: {
-            "stage": "PRODUCT_EXPANSION",
-            "instruction": "Evaluate the feedback status. If INSUFFICIENT, the previous search failed across every intent already valid for the current product; consider adding one plausible, matrix-valid related product. If PARTIALLY_SUFFICIENT, be conservative: add a product only if it has a direct, meaningful relationship to the specific remaining gap. Never remove the original product. Do not specify intents for an added product — the backend expands its full intent scope automatically.",
-        },
-        4: {
-            "stage": "ANGLE_EXPANSION",
-            "instruction": "Keep the exact product and intent filters. Preserve every existing angle group unchanged and append one complete new angle group that targets the missing detail in the sufficiency feedback.",
-        },
-    }
+    """Extra Effort v2.1: only one retry pass exists now (attempt 2 -- see
+    MAX_RAG_ATTEMPTS). Territory A (deterministic filter-widen of the
+    existing task, using its own pre-computed alternate_products) is
+    applied directly via _expand_intent_to_full, never requested from the
+    model; the model's only retry-mode job, when node_03c's
+    territory_b_unlocked says it's worth it, is constructing a task's
+    Territory B (scope-expansion) companion -- see node_02e's retry-mode
+    prompt."""
     plan = []
     for task in retry_tasks:
         next_attempt = retry_counts.get(task.get("task_id"), 0) + 1
-        plan.append({
-            "task_id": task.get("task_id"),
-            "next_attempt": next_attempt,
-            **stages.get(next_attempt, stages[4]),
-        })
+        plan.append({"task_id": task.get("task_id"), "next_attempt": next_attempt, "stage": "EXTRA_EFFORT"})
     return plan
 
 
 def _retrieval_mode_for_task(task: dict, retry_counts: dict[str, int]) -> str:
-    """Choose retrieval representation independently of the LLM.
+    """Extra Effort v2.0: always angle-group RRF, from the first attempt.
 
-    A task keeps its resolved customer subquery as the default retrieval
-    anchor through both filter-widening attempts (intent, then product).
-    Multi-angle RRF is reserved for the final, feedback-guided attempt.
+    A standalone "DIRECT" mode used to run for the first three attempts,
+    testing only one query representation (the resolved subquery text)
+    while varying the metadata filter (intent, then product) -- meaning the
+    other three representations node_02e already authors every task with
+    (procedural/policy/conceptual) sat unused until the fourth and final
+    attempt. Now the resolved subquery text is folded into the same RRF
+    fusion as a fourth angle (see execute_multi_angle_search's
+    `direct_query` parameter), so every attempt -- including the first --
+    tests all four representations together in one fused ranking, under
+    whatever scope that attempt's filter currently allows. See
+    RAG_RETRY_EFFORT_v1.0.md.
     """
-    retry_count = retry_counts.get(task.get("task_id"), 0)
-    return "ANGLE_GROUP_RRF" if retry_count >= 3 else "DIRECT"
+    return "ANGLE_GROUP_RRF"
 
 
 def _full_intent_scope(products: list[str]) -> list[str]:
@@ -544,68 +582,6 @@ def _expand_intent_to_full(task: dict) -> dict:
     revision["target_intent"] = _full_intent_scope(products)
     return revision
 
-
-def _merge_retry_task(prior_task: dict, revision: dict, expansion: dict) -> dict:
-    """Deterministically preserve cumulative retry state.
-
-    The LLM proposes a refinement only at the PRODUCT_EXPANSION and
-    ANGLE_EXPANSION stages; it must never be able to erase prior angle
-    groups, products, intents, task identity, or the resolved subquery.
-    """
-    stage = expansion.get("stage", "")
-    prior_groups = _normalize_angle_groups(prior_task)
-    revision_groups = _normalize_angle_groups(revision)
-    merged = dict(prior_task)
-    merged["task_id"] = prior_task.get("task_id")
-    merged["customer_component"] = prior_task.get("customer_component", "")
-    # The direct query is a stable, task-isolated subquery. Retry feedback may
-    # alter filters or add angle groups, but it must not overwrite the
-    # customer's original task wording.
-    merged["direct_query"] = prior_task.get("direct_query", prior_task.get("customer_component", ""))
-
-    if stage == "ANGLE_EXPANSION":
-        prior_ids = {group["group_id"] for group in prior_groups}
-        expected_id = f"retry_{expansion.get('next_attempt', 2)}"
-        new_group = next((group for group in revision_groups if group["group_id"] == expected_id), None)
-        if new_group is None:
-            new_group = next((group for group in revision_groups if group["group_id"] not in prior_ids), None)
-        if new_group is not None:
-            new_group = {**new_group, "group_id": expected_id}
-            merged["angle_groups"] = [*prior_groups, new_group]
-        else:
-            # Do not silently replace an established semantic representation
-            # with a malformed retry response. The following retry can still
-            # refine this task safely and the telemetry makes the omission
-            # visible.
-            merged["angle_groups"] = prior_groups
-            print(f"   ⚠️ [ANGLE EXPANSION OMITTED]: Task '{merged['task_id']}' returned no distinct retry group.")
-        merged["target_commercial_product"] = prior_task.get("target_commercial_product")
-        merged["target_intent"] = prior_task.get("target_intent", [])
-    elif stage == "INTENT_EXPANSION":
-        # Fully deterministic: `revision` already carries the full valid
-        # intent set for the current product(s) from _expand_intent_to_full.
-        merged["angle_groups"] = prior_groups
-        merged["target_commercial_product"] = prior_task.get("target_commercial_product")
-        merged["target_intent"] = revision.get("target_intent", prior_task.get("target_intent", []))
-    elif stage == "PRODUCT_EXPANSION":
-        prior_products = _normalized_product_tags(prior_task.get("target_commercial_product"))
-        proposed_products = _normalized_product_tags(revision.get("target_commercial_product"))
-        prior_intents = prior_task.get("target_intent", [])
-        prior_intents = [prior_intents] if isinstance(prior_intents, str) else prior_intents
-
-        products = list(dict.fromkeys([*prior_products, *proposed_products]))
-        new_products = [product for product in proposed_products if product not in prior_products]
-        merged["angle_groups"] = prior_groups
-        merged["target_commercial_product"] = products[0] if len(products) == 1 else products
-        # A newly added product's own intent scope is opened in full too —
-        # the LLM is not asked to guess intents for it (see instruction
-        # above); a narrow intent chosen for the ORIGINAL product has no
-        # guaranteed relevance to a different product.
-        merged["target_intent"] = list(dict.fromkeys([*prior_intents, *_full_intent_scope(new_products)]))
-    else:
-        merged["angle_groups"] = prior_groups
-
-    return _normalize_search_task_scope(merged) or prior_task
 
 _DECLINE_CATEGORY_REASONS = {
     "non_compliant": "it is outside the assistance I can provide under banking compliance requirements",
@@ -1124,6 +1100,14 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
     and normal-response groundedness. It deliberately contains identifiers,
     not hydrated text or stale turn state.
     """
+    # Extra Effort v2.0: a subquery can now own two task_ids (Territory A +
+    # a Territory B companion) that both end up ANSWERABLE. Each stays its
+    # own manifest entry (never silently merged) but is tagged with its own
+    # search_territory, so generation and the outbound audit both know
+    # which evidence is the literal answer and which is only related
+    # information -- without this tag, a companion's evidence would look
+    # identical to a direct answer to whichever node reads it next.
+    tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", []) if isinstance(task, dict)}
     approved_by_task = {
         result.get("task_id"): set(result.get("approved_parent_ids", []))
         for result in state.get("task_results", [])
@@ -1134,7 +1118,26 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
     # approved evidence set. Optional element-level source_task_ids narrow
     # provenance for logs and audits but never decide what may be displayed.
     return [
-        {"task_id": task_id, "approved_parent_ids": sorted(parent_ids)}
+        {
+            "task_id": task_id,
+            "approved_parent_ids": sorted(parent_ids),
+            "search_territory": tasks_by_id.get(task_id, {}).get("search_territory", "in_scope"),
+            # Extra Effort v2.0: node_02e's own stated reason for pivoting
+            # to this specific product/topic (SearchTask.mapping_reason).
+            # For an adjacent_scope entry this is the ONLY place the actual
+            # bridge -- e.g. "buying a car often means saving for a
+            # downpayment" -- exists anywhere in the pipeline; without
+            # surfacing it, the generator has no way to explain WHY the
+            # related evidence is being offered and either invents a
+            # weaker connection or drops the evidence in with no
+            # connecting sentence at all, reading as a non sequitur to the
+            # customer. Present for every entry (not just adjacent_scope)
+            # for a uniform manifest shape, but only meaningful as a
+            # customer-facing bridge basis for adjacent_scope ones -- an
+            # in_scope entry's mapping_reason is just its own internal
+            # product/intent justification, never customer-facing.
+            "mapping_reason": tasks_by_id.get(task_id, {}).get("mapping_reason", ""),
+        }
         for task_id, parent_ids in approved_by_task.items()
         if task_id and parent_ids
     ]
@@ -1664,24 +1667,37 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
          0-3 guesses, each a complete, natural sentence the customer might
          actually send back, most likely first.
 
-       For a TOOL_ELIGIBLE component:
+       For a TOOL_ELIGIBLE component, your job is faithful decomposition and
+       noise reduction -- nothing more:
        - A component is one independently answerable banking topic; do not
          split a coherent topic artificially and do not impose a numerical
          cap.
-       - Express it as a self-contained statement of that part of the
-         resolved TRUE REQUEST in `customer_component`, with pronouns/
-         ellipsis resolved from Trusted Conversation Context -- a fully
-         resolved, retrieval-ready statement is exactly what downstream
-         search needs, so do not hold back here out of caution, even when
-         the resolved statement itself is necessarily vague (e.g.
-         "Follow-up on an unspecified earlier question, distinct from the
-         items already mentioned this session"). (A later clarifying
-         question about this component, if one is ever needed, is authored
-         by a downstream node reasoning directly against Latest User Input
-         and Trusted Conversation Context, not by quoting this field back
-         -- you do not need to preserve customer-facing fidelity here.)
-       - Do not determine product, intent, availability, or a tool. Those
-         are downstream responsibilities.
+       - Express it as a self-contained statement of that part of the TRUE
+         REQUEST in `customer_component`. "Resolving" it means exactly two
+         things, both mechanical, neither interpretive: (a) replace a
+         pronoun, ellipsis, or vague reference with what it actually refers
+         to, using Trusted Conversation Context (e.g. "the card is ugly"
+         after a card-replacement discussion becomes a self-contained
+         statement naming that same card); (b) strip conversational noise
+         that carries no semantic content and would otherwise dilute
+         retrieval matching -- greetings, filler ("umm", "so", "I was
+         wondering if"), pleasantries, throat-clearing.
+       - This is NOT license to infer a more specific financial need,
+         product, or objective than the customer actually stated -- that is
+         a downstream node's job, and it needs your output to still contain
+         the genuine ambiguity for it to work with. Preserve the customer's
+         own stated goal exactly, even when that goal names no product or
+         service at all. For example, "Ah, hello, umm, so I was wondering
+         -- I want to buy a car" strips down to "I want to buy a car" --
+         it never becomes "I would like to apply for a car loan" or any
+         other invented financial framing; buying a car is a real-world
+         goal, not itself a stated banking product or action, and deciding
+         whether/which banking need it implies is not your call to make.
+       - Do not determine product, intent, availability, or a tool -- this
+         includes not assuming WHICH banking need, if any, a stated
+         real-world goal or life event implies. Those are downstream
+         responsibilities, and they depend on the ambiguity still being
+         visible in what you hand them.
 
     4. REPETITIVE ISSUE SIGNAL — Independent of triage_status above: look at
        the Trusted Conversation Context's recent turns (not just the Latest
@@ -1850,43 +1866,65 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     fast_forward_task_ids = []
     new_retry_counts = dict(state.get("task_retry_counts", {}))
     retry_expansion_plan = _retry_expansion_plan(retry_tasks, state.get("task_retry_counts", {}))
-    expansion_by_task_id = {expansion.get("task_id"): expansion for expansion in retry_expansion_plan}
-    # INTENT_EXPANSION is fully deterministic (see _expand_intent_to_full):
-    # widening intent within an already-confirmed product needs no semantic
-    # judgment and costs nothing extra at the Chroma filter layer, so these
-    # tasks never enter the retry-mode prompt at all. Only tasks that still
-    # need a genuine judgment call (PRODUCT_EXPANSION, ANGLE_EXPANSION) are
-    # sent to the model.
-    deterministic_task_ids = {
-        task_id for task_id, expansion in expansion_by_task_id.items()
-        if expansion.get("stage") == "INTENT_EXPANSION"
-    }
-    llm_retry_tasks = [task for task in retry_tasks if task.get("task_id") not in deterministic_task_ids]
     if retry_expansion_plan:
         for expansion in retry_expansion_plan:
             print(f"   🪜 [RETRY STAGE]: Task '{expansion.get('task_id')}' → {expansion.get('stage')} (attempt {expansion.get('next_attempt')})")
-        if not llm_retry_tasks:
-            print(f"   ⚡ [RETRY MODEL SKIPPED]: All {len(retry_tasks)} retry task(s) resolved deterministically this cycle; no LLM call.")
-        elif len(llm_retry_tasks) < len(retry_tasks):
-            print(f"   🧠 [RETRY MODEL SCOPED]: Calling model for {len(llm_retry_tasks)} of {len(retry_tasks)} retry task(s); {len(retry_tasks) - len(llm_retry_tasks)} resolved deterministically.")
         log_event(
             "task.retry.stage_plan",
             stages={item.get("task_id"): item.get("stage") for item in retry_expansion_plan},
-            llm_task_ids=[task.get("task_id") for task in llm_retry_tasks],
-            deterministic_task_ids=list(deterministic_task_ids),
+            llm_task_ids=[task.get("task_id") for task in retry_tasks],
         )
+    # Extra Effort v2.1: Territory A (deterministic filter-widen of the
+    # ORIGINAL task, using its own pre-computed alternate_products -- see
+    # SearchTask.alternate_products) is applied directly in code further
+    # below via _expand_intent_to_full, with no LLM involvement, for EVERY
+    # retrying task, unconditionally. Territory B (a genuinely different
+    # companion task) is constructed alongside it, in this SAME retry pass,
+    # only for a task that (a) node_03c's hypothesis test says is worth it
+    # this round (territory_b_unlocked) and (b) doesn't already have a
+    # companion from node_03c's own free, always-on direct-adopt path (an
+    # evidence-grounded lead already found and adopted -- see node_03c's
+    # direct-adopt block, which needs no LLM call at all). This LLM call is
+    # skipped entirely whenever no retrying task actually needs it.
+    territory_b_unlocked = bool(state.get("territory_b_unlocked", False))
+    existing_companion_source_ids = {
+        task.get("source_task_id") for task in prior_tasks
+        if task.get("search_territory") == "adjacent_scope" and task.get("source_task_id")
+    }
+    territory_b_needed_task_ids = [
+        task_id for task_id in retry_task_ids
+        if territory_b_unlocked and task_id not in existing_companion_source_ids
+    ]
     retry_context = ""
-    if llm_retry_tasks:
-        llm_retry_feedback = {
+    if territory_b_needed_task_ids:
+        territory_b_needed_tasks = [task for task in retry_tasks if task.get("task_id") in territory_b_needed_task_ids]
+        scoped_retry_feedback = {
             task_id: feedback for task_id, feedback in retry_feedback.items()
-            if task_id in {task.get("task_id") for task in llm_retry_tasks}
+            if task_id in territory_b_needed_task_ids
         }
         retry_context = f"""
-        RETRY MODE: Rewrite ONLY these existing tasks. Preserve each task_id exactly.
-        Failed tasks: {llm_retry_tasks}
-        Task-specific feedback: {llm_retry_feedback}
+        For EACH task in Failed Tasks below, construct exactly ONE new
+        scope-expansion companion task -- never a revision of the failed
+        task itself, which the backend already widens deterministically to
+        its full intent scope regardless of what you do here. Set the
+        companion's own `source_task_id` to repeat the exact failed
+        task_id it was constructed for.
+        Failed tasks: {territory_b_needed_tasks}
+        Task-specific feedback: {scoped_retry_feedback}
+
+        Reason from the Product/Intent Matrix and Trusted Conversation
+        Context to a plausible, genuinely different but related
+        product/intent -- never the same pairing the failed task already
+        searched under (Territory A already covers that), and never a
+        guess you cannot state a concrete basis for. This is ONE committed
+        guess, not a hedge -- write exactly one angle group
+        (`group_id: "scope"`) with all three angles targeting that one new
+        topic, never multiple groups. Set `search_task.search_territory`
+        to "adjacent_scope" on every companion (never "in_scope") and
+        `search_task.source_task_id` to the same failed task_id as the
+        entry's own `source_task_id` above.
         """
-    
+
     prompt = f"""
     PRE-DECOMPOSED CUSTOMER COMPONENTS (from Triage; already screened for financial relevance and compliance): {triaged_subqueries}
     Each has `customer_component`, the retrieval-ready, context-resolved
@@ -1918,7 +1956,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     - Use common banking vocabulary only. Do not invent specific product names, amounts, dates, or branch details.
 
     1. CONTEXTUAL INHERITANCE: Read each component's customer_component text first. A Product or Intent may be inherited only when it is unambiguously established by the current-session trusted history, Active Context Matrix, or an active graph plan. Do not use the user baseline or prior-session recall to fill a missing Product or Intent, unless the component explicitly continues that recalled topic (for example, "yes, continue").
-    2. FOR EACH supplied component, evaluate the two mandatory retrieval foundations:
+    2. FOR EACH supplied component, evaluate the two mandatory retrieval foundations -- PRODUCT and INTENT matter equally; a clearly-named product with no discernible request type is exactly as unresolved as a request type with no product:
        - PRODUCT: Identify the component's BASE product family by stripping any
          descriptive qualifier, tier name, customer-segment word, or marketing
          brand from the wording (e.g., "business credit card" -> base family
@@ -1942,22 +1980,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
            this resolves as DECLINE (case b in Rule 3), since this
            assistant's information is scoped exclusively to individual
            banking regardless of whether the underlying base product exists.
-       - INTENT: a specific request type that maps to an intent in the PRODUCT/INTENT MATRIX.
-         A clearly-named product with NO discernible request type is exactly
-         as ambiguous as a request type with no product -- do not treat
-         PRODUCT as the only axis worth scrutinizing. If the component names
-         a product but gives no verb, action, or outcome at all (e.g. "I
-         have a question about my loan", "something about my credit card"),
-         or gives one so generic it could map to several genuinely different
-         intents for that same product with no basis to prefer one (e.g.
-         "help with my loan" could mean Application, Repayment, or
-         Eligibility), INTENT is missing/ambiguous here just as surely as an
-         unnamed product would be -- do not default to the most common or
-         most recently-discussed intent to avoid asking.
+       - INTENT: a specific request type that maps to an intent in the PRODUCT/INTENT MATRIX, derived from the component's own wording and, only when unambiguous, the permitted context in Rule 1.
        Determine these foundations from the component and, only when unambiguous, the permitted current-session context in Rule 1.
     3. Assign EVERY component exactly one resolution:
-       - SEARCH: use only when BOTH Product and Intent are available and form a valid pair in the Product/Intent Matrix.
-       - CLARIFY: use when either mandatory foundation is missing or ambiguous, but the component could plausibly become searchable with more detail from the user. A generic process or policy word alone—such as "application", "fee", "eligibility", "limit", "rate", "requirements", or "processing time"—is an INTENT only. It does not identify a PRODUCT and MUST be CLARIFY unless a product is explicit or unambiguously inherited from permitted context. Likewise, a product name alone without a discernible request type MUST be CLARIFY.
+       - SEARCH: use only when BOTH Product and Intent are identified with genuine confidence and form a valid pair in the Product/Intent Matrix.
+       - CLARIFY: your job in this rule is identifying a product and intent that form one genuine, well-supported Matrix pair. This is a single test, not a checklist of named patterns: before writing target_commercial_product/target_intent, could you honestly state, in mapping_reason, a specific and real basis for that exact pairing -- not "this seems plausible" while something else is equally plausible? If ambiguity anywhere in the request or context prevents that, for any reason, your job here is blocked -- use CLARIFY. The patterns below all fail this same test; they illustrate it, they are not an exhaustive list to pattern-match against instead of applying the test itself: a generic process/policy word with no discernible product ("the fee", "eligibility"); a named product with no discernible request type ("something about my credit card"); several genuinely different intents equally plausible for the same product with no basis to prefer one ("help with my loan" -- Application, Repayment, or Eligibility?); or a life-event/goal that names no product at all and could become any of several genuinely different ones ("I want to buy a car" -- financing? using existing savings? a credit card?). Never default to the most common or most recently-discussed pairing merely to avoid asking.
        - DECLINE: use in either of two cases, and set decline.category accordingly:
          (a) decline.category="out_of_scope_product" -- the component's BASE product family, after stripping every qualifier, tier, or brand name per the PRODUCT rule above, still matches no Matrix noun at all (a fundamentally different financial instrument, e.g., margin trading, cryptocurrency trading, forex trading, or any product with no matrix entry at all). DECLINE means no amount of user clarification would ever produce a valid matrix pair.
          (b) decline.category="individual_customers_only" -- the BASE product family DOES exist in the Matrix, but the component names a non-individual customer segment (business, corporate, institutional) rather than an individual retail customer. This assistant's information is scoped exclusively to individual/personal banking.
@@ -1968,7 +1995,8 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        - "policy": A phrase describing the rules, conditions, eligibility criteria, limits, fees, or restrictions that apply to this specific component. Should sound like it comes from an FAQ answer's requirements or conditions section for this topic.
        - "conceptual": A phrase describing what the product, feature, or service in this specific component is and how it works. Should sound like it comes from an FAQ answer's explanatory introduction for this topic.
        DO NOT use comma-separated keywords. DO NOT paraphrase the customer's original question. Use common banking vocabulary only — do not invent specific product names, amounts, dates, or branch details. Each angle MUST target a structurally different part of a hypothetical FAQ answer about the component's topic.
-    5. For EACH SEARCH task, extract the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix above. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed. In RETRY MODE preserve the supplied task_id and use its task-specific sufficiency feedback to change the search terms, product, or intent.
+    5. For EACH SEARCH task, first write "mapping_reason": reason through, in one or two sentences, why this specific product/intent pairing is the right match for this component -- grounded in the Product/Intent Matrix and, where relevant, Recent Conversation -- BEFORE extracting the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix below it. Decide the reasoning first; do not write a pairing and then back-justify it afterward. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed.
+       After committing to target_commercial_product/target_intent, ALSO write "alternate_product_reason": could this exact same literal request ALSO plausibly be served by a genuinely different commercial product if your primary classification's own documentation turns out not to cover it? Strongly prefer a cross-cutting FUNCTIONAL product (Horizon_APP, Rewards_Program) over another genuine financial-instrument product (Credit_Card, Deposit_Account, Personal_Loan, Insurance, Mutual_Funds, Stocks, Debit_Card) as the alternate -- a request genuinely spanning two financial products should already be reflected in target_commercial_product or split into a separate component, never deferred to this fallback. Only name a second financial-instrument product when you can state a real, specific reason the SAME literal request is ALSO plausibly filed under it, never merely because it feels topically nearby. Then set "alternate_products" to 0-2 Matrix product nouns that reason justifies, distinct from target_commercial_product -- empty when nothing is genuinely plausible; a forced alternate is worse than none. This is a fallback the backend only ever uses later, if a search under the primary classification finds nothing -- it never affects this turn's own search.
     6. INTENT CLARIFICATION: You are one of several nodes in this pipeline authorized to raise a clarification, and the standing rule is who raises it, who provides the evidence and reason -- scoped strictly to YOUR OWN job here (identifying the correct Product and Intent for this request, before any evidence retrieval is even attempted). Never author a clarification about something outside that scope (e.g. whether retrieved evidence answers the question -- that is the sufficiency auditor's job later in the pipeline, not yours).
        For a CLARIFY component, set clarification.unresolved_request by reasoning directly against Latest User Input and Recent Conversation yourself -- never by quoting `customer_component`, which may already be elaborated with retrieval-oriented wording the customer never actually said. If Latest User Input itself names the ambiguous part clearly, use that wording directly. If it's a short continuation (e.g. "yes") whose own ambiguity is really about what it's confirming, use Recent Conversation to identify specifically what was being confirmed and name that (e.g. "whether you meant the personal loan or the credit card discussed earlier," grounded in an actual prior turn) rather than a generic "which product this refers to" -- and never a guessed product name of your own invention. Also set `clarification.clarification_reason`: name the specific detail in Latest User Input or Recent Conversation that makes Product, Intent, or both missing/ambiguous (e.g. "customer named no product; Recent Conversation has no prior product either") -- never a generic restatement like "the request is too vague," and never reference the Matrix alone without tying it to what the customer actually said or didn't say. Do not guess a product or create a generic task merely to fill the array. The customer-facing question itself is generated deterministically downstream from unresolved_request -- do not draft one here.
        Also set clarification.clarification_guesses: 0-3 entries, each a reasonable, grounded PREDICTION of what the customer likely means -- never a report of anything the customer has actually said -- offered as a tappable option that would unblock this task if correct. Order most likely first. Populate this only when genuinely inferable (e.g. an unresolved term with only one plausible matrix match given the customer's wording); leave it empty when you have no real basis to guess (e.g. a term identifying no plausible product or intent at all). Each entry needs a short "label" (e.g. "Personal Loan"), a "message" that is a complete, natural sentence a customer would actually send (e.g. "I'm asking about a personal loan.") -- never a bare word or phrase as the message -- and a "reason": a concise, internal-only justification naming the specific Matrix fact or conversation detail that makes this guess plausible (e.g. "Personal_Loan is the only loan-type Matrix product" or "customer named credit cards two turns ago"). A guess you cannot state a concrete reason for is not genuinely inferable -- do not offer it; this is not a customer-facing field, but writing it forces the same discipline as populating clarification_guesses at all.
@@ -1976,87 +2004,61 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     8. Use "ALL" only when a component is genuinely universal and its Intent is a valid intent listed under "ALL" in the Product/Intent Matrix. "ALL" is not a fallback for an unknown product.
 
     Output JSON ONLY:
-    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"the fee","clarification_reason":"No product or service is identified.","clarification_guesses":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"loan","clarification_reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","clarification_guesses":[{{"label":"Personal Loan","message":"I'm asking about a personal loan.","reason":"Personal_Loan is the only loan-type Matrix product."}}]}},"decline":null}},{{"component_id":"component_6","customer_component":"I have a question about my loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"a question about my loan","clarification_reason":"Product (Personal_Loan) is unambiguous, but no verb, action, or outcome is given -- Application, Repayment, and Eligibility are all equally plausible intents with no basis to prefer one.","clarification_guesses":[{{"label":"Applying","message":"I want to know how to apply for a loan.","reason":"Application is a valid Matrix intent for Personal_Loan."}},{{"label":"Repayment","message":"I want to know about repaying my loan.","reason":"Repayment is a valid Matrix intent for Personal_Loan."}},{{"label":"Eligibility","message":"I want to know if I'm eligible for a loan.","reason":"Eligibility is a valid Matrix intent for Personal_Loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
+    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","mapping_reason":"Customer named 'open an account' -- 'account' with no qualifier maps to the base Deposit_Account family, and 'open' is the Application intent verb in the Matrix.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"],"alternate_product_reason":"If Deposit_Account documentation doesn't cover this, opening an account is also a core Horizon_APP onboarding flow.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"the fee","clarification_reason":"No product or service is identified.","clarification_guesses":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"loan","clarification_reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","clarification_guesses":[{{"label":"Personal Loan","message":"I'm asking about a personal loan.","reason":"Personal_Loan is the only loan-type Matrix product."}}]}},"decline":null}},{{"component_id":"component_6","customer_component":"I have a question about my loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"a question about my loan","clarification_reason":"Product (Personal_Loan) is unambiguous, but no verb, action, or outcome is given -- Application, Repayment, and Eligibility are all equally plausible intents with no basis to prefer one.","clarification_guesses":[{{"label":"Applying","message":"I want to know how to apply for a loan.","reason":"Application is a valid Matrix intent for Personal_Loan."}},{{"label":"Repayment","message":"I want to know about repaying my loan.","reason":"Repayment is a valid Matrix intent for Personal_Loan."}},{{"label":"Eligibility","message":"I want to know if I'm eligible for a loan.","reason":"Eligibility is a valid Matrix intent for Personal_Loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
     {retry_context}
     """
 
     # A retrieval retry is not a fresh interpretation of the whole customer
-    # request.  Isolate it in a dedicated prompt so the model cannot reorder
+    # request. Isolate it in a dedicated prompt so the model cannot reorder
     # components or overwrite a failed task ID with another successful task.
-    if llm_retry_tasks:
-        prompt = f"""
+    # Extra Effort v2.1: this call's ONLY job is constructing a Territory B
+    # companion for a task that has no direct-adopt lead already covering
+    # it (see territory_b_needed_task_ids above) -- it never revises the
+    # failed task itself, and is skipped entirely when no task needs it.
+    retry_prompt = None
+    if territory_b_needed_task_ids:
+        retry_prompt = f"""
         PRODUCT/INTENT MATRIX (Valid Nouns and Verbs):
         {PRODUCT_INTENT_MATRIX}
 
         INTENT DEFINITION GUIDELINE:
         {INTENT_GUIDELINE}
 
-        RETRIEVAL RETRY MODE
-        You are a Decoupled Database Search Architect refining failed retrieval
-        tasks. This is NOT a new decomposition of the customer's request.
+        EXTRA EFFORT v2.1 -- TERRITORY B COMPANION CONSTRUCTION
+        You are a Decoupled Database Search Architect. Every task in Failed
+        Tasks already searched its own literal topic across its full valid
+        intent scope, including any plausible alternate product, without
+        success (Territory A -- handled entirely by the backend, not your
+        job here), and no candidate connection was found worth adopting
+        directly. Your only job is constructing ONE new, genuinely
+        different but related search task per failed task (Territory B) --
+        reasoning through mapping_reason FIRST, before choosing its
+        product/intent or writing its angles, exactly as that field requires.
 
         Latest User Input: "{user_msg}"
-        Failed Retrieval Tasks (the only components in scope): {llm_retry_tasks}
-        Task-Specific Candidate Evidence Delta: {llm_retry_feedback}
-        Deterministic Expansion Plan: {retry_expansion_plan}
+        {retry_context}
 
         REQUIRED CONTRACT:
-        - Return EXACTLY one SEARCH component for EACH Failed Retrieval Task,
-          and return NO other components.
-        - Preserve every supplied task_id exactly. Do not renumber, reuse, or
-          assign a failed task_id to a different topic.
-        - Do NOT re-partition the latest user input.
-        - Do NOT recreate successful tasks, intent-clarification tasks, or
-          unrelated topics from the original request.
-        - Candidate Evidence Delta contains only internally observed facts from
-          unapproved parents. Use it only as an optional clue when refining
-          within the deterministic stage; never quote parent IDs or treat it
-          as a customer request or approved answer evidence.
-        - Do NOT output CLARIFY in retry mode. The retrieval pipeline will
-          decide whether the task becomes unavailable after its retry limit.
-        - Follow the Deterministic Expansion Plan for EACH task exactly. The
-          plan's stage controls which filters may expand on this attempt.
-        - ANGLE_EXPANSION: keep the exact prior product and intent filters.
-          Return every prior angle group unchanged and append exactly one new,
-          complete angle group with group_id "retry_<next_attempt>". Each of
-          the new group's three angles must be a SHORT NATURAL-LANGUAGE PHRASE
-          (8-20 words) that resembles a sentence fragment likely found in an
-          FAQ answer ABOUT THE FAILED TASK'S TOPIC, guided by the missing
-          detail described in the feedback.
-          Use common banking vocabulary only — do not invent specific product
-          names, amounts, dates, or branch details. Do not paraphrase the
-          customer's original question or repeat wording from the prior base
-          group. Each angle must target a structurally different part of a
-          hypothetical FAQ answer about this task's topic (steps,
-          rules/conditions, or explanation).
-          If the feedback does not describe a specific missing detail, vary
-          the structural perspective (e.g., switch from customer-facing steps
-          to bank-internal processing steps) rather than inventing new facts.
-          Do not append terms into an existing angle.
-        - PRODUCT_EXPANSION: retain all prior angle terms and intents. Every
-          task reaching this stage has already been searched across its full
-          existing intent scope without success. Evaluate the provided
-          feedback status. If INSUFFICIENT, consider adding one plausible,
-          matrix-valid related product as an ordered array with the original
-          product first — but only when it has a direct, meaningful
-          relationship to this task's customer_component; never add a product
-          merely because its FAQ wording might be similar. If
-          PARTIALLY_SUFFICIENT, be conservative: add a product only if it
-          targets the specific remaining gap. Never replace the original
-          product. Do NOT specify target_intent for an added product — the
-          backend expands its full valid intent scope automatically; just
-          echo the existing target_intent unchanged.
-        - The revised task must remain about the same customer component as its
-          supplied failed task.
-        - Every revised Product/Intent pair must be valid in the matrix.
-        - NEVER use conversational filler in semantic angles. Each angle must
-          be a short natural-language PHRASE (8-20 words) that reads like a
-          sentence fragment from an FAQ answer. Use common banking vocabulary
-          only — do not invent specific product names, amounts, dates, or
-          branch details. Do not paraphrase the customer's original question.
+        - Exactly one companion per failed task. Never a revision of the
+          failed task_id itself, never a second companion for the same task,
+          never a companion for a task not listed in Failed Tasks.
+        - The companion's product/intent pairing must be DIFFERENT from the
+          failed task's own current pairing -- Territory A already covers
+          "same product (plus any plausible alternate), every intent"; a
+          companion proposing the identical pairing adds nothing.
+        - Every companion pairing must be valid in the Product/Intent Matrix.
+        - Write exactly one angle group (group_id "scope") with three angles,
+          each a SHORT NATURAL-LANGUAGE PHRASE (8-20 words) that resembles a
+          sentence fragment from an FAQ answer about the NEW topic -- not the
+          failed task's topic, not the customer's original wording. Use
+          common banking vocabulary only; do not invent specific product
+          names, amounts, dates, or branch details.
+        - This is one committed guess, not a hedge: do not write more than
+          one angle group, and do not propose more than one candidate
+          product/intent pairing per companion.
 
         Output JSON ONLY:
-        {{"components": [{{"component_id":"retry_task_1","customer_component":"same component as failed task","resolution":"SEARCH","search_task":{{"task_id":"exact failed task_id","angle_groups":[{{"group_id":"base","procedural":"unchanged","policy":"unchanged","conceptual":"unchanged"}},{{"group_id":"retry_2","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"valid matrix product or ordered product array during PRODUCT_EXPANSION","target_intent":["existing target_intent, unchanged"]}},"clarification":null}}]}}
+        {{"companions": [{{"source_task_id":"exact failed task_id","search_task":{{"task_id":"<source_task_id>_scope","mapping_reason":"reasoned first: name the concrete Matrix/context basis for this genuinely different but related pairing","angle_groups":[{{"group_id":"scope","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"a valid matrix product, different from the failed task's own","target_intent":["1-3 valid intents for that product"],"search_territory":"adjacent_scope","source_task_id":"<same as the entry's own source_task_id>"}}}}]}}
         """
 
     # Set wherever a component's SEARCH/DECLINE resolution is rejected or
@@ -2069,63 +2071,105 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     # for the exact same request.
     any_subquery_resolved_by_other_tool = False
 
+    formulated_tasks = []
+    formulated_clarifications = []
+    formulated_declines = []
+    prior_tasks_by_id = {task.get("task_id"): task for task in prior_tasks}
     try:
-        res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE)) if (not retry_tasks or llm_retry_tasks) else {"components": []}
-        # The model returns a mutually exclusive component partition. Derive
-        # the existing downstream task lists from it so retrieval, caching,
-        # retries, and clarification handling retain their current contracts.
-        formulated_tasks = []
-        formulated_clarifications = []
-        formulated_declines = []
-        for index, component in enumerate(res.get("components", []) or [], start=1):
-            if not isinstance(component, dict):
-                continue
-            resolution = str(component.get("resolution", "")).strip().upper()
-            customer_component = str(component.get("customer_component", "")).strip()
-            if resolution == "SEARCH" and isinstance(component.get("search_task"), dict):
-                # `customer_component` is the formulator's already-resolved
-                # sub-query.  Preserve it on the retrieval task so every
-                # downstream stage evaluates this task's scope—not the whole
-                # customer turn—without requiring another LLM interpretation.
-                search_task = dict(component["search_task"])
-                if customer_component:
-                    search_task["customer_component"] = customer_component
-                    # Preserve the resolved task-level subquery as the direct
-                    # retrieval anchor. It remains immutable across retries.
-                    search_task["direct_query"] = customer_component
-                search_task["subquery_id"] = str(component.get("component_id", "")).strip() or f"subquery_{index}"
-                formulated_tasks.append(search_task)
-            elif resolution == "CLARIFY" and isinstance(component.get("clarification"), dict):
-                clarification = dict(component["clarification"])
-                clarification["subquery_id"] = str(component.get("component_id", "")).strip() or f"subquery_{index}"
-                formulated_clarifications.append(clarification)
-            elif resolution == "DECLINE":
-                # A component the formulator declined as out-of-scope can
-                # still be the same subquery a different tool (deeplink,
-                # service_request, api) already fully resolved this same
-                # round -- the formulator's own SEARCH/DECLINE judgment
-                # doesn't see other tools' results. Skip manufacturing a
-                # decline for a subquery that's already answered, same
-                # guard as the SEARCH-side scope-rejection below.
-                owning_subquery = subqueries_by_id.get(str(component.get("component_id", "")).strip())
-                if _resolved_by_other_tool(owning_subquery):
-                    any_subquery_resolved_by_other_tool = True
+        if retry_tasks:
+            # Extra Effort v2.1: this call, when it runs at all, only ever
+            # produces Territory B companions -- a brand new task per
+            # failed task, never a revision. It's skipped entirely
+            # (formulated_tasks stays empty; Territory A's own
+            # deterministic widen still applies below regardless) whenever
+            # no retrying task actually needs one this round -- see
+            # territory_b_needed_task_ids above.
+            if retry_prompt is not None:
+                # Explicit response_schema_override rather than relying on
+                # marker-string auto-detection in call_llm_router, since
+                # this prompt's own text doesn't match any of that
+                # function's hardcoded markers (confirmed -- the prior
+                # version of this prompt didn't either, so retry-mode
+                # calls were never actually schema-enforced before this).
+                res = _parse_json_robustly(call_groq_lpu(retry_prompt, model_id=MODEL_E_TRIAGE, response_schema_override=TerritoryBPlan))
+                for companion in res.get("companions", []) or []:
+                    if not isinstance(companion, dict) or not isinstance(companion.get("search_task"), dict):
+                        continue
+                    source_task_id = str(companion.get("source_task_id", "")).strip()
+                    source_task = prior_tasks_by_id.get(source_task_id)
+                    if not source_task or source_task_id not in territory_b_needed_task_ids:
+                        # A companion for a task not actually asked for this
+                        # round (invented, malformed, stale, or already
+                        # covered by direct-adopt) has nothing to attach to
+                        # -- drop it rather than guess.
+                        continue
+                    search_task = dict(companion["search_task"])
+                    # Identity fields are never trusted from the model: the
+                    # companion belongs to the SAME subquery as its source task,
+                    # searches for the SAME underlying customer need (just a
+                    # different, adjacent scope), and gets a deterministic task_id
+                    # -- none of that is the model's call to make.
+                    search_task["subquery_id"] = source_task.get("subquery_id")
+                    search_task["customer_component"] = source_task.get("customer_component", "")
+                    search_task["direct_query"] = source_task.get("direct_query", source_task.get("customer_component", ""))
+                    search_task["task_id"] = f"{source_task_id}_scope"
+                    search_task["search_territory"] = "adjacent_scope"
+                    search_task["source_task_id"] = source_task_id
+                    formulated_tasks.append(search_task)
+        else:
+            res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
+            # The model returns a mutually exclusive component partition. Derive
+            # the existing downstream task lists from it so retrieval, caching,
+            # retries, and clarification handling retain their current contracts.
+            for index, component in enumerate(res.get("components", []) or [], start=1):
+                if not isinstance(component, dict):
                     continue
-                decline = component.get("decline") if isinstance(component.get("decline"), dict) else {}
-                # Only these two categories are ever valid from this node's own
-                # DECLINE resolution -- non_compliant/non_financial belong to
-                # triage's separate decline vocabulary, never this one.
-                category = str(decline.get("category", "")).strip()
-                if category not in {"out_of_scope_product", "individual_customers_only"}:
-                    category = "out_of_scope_product"
-                formulated_declines.append({
-                    "task_id": f"decline_formulator_{index}",
-                    "subquery": customer_component,
-                    "reason_category": category,
-                    "detail": str(decline.get("reason", "")).strip(),
-                    "decline_evidence": _decline_evidence_text(category),
-                    "source": "formulator",
-                })
+                resolution = str(component.get("resolution", "")).strip().upper()
+                customer_component = str(component.get("customer_component", "")).strip()
+                if resolution == "SEARCH" and isinstance(component.get("search_task"), dict):
+                    # `customer_component` is the formulator's already-resolved
+                    # sub-query.  Preserve it on the retrieval task so every
+                    # downstream stage evaluates this task's scope—not the whole
+                    # customer turn—without requiring another LLM interpretation.
+                    search_task = dict(component["search_task"])
+                    if customer_component:
+                        search_task["customer_component"] = customer_component
+                        # Preserve the resolved task-level subquery as the direct
+                        # retrieval anchor. It remains immutable across retries.
+                        search_task["direct_query"] = customer_component
+                    search_task["subquery_id"] = str(component.get("component_id", "")).strip() or f"subquery_{index}"
+                    formulated_tasks.append(search_task)
+                elif resolution == "CLARIFY" and isinstance(component.get("clarification"), dict):
+                    clarification = dict(component["clarification"])
+                    clarification["subquery_id"] = str(component.get("component_id", "")).strip() or f"subquery_{index}"
+                    formulated_clarifications.append(clarification)
+                elif resolution == "DECLINE":
+                    # A component the formulator declined as out-of-scope can
+                    # still be the same subquery a different tool (deeplink,
+                    # service_request, api) already fully resolved this same
+                    # round -- the formulator's own SEARCH/DECLINE judgment
+                    # doesn't see other tools' results. Skip manufacturing a
+                    # decline for a subquery that's already answered, same
+                    # guard as the SEARCH-side scope-rejection below.
+                    owning_subquery = subqueries_by_id.get(str(component.get("component_id", "")).strip())
+                    if _resolved_by_other_tool(owning_subquery):
+                        any_subquery_resolved_by_other_tool = True
+                        continue
+                    decline = component.get("decline") if isinstance(component.get("decline"), dict) else {}
+                    # Only these two categories are ever valid from this node's own
+                    # DECLINE resolution -- non_compliant/non_financial belong to
+                    # triage's separate decline vocabulary, never this one.
+                    category = str(decline.get("category", "")).strip()
+                    if category not in {"out_of_scope_product", "individual_customers_only"}:
+                        category = "out_of_scope_product"
+                    formulated_declines.append({
+                        "task_id": f"decline_formulator_{index}",
+                        "subquery": customer_component,
+                        "reason_category": category,
+                        "detail": str(decline.get("reason", "")).strip(),
+                        "decline_evidence": _decline_evidence_text(category),
+                        "source": "formulator",
+                    })
     except Exception as e:
         print(f"🚨 [NODE 02e EXCEPTION]: {e}")
         formulated_tasks = []
@@ -2205,62 +2249,86 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     formulated_tasks = validated_tasks
 
     if retry_tasks:
-        llm_replacements = {task.get("task_id"): task for task in formulated_tasks if task.get("task_id") in retry_task_ids}
-        search_tasks = []
+        # Extra Effort v2.1: formulated_tasks now holds only Territory B
+        # companions (see the retry_prompt branch above, only ever
+        # non-empty for territory_b_needed_task_ids), each already carrying
+        # its own source_task_id. Territory A is applied here, directly, to
+        # every retrying task_id -- deterministic, no LLM involvement --
+        # using each task's own pre-computed alternate_products (reasoned
+        # once, at fresh-formulation time -- see SearchTask.alternate_products)
+        # appended to its existing product(s) before widening intent, so a
+        # single failed classification can now also test a genuinely
+        # different product's own full intent scope, not just its original
+        # product's.
+        territory_b_by_source = {}
+        for task in formulated_tasks:
+            source_id = task.get("source_task_id")
+            if source_id and source_id not in territory_b_by_source:
+                territory_b_by_source[source_id] = task
 
+        search_tasks = []
         for prior_task in prior_tasks:
             task_id = prior_task.get("task_id")
-            expansion = expansion_by_task_id.get(task_id, {})
-            if task_id in deterministic_task_ids:
-                # INTENT_EXPANSION never touches the LLM: compute the widened
-                # scope directly from the matrix.
-                replacement = _expand_intent_to_full(prior_task)
-            else:
-                replacement = llm_replacements.get(task_id)
-            if replacement and task_id in retry_task_ids:
-                merged = _merge_retry_task(prior_task, replacement, expansion)
-                stage_label = expansion.get("stage", "")
-
-                if stage_label in {"INTENT_EXPANSION", "PRODUCT_EXPANSION"}:
-                    old_prod = _normalized_product_tags(prior_task.get("target_commercial_product"))
-                    new_prod = _normalized_product_tags(merged.get("target_commercial_product"))
-                    old_int = prior_task.get("target_intent", [])
-                    new_int = merged.get("target_intent", [])
-                    old_int = [old_int] if isinstance(old_int, str) else old_int
-                    new_int = [new_int] if isinstance(new_int, str) else new_int
-                    if old_prod == new_prod and set(old_int) == set(new_int):
-                        print(f"   ⏩ [RETRY BARRIER]: {stage_label} produced no changes for '{task_id}'. Deferring duplicate RAG until the next stage.")
-                        fast_forward_task_ids.append(task_id)
-                        new_retry_counts[task_id] = new_retry_counts.get(task_id, 0) + 1
-                    else:
-                        print(f"   🔧 [{stage_label}]: Task '{task_id}' | product {old_prod} → {new_prod} | intent {old_int} → {new_int}")
-                    log_event(
-                        "task.expansion.applied",
-                        task_id=task_id,
-                        stage=stage_label,
-                        old_product=old_prod,
-                        new_product=new_prod,
-                        old_intent=old_int,
-                        new_intent=new_int,
-                        no_op=(old_prod == new_prod and set(old_int) == set(new_int)),
-                    )
-                elif stage_label == "ANGLE_EXPANSION":
-                    prior_group_count = len(_normalize_angle_groups(prior_task))
-                    merged_groups = _normalize_angle_groups(merged)
-                    if len(merged_groups) > prior_group_count:
-                        new_group = merged_groups[-1]
-                        print(f"   🔧 [ANGLE_EXPANSION]: Task '{task_id}' added group '{new_group.get('group_id')}' | procedural='{new_group.get('procedural')}' | policy='{new_group.get('policy')}' | conceptual='{new_group.get('conceptual')}'")
-                        log_event(
-                            "task.expansion.applied",
-                            task_id=task_id,
-                            stage=stage_label,
-                            new_angle_group=new_group,
-                            angle_group_count=len(merged_groups),
-                        )
-
-                search_tasks.append(merged)
-            else:
+            if task_id not in retry_task_ids:
                 search_tasks.append(prior_task)
+                continue
+
+            alternate_products = (prior_task.get("alternate_products") or [])[:2]
+            widened_task = dict(prior_task)
+            widened_task["target_commercial_product"] = _normalized_product_tags(
+                _normalized_product_tags(prior_task.get("target_commercial_product")) + alternate_products
+            )
+            expanded = _expand_intent_to_full(widened_task)
+            old_prod = _normalized_product_tags(prior_task.get("target_commercial_product"))
+            new_prod = _normalized_product_tags(expanded.get("target_commercial_product"))
+            old_int = prior_task.get("target_intent", [])
+            old_int = [old_int] if isinstance(old_int, str) else old_int
+            new_int = expanded.get("target_intent", [])
+            no_op = old_prod == new_prod and set(old_int) == set(new_int)
+            if no_op:
+                # No valid alternate product, and already at full intent
+                # scope for its own product -- nothing left for Territory A
+                # to try. Defer its own duplicate RAG re-run; Territory B's
+                # companion below is unaffected and always still retrieves.
+                print(f"   ⏩ [TERRITORY A NO-OP]: Task '{task_id}' already covers its full product/intent scope.")
+                fast_forward_task_ids.append(task_id)
+                new_retry_counts[task_id] = new_retry_counts.get(task_id, 0) + 1
+                search_tasks.append(prior_task)
+            else:
+                print(f"   🔧 [TERRITORY A]: Task '{task_id}' | product {old_prod} → {new_prod} | intent {old_int} → {new_int}")
+                search_tasks.append(expanded)
+            log_event(
+                "task.expansion.applied",
+                task_id=task_id,
+                stage="TERRITORY_A_FILTER_WIDEN",
+                old_product=old_prod,
+                new_product=new_prod,
+                old_intent=old_int,
+                new_intent=new_int,
+                no_op=no_op,
+            )
+
+            # Territory B: a brand-new companion task, appended alongside
+            # the original -- never merged with it. Both share the same
+            # subquery_id, so _finalize_rag_attempts already combines both
+            # territories' results into one subquery-level rag attempt.
+            companion = territory_b_by_source.get(task_id)
+            if companion:
+                print(f"   🔭 [TERRITORY B]: Task '{task_id}' → companion '{companion.get('task_id')}' | product={companion.get('target_commercial_product')} intent={companion.get('target_intent')}")
+                log_event(
+                    "task.scope_expansion.created",
+                    source_task_id=task_id,
+                    companion_task_id=companion.get("task_id"),
+                    target_commercial_product=companion.get("target_commercial_product"),
+                    target_intent=companion.get("target_intent"),
+                    mapping_reason=companion.get("mapping_reason", ""),
+                )
+                search_tasks.append(companion)
+            elif task_id in territory_b_needed_task_ids:
+                # A companion was genuinely expected this round (unlocked,
+                # no existing lead) but didn't come back -- malformed or
+                # dropped model response.
+                print(f"   ⚠️ [TERRITORY B OMITTED]: Task '{task_id}' has no companion this round (malformed or dropped model response).")
     else:
         search_tasks = formulated_tasks
 
@@ -3478,19 +3546,19 @@ async def node_03b_rag_worker(state: AgentState):
             parent_ids=verified_session_parent_ids,
             candidate_count=len(verified_session_parent_ids),
         )
-        if retrieval_mode == "DIRECT":
-            parents = await engine.execute_direct_search(
-                query_text=task.get("direct_query", task.get("customer_component", "")),
-                scope_pairs=scope_pairs,
-                verified_session_parent_ids=verified_session_parent_ids,
-                excluded_parent_ids=excluded_parent_ids,
-            )
-        else:
-            parents = await engine.execute_multi_angle_search(
-                blueprint=task,
-                scope_pairs=scope_pairs,
-                excluded_parent_ids=excluded_parent_ids,
-            )
+        # Extra Effort v2.0: every attempt fuses all four representations
+        # (procedural/policy/conceptual + the resolved subquery text) into
+        # one RRF ranking -- see _retrieval_mode_for_task and
+        # execute_multi_angle_search's docstring. The standalone DIRECT
+        # path (and its own verified-session fusion) is retired; verified-
+        # session boosting is now a parameter of the same fused search.
+        parents = await engine.execute_multi_angle_search(
+            blueprint=task,
+            scope_pairs=scope_pairs,
+            excluded_parent_ids=excluded_parent_ids,
+            direct_query=task.get("direct_query", task.get("customer_component", "")),
+            verified_session_parent_ids=verified_session_parent_ids,
+        )
         return {
             "task_id": task.get("task_id"),
             "status": "RETRIEVED",
@@ -3637,8 +3705,13 @@ def node_03c_sufficiency_auditor(state: AgentState):
     # otherwise a historical test. Rejecting H0 extends effort; static
     # rolling confidence is otherwise untouched and still exclusively
     # feeds node_08's soft-escalation chip. See RAG_RETRY_EFFORT_v1.0.md.
-    NORMAL_EFFORT_RAG_ATTEMPTS = 2
+    # Extra Effort v2.1: which attempt transitions are unconditional vs
+    # gated by extend_if_optional (this same Monte-Carlo-calibrated
+    # hypothesis test) is now table-driven -- see EFFORT_TIER_GATE and
+    # _attempt_unlocked above. Only the attempt-2->3 transition
+    # (Territory B) is actually gated by it today.
     pending_decisions = []
+    new_direct_adopt_tasks = []
     tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", [])}
     subqueries_by_id = {
         subquery.get("subquery_id"): subquery
@@ -3750,6 +3823,19 @@ def node_03c_sufficiency_auditor(state: AgentState):
           materially relevant information for the task—not whether they repeat
           the customer's wording or explicitly resolve every possible
           interpretation of the customer's question.
+        - TERRITORY CEILING (Extra Effort v2.0): when `task.search_territory`
+          is `"adjacent_scope"`, this task is a deliberate scope-expansion
+          companion -- by construction, its own product/intent is DIFFERENT
+          from what the customer literally asked about, offered only as
+          related information that might still help. Its status may never
+          be SUFFICIENT, no matter how well its parents match it -- cap at
+          PARTIALLY_SUFFICIENT when they contain a genuinely useful related
+          fact, INSUFFICIENT when they don't. A normal task
+          (`search_territory` absent or `"in_scope"`) has no such ceiling.
+          Never set `likely_ambiguous_request`/`unresolved_term` for an
+          `"adjacent_scope"` task either -- clarification-authoring for
+          this subquery belongs exclusively to its `"in_scope"` sibling
+          task, which reviews the same underlying request.
         - PARTIAL-EVIDENCE DECISION ORDER: First identify whether any supplied
           parent contains a factual proposition directly relevant to a
           meaningful aspect of the customer's resolved request. If one does,
@@ -3781,6 +3867,75 @@ def node_03c_sufficiency_auditor(state: AgentState):
           Only treat a differently-named product's parent as material when
           it explicitly states it also applies to, or is the general form
           of, the customer's named product.
+        - MECHANISM-BRIDGE REASONING (progressive, work through in this
+          order before falling back to INSUFFICIENT): this is a genuinely
+          different case from the category-adjacency rule just above --
+          that rule blocks treating a DIFFERENT product as material merely
+          for sharing a category, menu path, or vocabulary; this rule
+          instead asks whether a parent already material to the CUSTOMER'S
+          OWN NAMED PRODUCT describes an outcome, resource, or capability
+          whose own ordinary, unrestricted nature would satisfy the
+          customer's underlying need, even though no parent ever names that
+          specific need. Never trigger this from shared category,
+          vocabulary, or menu placement alone -- only from the OUTPUT's own
+          stated, inherent nature.
+          Product-identity note: a parent's own internal or marketing name
+          for an offering (e.g. a specific product branded "Instant Loan")
+          is never grounds on its own to doubt it concerns the customer's
+          named product just because the two names read differently --
+          every parent supplied to you for this task was already retrieved
+          under this task's own product classification, and that
+          classification is settled before you ever see it; do not
+          re-litigate it here. The category-adjacency rule's stricter bar
+          (an explicit statement that it also applies to, or is the general
+          form of, the named product) is for a parent tagged under a
+          genuinely DIFFERENT product than this task's own -- it does not
+          apply merely because a parent's own brand name for the SAME
+          product differs from the generic Matrix noun describing it.
+          Step 1: Re-read the request one level more abstractly than its
+          literal wording -- what underlying outcome is the customer
+          actually after (e.g. a way to pay for something, a way to access
+          funds, a way to complete an action), not just the specific
+          scenario they used to describe it.
+          Step 2: Check whether any parent already established as
+          concerning the customer's own named product describes a
+          resource, output, or capability that -- by its own ORDINARY,
+          COMMON-KNOWLEDGE nature -- would ordinarily satisfy that more
+          abstract outcome. A parent does NOT need to spell out that nature
+          explicitly for you to rely on it: plain cash, once disbursed with
+          no stated restriction, is fungible and usable for any purpose by
+          the ordinary meaning of "cash" itself -- the same way you would
+          never require an FAQ to state "you may spend your salary on
+          anything" before treating salary as unrestricted. Requiring the
+          word "unrestricted" (or equivalent) to appear before relying on
+          this is over-literal and defeats the rule -- reason from the
+          resource's ordinary real-world nature, exactly as you already
+          reason from common banking vocabulary elsewhere in this task.
+          The bridge itself must still rest on a parent's actual stated
+          fact (that the product disburses cash, or grants some other
+          describable capability) -- never on an assumption about the
+          PRODUCT the parent never actually states.
+          Step 3: Before relying on it, check every supplied parent for any
+          stated condition, restriction, or limitation on that same
+          resource, output, or capability (e.g. a required use, an
+          eligibility condition, a repayment term tied to purpose) that
+          would qualify or block the bridge. Absence of a restriction is
+          not itself suspicious -- it is the default state -- so do not
+          treat "no parent mentions a restriction" as a reason to doubt the
+          bridge; only an actually-stated restriction qualifies or blocks
+          it. When one exists, the bridge does not hold as clean
+          PARTIALLY_SUFFICIENT guidance -- treat the restriction as part of
+          what must be disclosed, not as grounds to discard the bridge
+          entirely, unless it outright forecloses the
+          customer's outcome.
+          Step 4: If the bridge holds, approve the parent(s) it rests on as
+          PARTIALLY_SUFFICIENT (never SUFFICIENT -- this is one bounded
+          logical step removed from a literal answer, not a direct one) and
+          state the bridge explicitly in `reason`, including any
+          qualifying condition from Step 3 that the response must carry
+          forward. If no such resource/capability is described anywhere in
+          the supplied parents, this rule simply does not apply -- proceed
+          to INSUFFICIENT under the rules above as normal.
         - SUFFICIENT: the selected parents contain enough grounded information
           for a useful response to the `customer_component`, even when that
           response is an explicit policy boundary, limit, condition,
@@ -3918,8 +4073,33 @@ def node_03c_sufficiency_auditor(state: AgentState):
         - evidence_delta is internal diagnostic context only. It is never
           approved answer evidence.
         - Never invent a parent ID, fact, or instruction.
+        - SCOPE-EXPANSION LEAD (Extra Effort v2.1, for a task whose
+          `search_territory` is absent or `"in_scope"` only -- never set
+          this for an already-`"adjacent_scope"` task): reasoned through
+          BEFORE naming the candidate. When this task's own status is
+          PARTIALLY_SUFFICIENT or INSUFFICIENT, look across its supplied
+          candidate parents for ONE that -- while not materially answering
+          this task's own `customer_component` -- has a genuine, real,
+          content-based connection worth pursuing as a related topic if
+          this task's literal request turns out undocumented (e.g. it
+          covers a closely adjacent product or process). This candidate is
+          adopted VERBATIM and shown to the customer immediately, exactly as
+          you name it here -- no further review happens downstream, and it
+          fires even on a turn where nothing else about this task ever
+          retries. Only set this when you would stand behind it as
+          genuinely useful related information right now, not merely as a
+          hopeful lead for a future retry attempt. Set
+          `scope_expansion_lead_reason` to the specific, concrete basis for
+          that connection and `scope_expansion_lead_parent_id` to its exact
+          parent ID. The connection must be real content, never merely
+          shared vocabulary, category, or menu placement -- the same
+          discipline `clarification_guesses` already requires. If no
+          candidate has a real, statable connection, leave both fields
+          empty -- a forced lead is worse than none, since it would be
+          shown to the customer immediately instead of a genuinely reasoned
+          connection.
 
-        Output JSON only: {{"task_results": [{{"task_id": "...", "status": "SUFFICIENT" | "PARTIALLY_SUFFICIENT" | "INSUFFICIENT", "approved_parent_ids": ["..."], "reason": "...", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "likely_ambiguous_request": true|false, "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
+        Output JSON only: {{"task_results": [{{"task_id": "...", "reason": "...", "status": "SUFFICIENT" | "PARTIALLY_SUFFICIENT" | "INSUFFICIENT", "approved_parent_ids": ["..."], "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "scope_expansion_lead_reason": "", "scope_expansion_lead_parent_id": "", "likely_ambiguous_request": true|false, "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
         """
         try:
             auditor_results.update({
@@ -3941,6 +4121,15 @@ def node_03c_sufficiency_auditor(state: AgentState):
             requested_status = "INSUFFICIENT"
         if requested_status not in {"SUFFICIENT", "PARTIALLY_SUFFICIENT", "INSUFFICIENT"}:
             requested_status = "INSUFFICIENT"
+        # Extra Effort v2.0 TERRITORY CEILING: enforced here in code, not
+        # left to the prompt instruction alone -- an adjacent_scope task is,
+        # by construction, not the customer's literal request, so a
+        # SUFFICIENT verdict from the model would overstate what its
+        # evidence actually supports. Downgrade deterministically rather
+        # than trust the model never to say it anyway.
+        if requested_status == "SUFFICIENT" and tasks_by_id.get(task_id, {}).get("search_territory") == "adjacent_scope":
+            print(f"   🔒 [TERRITORY CEILING]: Task '{task_id}' is adjacent_scope; downgrading model's SUFFICIENT to PARTIALLY_SUFFICIENT.")
+            requested_status = "PARTIALLY_SUFFICIENT"
         reason = audit.get("reason", "No sufficient grounded FAQ evidence was selected.")
         history_delta = [
             {
@@ -4018,12 +4207,91 @@ def node_03c_sufficiency_auditor(state: AgentState):
             # Backward-compatible handling for an in-flight / legacy model
             # response that still uses the former string field.
             refinement = audit.get("search_feedback") or reason
+        # Extra Effort v2.1: a lead is only trustworthy when it names a
+        # parent this exact attempt actually supplied -- same discipline as
+        # evidence_delta above -- AND the audited task's own search_territory
+        # is not already "adjacent_scope". Without that second check, an
+        # adjacent_scope companion's own audit round flagging a lead would
+        # synchronously spawn a "..._scope_scope" companion below,
+        # reintroducing the exact unbounded-recursion class of bug
+        # is_scope_expansion_task (further below) exists to stop -- that
+        # guard alone isn't enough here because direct-adopt acts on the
+        # lead immediately, in this same loop, before is_scope_expansion_task
+        # ever gets a chance to apply.
+        scope_expansion_lead_parent_id = str(audit.get("scope_expansion_lead_parent_id", "")).strip()
+        scope_expansion_lead_reason = str(audit.get("scope_expansion_lead_reason", "")).strip()
+        if (
+            scope_expansion_lead_parent_id not in available_ids
+            or not scope_expansion_lead_reason
+            or tasks_by_id.get(task_id, {}).get("search_territory") == "adjacent_scope"
+        ):
+            scope_expansion_lead_parent_id = ""
+            scope_expansion_lead_reason = ""
+
+        # Direct-adopt (Extra Effort v2.1): a genuine lead is adopted
+        # immediately as PARTIALLY_SUFFICIENT/adjacent_scope evidence --
+        # free (no LLM call, no retrieval), and deliberately NOT part of
+        # the effort-tier system above (see EFFORT_TIER_GATE): it must fire
+        # even on a turn where extend_if_optional is False and this task is
+        # about to terminate in this very same round, which is exactly why
+        # this lives here rather than in node_02e's retry pass (that pass
+        # only ever runs for a task whose status is "RETRY" this round).
+        # First-lead-wins: a task can be audited across two attempts before
+        # terminating, and a later round's audit could flag a different
+        # candidate -- without this guard a later lead would silently
+        # overwrite an already-terminal, already-scored companion, or (if
+        # appended instead) produce two search_tasks entries sharing one
+        # task_id.
+        companion_task_id = f"{task_id}_scope"
+        if scope_expansion_lead_parent_id and companion_task_id not in tasks_by_id:
+            companion_stub = {
+                "task_id": companion_task_id,
+                "search_territory": "adjacent_scope",
+                "source_task_id": task_id,
+                "mapping_reason": scope_expansion_lead_reason,
+                "subquery_id": tasks_by_id.get(task_id, {}).get("subquery_id"),
+                "customer_component": tasks_by_id.get(task_id, {}).get("customer_component", ""),
+                # target_commercial_product/target_intent deliberately left
+                # unset -- there is no cheap way to look up the flagged
+                # PARENT's own product/intent tags (hydrated parents carry
+                # only parent_id+content), and copying the SOURCE task's own
+                # product/intent would let a future turn's
+                # _verified_session_parent_ids_for_task (which matches by
+                # product+intent overlap) resurface this never-fully-vetted,
+                # adjacent-scope parent as if it were verified in-scope
+                # evidence -- exactly the cross-scope leakage the territory
+                # ceiling exists to prevent. Left empty,
+                # _normalized_product_tags(None) -> [] and that lookup's own
+                # guard naturally excludes it.
+            }
+            # Local dict, kept in sync immediately so any LATER lookup this
+            # same loop/call (e.g. rag_task_scores_by_subquery_id further
+            # below) sees it -- state's own search_tasks is only updated
+            # once, in this function's final return.
+            tasks_by_id[companion_task_id] = companion_stub
+            new_direct_adopt_tasks.append(companion_stub)
+            current_results[companion_task_id] = {
+                "task_id": companion_task_id,
+                "status": "PARTIALLY_SUFFICIENT",
+                "approved_parent_ids": [scope_expansion_lead_parent_id],
+                "reason": scope_expansion_lead_reason,
+                "origin": "DIRECT_ADOPT",
+            }
+            print(f"   🎯 [DIRECT ADOPT]: Task '{task_id}' → companion '{companion_task_id}' adopts parent '{scope_expansion_lead_parent_id}' verbatim.")
+            log_event(
+                "task.scope_expansion.direct_adopted",
+                source_task_id=task_id,
+                companion_task_id=companion_task_id,
+                parent_id=scope_expansion_lead_parent_id,
+                reason=scope_expansion_lead_reason,
+            )
+
         # Not decided yet whether this task stops here or continues -- see
         # the dilution check right after this loop. A task below
-        # NORMAL_EFFORT_RAG_ATTEMPTS or at/past MAX_RAG_ATTEMPTS has no
-        # real choice either way, but one in between depends on how the
-        # *whole turn* is reading once every task's current-round result
-        # is known, not on this task in isolation.
+        # EXTRA_EFFORT_ATTEMPT or at/past MAX_RAG_ATTEMPTS has no real
+        # choice either way, but one in between depends on how the *whole
+        # turn* is reading once every task's current-round result is known,
+        # not on this task in isolation.
         pending_decisions.append({
             "task_id": task_id,
             "attempt_count": attempt_count,
@@ -4031,14 +4299,6 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "reason": reason,
             "refinement": refinement,
             "requested_status": requested_status,
-            # Only meaningful if this decision ends up terminal (see the
-            # PARTIALLY_SUFFICIENT and CLARIFICATION_REQUIRED branches
-            # below) -- carries the auditor's own judgment of why retrieval
-            # failed and, when it decided a clarifying question is
-            # warranted, the actual question content it authored, from
-            # whichever round actually terminates this task, forward to
-            # finalization. The response generator makes no clarification
-            # judgment of its own; it only relays what's built here.
             "likely_ambiguous_request": bool(audit.get("likely_ambiguous_request", False)),
             "unresolved_term": str(audit.get("unresolved_term", "")).strip(),
             # Distinct from `reason` above: reason explains the evidence
@@ -4070,15 +4330,24 @@ def node_03c_sufficiency_auditor(state: AgentState):
     # one's rag attempt as still "pending" even after it has actually
     # resolved -- the same staleness _resolved_by_other_tool exists to
     # work around elsewhere (DECLINE_CLARIFICATION_DESIGN_v1.0.md §6).
+    # Extra Effort v2.0: a subquery can now own TWO task_ids (Territory A +
+    # a Territory B companion) contributing to the same subquery_id here.
+    # Take the best of the two, never the last one processed -- a blind
+    # overwrite would silently discard whichever territory's contribution
+    # didn't happen to be iterated last, understating (or overstating) the
+    # turn's true grade. This mirrors _finalize_rag_attempts' own "best of
+    # both territories" combination for the same reason.
     rag_task_scores_by_subquery_id = {}
     for result in current_results.values():
         subquery_id = tasks_by_id.get(result.get("task_id"), {}).get("subquery_id")
         if subquery_id:
-            rag_task_scores_by_subquery_id[subquery_id] = _dynamic_task_confidence(result, partial_evidence)
+            score = _dynamic_task_confidence(result, partial_evidence)
+            rag_task_scores_by_subquery_id[subquery_id] = max(score, rag_task_scores_by_subquery_id.get(subquery_id, 0.0))
     for decision in pending_decisions:
         subquery_id = tasks_by_id.get(decision["task_id"], {}).get("subquery_id")
         if subquery_id:
-            rag_task_scores_by_subquery_id[subquery_id] = 0.5 if decision["partial_ids"] else 0.0
+            score = 0.5 if decision["partial_ids"] else 0.0
+            rag_task_scores_by_subquery_id[subquery_id] = max(score, rag_task_scores_by_subquery_id.get(subquery_id, 0.0))
 
     all_subqueries = state.get("financial_subqueries", state.get("triaged_subqueries", []))
     subquery_scores = []
@@ -4131,6 +4400,16 @@ def node_03c_sufficiency_auditor(state: AgentState):
     # has genuinely declined by the test's standard.
     has_repeated_need_this_turn = bool(state.get("repeated_need_detected_this_turn", False))
     extend_if_optional = reject_null_hypothesis or has_repeated_need_this_turn
+    # Extra Effort v2.1: whether Territory B's companion may be constructed
+    # this round, routed through the same EFFORT_TIER_GATE table every
+    # other tier gate uses (rather than reading extend_if_optional
+    # directly) so a future change to Territory B's own gate (see
+    # EFFORT_TIER_GATE's own comment) takes effect here automatically.
+    # Territory A and Territory B are decided/constructed together, in the
+    # SAME node_02e retry pass -- a task that terminates after Territory A
+    # has no live "RETRY" status left for a later, separate round to hang
+    # off of, so this can't be deferred to a genuinely sequential 3rd round.
+    territory_b_unlocked = _attempt_unlocked(MAXIMUM_EFFORT_ATTEMPT, extend_if_optional)
     # Logged every round regardless of extend/stop -- previously only
     # logged at the terminal boundary (evidence.boundary.terminal_unresolved),
     # which meant a task that kept extending across several rounds left no
@@ -4159,9 +4438,33 @@ def node_03c_sufficiency_auditor(state: AgentState):
         # the applicable boundary. At the boundary it is answerable for the
         # supported part and carries a clarification only for the
         # unresolved part.
-        below_floor = attempt_count < NORMAL_EFFORT_RAG_ATTEMPTS
-        at_ceiling = attempt_count >= MAX_RAG_ATTEMPTS
-        should_retry = below_floor or (not at_ceiling and extend_if_optional)
+        next_attempt = attempt_count + 1
+        # Extra Effort v2.0: a Territory B companion is a single committed
+        # guess, never a hedge -- it gets exactly one evaluation, always
+        # terminal, regardless of the tier gating below. Without this, an
+        # insufficient companion re-enters retry_task_ids on its own
+        # brand-new task_id (its own retry_counts start fresh at 0, same as
+        # any other new task), and node_02e would construct a companion
+        # for the companion -- confirmed live as genuine unbounded
+        # recursion (task_1_scope -> task_1_scope_scope -> ...) before this
+        # guard existed.
+        is_scope_expansion_task = tasks_by_id.get(task_id, {}).get("search_territory") == "adjacent_scope"
+        should_retry = (
+            not is_scope_expansion_task
+            and next_attempt <= MAX_RAG_ATTEMPTS
+            and _attempt_unlocked(next_attempt, extend_if_optional)
+        )
+        if is_scope_expansion_task:
+            # Clarification-authoring for this subquery belongs exclusively
+            # to its in_scope (Territory A) task -- a companion sharing the
+            # same subquery_id must never also author one, which would
+            # otherwise produce two clarification_tasks entries for one
+            # subquery_id, violating the "at most one per subquery_id"
+            # guarantee the rest of this design relies on.
+            likely_ambiguous_request = False
+            unresolved_term = ""
+            clarification_reason = ""
+            clarification_guesses = []
         if not should_retry:
             if partial_ids:
                 current_results[task_id] = {
@@ -4209,7 +4512,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             }
             feedback[task_id] = {
                 "status": requested_status,
-                "missing_detail_clues": refinement
+                "missing_detail_clues": refinement,
             }
 
     unresolved = [result for result in current_results.values() if result.get("status") == "RETRY"]
@@ -4229,6 +4532,24 @@ def node_03c_sufficiency_auditor(state: AgentState):
         # result is.
         if result.get("status") != "CLARIFICATION_REQUIRED":
             return True
+        task_meta = tasks_by_id.get(result.get("task_id"), {})
+        # Extra Effort v2.0: a failed Territory B companion never surfaces
+        # its own no-info marker, unconditionally -- the customer never
+        # asked about this adjacent territory, so its own failure is
+        # silently absorbed rather than announced. Whatever should be said
+        # about the LITERAL request is entirely its in_scope sibling's own
+        # job. This must not be keyed off "did the sibling succeed":
+        # confirmed live (a "buy a car" turn where Territory A genuinely
+        # found nothing and Territory B found only adjacent Savings
+        # Account content) that suppressing based on sibling success alone
+        # wrongly swallows the in_scope task's own genuine "no information
+        # for this literal request" marker merely because its adjacent-
+        # scope sibling happened to find related-but-different content --
+        # the exact honesty claim this whole redesign exists to preserve,
+        # left standing on the generator's own prompt adherence alone
+        # instead of this deterministic marker.
+        if task_meta.get("search_territory") == "adjacent_scope":
+            return False
         # _resolved_by_other_tool, not _compute_subquery_status: this
         # subquery's own rag attempt is still the one being finalized
         # right now (_finalize_rag_attempts runs after this point, at the
@@ -4236,8 +4557,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         # still "pending"/unset and never reach RESOLVED regardless of
         # what else already covers it -- the same reason the first
         # version of the node_02e fix for this didn't change anything.
-        subquery_id = tasks_by_id.get(result.get("task_id"), {}).get("subquery_id")
-        owning_subquery = subqueries_by_id.get(subquery_id)
+        owning_subquery = subqueries_by_id.get(task_meta.get("subquery_id"))
         return not _resolved_by_other_tool(owning_subquery)
 
     # Evidence-authored clarifications: the sufficiency auditor -- not the
@@ -4375,19 +4695,40 @@ def node_03c_sufficiency_auditor(state: AgentState):
     # evidence to reject H0, AND that there's an actual pending task this
     # round for that finding to apply to -- a round where everything
     # already resolved SUFFICIENT has nothing left to extend, regardless
-    # of what the test concludes from history.
+    # of what the test concludes from history. Correct as-is even under
+    # Extra Effort v2.1's simultaneous-round design: node_02e decides
+    # Territory A's (unconditional) widen AND Territory B's (conditional,
+    # gated by this exact same extend_if_optional) companion construction
+    # together, in the SAME retry pass -- so whenever extend_if_optional is
+    # True here, Territory B genuinely IS being attempted this round
+    # alongside Territory A, not merely eligible for a later one.
     is_low_confidence = bool(pending_decisions) and extend_if_optional
     # The RAG subgraph is an implementation detail of a generic tool
     # attempt. Only terminal, approved IDs cross this boundary; raw
     # candidates and retry evidence remain inside RAG.
+    # Extra Effort v2.1: this node can now create new search_tasks entries
+    # itself (direct-adopt companions, above) for the first time -- state's
+    # own search_tasks has no LangGraph reducer (plain replace), so the
+    # updated list is built once here and used for BOTH the
+    # _finalize_rag_attempts call below and the final return. Using the raw
+    # `state` parameter for _finalize_rag_attempts here would silently miss
+    # a companion created in this exact call when its source task also
+    # terminates in this same round (fully possible -- e.g. a single-
+    # subquery turn with extend_if_optional=False finishes in one round),
+    # finalizing that subquery's rag tool_attempt as "unavailable" even
+    # though real, direct-adopted evidence exists.
+    updated_search_tasks = state.get("search_tasks", []) + new_direct_adopt_tasks
     financial_subqueries = state.get("financial_subqueries", state.get("triaged_subqueries", []))
     if not unresolved:
-        financial_subqueries = _finalize_rag_attempts(state, list(current_results.values()))
+        financial_subqueries = _finalize_rag_attempts(
+            {**state, "search_tasks": updated_search_tasks}, list(current_results.values())
+        )
     return {
         "preflight_status": "retry_tasks" if unresolved else "task_resolution_ready",
         "task_results": list(current_results.values()),
         "task_retry_counts": retry_counts,
         "task_feedback": feedback,
+        "search_tasks": updated_search_tasks,
         # Completed-task audit history can include internal evidence deltas.
         # Retain it only for tasks that will retry; it must not cross the
         # terminal evidence boundary into subsequent nodes.
@@ -4403,6 +4744,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         "financial_subqueries": financial_subqueries,
         "low_confidence_mode": is_low_confidence,
         "live_task_confidence": live_task_confidence,
+        "territory_b_unlocked": territory_b_unlocked,
     }
 
 
@@ -4575,6 +4917,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
             "task_id": entry.get("task_id"),
             "resolved_request": task_metadata.get(entry.get("task_id"), ""),
             "approved_parents": entry.get("approved_parents", []),
+            "search_territory": entry.get("search_territory", "in_scope"),
+            "mapping_reason": entry.get("mapping_reason", ""),
         }
         for entry in evidence_by_task
     ]
@@ -4677,6 +5021,35 @@ def _generate_response_blocks(state: AgentState) -> dict:
     only; not evidence, response wording, or UI guidance):
     {json.dumps(resolution_context, ensure_ascii=False)}
     Approved evidence by retrieval task: {json.dumps(evidence_inputs, ensure_ascii=False)}
+    An entry whose "search_territory" is "adjacent_scope" (Extra Effort
+    v2.0) is RELATED information the customer did not literally ask about,
+    surfaced only because their exact request wasn't documented -- never
+    present it as a direct answer to their request, and never blend its
+    claims into the same sentence as an "in_scope" (or absent
+    search_territory) entry's direct answer without making the distinction
+    clear. That entry's own "mapping_reason" states WHY this specific
+    related topic was chosen (e.g. "buying a car often means saving for a
+    downpayment") -- use it as the basis for a natural, specific bridging
+    sentence explaining the connection, instead of a generic "here's
+    related information" with no stated reason, which reads as a non
+    sequitur to the customer. Paraphrase mapping_reason's own connection in
+    plain, customer-facing language and visibly hedge it as the
+    assistant's own suggestion, never a stated bank fact or policy (e.g.
+    "you may want to..." / "since you might be..." / "this could help
+    if..."), since it is the assistant's own reasoned inference, not
+    something the customer said or something the evidence itself asserts
+    -- never state or imply it more strongly than mapping_reason itself
+    supports, and never invent a different or additional connection of
+    your own. When this task's own literal request also has a paired
+    no-info statement below (same resolved_request/no-info entry), open
+    with that limitation first, then bridge into the adjacent_scope
+    information in one coherent reply -- e.g. "I don't have information on
+    auto financing, but since you might be saving for a car's downpayment,
+    here's some information about our Savings Account that may help:" --
+    rather than presenting the two as unrelated, separate statements.
+    Sharing a subquery with an "in_scope" entry is otherwise only
+    permitted when both are cited together AND the adjacent_scope framing
+    above is preserved in the text itself.
     Clarification inputs -- never for you to judge WHETHER to ask (that
     decision is already made); your only job is composing the actual
     question. "scope" tells you WHERE in the pipeline the ambiguity is
@@ -5890,6 +6263,8 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
             "task_id": task_id,
             "resolved_subquery": task.get("customer_component", ""),
             "approved_parents": evidence.get("approved_parents", []),
+            "search_territory": evidence.get("search_territory", "in_scope"),
+            "mapping_reason": evidence.get("mapping_reason", ""),
         })
 
     response_block_map = []
@@ -6116,8 +6491,13 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         Customer-Facing Content (assess against BOTH axes above):
         {content_block}
 
+        Write each axis's own "_reason" field BEFORE its verdict field below,
+        and reason it through there first -- a verdict decided first and
+        explained afterward is a rationalization, not a judgment; reasoning
+        that precedes the verdict is what actually shapes it.
+
         Output JSON only:
-        {{"conduct_compliant": true/false, "conduct_reason": "...", "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "violation": "...", "unsupported_content": ["verbatim phrase"]}}]{conduct_extra_output_fields}, "evidence_grounded": true/false, "evidence_reason": "...", "evidence_violations": [{{"scope": "...", "unsupported_content": ["verbatim phrase"], "evidence_gap": "..."}}]{evidence_extra_output_fields}}}
+        {{"conduct_reason": "...", "conduct_compliant": true/false, "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "violation": "...", "unsupported_content": ["verbatim phrase"]}}]{conduct_extra_output_fields}, "evidence_reason": "...", "evidence_grounded": true/false, "evidence_violations": [{{"scope": "...", "unsupported_content": ["verbatim phrase"], "evidence_gap": "..."}}]{evidence_extra_output_fields}}}
         """
         try:
             result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
@@ -6270,6 +6650,44 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         - Assess every remaining financial statement and UI field only against
           Task-Level Approved Evidence. The Original Customer Message can
           never support, soften, or justify a financial claim.
+
+        Scope-Expansion Honesty Rule (Extra Effort v2.0):
+        - A Task-Level Approved Evidence entry whose "search_territory" is
+          "adjacent_scope" was retrieved from a deliberately different
+          product/topic than the customer's own task -- by construction it
+          is related information, not a literal answer to that task's
+          `customer_component`. Its facts are a permitted source, but only
+          for content that is visibly introduced as related or additional
+          information (e.g. "I don't have that exact detail, but here's
+          related information about X that may help:") -- never phrased as
+          if it directly answers the customer's stated request.
+        - Reject as a `wrong_task_evidence` violation any visible claim that
+          draws on an "adjacent_scope" entry's facts while presenting them
+          as the direct, literal answer to that task, or that blends them
+          into the same sentence as an "in_scope" (or absent
+          search_territory) entry's answer without preserving the
+          related-information framing. The underlying facts may still be
+          correct and traceable -- the violation is the missing or
+          erased distinction, not a fabricated fact.
+        - That entry's own "mapping_reason" is the ONLY permitted basis for
+          a bridging sentence explaining WHY this related topic is being
+          offered (e.g. connecting a car purchase to a downpayment to a
+          Savings Account) -- a bridge is grounded only when it is a
+          bounded restatement of that entry's own mapping_reason, visibly
+          hedged as the assistant's own suggestion/possibility ("you may
+          want to...", "since you might be...") rather than asserted as a
+          stated bank fact or policy. Reject as an
+          `unsupported_bridge_inference` violation a bridge that states a
+          different or stronger connection than mapping_reason itself
+          supports, or that drops the hedge and asserts the connection as
+          fact. A response is not required to include a bridge sentence at
+          all -- absence of one is never itself a violation -- but a
+          missing connecting sentence next to an unexplained topic switch
+          should be weighed under the general answer-quality expectations,
+          not this rule specifically.
+        - An entry with "search_territory" absent or "in_scope" is graded
+          exactly as before this rule; this rule only ever narrows how an
+          "adjacent_scope" entry may be used, never how the others are.
 
         Clarification Rules:
         - Each Decline Input and No-Info Input carries its own
@@ -6965,6 +7383,16 @@ def node_08_soft_escalation_analyzer(state: AgentState):
     the latest turn's own value, so it disappears the moment a turn comes
     back with nothing triggered, the same way every other signal here
     already decays.
+
+    A fifth, overriding condition: even when one of the four rules above
+    fires, the banner is suppressed outright when THIS turn's own response
+    was a clean, complete resolution (`turn_fully_resolved` below) -- a
+    rolling multi-turn signal can still read as "struggling" today because
+    of a rough patch several turns ago, but showing "need help?" in the
+    same breath as a fully-answered question reads as the bot doubting its
+    own correct answer, which is worse than saying nothing. This is not a
+    fifth independent trigger -- it only ever suppresses, never causes, an
+    offer.
     """
     print("🟢 [NODE 08] Executing Soft Escalation Analyzer")
     payload = state.get("ui_action_payload", {})
@@ -7043,9 +7471,31 @@ def node_08_soft_escalation_analyzer(state: AgentState):
     if repeated_need_triggered:
         triggered_rules.append("repeated_need")
 
+    # A rolling multi-turn signal (confidence, streak, duration) can still
+    # be true even when THIS turn's own response was a clean, complete
+    # resolution -- e.g. a rough patch several turns ago still drags the
+    # rolling average down today. Offering "need help?" in the same breath
+    # as a fully-answered question is jarring UX and undermines trust in
+    # the answer just given, regardless of what the session as a whole
+    # looks like. `this_turn_confidence` (already computed above, for the
+    # feedback-prompt band) is 1.0 only when every financial subquery this
+    # turn resolved cleanly; a decline is also a complete, definitive
+    # resolution (a clear "no", not a gap), so a decline-only turn (no
+    # financial subqueries to score at all) counts as resolved too. A pure
+    # conversational turn (nothing to resolve either way) does NOT count --
+    # it falls through to the rolling signals unchanged, same as before.
+    had_resolvable_content_this_turn = bool(financial_subqueries) or bool(state.get("decline_tasks"))
+    turn_fully_resolved = had_resolvable_content_this_turn and (
+        this_turn_confidence is None or this_turn_confidence >= 1.0
+    )
+
     # Clarification responses intentionally have no UI actions -- the same
     # reason this never touched payload["options"] even when it was a chip.
-    soft_escalation_available = bool(triggered_rules) and not state.get("final_clarification", "").strip()
+    soft_escalation_available = (
+        bool(triggered_rules)
+        and not turn_fully_resolved
+        and not state.get("final_clarification", "").strip()
+    )
     payload["softEscalationAvailable"] = soft_escalation_available
     if soft_escalation_available:
         log_event(
@@ -7056,6 +7506,13 @@ def node_08_soft_escalation_analyzer(state: AgentState):
             confidence=confidence,
             scored_turn_count=scored_turn_count,
             repeated_need_turns=repeated_need_turns,
+        )
+    elif triggered_rules:
+        log_event(
+            "escalation.soft.suppressed_resolved",
+            rules=triggered_rules,
+            this_turn_confidence=this_turn_confidence,
+            had_resolvable_content_this_turn=had_resolvable_content_this_turn,
         )
 
     payload["showFeedbackPrompt"] = show_feedback_prompt

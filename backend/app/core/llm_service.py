@@ -99,15 +99,42 @@ class ClarificationGuess(BaseModel):
 
 class TaskSufficiencyItem(BaseModel):
     task_id: str = Field(description="The exact task_id supplied in the task input.")
+    # Declared before status/approved_parent_ids on purpose: Gemini's
+    # structured output generates fields in declaration order, so reasoning
+    # through how completely the candidate evidence answers the task BEFORE
+    # committing to a verdict lets that reasoning actually inform the
+    # verdict, rather than just narrating a decision already made -- the
+    # reverse order (reason declared after status, as this schema used to
+    # have it) only ever produces a post-hoc rationalization of a verdict
+    # the model already committed to.
+    reason: str = Field(description="Brief explanation of how completely the candidate evidence answers the task -- reasoned through before deciding status/approved_parent_ids below, not a restatement of them.")
     status: str = Field(description="Must be SUFFICIENT, PARTIALLY_SUFFICIENT, or INSUFFICIENT.")
     approved_parent_ids: List[str] = Field(description="Only supplied parent IDs that provide material grounded information for this exact task.")
-    reason: str = Field(description="Brief explanation of how completely the candidate evidence answers the task.")
     evidence_delta: List[RetryEvidenceDeltaItem] = Field(
         default_factory=list,
         description=(
             "For PARTIALLY_SUFFICIENT or INSUFFICIENT only: newly observed, materially task-relevant facts from "
             "supplied candidate parents. Empty when no such fact exists."
         ),
+    )
+    scope_expansion_lead_reason: str = Field(
+        default="",
+        description=(
+            "Extra Effort v2.0, for PARTIALLY_SUFFICIENT or INSUFFICIENT only: reasoned BEFORE naming the "
+            "candidate below. A concise, statable reason why ONE specific supplied candidate parent -- even "
+            "though it does NOT materially answer this task's own customer_component -- has a genuine, real "
+            "connection worth pursuing as a related topic if this task's literal request turns out "
+            "undocumented (e.g. it covers a closely adjacent product, process, or need). The connection must be "
+            "concrete and content-based, never merely shared vocabulary, category, or menu placement -- the "
+            "same discipline this schema already requires of a clarification guess. If you cannot point to a "
+            "real, statable connection, leave this and scope_expansion_lead_parent_id both empty -- a forced "
+            "lead here is worse than none, since it would send the next retrieval attempt in a wrong direction "
+            "instead of a genuinely reasoned one."
+        ),
+    )
+    scope_expansion_lead_parent_id: str = Field(
+        default="",
+        description="The exact supplied candidate parent ID scope_expansion_lead_reason justifies. Populate only when scope_expansion_lead_reason is non-empty; otherwise leave empty.",
     )
     likely_ambiguous_request: bool = Field(
         default=False,
@@ -185,11 +212,69 @@ class TriageEvaluation(BaseModel):
 # 4. 2D MATRIX QUERY FORMULATOR (Node 02e) -> NESTED SCHEMA
 class SearchTask(BaseModel):
     task_id: str = Field(description="Stable task identifier, e.g. task_1. Preserve it during retries.")
+    # Declared before target_commercial_product/target_intent on purpose,
+    # same reasoning-before-verdict principle as TaskSufficiencyItem.reason
+    # above: committing to a product/intent pairing first and justifying it
+    # afterward only ever produces a post-hoc rationalization, never a
+    # reason that could have shaped the choice itself.
+    mapping_reason: str = Field(
+        description=(
+            "Reasoned through FIRST, before choosing target_commercial_product/target_intent below: why this "
+            "product/intent pairing fits the component, grounded in the Product/Intent Matrix and Trusted "
+            "Conversation Context. For a scope-expansion companion task (search_territory=adjacent_scope) "
+            "specifically, name the concrete, statable basis for this genuinely different but related "
+            "product/intent pairing -- never a generic restatement like 'this seems related.'"
+        )
+    )
     procedural: str = Field(description="Comma-separated action verbs and tool nouns.")
     policy: str = Field(description="Comma-separated rule nouns and constraints.")
     conceptual: str = Field(description="Comma-separated definition nouns.")
     target_commercial_product: str = Field(description="The exact Noun from the Product Matrix.")
     target_intent: List[str] = Field(description="List of 1-3 Verbs from the Intent Matrix.")
+    # Extra Effort v2.1: computed ONCE here, at initial/fresh formulation
+    # time, never re-derived at retry time -- this is a Matrix/context
+    # question answerable from the customer's request alone ("what are my
+    # top candidate classifications"), not one that benefits from having
+    # already seen a failed retrieval attempt. Pre-computing it here is
+    # what makes the backend's own later filter-widening step (Territory A)
+    # fully deterministic again, with zero LLM call needed for it --
+    # mirroring the same "pre-generate now, use later or not" pattern
+    # already used for procedural/policy/conceptual above.
+    alternate_product_reason: str = Field(
+        default="",
+        description=(
+            "Reasoned through FIRST, after committing to target_commercial_product/target_intent above: could "
+            "this exact same literal request ALSO plausibly be served by a genuinely different commercial "
+            "product if this primary classification's own documentation turns out not to cover it? Strongly "
+            "prefer a cross-cutting FUNCTIONAL product (Horizon_APP, Rewards_Program) over another genuine "
+            "financial-instrument product (e.g. Credit_Card, Deposit_Account, Personal_Loan, Insurance, "
+            "Mutual_Funds, Stocks, Debit_Card) as the alternate -- a request genuinely spanning two financial "
+            "products should already be reflected in target_commercial_product or split into a separate "
+            "component upstream, never deferred to this fallback list. Only name a second financial-instrument "
+            "product here when you can state a real, specific reason the SAME literal request is ALSO plausibly "
+            "filed under it -- never merely because it feels topically nearby. Name the concrete basis either "
+            "way. This is a fallback candidate list only ever used later, if a search under the primary "
+            "classification finds nothing -- leave this and alternate_products both empty when nothing is "
+            "genuinely plausible; a forced alternate is worse than none."
+        ),
+    )
+    alternate_products: List[str] = Field(
+        default_factory=list,
+        description="0-2 Matrix product nouns alternate_product_reason justifies, distinct from target_commercial_product. Empty when alternate_product_reason found nothing plausible.",
+    )
+    search_territory: str = Field(
+        default="in_scope",
+        description=(
+            "Must be 'in_scope' for a normal SEARCH task. Must be 'adjacent_scope' only for a scope-expansion "
+            "companion task constructed in RETRY MODE (Extra Effort v2.0) -- evidence found under an "
+            "adjacent_scope task can never be graded SUFFICIENT downstream, only offered as related information, "
+            "since by construction it is not the customer's literal request."
+        ),
+    )
+    source_task_id: str = Field(
+        default="",
+        description="For a scope-expansion companion task only (search_territory=adjacent_scope): the exact original failed task_id this one was constructed alongside. Empty for a normal SEARCH task.",
+    )
 
 class DeclineTask(BaseModel):
     reason: str = Field(description="A short, factual statement for the decline.")
@@ -205,6 +290,23 @@ class RequestComponentResolution(BaseModel):
 
 class QueryFormulation(BaseModel):
     components: List[RequestComponentResolution] = Field(description="An exhaustive, mutually exclusive partition of the pre-decomposed components supplied by triage.")
+
+# 4b. EXTRA EFFORT v2.1 -- TERRITORY B COMPANION CONSTRUCTION (Node 02e,
+# invoked only for a task that has ALSO exhausted Territory A's deterministic
+# filter-widen attempt AND has no direct-adopt companion already covering it
+# -- see node_03c's direct-adopt block, which handles the evidence-grounded
+# case for free, with no LLM call at all. This call's only remaining job is
+# the genuinely speculative case: reason a plausible, different topic when
+# nothing at all was even tangentially flagged.
+class TerritoryBCompanion(BaseModel):
+    source_task_id: str = Field(description="The exact failed task_id (from Failed Tasks) this companion was constructed for. Must match one supplied failed task_id exactly.")
+    search_task: SearchTask = Field(description="The new scope-expansion task itself. Its own search_territory must be 'adjacent_scope' and its own source_task_id must repeat the value above.")
+
+class TerritoryBPlan(BaseModel):
+    companions: List[TerritoryBCompanion] = Field(
+        default_factory=list,
+        description="Exactly one companion for each supplied failed task -- never a revision of the failed task itself; never more than one companion per failed task.",
+    )
 
 # 5. USER JOURNEY PLANNER
 class PresentationTask(BaseModel):

@@ -65,6 +65,45 @@ The existing guard is unchanged: a turn ending in `final_clarification`
 still never sets this (clarification responses intentionally carry no UI
 actions, banner included).
 
+## 1b. Suppressed outright when this turn's own response was fully resolved
+
+Live-traced bug: the banner appeared right after a complete, correct
+answer (a savings-account opening walkthrough), because `low_confidence`
+was true on the *rolling* window -- a rough patch several turns earlier in
+the same session was still dragging the 10-turn average down, even though
+the turn actually shown to the customer fully resolved on its own. Offering
+"need help?" in the same breath as a fully-answered question reads as the
+bot doubting the very answer it just gave, which is worse UX than saying
+nothing.
+
+Fixed with a fifth, purely suppressive condition -- it never causes an
+offer, only ever cancels one that the four trigger rules would otherwise
+produce. `this_turn_confidence` (already computed in this node for the
+turn-quality feedback band, §4) is 1.0 only when every financial subquery
+*this turn* resolved cleanly; a turn whose only content is a decline (a
+complete, definitive "no," not a gap) also counts as resolved, since
+nothing is left hanging for the customer even though a decline never
+enters the RAG-scored `financial_subqueries` list at all. A pure
+conversational turn (nothing to resolve either way) does not count, so it
+falls through to the four rolling signals unchanged.
+
+```
+had_resolvable_content_this_turn = bool(financial_subqueries) or bool(decline_tasks)
+turn_fully_resolved = had_resolvable_content_this_turn and (
+    this_turn_confidence is None or this_turn_confidence >= 1.0
+)
+soft_escalation_available = bool(triggered_rules) and not turn_fully_resolved and not final_clarification
+```
+
+Logged either way for auditability: `escalation.soft.triggered` when the
+banner actually shows, `escalation.soft.suppressed_resolved` (new) when a
+rule fired but this override cancelled it -- naming which rule(s) would
+have fired, so the suppression itself stays inspectable rather than
+silently swallowing the signal. Live-verified against the exact traced
+scenario: `low_confidence` fired (rolling confidence 0.25 over 8 scored
+turns) on a turn whose own `this_turn_confidence` was 1.0, and the banner
+correctly stayed hidden.
+
 ## 2. Bot confidence: a continuous score, not a binary count
 
 Tool Calling v3.0's schema already tracks resolution at a finer grain than
@@ -307,3 +346,35 @@ which crashes with `unhashable type: 'list'` whenever a retry widens that
 field to multiple products (a `PRODUCT_EXPANSION` retry stage). Fixed by
 routing it through the existing `_normalized_product_tags` helper before
 hashing.
+
+## 8. Known issue, deliberately not yet fixed: a flat no-info reply suppresses escalation
+
+Live-traced tracing three consecutive real turns where a customer kept
+asking about car financing (Extra Effort v2.1 — see
+`RAG_RETRY_EFFORT_v1.0.md` §8d): confidence stayed pinned at `0.0` across
+all three turns, and `repeated_need_detected_this_turn` was correctly
+`True` on the second and third — exactly the pattern §1b/§3 describe as
+the case soft escalation exists for. Yet
+`escalation.soft.suppressed_resolved` fired both times, never offering the
+banner.
+
+Root cause: `_generate_evidence_only_response` (`nodes.py`, the plain "I
+don't have information" path a turn takes when it resolves to nothing but
+a `no_info`/`decline`/`clarification` entry) unconditionally returns
+`"final_answer": ""` / `"final_clarification": final_text` — even for an
+entry whose `kind` is `no_info`, a flat informational statement with no
+actual question attached. `node_08`'s own suppression condition
+(`soft_escalation_available = ... and not
+state.get("final_clarification", "").strip()`) exists to avoid offering
+escalation "in the same breath as" a genuine pending clarifying question —
+correct for that case — but this makes it also suppress escalation for a
+flat repeated-failure statement that carries no question at all, which is
+exactly the scenario worth offering it for.
+
+Not fixed here — flagged for a future pass. A fix would need
+`_generate_evidence_only_response` (and/or its sibling
+`_generate_response_blocks`'s own terminal-marker path) to distinguish "this
+turn's only content is a real clarifying question" from "this turn's only
+content is a flat no-info/decline statement" before choosing which of
+`final_answer`/`final_clarification` to populate, rather than routing
+every evidence-only turn through `final_clarification` uniformly.

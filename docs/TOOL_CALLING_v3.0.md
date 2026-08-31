@@ -511,6 +511,67 @@ entirely (zero RAG/tool-calling cost); a pure product-decline turn is
 unaffected; a pure-conversational turn that fails audit three times still
 lands on the same deterministic apology fallback as before.
 
+### Triage was silently doing node_02e's job, and CLARIFY became a growing checklist instead of one test
+
+Tracing a real "i want to buy a car" turn (through the whole Extra Effort
+v2.1 retry ladder — see `RAG_RETRY_EFFORT_v1.0.md` §8d/§8e) surfaced that
+triage's own "resolve the customer's TRUE REQUEST" step was silently
+rewriting `customer_component` from `"i want to buy a car"` to `"I would
+like to apply for a car loan"` — deciding, on its own, that a loan was the
+right product, before `node_02e` (whose own documented job is exactly
+that decision) ever saw the request. By the time `node_02e` read `"apply
+for a car loan"`, the wording itself no longer read as ambiguous, so it
+correctly (from its own, now-incomplete view) committed to
+`Personal_Loan`/`Application` and searched confidently — the entire
+downstream instability across Wave 1, Territory A, and Territory B that
+session traced that day (the auditor mis-framing "Instant Loan" evidence,
+the mechanism-bridge rule fighting an unresolvable case, Territory B
+guessing further wrong products) all inherited this one upstream error.
+Triage's own prompt already explicitly forbade this
+("Do not determine product, intent, availability, or a tool. Those are
+downstream responsibilities.") — this was the model failing to follow an
+existing instruction, in tension with a neighboring one ("do not hold back
+here out of caution, even when... vague") that was winning instead.
+
+**Fix, deliberately subtractive rather than additive**: rather than
+patching either prompt with more named cases (the failure mode this
+session kept re-falling into — see `RAG_RETRY_EFFORT_v1.0.md` §8e's own
+account of the same anti-pattern in `node_03c`), both prompts were
+re-centered on the one general test the system's own architecture already
+implies via `_CLARIFICATION_SCOPE_BY_ORIGINATOR` (each clarification-
+authoring node already has exactly one declared job in that dict) --
+**"can I complete my own defined job, right now, with genuine
+confidence?"** -- rather than an enumerated list of trigger patterns:
+
+- **Triage**'s `customer_component` authoring rule was narrowed to exactly
+  two mechanical operations -- resolving a pronoun/ellipsis/vague
+  reference from Trusted Conversation Context, and stripping
+  conversational noise (greetings, filler, pleasantries) that would dilute
+  retrieval matching -- with an explicit worked contrast: "buy a car"
+  strips down to "I want to buy a car," never elaborated into "I would
+  like to apply for a car loan." Determining whether a real financial
+  need exists, and if so which, is explicitly named as not triage's call.
+- **node_02e**'s `CLARIFY` rule was restated around one test tied directly
+  to its own already-existing `mapping_reason` field (reasoned before the
+  pairing it justifies, per the reasoning-before-verdict convention this
+  whole session extended elsewhere): could you honestly write
+  `mapping_reason` naming one product with a real, specific basis, not
+  merely "this seems plausible" while another is equally plausible? If
+  not, that is ambiguity blocking your job, whatever shape it takes. The
+  previously-separate, narrower rules ("product named with no discernible
+  intent," "several intents equally plausible for the same product") were
+  kept only as brief illustrations of this one test, explicitly flagged as
+  non-exhaustive, rather than as separate rules to pattern-match against.
+
+**Verified live, twice, with different phrasing** ("i want to buy a car"
+and "i want a car"): triage now preserves `"I want to buy a car"`
+faithfully; `node_02e` correctly recognizes the product-level ambiguity on
+its own and resolves `CLARIFY` with reasoned, genuinely distinct guesses
+(Personal Loan / Deposit Account / Credit Card) -- `task.formulated` shows
+`task_count: 0`, confirming RAG never runs at all for a request this
+ambiguous, rather than guessing a product and spending three retry tiers
+discovering the guess was never checkable to begin with.
+
 ## What this replaces
 
 - **Removed entirely**: `tool_tasks`, `tool_results` (flat, `AgentState`-level

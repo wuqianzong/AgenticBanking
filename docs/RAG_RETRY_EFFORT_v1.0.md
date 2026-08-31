@@ -526,6 +526,462 @@ ignored three rounds of contrary evidence to act on the first one. See
 clarification (`node_03c`, as one of the four originators) and the
 standard contract shape it's written into.
 
+**Superseded by §8c below**: the named stages this section describes
+(`INTENT_EXPANSION`/`PRODUCT_EXPANSION`/`ANGLE_EXPANSION` as three separate
+sequential rounds) no longer exist as such under Extra Effort v2.0 — their
+mechanisms survive, reorganized into two waves. The underlying principle
+this section documents (a round's own read is provisional until the ladder
+reaches a genuine boundary, using that boundary round's own fresh
+judgment, never a stale earlier one) still holds, just against the new
+two-wave boundary instead of a four-round one.
+
+## 8c. Extra Effort v2.0 — two waves instead of four rounds
+
+Two problems with the four-round ladder motivated this redesign, both
+found by mining real retry outcomes from `system.jsonl` rather than
+assumed:
+
+1. **`INTENT_EXPANSION`/`PRODUCT_EXPANSION` almost never rescued a failed
+   round** — 1 rescue out of 84 real task lifecycles sampled. Widening the
+   metadata *filter* without also widening the *query text* doesn't
+   actually help ranking find newly-eligible content; a wider net mostly
+   just means the same, still-unmatched query runs against more documents.
+2. **`node_02e` already authors three distinct representations**
+   (`procedural`/`policy`/`conceptual`) on every `SearchTask` from round 1
+   — but retrieval never used them until round 4 (`ANGLE_GROUP_RRF` was
+   gated to `retry_count >= 3`). Rounds 1 through 3 all searched with a
+   single `direct_query` string; three rounds were spent varying the
+   *filter* while the *query representation* never changed at all.
+
+### Stage 1 (implemented, verified): Wave 1 fuses all four representations, from the first attempt
+
+`execute_multi_angle_search` (`rag_engine.py`) now takes a `direct_query`
+parameter and folds it into the *same* RRF fusion as a fourth angle of the
+base group, rather than as a separate `DIRECT` retrieval mode.
+`_retrieval_mode_for_task` (`nodes.py`) now unconditionally returns
+`"ANGLE_GROUP_RRF"` — the standalone `DIRECT` path, and the now-redundant
+`execute_direct_search`/`_execute_direct_search_with_verified_session_evidence`
+methods it alone used, are removed.
+
+**Verified-session-parent boosting (Search Strategy v2.8) is preserved,
+not lost** — it used to be a fusion exclusive to `execute_direct_search`
+(re-query each already-approved-this-session parent against the direct
+query, fold its rank in as one more RRF list). It's now a
+`verified_session_parent_ids` parameter of `execute_multi_angle_search`
+itself: the same re-query happens against the same `direct_query` text,
+and its hits become one more contributing rank-list (`"VerifiedSession"`)
+in the identical group-RRF sum every other angle already contributes to —
+confirmed directly (a verified parent's RRF contribution added a second,
+independent point contribution and correctly moved it to rank 1 without
+disturbing the other three candidates' relative order).
+
+Live-verified: a real turn ("how do I open a savings account") now shows
+`retrieval_mode: "ANGLE_GROUP_RRF"` and 4 vector searches (`Procedural`,
+`Policy`, `Conceptual`, `Direct`) on its very first attempt, resolving in
+one round where it previously would have spent three rounds testing only
+the direct-query representation before ever trying the other three.
+
+### Stage 2 (implemented, verified): Wave 2 — intent expansion + scope expansion, two territories, one audit
+
+Only fires when Wave 1's audit says insufficient — intent is widened only
+after the narrow scope has been genuinely tested and found wanting, never
+pre-emptively (an earlier version of this design, pooling narrow- and
+full-intent results unconditionally, was caught and rejected mid-design:
+it would have silently retired intent as a real filter, since top-K
+retrieval lets noise from other intents crowd out a correct narrow match).
+Two territories, never RRF-fused together since they carry different
+honest ceilings on what status they can support:
+
+- **Territory A (intent expansion)**: same product, full intent scope,
+  same four representations Wave 1 already built — no new LLM call.
+  Candidates here can honestly reach `SUFFICIENT`.
+- **Territory B (scope expansion, Type 1 or Type 2)**: a second
+  `SearchTask` under the same `subquery_id`, reusing the existing
+  "one subquery, multiple search_tasks" combination already done in
+  `_finalize_rag_attempts`. Type 2 (evidence-grounded: Wave 1's audit
+  flags a specific unapproved candidate worth pivoting toward) takes
+  priority over Type 1 (Matrix-and-context reasoning, used only when
+  nothing at all connects) — one committed query, not three angles, since
+  this is a single commitment, not a hedge across facets of an
+  already-confirmed topic. Evidence found here must never be graded above
+  `PARTIALLY_SUFFICIENT`, framed honestly as related-but-not-exact.
+
+Also in scope for Stage 2: `node_02e`/`TaskSufficiencyItem` both gain a
+reasoning field declared *before* the fields it should inform (the same
+fix already applied and verified for `TaskSufficiencyItem.reason`/
+node_06's audit earlier this session, extended to the fields that
+construct the retrieval query itself — `SearchTask.mapping_reason` and
+`TaskSufficiencyItem.scope_expansion_lead_reason`), and the
+hypothesis-test machinery below is repurposed from "is another sequential
+round worth it" (up to four rounds) to the simpler "is Wave 2 worth
+attempting at all" (one binary decision after Wave 1).
+
+**Critical bug found and fixed during live verification: unbounded
+recursion via Territory B self-retry.** A live end-to-end test ran past a
+90-second client timeout without terminating; log analysis showed
+`task_1` → `task_1_scope` → `task_1_scope_scope` → `task_1_scope_scope_scope`
+→ ... — each companion, being a brand-new `task_id` with its own fresh
+`retry_counts` starting at 0, was structurally eligible for the general
+`should_retry` formula's own Wave 2 extension, so an insufficient
+companion kept spawning a companion of its own. Fixed with an explicit
+`is_scope_expansion_task` guard in `node_03c` forcing `should_retry =
+False` unconditionally whenever a task's `search_territory ==
+"adjacent_scope"` — a Territory B companion is a single committed guess,
+never a hedge, and gets exactly one evaluation, always terminal.
+Re-verified live afterward: exactly 2 RAG rounds, clean termination.
+
+A related bug surfaced alongside it: if Territory B's own audit set
+`unresolved_term` (its `customer_component` is a copy of the original
+task's), it could author a *second* `clarification_tasks` entry for the
+same `subquery_id`, violating the "at most one clarification per
+subquery_id" invariant the rest of the design relies on. Fixed by
+force-clearing `likely_ambiguous_request`/`unresolved_term`/
+`clarification_reason`/`clarification_guesses` for any
+`is_scope_expansion_task` — clarification-authoring for a subquery
+belongs exclusively to its in_scope (Territory A) task.
+
+**Further correctness gaps found and fixed after the recursion fix, before
+declaring the implementation complete:**
+
+- **Territory ceiling enforced in code, not just in the prompt** — this
+  codebase's established principle (seen elsewhere, e.g. clarification
+  guesses) that a prompt instruction alone isn't a reliable guarantee for
+  something this important. `node_03c` now deterministically downgrades a
+  model-returned `SUFFICIENT` to `PARTIALLY_SUFFICIENT` for any
+  `search_territory == "adjacent_scope"` task, before the `SUFFICIENT`
+  short-circuit branch runs.
+- **Subquery-level score aggregation** — `rag_task_scores_by_subquery_id`
+  was a dict keyed by `subquery_id`, blindly overwritten per task result
+  processed; since a subquery can now own two task_ids (Territory A + B)
+  both contributing a score to the same key, whichever was processed last
+  in dict-iteration order silently discarded the other's contribution.
+  Fixed to take `max()` of both territories' scores, mirroring
+  `_finalize_rag_attempts`' own "best of both territories" combination.
+- **Evidence-manifest and audit territory tagging** — `_response_evidence_
+  manifest` read `task_results` per task_id with no signal about which one
+  is Territory A (literal answer) vs. Territory B (related-only),
+  breaking the redesign's core honesty guarantee downstream. Fixed by
+  threading a `search_territory` tag through the manifest into both
+  `_generate_response_blocks`'s evidence inputs (new prompt instruction:
+  introduce `adjacent_scope` evidence explicitly as related/additional
+  information, never as a direct answer, and never blend it into the same
+  sentence as an in_scope answer without preserving that distinction) and
+  `_normal_outbound_grounding_context`'s `approved_by_task` entries feeding
+  node_06 (new "Scope-Expansion Honesty Rule": an `adjacent_scope` claim
+  presented as a direct answer, or blended into an in_scope answer without
+  the distinction preserved, is now a `wrong_task_evidence` grounding
+  violation — the underlying fact can be correct and still fail the audit
+  if the framing erases which territory it came from).
+- **No-info marker, Territory B side** — `_rag_gap_still_matters` (which
+  suppresses a `CLARIFICATION_REQUIRED` task's own "no information
+  available" marker when something else already answers its subquery) only
+  ever checked *other tools* (`_resolved_by_other_tool` deliberately
+  excludes `tool_name == "rag"`, to avoid a self-reference against RAG's
+  own still-pending attempt). With two task_ids per subquery now possible,
+  a failed Territory B companion could still emit its own no-info marker
+  even when its Territory A sibling (same `subquery_id`) had already
+  resolved `SUFFICIENT`/`PARTIALLY_SUFFICIENT` — telling the customer no
+  information exists for a subquery the response was about to answer in
+  full, directly above it.
+
+  **First fix attempt was itself wrong, caught by tracing a real live
+  turn**: suppressing based on "does *any* sibling task_id already have
+  real evidence" looked right in isolation, but a real "i want to buy a
+  car" turn exposed the actual failure mode — Territory A (`task_1`,
+  `Personal_Loan`) genuinely found nothing (the FAQ corpus has no auto-
+  financing content), while Territory B (`task_1_scope`) found only
+  adjacent Savings Account content and reached `PARTIALLY_SUFFICIENT`.
+  The sibling-success check suppressed `task_1`'s own genuine "no
+  information for this literal request" marker merely because its
+  *adjacent-scope* sibling found unrelated content — exactly the honesty
+  claim this whole redesign exists to protect, left standing on the
+  generator's own prompt adherence alone instead of a deterministic
+  marker. **Corrected fix**: key the suppression off the *failing* task's
+  own `search_territory`, not its sibling's status — a failed Territory B
+  companion (`search_territory == "adjacent_scope"`) always suppresses its
+  own marker unconditionally (the customer never asked about that
+  territory, so silence is correct regardless of how the sibling fared);
+  an in_scope task's own failure marker is never suppressed by a sibling's
+  outcome. This also cleanly avoids a duplicate marker when both
+  territories fail (only the in_scope task's marker survives), and passed
+  direct verification against all three cases (Territory A fails/Territory
+  B partial, Territory A succeeds/Territory B fails, both fail).
+- **The Territory B bridge reason was computed but never surfaced** — a
+  live "buy a car" turn resolved exactly as designed (Territory A found
+  nothing, Territory B pivoted to a Savings Account via Type 1 reasoning:
+  *"buying a car often means saving for a downpayment"*), and the audit
+  correctly enforced the honesty framing -- but the actual WHY behind that
+  pivot, `SearchTask.mapping_reason`, was never threaded past `node_02e`.
+  The generator and node_06's auditor only ever saw the tag
+  `search_territory: "adjacent_scope"` plus a generic "introduce this as
+  related information" instruction, with no access to the specific
+  reasoned connection -- forcing the model to either invent its own
+  weaker bridge or drop the evidence in with no connecting sentence at
+  all, reading as a non sequitur ("here's a Savings Account" with no
+  stated reason why, right after "I can't help with car financing").
+  Fixed by threading `mapping_reason` through the same three points
+  `search_territory` already reaches: `_response_evidence_manifest`,
+  `_generate_response_blocks`'s `evidence_inputs` (with a prompt
+  instruction to use it as the basis for a specific, hedged bridging
+  sentence -- "you may want to..." / "since you might be...", never
+  asserted as bank fact -- and to open with the paired no-info statement
+  first when the same literal request also failed, so the two read as one
+  coherent reply instead of two disconnected statements), and
+  `_normal_outbound_grounding_context`'s `approved_by_task` (with a new
+  Scope-Expansion Honesty Rule clause treating `mapping_reason` as the
+  only permitted basis for that bridge sentence, rejecting one that
+  states a stronger or different connection, or drops the hedge, as an
+  `unsupported_bridge_inference` violation).
+
+## 8d. Extra Effort v2.1 — direct-adopt, and Territory A becomes free
+
+Tracing a real "buy a car" turn under v2.0 surfaced a real flaw in Territory
+B's evidence-grounded case ("Type 2"): the auditor flagged `faq_75ed6e4d`
+("discusses loan approval timeframes... a logical adjacent step") as a
+genuinely connected candidate — then Territory B invented a brand-new query
+and re-retrieved, and `faq_75ed6e4d` itself never reappeared in the new
+results. The auditor had already reviewed that candidate's real content and
+judged it connected; re-querying can only drift further from it, never
+closer. This became the motivating question for v2.1: **when the answer is
+already in hand from an earlier round, why search for it again?**
+
+### Direct-adopt replaces Type 2 — free, always-on, lives in `node_03c`
+
+The evidence-grounded case is no longer "Territory B, Type 2" at all. The
+moment `node_03c`'s own audit flags a genuine `scope_expansion_lead_parent_id`/
+`scope_expansion_lead_reason`, it is adopted **immediately and
+deterministically** as `f"{task_id}_scope"`, `PARTIALLY_SUFFICIENT`,
+`adjacent_scope`, `approved_parent_ids=[lead_parent_id]` — no new query, no
+retrieval, no LLM call, and critically **not gated by the extra-effort
+hypothesis test** (`extend_if_optional`). It fires even on a turn where
+extra effort never triggers at all (a real, live-traced scenario: `n=1,
+insufficient_sample` → `extend_if_optional=False` → the source task
+terminates in the very same round the lead was flagged).
+
+This must live inside `node_03c` itself, not `node_02e`'s retry pass —
+that pass only ever runs for a task whose status is `"RETRY"` this round,
+and a task that terminates immediately would never reach it again. Two
+guards, neither of which existed before this revision, both necessary:
+
+- **Recursion safety**: the lead is discarded if the *auditing* task's own
+  `search_territory` is already `"adjacent_scope"` — without this, an
+  adjacent_scope companion's own audit round flagging a lead would
+  synchronously spawn a `..._scope_scope` companion, reintroducing the
+  exact unbounded-recursion class of bug `is_scope_expansion_task` was
+  built to stop (see §8c), just via a code path that guard doesn't cover,
+  since direct-adopt acts on the lead before that guard ever applies.
+- **First-lead-wins**: a companion is only created if
+  `f"{task_id}_scope"` doesn't already exist. A task can be audited across
+  two attempts (Wave 1, then Territory A) before terminating, and a later
+  round's audit could flag a different candidate — without this guard a
+  later lead would silently overwrite an already-terminal, already-scored
+  companion, or produce two `search_tasks` entries sharing one `task_id`.
+
+`node_03c` becomes a co-writer of `search_tasks` for the first time (only
+`node_02e` wrote it before). `state.py`'s `search_tasks` has no LangGraph
+reducer (plain replace), so the updated list — existing tasks plus any new
+direct-adopt stubs — is built once and used for **both** the final return
+**and** the `_finalize_rag_attempts` call earlier in the same function.
+This second use matters: `_finalize_rag_attempts` reads whatever
+`search_tasks` value it's handed, and if a task terminates in the very same
+round its companion is created (fully possible, per the `n=1` scenario
+above), passing the raw, pre-round `state` would silently miss the
+just-created companion, finalizing that subquery's `rag` tool_attempt as
+`"unavailable"` even though real, direct-adopted evidence exists moments
+later in the same return.
+
+The stub deliberately never carries `target_commercial_product`/
+`target_intent` — there's no cheap way to look up the flagged *parent's*
+own product/intent (hydrated parents carry only `parent_id`+`content`),
+and copying the *source task's* own product/intent would let a future
+turn's `_verified_session_parent_ids_for_task` (which matches by
+product+intent overlap) resurface this never-fully-vetted, adjacent-scope
+parent as if it were verified in-scope evidence — exactly the cross-scope
+leakage the territory ceiling exists to prevent. Left empty,
+`_normalized_product_tags(None)` degrades to `[]` everywhere it's read.
+
+### Territory A gains a real capability: hypothesizing the *filter*, not just the intent, was wrong
+
+Previously Territory A only widened *intent* within the *same* product
+(`_expand_intent_to_full`). It now also asks whether the *product*
+classification itself might be wrong — e.g. the answer might live under a
+general app feature (`Horizon_APP`) rather than the product node_02e
+originally picked — while keeping the **same query representation**
+(`procedural`/`policy`/`conceptual`/`direct_query`, unchanged) and only
+widening the *filter*, since this attempt tests "was the filter wrong,"
+never "was the query text wrong."
+
+Critically, which alternate products are plausible is reasoned **once, at
+fresh/Wave-1 formulation time** (`SearchTask.alternate_product_reason`/
+`alternate_products`, capped at 2, code-enforced via `[:2]` at consumption
+time rather than trusting the schema's own wording alone), never
+re-derived at retry time — it's a Matrix/context question answerable from
+the customer's request alone ("what are my other plausible
+classifications"), not one that benefits from having already seen Wave 1's
+failure. This is the same "pre-generate now, use later or not" pattern
+already used for `procedural`/`policy`/`conceptual`. The prompt instruction
+strongly prefers a cross-cutting **functional** product (`Horizon_APP`,
+`Rewards_Program`) over another genuine financial-instrument product as
+the alternate — a request genuinely spanning two financial products should
+already be reflected in the primary classification or a separate
+component, never deferred to this fallback.
+
+This makes Territory A's retry-time widen **fully deterministic again,
+with zero LLM call** — confirmed live: a real "buy a car" retry showed
+exactly two `TASK-LEVEL SUFFICIENCY` audit calls (Wave 1, then Territory
+A's own audit) and **no** retry-mode prompt logged anywhere in between.
+`_valid_product_intent_scope_pairs`/`_normalized_product_tags` already
+supported a `target_commercial_product` list unioning each product's own
+valid intents (confirmed by reading the code, not assumed) — so widening
+into a second product required zero retrieval-engine changes, only
+appending the pre-computed alternates before calling
+`_expand_intent_to_full`.
+
+### Three named effort tiers, table-driven and explicitly made configurable
+
+Made configurable on request, since the boundary between "unconditional"
+and "statistically gated" is expected to move as production data comes in:
+
+```python
+NORMAL_EFFORT_ATTEMPT = 1    # Wave 1
+EXTRA_EFFORT_ATTEMPT = 2     # Territory A -- also a task_id's own hard ceiling
+MAXIMUM_EFFORT_ATTEMPT = 3   # Territory B -- a gate-table key only, never a real attempt count
+MAX_RAG_ATTEMPTS = EXTRA_EFFORT_ATTEMPT
+EFFORT_TIER_GATE = {
+    NORMAL_EFFORT_ATTEMPT: "always",
+    EXTRA_EFFORT_ATTEMPT: "always",
+    MAXIMUM_EFFORT_ATTEMPT: "statistical",
+}
+```
+
+Moving a tier's gate (e.g. if production data someday shows Territory A
+needs gating too) or adding a fourth tier is an edit to this table alone,
+never a restructuring of `should_retry`. A subtlety worth recording:
+`MAX_RAG_ATTEMPTS` is **not** `MAXIMUM_EFFORT_ATTEMPT`. Territory B is
+never a further attempt on the *same* task_id — it always spawns a
+brand-new, separately-tracked companion task_id, constructed **alongside**
+Territory A in the same `node_02e` retry pass, not a later, sequential
+round (a task that terminates after Territory A has no live `"RETRY"`
+status left for a genuinely later round to hang off of — this was the
+first design tried and found unworkable: it would have required a second,
+parallel "this task still needs a companion" signal threaded through
+`preflight_status`/`_finalize_rag_attempts`/`node_03b`'s retrieval filter,
+all to route around a task that had already, correctly, gone terminal).
+So a single task_id's own ceiling (`MAX_RAG_ATTEMPTS`) stops at
+`EXTRA_EFFORT_ATTEMPT` — Territory B's own gate is checked directly via
+`_attempt_unlocked(MAXIMUM_EFFORT_ATTEMPT, extend_if_optional)`, a
+turn-level question, never compared against any task's own attempt count.
+`node_03c` returns this as `state["territory_b_unlocked"]`, which
+`node_02e`'s retry section reads to decide whether to *also* construct a
+Territory B companion for a retrying task this same round.
+
+Live-verified: a real "buy a car" turn with a real 30-turn historical
+sample (`reject_null_hypothesis=True`) constructed `task_1` (Territory A,
+widened intent) and `task_1_scope` (Territory B, `Horizon_APP`/"manage
+savings for a downpayment") **in the same round** (`task.formulated`
+showing both task_ids together), both retrieved and audited together, and
+— since both ended up empty this run — the sibling no-info-suppression fix
+from earlier this session correctly produced exactly one no-info marker,
+not two.
+
+### `node_02e`'s retry section, restructured around what each task still needs
+
+Territory B's LLM call (renamed `TerritoryBPlan`/`TerritoryBCompanion`,
+schema narrowed to drop the now-dead "Type 1 vs Type 2" framing) is now
+skipped entirely whenever no retrying task actually needs one this round —
+`territory_b_needed_task_ids` (unlocked AND no existing companion from
+direct-adopt) is empty in most rounds (whenever `extend_if_optional` is
+`False`, or whenever direct-adopt already covered every failing task for
+free). The `feedback[task_id]` payload dropped
+`scope_expansion_lead_parent_id`/`scope_expansion_lead_reason` entirely —
+direct-adopt now consumes the lead synchronously in `node_03c`, so nothing
+downstream needs it forwarded anymore.
+
+## 8e. Sufficiency reasoning gains a mechanism-bridge test, and a boundary fix upstream of the whole ladder
+
+Tracing "can your personal loan be used to buy car?" surfaced two separate
+findings, in the same session, on either side of `node_03c`.
+
+### The auditor couldn't reason across a produced resource's ordinary nature
+
+The FAQ corpus's only `Personal_Loan`-tagged content describes an
+"Instant Loan" that converts a customer's credit card limit into cash —
+confirmed by direct query against `knowledge_parents`, no document
+anywhere in the 708-row corpus uses "various purposes"/"personal
+needs"/similar generic-use framing, and none mention "car" or "vehicle"
+under any product. `node_03c` was rejecting this evidence outright as
+INSUFFICIENT, reasoning only about whether it *literally* named car
+financing — never asking whether the evidence described an output (cash)
+whose own ordinary, real-world nature would satisfy the request via one
+bounded logical step, the same "Inferential Grounding / Bridge Check"
+principle `GROUNDEDNESS_v2.0.md` already licenses at response-generation
+and audit time. Once evidence is *approved*, that existing machinery
+already knows how to use it honestly — the actual gap was narrower than
+first assumed: `node_03c` needed permission to approve this kind of
+evidence as `PARTIALLY_SUFFICIENT` in the first place, not a new pipeline
+stage.
+
+Added a **MECHANISM-BRIDGE REASONING** rule to `node_03c`'s prompt,
+deliberately generalized (never mentions loans, cash, or cars — those are
+only the illustrative example), worked through in explicit progressive
+steps: (1) re-read the request one level more abstractly than its literal
+wording; (2) check whether a parent already covering the customer's own
+named product describes a resource/output/capability whose *ordinary,
+common-knowledge nature* — not a nature the parent must spell out
+explicitly — would satisfy that abstract outcome (plain cash, once
+disbursed with no stated restriction, is fungible by the ordinary meaning
+of "cash" itself, the same way an FAQ is never expected to state "you may
+spend your salary on anything" before salary counts as unrestricted); (3)
+check every parent for an actual *stated* restriction before relying on
+the bridge — absence of a restriction is the default state, not grounds
+for suspicion; (4) approve as `PARTIALLY_SUFFICIENT` (never `SUFFICIENT`)
+with the bridge and any restriction stated explicitly in `reason`. A
+product-identity note was added alongside it: a parent's own internal
+marketing name (e.g. an offering called "Instant Loan") is never grounds
+to doubt it concerns the customer's named product merely because the
+names differ — that classification was already settled by retrieval
+metadata before the parent ever reaches this prompt, and re-litigating it
+here is a different failure mode than the category-adjacency rule this
+sits beside (which correctly blocks a *genuinely different* product from
+being treated as material merely for shared vocabulary or menu
+placement).
+
+**Honest status on this one**: live-verified to measurably change the
+model's own reasoning (its `reason` text now explicitly engages with
+"unrestricted"/"general-purpose" framing it never raised before this rule
+existed) but, after several iterations narrowing exactly where it still
+resists, the specific worked example (Instant Loan → car financing) did
+not fully resolve — the model kept reverting to "is this the right kind of
+product" instead of "does this product's output satisfy the need," despite
+being asked for the latter. Deliberately stopped iterating rather than
+keep patching the prompt with case-specific caveats in response to each
+new observed failure (see the boundary fix below for why that pattern was
+explicitly rejected this session) — the rule is a real, principled,
+already-behavior-changing addition on its own terms; this exact edge case
+may need a stronger model or a different lever, not more prose.
+
+### The actual root cause was one node upstream of all of this
+
+Investigating further, the real source of the instability wasn't
+`node_03c` at all: `node_02d` (triage)'s own "resolve the TRUE REQUEST"
+step was silently rewriting `"i want to buy a car"` into `"I would like to
+apply for a car loan"` before `node_02e` (intent formulator) ever saw the
+request — deciding, on triage's own authority, that a loan was the right
+product. `node_02e`'s own product/intent classification was reasoning
+correctly and in good faith from what it was handed; the ambiguity it
+should have caught had already been erased one node earlier. Full
+description of this finding and its fix (a subtractive, general-principle
+rewrite of both `node_02d`'s and `node_02e`'s prompts, replacing a
+would-be growing checklist of named ambiguity patterns with one shared
+test — "can I complete my own defined job, right now, with genuine
+confidence?" — already implied by `_CLARIFICATION_SCOPE_BY_ORIGINATOR`'s
+existing per-node job statements) lives in `TOOL_CALLING_v3.0.md`'s
+"Triage was silently doing node_02e's job" section, since it's a triage/
+intent-formulator boundary fix, not a retry-ladder one — Extra Effort
+v2.1's own mechanics (direct-adopt, Territory A/B) were all found to be
+working exactly as designed throughout; they simply inherited an
+unrecoverable bad premise from upstream.
+
 ## 9. Exhausted retries and hard escalation
 
 What happens when even the full ladder exhausts is covered in
@@ -559,3 +1015,47 @@ storage-truncation sites widened to `HYPOTHESIS_TEST_SAMPLE_SIZE`),
 stream), `frontend/src/App.jsx` (`taskConfidence` state, live percentage
 readout), `frontend/src/translations.js` (`caption.confidence`,
 `caption.thinkingHarder`).
+
+**Extra Effort v2.0 (§8c) additionally touched:**
+`backend/app/orchestration/rag_engine.py` (`execute_multi_angle_search`
+gains `direct_query`/`verified_session_parent_ids`; `execute_direct_search`
+and its helpers removed as dead code), `backend/app/orchestration/nodes.py`
+(`MAX_RAG_ATTEMPTS`, `NORMAL_EFFORT_RAG_ATTEMPTS`,
+`_retrieval_mode_for_task`, `_retry_expansion_plan`, `_merge_retry_task`
+removed, `node_02e`'s retry-mode `ScopeExpansionPlan` call and Territory
+A/B assembly, `node_03c`'s territory-ceiling downgrade,
+`is_scope_expansion_task` recursion guard, `scope_expansion_lead_*`
+parsing, `subquery_ids_with_rag_evidence`/`_rag_gap_still_matters`
+sibling-territory fix, `rag_task_scores_by_subquery_id` max-combination
+fix, `_response_evidence_manifest`/`_generate_response_blocks`/
+`_normal_outbound_grounding_context` `search_territory` tagging and the
+corresponding generation-side and node_06 audit-side honesty rules),
+`backend/app/core/llm_service.py` (`SearchTask.mapping_reason`/
+`search_territory`/`source_task_id`, `TaskSufficiencyItem.
+scope_expansion_lead_reason`/`scope_expansion_lead_parent_id`, new
+`ScopeExpansionCompanion`/`ScopeExpansionPlan` schemas).
+
+**Extra Effort v2.1 (§8d) additionally touched:**
+`backend/app/orchestration/nodes.py` (new `NORMAL_EFFORT_ATTEMPT`/
+`EXTRA_EFFORT_ATTEMPT`/`MAXIMUM_EFFORT_ATTEMPT`/`EFFORT_TIER_GATE`/
+`_attempt_unlocked` replacing the old `NORMAL_EFFORT_RAG_ATTEMPTS` floor
+constant and inline `below_floor`/`at_ceiling` comparison;
+`node_03c_sufficiency_auditor`'s direct-adopt block, `search_tasks`
+co-writer return, `_finalize_rag_attempts` staleness fix,
+`territory_b_unlocked` computation/return; `node_02e`'s retry section
+restructured around `territory_b_needed_task_ids` and the deterministic
+`alternate_products`-driven filter widen), `backend/app/core/llm_service.py`
+(`SearchTask.alternate_product_reason`/`alternate_products`;
+`ScopeExpansionCompanion`/`ScopeExpansionPlan` renamed to
+`TerritoryBCompanion`/`TerritoryBPlan` and narrowed to the no-lead-only
+case; `mapping_reason`'s stale "Type 1 vs Type 2" language removed),
+`backend/app/orchestration/state.py` (`territory_b_unlocked`).
+
+**§8e additionally touched:** `backend/app/orchestration/nodes.py`
+(`node_03c`'s MECHANISM-BRIDGE REASONING rule, inserted alongside the
+existing PARTIAL-EVIDENCE DECISION ORDER/category-adjacency rules; the
+triage/node_02e boundary fix itself is a prompt-only change to
+`node_02d_user_journey_classifier_and_triage`'s `customer_component`
+authoring rule and `node_02e_intent_classifier_and_query_formulator`'s
+Rule 2/3, both described fully in `TOOL_CALLING_v3.0.md`'s "Triage was
+silently doing node_02e's job" section).

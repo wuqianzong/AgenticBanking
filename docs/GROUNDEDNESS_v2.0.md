@@ -133,6 +133,49 @@ it genuinely contains no ungrounded claim and no conduct violation — the gap
 is in the generator's own adherence to its instruction, not in either
 Groundedness v2.0 check.
 
+## Reasoning-before-verdict field order
+
+`node_06_outbound_combined_audit_gate`'s combined prompt used to ask for
+`conduct_compliant`/`evidence_grounded` before their own `conduct_reason`/
+`evidence_reason` fields. Since an LLM call outputting JSON generates the
+requested fields in the order they're requested, this meant the model
+committed to each verdict *before* writing anything explaining it -- the
+reason was pure post-hoc narration of a decision already made, not
+something that could have shaped the decision itself. Reordered so each
+axis's `_reason` is written first, with an explicit instruction telling the
+model to reason there before deciding: "a verdict decided first and
+explained afterward is a rationalization, not a judgment." This call isn't
+schema-enforced (see the Files-touched note below), so the explicit prompt
+instruction is doing real work here, not just documentation -- unlike
+`TaskSufficiencyItem` below, where the schema itself enforces the order.
+
+The same fix applies to `TaskSufficiencyItem` (`node_03c`'s sufficiency
+auditor, `llm_service.py`): `reason` moved to be declared before `status`/
+`approved_parent_ids` in the Pydantic schema itself. Since this call *is*
+schema-enforced (Gemini structured output via the `TaskSufficiencyEvaluation`
+response schema), this reorder is a stronger guarantee than a prompt-only
+instruction -- the model cannot emit `status` before `reason` at all,
+regardless of what the surrounding prompt text says.
+
+Both are free changes -- no new fields, no added tokens, same content just
+reordered -- applied only where a `reason` already existed on the routine
+(non-exceptional) decision path. Live-verified: the sufficiency auditor's
+raw output now shows `reason` genuinely preceding `status` on every round,
+and the combined audit's raw output shows `conduct_reason` preceding
+`conduct_compliant`.
+
+A related, separate finding surfaced while making this change: this
+combined-audit call passes no `response_schema_override`, and the marker
+string `call_llm_router` checks to auto-select a schema
+(`"ANSWER GROUNDEDNESS V2 AUDIT"`/`"NON-FINANCIAL CONVERSATION GROUNDEDNESS
+AUDIT"`) no longer matches this prompt's actual text
+(`"GROUNDEDNESS v2.0 — COMBINED CONDUCT & EVIDENCE AUDIT"`) -- so unlike
+every other structured call in this codebase, this one runs fully
+unconstrained JSON, relying entirely on the model following the literal
+example in the prompt. Not fixed here (a different, larger change: it would
+need a dynamic schema matching this call's two variable extra-field sets);
+flagged for a future pass.
+
 ## Observability
 
 - `outbound.groundedness.completed` (log) — unchanged event name and fields;

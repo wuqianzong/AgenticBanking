@@ -163,6 +163,30 @@ export default function BankingBotUI() {
     }, 250);
   };
 
+  const [isBannerHovered, setIsBannerHovered] = useState(false);
+  const bannerHoverTimeoutRef = useRef(null);
+
+  const handleBannerMouseEnter = () => {
+    if (bannerHoverTimeoutRef.current) {
+      clearTimeout(bannerHoverTimeoutRef.current);
+      bannerHoverTimeoutRef.current = null;
+    }
+    if (isLoggedIn) {
+      void fetchServiceRequestList();
+      setIsBannerHovered(true);
+    }
+  };
+
+  const handleBannerMouseLeave = () => {
+    if (bannerHoverTimeoutRef.current) {
+      clearTimeout(bannerHoverTimeoutRef.current);
+    }
+    bannerHoverTimeoutRef.current = setTimeout(() => {
+      setIsBannerHovered(false);
+    }, 250);
+  };
+
+
   const toUiMessage = (message, targetSessionId) => {
     const payload = message.ui_payload || {};
     return {
@@ -2261,154 +2285,15 @@ export default function BankingBotUI() {
 
   const serviceRequestStatusMeta = (status) => {
     if (PENDING_SERVICE_REQUEST_STATUSES.includes(status)) {
-      return { label: t(preferences.language, 'serviceRequest.statusPending'), icon: <Clock size={14} />, className: 'text-amber-700 bg-amber-50 border-amber-200' };
+      return { label: t(preferences.language, 'serviceRequest.statusPending'), icon: <Clock size={13} />, className: 'text-blue-700 bg-blue-50 border-blue-200' };
     }
     if (status === 'completed') {
-      return { label: t(preferences.language, 'serviceRequest.statusCompleted'), icon: <CheckCircle2 size={14} />, className: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+      return { label: t(preferences.language, 'serviceRequest.statusCompleted'), icon: <CheckCircle2 size={13} />, className: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
     }
-    return { label: t(preferences.language, 'serviceRequest.statusExpired'), icon: <XCircle size={14} />, className: 'text-slate-500 bg-slate-50 border-slate-200' };
+    return { label: t(preferences.language, 'serviceRequest.statusExpired'), icon: <XCircle size={13} />, className: 'text-slate-500 bg-slate-50 border-slate-200' };
   };
 
-  const renderServiceRequestListModal = () => {
-    if (!showServiceRequestList) return null;
-
-    const ITEMS_PER_PAGE = 3;
-    const filteredList = serviceRequestList.filter(item => {
-      if (serviceRequestTab === 'pending') return PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
-      if (serviceRequestTab === 'completed') return item.status === 'completed';
-      if (serviceRequestTab === 'expired') return item.status === 'expired';
-      return false;
-    });
-
-    const totalPages = Math.ceil(filteredList.length / ITEMS_PER_PAGE);
-    const paginatedList = filteredList.slice((serviceRequestPage - 1) * ITEMS_PER_PAGE, serviceRequestPage * ITEMS_PER_PAGE);
-
-    return (
-      <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
-        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl flex flex-col h-[500px] overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-bold text-slate-800">{t(preferences.language, 'serviceRequest.listTitle')}</h3>
-            <button onClick={() => { setShowServiceRequestList(false); setServiceRequestPage(1); }} className="text-slate-400 hover:text-slate-600">×</button>
-          </div>
-          <div className="flex border-b border-slate-100 px-4">
-            <button onClick={() => { setServiceRequestTab('pending'); setServiceRequestPage(1); }} className={`flex-1 py-3 text-xs font-semibold ${serviceRequestTab === 'pending' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
-              {t(preferences.language, 'serviceRequest.statusPending')}
-            </button>
-            <button onClick={() => { setServiceRequestTab('completed'); setServiceRequestPage(1); }} className={`flex-1 py-3 text-xs font-semibold ${serviceRequestTab === 'completed' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
-              {t(preferences.language, 'serviceRequest.statusCompleted')}
-            </button>
-            <button onClick={() => { setServiceRequestTab('expired'); setServiceRequestPage(1); }} className={`flex-1 py-3 text-xs font-semibold ${serviceRequestTab === 'expired' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
-              {t(preferences.language, 'serviceRequest.statusExpired')}
-            </button>
-          </div>
-          <div className="overflow-y-auto flex-1">
-            {filteredList.length === 0 && (
-              <p className="p-4 text-sm text-slate-400 text-center">{t(preferences.language, 'serviceRequest.listEmpty')}</p>
-            )}
-            <ul className="divide-y divide-slate-100">
-              {paginatedList.map((item) => {
-                const meta = serviceRequestStatusMeta(item.status);
-                const isPending = PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
-                return (
-                  <li key={item.special_id}>
-                    <button
-                      type="button"
-                      disabled={!isPending}
-                      onClick={async () => {
-                        setShowServiceRequestList(false);
-                        const cardElement = document.getElementById(`service-request-card-${item.special_id}`);
-                        if (cardElement) {
-                          cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          cardElement.classList.add('ring-2', 'ring-blue-500', 'shadow-md');
-                          setTimeout(() => {
-                            cardElement.classList.remove('ring-2', 'ring-blue-500', 'shadow-md');
-                          }, 2000);
-                        } else {
-                          try {
-                            const res = await fetch(`http://localhost:8000/api/service-request/${item.special_id}`);
-                            const data = await res.json();
-                            if (data.status === 'pending') {
-                              setMessages(prev => [...prev, {
-                                id: Date.now(),
-                                sender: 'bot',
-                                text: item.description || item.action_label || t(preferences.language, "serviceRequest.completeForm"),
-                                type: 'text',
-                                serviceRequestActions: [{
-                                  specialId: item.special_id,
-                                  serviceRequestId: data.service_request_id,
-                                  label: item.action_label || data.description,
-                                  description: data.description || item.description,
-                                  formSchema: data.form_schema
-                                }],
-                                createdAt: new Date().toISOString()
-                              }]);
-                              shouldAutoScrollRef.current = true;
-                            } else if (data.status === 'completed') {
-                              setServiceRequestNotice(t(preferences.language, 'serviceRequest.alreadyCompleted'));
-                            } else if (data.status === 'expired') {
-                              setServiceRequestNotice(t(preferences.language, 'serviceRequest.expired'));
-                            }
-                          } catch (e) {
-                            console.error('Failed to load service request from drawer', e);
-                          }
-                        }
-                      }}
-                      className={`w-full text-left p-4 flex flex-col gap-1.5 ${isPending ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default'}`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold text-slate-800">{item.action_label || item.description}</span>
-                        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0 ${meta.className}`}>
-                          {meta.icon}
-                          {meta.label}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 mt-1">
-                        {item.action_label && item.description && (
-                          <span className="text-xs text-slate-500">{item.description}</span>
-                        )}
-                        {item.created_at && (
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {new Date(item.created_at).toLocaleString(preferences.language === 'Mandarin' ? 'zh-CN' : preferences.language === 'Spanish' ? 'es-ES' : 'en-US', {
-                              year: 'numeric', month: 'short', day: 'numeric',
-                              hour: '2-digit', minute: '2-digit'
-                            })}
-                          </span>
-                        )}
-                      </div>
-                      {isPending && (
-                        <span className="text-[11px] text-blue-600 font-medium mt-1">{t(preferences.language, 'serviceRequest.tapToComplete')}</span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-          {totalPages > 1 && (
-            <div className="p-3 border-t border-slate-100 flex items-center justify-between bg-slate-50">
-              <button
-                onClick={() => setServiceRequestPage(p => Math.max(1, p - 1))}
-                disabled={serviceRequestPage === 1}
-                className="px-3 py-1 text-xs font-medium text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed bg-white border border-slate-200 rounded-md shadow-sm"
-              >
-                {t(preferences.language, 'serviceRequest.prevPage')}
-              </button>
-              <span className="text-xs text-slate-500 font-medium">
-                {t(preferences.language, 'serviceRequest.pageInfo').replace('{current}', serviceRequestPage).replace('{total}', totalPages)}
-              </span>
-              <button
-                onClick={() => setServiceRequestPage(p => Math.min(totalPages, p + 1))}
-                disabled={serviceRequestPage === totalPages}
-                className="px-3 py-1 text-xs font-medium text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed bg-white border border-slate-200 rounded-md shadow-sm"
-              >
-                {t(preferences.language, 'serviceRequest.nextPage')}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
+  const renderServiceRequestListModal = () => null;
 
   const renderPreferencesModal = () => {
     if (!showPreferences) return null;
@@ -2497,20 +2382,6 @@ export default function BankingBotUI() {
             {/* Action Toggles */}
             <div className="flex items-center gap-1">
               {isLoggedIn && (
-                <button
-                  onClick={() => { void fetchServiceRequestList(); setShowServiceRequestList(true); }}
-                  className="relative p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"
-                  title={t(preferences.language, "serviceRequest.listTitle")}
-                >
-                  <ClipboardList size={18}/>
-                  {serviceRequestList.filter(item => PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)).length > 0 && (
-                    <span className="absolute top-0.5 right-0.5 bg-blue-600 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1">
-                      {serviceRequestList.filter(item => PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)).length}
-                    </span>
-                  )}
-                </button>
-              )}
-              {isLoggedIn && (
                 <button onClick={() => setShowPreferences(true)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors" title={t(preferences.language, "header.preferences")}>
                   <Settings size={18}/>
                 </button>
@@ -2521,22 +2392,230 @@ export default function BankingBotUI() {
             </div>
           </div>
 
-          {/* User Status Bar */}
-          <div className={`flex items-center justify-between px-3 py-2 rounded-lg border ${isLoggedIn ? 'bg-blue-50/50 border-blue-100' : 'bg-slate-50 border-slate-100'}`}>
-             <div className="flex items-center gap-2">
-               {isLoggedIn ? (
-                 <>
-                   <UserCheck size={14} className="text-blue-600"/>
-                   <span className="text-xs font-semibold text-blue-900">{preferences.nickname || MOCK_PROFILE.displayName}</span>
-                 </>
-               ) : (
-                 <>
-                   <AlertCircle size={14} className="text-slate-500"/>
-                   <span className="text-xs font-medium text-slate-600">{t(preferences.language, "misc.guestUser")}</span>
-                 </>
-               )}
-             </div>
-             {isLoggedIn && <span className="text-[10px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{t(preferences.language, "misc.maskedAcc")}</span>}
+          {/* User Status Bar with Integrated Service Request Binder Drawer on Hover */}
+          <div
+            className="relative z-30"
+            onMouseEnter={handleBannerMouseEnter}
+            onMouseLeave={handleBannerMouseLeave}
+          >
+            <div className={`flex items-center justify-between px-3 py-2 transition-all select-none ${
+              isBannerHovered && isLoggedIn
+                ? 'bg-blue-50/95 border-x border-t border-blue-200 shadow-sm rounded-t-xl rounded-b-none'
+                : (isLoggedIn ? 'bg-blue-50/50 border border-blue-100 hover:bg-blue-50 hover:border-blue-200 rounded-xl cursor-pointer' : 'bg-slate-50 border border-slate-100 rounded-xl')
+            }`}>
+              {/* Left: User Identity & Masked Account */}
+              <div className="flex items-center gap-2.5">
+                {isLoggedIn ? (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-5 h-5 rounded-full bg-blue-100/90 flex items-center justify-center border border-blue-200/60 shrink-0">
+                        <UserCheck size={12} className="text-blue-700"/>
+                      </div>
+                      <span className="text-xs font-semibold text-slate-800">{preferences.nickname || MOCK_PROFILE.displayName}</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-500 bg-white/90 px-2 py-0.5 rounded-md border border-slate-200/80 shadow-2xs">
+                      {t(preferences.language, "misc.maskedAcc")}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle size={14} className="text-slate-500 shrink-0"/>
+                    <span className="text-xs font-medium text-slate-600">{t(preferences.language, "misc.guestUser")}</span>
+                  </>
+                )}
+              </div>
+
+              {/* Right: Service Request Status & Drawer Trigger */}
+              <div className="flex items-center gap-2">
+                {isLoggedIn && (
+                  <>
+                    {(() => {
+                      const pendingCount = serviceRequestList.filter(item => PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)).length;
+                      if (pendingCount > 0) {
+                        return (
+                          <span className="inline-flex items-center gap-1.5 bg-white border border-blue-200 text-blue-900 text-[10px] font-semibold rounded-full px-2.5 py-0.5 shadow-2xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
+                            <span className="font-bold text-blue-950">{pendingCount}</span>
+                            <span className="text-[9.5px] font-medium text-blue-600">{t(preferences.language, 'serviceRequest.statusPending').toLowerCase()}</span>
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="text-[10px] font-medium text-slate-400">
+                          {t(preferences.language, 'serviceRequest.listTitle')}
+                        </span>
+                      );
+                    })()}
+                    <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${isBannerHovered ? 'rotate-180 text-blue-600' : ''}`} />
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Binder-Style Service Form Drawer */}
+            {isLoggedIn && isBannerHovered && (
+              <div
+                className="absolute top-full left-0 right-0 bg-white/98 backdrop-blur-xl rounded-b-2xl border-x border-b border-blue-200 shadow-2xl z-40 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
+                onMouseEnter={handleBannerMouseEnter}
+                onMouseLeave={handleBannerMouseLeave}
+              >
+                {/* Binder Header with 3 Status Index Tabs */}
+                <div className="bg-slate-100/90 border-b border-slate-200 px-3 pt-2.5 flex items-end justify-between gap-1">
+                  <div className="flex items-end gap-1">
+                    {/* Pending Tab */}
+                    <button
+                      type="button"
+                      onClick={() => { setServiceRequestTab('pending'); setServiceRequestPage(1); }}
+                      className={`px-2.5 py-1.5 rounded-t-lg text-[11px] font-bold transition-all flex items-center gap-1.5 border-t-2 border-x ${
+                        serviceRequestTab === 'pending'
+                          ? 'bg-white text-blue-900 border-t-blue-600 border-x-slate-200 -mb-px shadow-2xs'
+                          : 'bg-slate-200/60 text-slate-500 hover:text-slate-700 border-t-transparent border-x-transparent hover:bg-slate-200'
+                      }`}
+                    >
+                      <Clock size={12} className={serviceRequestTab === 'pending' ? 'text-blue-600' : 'text-slate-400'} />
+                      <span>{t(preferences.language, 'serviceRequest.statusPending')}</span>
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                        serviceRequestTab === 'pending' ? 'bg-blue-100 text-blue-800' : 'bg-slate-300/70 text-slate-600'
+                      }`}>
+                        {serviceRequestList.filter(item => PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)).length}
+                      </span>
+                    </button>
+
+                    {/* Completed Tab */}
+                    <button
+                      type="button"
+                      onClick={() => { setServiceRequestTab('completed'); setServiceRequestPage(1); }}
+                      className={`px-2.5 py-1.5 rounded-t-lg text-[11px] font-bold transition-all flex items-center gap-1.5 border-t-2 border-x ${
+                        serviceRequestTab === 'completed'
+                          ? 'bg-white text-emerald-800 border-t-emerald-500 border-x-slate-200 -mb-px shadow-2xs'
+                          : 'bg-slate-200/60 text-slate-500 hover:text-slate-700 border-t-transparent border-x-transparent hover:bg-slate-200'
+                      }`}
+                    >
+                      <CheckCircle2 size={12} className={serviceRequestTab === 'completed' ? 'text-emerald-600' : 'text-slate-400'} />
+                      <span>{t(preferences.language, 'serviceRequest.statusCompleted')}</span>
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                        serviceRequestTab === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-300/70 text-slate-600'
+                      }`}>
+                        {serviceRequestList.filter(item => item.status === 'completed').length}
+                      </span>
+                    </button>
+
+                    {/* Expired Tab */}
+                    <button
+                      type="button"
+                      onClick={() => { setServiceRequestTab('expired'); setServiceRequestPage(1); }}
+                      className={`px-2.5 py-1.5 rounded-t-lg text-[11px] font-bold transition-all flex items-center gap-1.5 border-t-2 border-x ${
+                        serviceRequestTab === 'expired'
+                          ? 'bg-white text-slate-700 border-t-slate-400 border-x-slate-200 -mb-px shadow-2xs'
+                          : 'bg-slate-200/60 text-slate-500 hover:text-slate-700 border-t-transparent border-x-transparent hover:bg-slate-200'
+                      }`}
+                    >
+                      <XCircle size={12} className={serviceRequestTab === 'expired' ? 'text-slate-500' : 'text-slate-400'} />
+                      <span>{t(preferences.language, 'serviceRequest.statusExpired')}</span>
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                        serviceRequestTab === 'expired' ? 'bg-slate-200 text-slate-700' : 'bg-slate-300/70 text-slate-600'
+                      }`}>
+                        {serviceRequestList.filter(item => item.status === 'expired').length}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Binder Content Body */}
+                <div className="p-2.5 max-h-[260px] overflow-y-auto bg-white space-y-1.5">
+                  {(() => {
+                    const filteredList = serviceRequestList.filter(item => {
+                      if (serviceRequestTab === 'pending') return PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
+                      if (serviceRequestTab === 'completed') return item.status === 'completed';
+                      if (serviceRequestTab === 'expired') return item.status === 'expired';
+                      return false;
+                    });
+
+                    if (filteredList.length === 0) {
+                      return (
+                        <div className="py-6 text-center text-slate-400 flex flex-col items-center gap-1.5">
+                          <ClipboardList size={22} className="text-slate-300" />
+                          <p className="text-xs">{t(preferences.language, 'serviceRequest.listEmpty')}</p>
+                        </div>
+                      );
+                    }
+
+                    return filteredList.map((item) => {
+                      const meta = serviceRequestStatusMeta(item.status);
+                      const isPending = PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
+
+                      return (
+                        <button
+                          key={item.special_id}
+                          type="button"
+                          onClick={async () => {
+                            setIsBannerHovered(false);
+                            const cardElement = document.getElementById(`service-request-card-${item.special_id}`);
+                            if (cardElement) {
+                              cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              cardElement.classList.add('ring-2', 'ring-blue-500', 'shadow-md');
+                              setTimeout(() => {
+                                cardElement.classList.remove('ring-2', 'ring-blue-500', 'shadow-md');
+                              }, 2000);
+                            } else {
+                              try {
+                                const res = await fetch(`http://localhost:8000/api/service-request/${item.special_id}`);
+                                const data = await res.json();
+                                if (data.status === 'pending') {
+                                  setMessages(prev => [...prev, {
+                                    id: Date.now(),
+                                    sender: 'bot',
+                                    text: item.description || item.action_label || t(preferences.language, "serviceRequest.completeForm"),
+                                    type: 'text',
+                                    serviceRequestActions: [{
+                                      specialId: item.special_id,
+                                      serviceRequestId: data.service_request_id,
+                                      label: item.action_label || data.description,
+                                      description: data.description || item.description,
+                                      formSchema: data.form_schema
+                                    }],
+                                    createdAt: new Date().toISOString()
+                                  }]);
+                                  shouldAutoScrollRef.current = true;
+                                } else if (data.status === 'completed') {
+                                  setServiceRequestNotice(t(preferences.language, 'serviceRequest.alreadyCompleted'));
+                                } else if (data.status === 'expired') {
+                                  setServiceRequestNotice(t(preferences.language, 'serviceRequest.expired'));
+                                }
+                              } catch (e) {
+                                console.error('Failed to load service request from drawer', e);
+                              }
+                            }
+                          }}
+                          className={`w-full text-left p-2.5 rounded-xl border transition-all flex flex-col gap-1 ${
+                            isPending
+                              ? 'border-blue-200/80 bg-blue-50/40 hover:bg-blue-50 hover:border-blue-300 cursor-pointer shadow-2xs'
+                              : 'border-slate-200/70 bg-slate-50/60 hover:bg-slate-100 cursor-pointer'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-800 line-clamp-1">{item.action_label || item.description}</span>
+                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold shrink-0 ${meta.className}`}>
+                              {meta.icon}
+                              {meta.label}
+                            </span>
+                          </div>
+                          {item.action_label && item.description && (
+                            <p className="text-[11px] text-slate-600 leading-snug line-clamp-1">{item.description}</p>
+                          )}
+                          <div className="flex items-center justify-between pt-0.5 text-[9px] text-slate-400 font-mono">
+                            <span>ID: {item.special_id?.substring(0, 10)}...</span>
+                            {item.created_at && (
+                              <span>{new Date(item.created_at).toLocaleDateString()}</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

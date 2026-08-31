@@ -955,33 +955,22 @@ export default function BankingBotUI() {
   const renderChips = (options) => {
     if (!options || options.length === 0) return null;
     return (
-      <div className="relative mt-2 pl-3.5 max-w-sm">
-        {/* Continuous vertical connector stem line from response bubble down through options */}
-        <div className="absolute left-1 top-0 bottom-2.5 w-0.5 bg-slate-300 rounded-full" />
-        
-        <div className="flex flex-col gap-1 relative">
-          {options.map((opt, idx) => {
-            const label = typeof opt === 'string' ? opt : (opt?.label || opt?.message || t(preferences.language, "misc.continue"));
-            const message = typeof opt === 'string' ? opt : (opt?.message || opt?.label || '');
-            return (
-              <div key={idx} className="relative flex items-center min-h-[24px]">
-                {/* Horizontal branch line */}
-                <div className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-2.5 h-0.5 bg-slate-300 rounded-full" />
-
-                <button
-                  type="button"
-                  onClick={() => message && handleSend(message)}
-                  disabled={!message || isTyping || isCompactingMemory}
-                  className="group flex items-center text-left text-[13px] font-medium text-slate-600 hover:text-blue-600 active:text-blue-700 transition-colors py-0.5 pl-1 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-                >
-                  <span className="group-hover:underline underline-offset-2 transition-all leading-snug">
-                    {label}
-                  </span>
-                </button>
-              </div>
-            );
-          })}
-        </div>
+      <div className="flex flex-wrap gap-1.5 mt-2.5 max-w-sm">
+        {options.map((opt, idx) => {
+          const label = typeof opt === 'string' ? opt : (opt?.label || opt?.message || t(preferences.language, "misc.continue"));
+          const message = typeof opt === 'string' ? opt : (opt?.message || opt?.label || '');
+          return (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => message && handleSend(message)}
+              disabled={!message || isTyping || isCompactingMemory}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-slate-700 bg-white border border-slate-200/90 shadow-2xs hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 active:scale-[0.98] transition-all disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer max-w-full text-left"
+            >
+              <span className="whitespace-normal break-words leading-relaxed">{label}</span>
+            </button>
+          );
+        })}
       </div>
     );
   };
@@ -2491,8 +2480,11 @@ export default function BankingBotUI() {
         <div className="bg-white border-b border-slate-100 p-4 pb-3 flex flex-col gap-3 z-10 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="bg-blue-600 w-11 h-11 rounded-full flex items-center justify-center shadow-md">
-                <Bot className="text-white" size={24} />
+              <div className="relative bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-600 w-11 h-11 rounded-2xl flex items-center justify-center shadow-md shadow-blue-500/20 border border-white/20">
+                <Landmark className="text-white drop-shadow-xs" size={22} strokeWidth={2.2} />
+                <div className="absolute -bottom-0.5 -right-0.5 bg-indigo-500 rounded-full p-0.5 border-2 border-white shadow-xs">
+                  <Sparkles size={8} className="text-white" />
+                </div>
               </div>
               <div>
                 <h1 className="font-bold text-slate-800 text-lg leading-tight">{t(preferences.language, "header.title")}</h1>

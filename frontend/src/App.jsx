@@ -3135,9 +3135,21 @@ export default function BankingBotUI() {
                     {msg.type === 'checklist' && msg.listClarificationText && renderClarificationCard(msg.listClarificationText)}
                     {msg.type === 'escalation' && renderEscalation()}
                     
-                    {/* Message Footer: Timestamp on left, Thumbs feedback on right */}
-                    <div className={`mt-1 flex items-center ${msg.sender === 'user' ? 'justify-end mr-1' : 'justify-between ml-1 mr-1'}`}>
-                      <span className="text-[10px] tabular-nums text-slate-400">
+                    {/* Message Footer: Timestamp & Retry for user, Timestamp & Thumbs for bot */}
+                    <div className={`mt-1 flex items-center ${msg.sender === 'user' ? 'justify-end items-center gap-1.5 mr-0.5' : 'justify-between ml-1 mr-1'}`}>
+                      {msg.sender === 'user' && (
+                        <button
+                          type="button"
+                          onClick={() => !isTyping && handleSend(msg.text)}
+                          disabled={isTyping || !isLoggedIn || Boolean(activeDeeplink)}
+                          title={t(preferences.language, "chat.retry")}
+                          aria-label={t(preferences.language, "chat.retry")}
+                          className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-200/60 rounded-md transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <RotateCw size={11} />
+                        </button>
+                      )}
+                      <span className="text-[10px] tabular-nums text-slate-400 select-none">
                         {formatMessageTime(timestamp)}
                       </span>
                       {msg.sender === 'bot' && renderTurnFeedback(msg)}

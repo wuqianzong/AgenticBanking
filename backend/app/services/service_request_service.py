@@ -188,13 +188,42 @@ def resolve_credential_check(special_id: str, passed: bool) -> dict[str, Any] | 
     return get(special_id)
 
 
-def complete_with_result(special_id: str, result_payload: dict[str, Any]) -> dict[str, Any] | None:
-    """Consumes any grant and records the downstream mock API's result.
+def submit_and_complete(special_id: str, submitted_data: dict[str, Any]) -> dict[str, Any] | None:
+    """Persist a form directly at the central service API and close it.
 
-    Valid only while "pending", and only once a grant exists for any
-    registration that required step-up -- a low-risk registration completes
-    straight from a submission, an intermediate-risk one only after
-    resolve_credential_check has issued a grant.
+    This is intentionally a single deterministic database transaction.  The
+    submitted values never enter LangGraph, RAG, or an LLM prompt; the
+    registration status itself is the mock service outcome.
+    """
+    record = get(special_id)
+    if record is None or record["status"] != PENDING:
+        return record
+    canonical = json.dumps(submitted_data or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    data_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    with _connect() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE Service_Request_Registration
+            SET submitted_data = ?, submitted_data_hash = ?, status = ?,
+                result_payload = NULL, grant_id = NULL, grant_consumed = 1
+            WHERE special_id = ? AND status = ?
+            """,
+            (canonical, data_hash, COMPLETED, special_id, PENDING),
+        )
+        conn.commit()
+    if cursor.rowcount != 1:
+        # A concurrent browser request completed the same registration first.
+        # Return the durable winner rather than accepting a second payload.
+        return get(special_id)
+    log_event("service_request.completed", special_id=special_id, data_hash=data_hash)
+    return get(special_id)
+
+
+def complete_with_result(special_id: str, result_payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Legacy compatibility helper for existing special-route callers.
+
+    New direct form submissions use :func:`submit_and_complete`; they do not
+    execute a downstream mock or publish a result payload.
     """
     record = get(special_id)
     if record is None or record["status"] != PENDING:

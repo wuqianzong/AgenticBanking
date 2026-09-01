@@ -592,7 +592,12 @@ export default function BankingBotUI() {
       } else {
         setEmbeddedFormStates(prev => ({
           ...prev,
-          [specialId]: { ...prev[specialId], isSubmitting: false, status: 'completed' }
+          [specialId]: {
+            ...prev[specialId],
+            isSubmitting: false,
+            status: 'completed',
+            completionMessage: data.text || ''
+          }
         }));
         appendServiceRequestResultMessage(data);
       }
@@ -1781,7 +1786,7 @@ export default function BankingBotUI() {
                 </span>
               </div>
               <p className="mt-1 text-[14px] text-emerald-700 leading-relaxed">
-                {t(preferences.language, "serviceRequest.submittedSuccess")}
+                {formState.completionMessage || t(preferences.language, "serviceRequest.submittedSuccess")}
               </p>
             </div>
           </div>

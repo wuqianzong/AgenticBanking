@@ -13,7 +13,7 @@ from backend.app.orchestration.graph import app_graph
 from backend.app.services.memory_service import LongTermMemoryManager, ShortTermMemoryManager
 from backend.app.core.system_logger import log_event, reset_request_context, set_request_context
 from backend.app.services import service_request_service
-from backend.app.services.service_request_mock_api import run_downstream_service, run_mock_credential_check
+from backend.app.services.service_request_mock_api import run_mock_credential_check
 from backend.app.orchestration.service_request_registry import get_service_request_contract
 
 app = FastAPI(title="Production Horizon Core Gateway")
@@ -215,6 +215,38 @@ async def _run_service_request_turn(session_id: str, user_id: str, service_reque
         reset_request_context(token)
 
 
+def _completed_service_request_response(record: dict, contract: dict | None) -> dict:
+    """Return the fixed, non-LLM confirmation for a completed form."""
+    form_name = (contract or {}).get("action_label") or record["service_request_id"]
+    request_id = record["special_id"]
+    return {
+        "status": "completed",
+        "special_id": request_id,
+        "service_request_id": record["service_request_id"],
+        "form_name": form_name,
+        "request_id": request_id,
+        "text": f"Your {form_name} form has been submitted successfully. Request ID: {request_id}",
+        "uiType": "none",
+        "options": [],
+    }
+
+
+def _service_request_credential_denied_response(record: dict) -> dict:
+    """Fixed local response for a failed mock credential check.
+
+    The registration remains pending, so this says nothing about the form
+    data and lets the customer retry through the same direct API path.
+    """
+    return {
+        "status": "credential_check_failed",
+        "special_id": record["special_id"],
+        "service_request_id": record["service_request_id"],
+        "text": "We could not complete the credential check. Your form has not been submitted; please try again.",
+        "uiType": "none",
+        "options": [],
+    }
+
+
 @app.get("/api/service-request/list/{user_id}")
 async def list_service_requests(user_id: str):
     """The customer's full service-request to-do list -- pending, completed,
@@ -264,23 +296,14 @@ async def submit_service_request(payload: ServiceRequestSubmitPayload):
     if record["status"] != "pending":
         return {"status": "error", "message": "This request has already been completed."}
 
-    record = await asyncio.to_thread(service_request_service.mark_submitted, payload.special_id, payload.submitted_data)
+    record = await asyncio.to_thread(service_request_service.submit_and_complete, payload.special_id, payload.submitted_data)
     contract = get_service_request_contract(record["service_request_id"])
-    log_event("service_request.submit.received", special_id=payload.special_id, service_request_id=record["service_request_id"])
-
-    if record["requires_step_up"]:
-        return {"status": "credential_check_required", "special_id": payload.special_id}
-
-    result_payload = run_downstream_service(record["service_request_id"], record["submitted_data"])
-    await asyncio.to_thread(service_request_service.complete_with_result, payload.special_id, result_payload)
-    return await _run_service_request_turn(
-        payload.session_id, payload.user_id,
-        {
-            "special_id": payload.special_id, "outcome": "completed",
-            "service_request_id": record["service_request_id"], "result_payload": result_payload,
-            "description": contract["description"] if contract else "",
-        },
+    log_event(
+        "service_request.submit.completed_directly",
+        special_id=payload.special_id,
+        service_request_id=record["service_request_id"],
     )
+    return _completed_service_request_response(record, contract)
 
 
 @app.post("/api/service-request/credential-check")
@@ -296,25 +319,14 @@ async def credential_check_service_request(payload: ServiceRequestCredentialChec
     record = await asyncio.to_thread(service_request_service.resolve_credential_check, payload.special_id, passed)
 
     if not passed:
-        return await _run_service_request_turn(
-            payload.session_id, payload.user_id,
-            {
-                "special_id": payload.special_id, "outcome": "denied",
-                "service_request_id": record["service_request_id"],
-                "description": contract["description"] if contract else "",
-            },
-        )
+        return _service_request_credential_denied_response(record)
 
-    result_payload = run_downstream_service(record["service_request_id"], record["submitted_data"])
-    await asyncio.to_thread(service_request_service.complete_with_result, payload.special_id, result_payload)
-    return await _run_service_request_turn(
-        payload.session_id, payload.user_id,
-        {
-            "special_id": payload.special_id, "outcome": "completed",
-            "service_request_id": record["service_request_id"], "result_payload": result_payload,
-            "description": contract["description"] if contract else "",
-        },
+    record = await asyncio.to_thread(
+        service_request_service.submit_and_complete,
+        payload.special_id,
+        record["submitted_data"],
     )
+    return _completed_service_request_response(record, contract)
 
 
 @app.post("/api/feedback/turn-rating")

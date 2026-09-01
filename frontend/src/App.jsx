@@ -6,7 +6,7 @@ import {
   FileText, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
   Loader2, Settings, ClipboardList, Clock, XCircle, ArrowRight, ArrowLeft, LayoutDashboard,
   ThumbsUp, ThumbsDown, Copy, Check, Sparkles, ChevronDown, ChevronUp, AlertTriangle, ShieldAlert, Info, Layers, HelpCircle,
-  Globe, Signal, Wifi
+  Globe, Signal, Wifi, RotateCw, Truck
 } from 'lucide-react';
 
 // 1. THE NODE CAPTION DICTIONARY
@@ -126,6 +126,11 @@ export default function BankingBotUI() {
   const [serviceRequestList, setServiceRequestList] = useState([]);
   const [showServiceRequestList, setShowServiceRequestList] = useState(false);
   const [activeDeeplink, setActiveDeeplink] = useState(null);
+  const [showReplaceCardModal, setShowReplaceCardModal] = useState(false);
+  const [replaceCardReason, setReplaceCardReason] = useState('damaged');
+  const [isSubmittingReplaceCard, setIsSubmittingReplaceCard] = useState(false);
+  const [replaceCardSuccess, setReplaceCardSuccess] = useState(false);
+  const [replaceCardRef, setReplaceCardRef] = useState('');
   const [serviceRequestPage, setServiceRequestPage] = useState(1);
   const [serviceRequestTab, setServiceRequestTab] = useState('pending');
   // Only three statuses exist: this registry tracks that a submission was
@@ -1983,6 +1988,178 @@ export default function BankingBotUI() {
   const renderDeeplinkContent = () => {
     switch (activeDeeplink.destinationId) {
       case 'card-management':
+        if (showReplaceCardModal) {
+          if (replaceCardSuccess) {
+            return (
+              <div className="w-full text-left space-y-4 max-w-sm">
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs text-center flex flex-col items-center">
+                  <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+                    <CheckCircle2 size={32} />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-800">Application Submitted</h3>
+                  <p className="text-xs text-slate-500 mt-1">Your replacement card is now being processed</p>
+
+                  <div className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3.5 mt-4 space-y-2 text-left">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500">Reference No.</span>
+                      <span className="font-mono font-bold text-slate-800">{replaceCardRef}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500">Card</span>
+                      <span className="font-medium text-slate-700">Horizon Rewards Visa (•••• 4912)</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500">Delivery Address</span>
+                      <span className="font-medium text-slate-700 truncate max-w-[170px]">12 Marina Blvd, #28-01, SG</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500">Estimated Delivery</span>
+                      <span className="font-semibold text-emerald-700">3–5 business days</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-left flex items-start gap-2">
+                    <Info size={14} className="text-blue-600 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-blue-900 leading-snug">
+                      Your current card remains active until you receive and activate the replacement.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowReplaceCardModal(false);
+                      setReplaceCardSuccess(false);
+                    }}
+                    className="w-full mt-5 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-xs transition-colors shadow-xs cursor-pointer"
+                  >
+                    Back to Card Management
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="w-full text-left space-y-4 max-w-sm">
+              <div className="flex items-center justify-between pb-1">
+                <button
+                  type="button"
+                  onClick={() => setShowReplaceCardModal(false)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  <ArrowLeft size={14} /> Back
+                </button>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Card Replacement</span>
+              </div>
+
+              {/* Card Summary Badge */}
+              <div className="bg-slate-900 text-white rounded-xl p-3.5 flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <CreditCard size={18} className="text-blue-400" />
+                  <div>
+                    <div className="text-xs font-bold">Horizon Rewards Visa</div>
+                    <div className="text-[11px] font-mono text-slate-400">•••• 4912</div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 px-2 py-0.5 rounded-md">
+                  Active
+                </span>
+              </div>
+
+              {/* Step 1: Reason Selection */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Reason for Replacement
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { id: 'damaged', label: 'Damaged Chip or Magnetic Stripe', desc: 'Card is physically intact but cannot be read by POS terminals' },
+                    { id: 'worn', label: 'General Wear & Tear', desc: 'Faded numbers, peeling laminate, or cracked plastic' },
+                    { id: 'name_update', label: 'Name / Detail Update', desc: 'Updated legal name or updated card personalization' },
+                    { id: 'lost_stolen', label: 'Lost or Stolen (Blocks current card)', desc: 'Immediately cancels current card and issues a new card number' },
+                  ].map((reason) => (
+                    <button
+                      key={reason.id}
+                      type="button"
+                      onClick={() => setReplaceCardReason(reason.id)}
+                      className={`w-full text-left p-3 rounded-xl border transition-all flex flex-col gap-0.5 cursor-pointer ${
+                        replaceCardReason === reason.id
+                          ? 'border-blue-500 bg-blue-50/50 shadow-2xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-bold ${replaceCardReason === reason.id ? 'text-blue-900' : 'text-slate-800'}`}>
+                          {reason.label}
+                        </span>
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          replaceCardReason === reason.id
+                            ? 'border-blue-600 bg-blue-600 text-white'
+                            : 'border-slate-300'
+                        }`}>
+                          {replaceCardReason === reason.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                      </div>
+                      <span className="text-[11px] text-slate-500 leading-snug">{reason.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Step 2: Delivery & Fulfillment Info */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                  <div className="flex items-center gap-1.5 text-slate-800 text-xs font-bold">
+                    <Truck size={14} className="text-blue-600" />
+                    <span>Delivery Address</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Fee: Waived ($0)
+                  </span>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 text-xs text-slate-700 leading-relaxed">
+                  <strong>Registered Address:</strong><br />
+                  12 Marina Boulevard, #28-01<br />
+                  Marina Bay Financial Centre Tower 3<br />
+                  Singapore 018982
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 pt-1">
+                  <Clock size={12} className="text-slate-400 shrink-0" />
+                  <span>Estimated delivery: 3–5 business days via SingPost Registered Mail</span>
+                </div>
+              </div>
+
+              {/* Submit Action */}
+              <button
+                type="button"
+                disabled={isSubmittingReplaceCard}
+                onClick={() => {
+                  setIsSubmittingReplaceCard(true);
+                  setTimeout(() => {
+                    setIsSubmittingReplaceCard(false);
+                    setReplaceCardRef(`REP-${Math.floor(100000 + Math.random() * 900000)}`);
+                    setReplaceCardSuccess(true);
+                  }, 1200);
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {isSubmittingReplaceCard ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" />
+                    <span>Processing Application...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCw size={14} />
+                    <span>Confirm & Request Replacement</span>
+                  </>
+                )}
+              </button>
+            </div>
+          );
+        }
+
         return (
           <div className="w-full text-left space-y-4">
             <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-5 text-white shadow-lg relative overflow-hidden">
@@ -2008,19 +2185,39 @@ export default function BankingBotUI() {
               </div>
             </div>
             
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm divide-y divide-slate-100">
+              <div className="px-4 py-3 flex justify-between items-center bg-slate-50/50">
                 <span className="text-sm font-medium text-slate-700">Lock Card temporarily</span>
                 <div className="w-10 h-6 bg-slate-200 rounded-full relative cursor-pointer">
                   <div className="w-4 h-4 bg-white rounded-full absolute left-1 top-1 shadow-sm"></div>
                 </div>
               </div>
-              <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
+              <div className="px-4 py-3 flex justify-between items-center">
                 <span className="text-sm font-medium text-slate-700">Online Transactions</span>
                 <div className="w-10 h-6 bg-blue-500 rounded-full relative cursor-pointer">
                   <div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div>
                 </div>
               </div>
+              {/* Replace Card Application Trigger */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReplaceCardModal(true);
+                  setReplaceCardSuccess(false);
+                }}
+                className="w-full px-4 py-3 flex justify-between items-center text-slate-800 hover:bg-slate-50 transition-colors text-left group cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <RotateCw size={14} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800 group-hover:text-blue-600 transition-colors">Apply for Replacement Card</div>
+                    <div className="text-[11px] text-slate-400">Damaged, worn, or updated details</div>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+              </button>
               <div className="px-4 py-3 flex justify-between items-center text-red-600 hover:bg-red-50 cursor-pointer transition-colors">
                 <span className="text-sm font-medium">Report Lost or Stolen</span>
                 <ChevronRight size={16} />
@@ -2298,14 +2495,46 @@ export default function BankingBotUI() {
   const renderDeeplinkMockScreen = () => {
     if (!activeDeeplink) return null;
     return (
-      <div className="absolute inset-0 bg-slate-50 z-50 flex flex-col">
-        <div className="bg-white border-b border-slate-100 flex items-center px-4 py-3 sticky top-0 z-10 shadow-sm">
-          <button onClick={() => setActiveDeeplink(null)} className="p-2 -ml-2 text-slate-500 hover:text-slate-700 transition-colors rounded-full hover:bg-slate-50">
-            <ArrowLeft size={20} />
-          </button>
-          <h2 className="text-base font-semibold text-slate-800 ml-2">{activeDeeplink.label}</h2>
+      <div className="absolute inset-0 bg-slate-50 z-50 flex flex-col animate-in fade-in duration-150">
+        {/* Authentic Mobile Status Bar & Dynamic Island */}
+        <div className="bg-white px-6 pt-3 pb-1 flex items-center justify-between text-slate-800 select-none shrink-0 border-b border-slate-100/50">
+          <span className="text-[12px] font-semibold tracking-tight">9:41</span>
+          <div className="w-24 h-4 bg-slate-900 rounded-full flex items-center justify-center shadow-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-slate-800 mr-2" />
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-900/60" />
+          </div>
+          <div className="flex items-center gap-1.5 text-slate-700">
+            <Signal size={12} strokeWidth={2.5} />
+            <Wifi size={12} strokeWidth={2.5} />
+            <div className="w-5 h-2.5 border border-slate-700 rounded-[3px] p-0.5 flex items-center">
+              <div className="h-full w-full bg-slate-800 rounded-[1px]" />
+            </div>
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-start pt-6 text-center">
+
+        {/* Top App Header */}
+        <div className="bg-white border-b border-slate-100 flex items-center justify-between px-4 py-2.5 sticky top-0 z-10 shadow-xs">
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveDeeplink(null);
+                setShowReplaceCardModal(false);
+                setReplaceCardSuccess(false);
+              }}
+              className="p-1.5 -ml-1 text-slate-600 hover:text-slate-900 transition-colors rounded-full hover:bg-slate-100 cursor-pointer"
+              title="Back to Chat"
+            >
+              <ArrowLeft size={19} />
+            </button>
+            <h2 className="text-[15px] font-bold text-slate-800 ml-1.5 tracking-tight">{activeDeeplink.label}</h2>
+          </div>
+          <div className="flex items-center gap-1 bg-slate-100/80 px-2 py-0.5 rounded-md border border-slate-200/50">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-bold uppercase text-slate-500 font-mono tracking-wide">Horizon App</span>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-start pt-5 text-center">
           {renderDeeplinkContent()}
         </div>
       </div>

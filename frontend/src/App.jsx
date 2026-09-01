@@ -5,7 +5,8 @@ import {
   CreditCard, Wallet, Landmark, ShieldCheck,
   FileText, UserCheck, AlertCircle, LogIn, LogOut, Lock as LockIcon,
   Loader2, Settings, ClipboardList, Clock, XCircle, ArrowRight, ArrowLeft, LayoutDashboard,
-  ThumbsUp, ThumbsDown, Copy, Check, Sparkles, ChevronDown, ChevronUp, AlertTriangle, ShieldAlert, Info, Layers, HelpCircle
+  ThumbsUp, ThumbsDown, Copy, Check, Sparkles, ChevronDown, ChevronUp, AlertTriangle, ShieldAlert, Info, Layers, HelpCircle,
+  Globe, Signal, Wifi
 } from 'lucide-react';
 
 // 1. THE NODE CAPTION DICTIONARY
@@ -101,6 +102,7 @@ export default function BankingBotUI() {
   const [expandedProgressSteps, setExpandedProgressSteps] = useState({});
   const [expandedAccordions, setExpandedAccordions] = useState({});
   const [copiedKey, setCopiedKey] = useState(null);
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [showPreferences, setShowPreferences] = useState(false);
   const [preferences, setPreferences] = useState({
     nickname: "",
@@ -982,16 +984,19 @@ export default function BankingBotUI() {
       <div className="flex flex-wrap gap-1.5 mt-2.5 max-w-sm">
         {options.map((opt, idx) => {
           const label = typeof opt === 'string' ? opt : (opt?.label || opt?.message || t(preferences.language, "misc.continue"));
-          const message = typeof opt === 'string' ? opt : (opt?.message || opt?.label || '');
+          const message = typeof opt === 'string' ? opt : (opt?.message || opt?.action || opt?.label || '');
+          const tooltipText = message || label;
           return (
             <button
               key={idx}
               type="button"
               onClick={() => message && handleSend(message)}
               disabled={!message || isTyping || isCompactingMemory}
+              title={tooltipText}
+              aria-label={tooltipText}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-slate-700 bg-white border border-slate-200/90 shadow-2xs hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 active:scale-[0.98] transition-all disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer max-w-full text-left"
             >
-              <span className="whitespace-normal break-words leading-relaxed">{label}</span>
+              <span className="truncate max-w-[260px] leading-relaxed">{label}</span>
             </button>
           );
         })}
@@ -1084,6 +1089,33 @@ export default function BankingBotUI() {
     setCopiedKey(key);
     setTimeout(() => {
       setCopiedKey((prev) => (prev === key ? null : prev));
+    }, 2000);
+  };
+
+  const handleCopyFullMessage = (msgId, text, e) => {
+    if (e) e.stopPropagation();
+    if (typeof text !== 'string') return;
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text);
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      }
+      textArea.remove();
+    }
+    setCopiedMessageId(msgId);
+    setTimeout(() => {
+      setCopiedMessageId((prev) => (prev === msgId ? null : prev));
     }, 2000);
   };
 
@@ -1217,12 +1249,9 @@ export default function BankingBotUI() {
   );
 
   const renderClarificationCard = (text, options = []) => (
-    <div className="mt-3">
-      <div className="max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 shadow-sm">
-        <div className="flex items-start gap-2.5">
-          <HelpCircle size={17} className="mt-0.5 shrink-0 text-blue-600" aria-hidden="true" />
-          <span className="whitespace-pre-wrap">{renderTextWithDataChips(text)}</span>
-        </div>
+    <div className="mt-2.5">
+      <div className="max-w-sm rounded-2xl rounded-tl-sm border-l-2 border-l-blue-400 border-y border-r border-slate-200 bg-white p-3.5 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+        {renderTextWithDataChips(text)}
       </div>
       {options?.length > 0 && <div className="mt-2.5">{renderChips(options)}</div>}
     </div>
@@ -1578,18 +1607,30 @@ export default function BankingBotUI() {
     const blockId = `${messageId}-${block.blockId || index}`;
     const expandedStep = expandedProgressSteps[blockId] ?? 1;
     return (
-      <div key={blockId} className={index > 0 ? 'mt-5' : ''}>
-        <div className="mb-1.5 ml-1 flex items-end gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          <span>{t(preferences.language, "chat.botName")}</span>
-          {index === 0 && precisionSubstituted && renderPrecisionBadge()}
-          {index === 0 && personalDataSubstituted && renderDataProtectedBadge()}
-        </div>
+      <div key={blockId} className={index > 0 ? 'mt-3.5' : ''}>
+        {index === 0 && (
+          <div className="mb-1 ml-0.5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <span>{t(preferences.language, "chat.botName")}</span>
+            {precisionSubstituted && renderPrecisionBadge()}
+            {personalDataSubstituted && renderDataProtectedBadge()}
+          </div>
+        )}
         {block.type === 'text' && (
-          <div className="max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white p-3.5 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
-            {block.contextText && (
-              <div className="mb-2 text-slate-600">{renderTextWithDataChips(block.contextText)}</div>
-            )}
-            {renderTextWithDataChips(block.text)}
+          <div className="relative group max-w-sm">
+            <div className="rounded-2xl rounded-tl-sm border border-slate-200 bg-white p-3.5 pr-8 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+              {block.contextText && (
+                <div className="mb-2 text-slate-600">{renderTextWithDataChips(block.contextText)}</div>
+              )}
+              {renderTextWithDataChips(block.text)}
+            </div>
+            <button
+              type="button"
+              onClick={(e) => handleCopyFullMessage(blockId, block.text, e)}
+              className="absolute top-2.5 right-2.5 p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 bg-white/90 shadow-2xs cursor-pointer"
+              title={copiedMessageId === blockId ? t(preferences.language, "misc.copied") : t(preferences.language, "misc.copy")}
+            >
+              {copiedMessageId === blockId ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+            </button>
           </div>
         )}
         {block.type === 'clarification' && renderClarificationCard(block.text, block.options)}
@@ -2298,51 +2339,137 @@ export default function BankingBotUI() {
   const renderPreferencesModal = () => {
     if (!showPreferences) return null;
     return (
-      <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-6">
-        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl flex flex-col max-h-[80vh] overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-bold text-slate-800">{t(preferences.language, "prefs.title")}</h3>
-            <button onClick={() => setShowPreferences(false)} className="text-slate-400 hover:text-slate-600">×</button>
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-6 animate-in fade-in duration-150">
+        <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-100">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                <Settings size={16} />
+              </div>
+              <h3 className="font-bold text-slate-800 text-sm">{t(preferences.language, "prefs.title")}</h3>
+            </div>
+            <button onClick={() => setShowPreferences(false)} className="w-7 h-7 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center">×</button>
           </div>
-          <div className="p-4 overflow-y-auto flex flex-col gap-4 text-sm">
+          <div className="p-4 overflow-y-auto flex flex-col gap-4 text-xs">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{t(preferences.language, "prefs.nickname")}</label>
-              <input type="text" className="w-full border border-slate-200 rounded-lg p-2" value={preferences.nickname} onChange={(e) => setPreferences({...preferences, nickname: e.target.value})} placeholder={t(preferences.language, "prefs.nicknamePlaceholder")} />
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{t(preferences.language, "prefs.nickname")}</label>
+              <input
+                type="text"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 focus:outline-none transition-all placeholder:text-slate-400"
+                value={preferences.nickname}
+                onChange={(e) => setPreferences({...preferences, nickname: e.target.value})}
+                placeholder={t(preferences.language, "prefs.nicknamePlaceholder")}
+              />
             </div>
+
+            {/* Language Segmented Control */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{t(preferences.language, "prefs.language")}</label>
-              <select className="w-full border border-slate-200 rounded-lg p-2" value={preferences.language} onChange={(e) => setPreferences({...preferences, language: e.target.value})}>
-                <option value="English">English</option>
-                <option value="Mandarin">简体中文</option>
-                <option value="Spanish">Español</option>
-              </select>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{t(preferences.language, "prefs.language")}</label>
+              <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+                {[
+                  { id: 'English', label: 'English' },
+                  { id: 'Mandarin', label: '简体中文' },
+                  { id: 'Spanish', label: 'Español' }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setPreferences({ ...preferences, language: opt.id })}
+                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                      preferences.language === opt.id
+                        ? 'bg-white text-blue-700 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Tone Segmented Control */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{t(preferences.language, "prefs.tone")}</label>
-              <select className="w-full border border-slate-200 rounded-lg p-2" value={preferences.tone} onChange={(e) => setPreferences({...preferences, tone: e.target.value})}>
-                <option value="professional">{t(preferences.language, "prefs.toneProfessional")}</option>
-                <option value="friendly">{t(preferences.language, "prefs.toneFriendly")}</option>
-                <option value="concise">{t(preferences.language, "prefs.toneConcise")}</option>
-              </select>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{t(preferences.language, "prefs.tone")}</label>
+              <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+                {[
+                  { id: 'professional', label: t(preferences.language, "prefs.toneProfessional") },
+                  { id: 'friendly', label: t(preferences.language, "prefs.toneFriendly") },
+                  { id: 'concise', label: t(preferences.language, "prefs.toneConcise") }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setPreferences({ ...preferences, tone: opt.id })}
+                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                      preferences.tone === opt.id
+                        ? 'bg-white text-blue-700 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Financial Literacy Segmented Control */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{t(preferences.language, "prefs.literacy")}</label>
-              <select className="w-full border border-slate-200 rounded-lg p-2" value={preferences.financial_literacy} onChange={(e) => setPreferences({...preferences, financial_literacy: e.target.value})}>
-                <option value="beginner">{t(preferences.language, "prefs.literacyBeginner")}</option>
-                <option value="intermediate">{t(preferences.language, "prefs.literacyIntermediate")}</option>
-                <option value="professional">{t(preferences.language, "prefs.literacyProfessional")}</option>
-              </select>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{t(preferences.language, "prefs.literacy")}</label>
+              <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+                {[
+                  { id: 'beginner', label: t(preferences.language, "prefs.literacyBeginner") },
+                  { id: 'intermediate', label: t(preferences.language, "prefs.literacyIntermediate") },
+                  { id: 'professional', label: t(preferences.language, "prefs.literacyProfessional") }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setPreferences({ ...preferences, financial_literacy: opt.id })}
+                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                      preferences.financial_literacy === opt.id
+                        ? 'bg-white text-blue-700 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Emoji Segmented Control */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{t(preferences.language, "prefs.emoji")}</label>
-              <select className="w-full border border-slate-200 rounded-lg p-2" value={preferences.emoji} onChange={(e) => setPreferences({...preferences, emoji: e.target.value})}>
-                <option value="enabled">{t(preferences.language, "prefs.emojiEnabled")}</option>
-                <option value="disabled">{t(preferences.language, "prefs.emojiDisabled")}</option>
-              </select>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{t(preferences.language, "prefs.emoji")}</label>
+              <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+                {[
+                  { id: 'enabled', label: t(preferences.language, "prefs.emojiEnabled") },
+                  { id: 'disabled', label: t(preferences.language, "prefs.emojiDisabled") }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setPreferences({ ...preferences, emoji: opt.id })}
+                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                      preferences.emoji === opt.id
+                        ? 'bg-white text-blue-700 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="p-4 border-t border-slate-100 flex justify-end">
-            <button onClick={() => savePreferences(preferences)} className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+          <div className="p-3.5 border-t border-slate-100 flex justify-end bg-slate-50/50">
+            <button
+              type="button"
+              onClick={() => {
+                void savePreferences(preferences);
+                setShowPreferences(false);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-5 rounded-xl text-xs transition-colors shadow-xs"
+            >
               Save Preferences
             </button>
           </div>
@@ -2361,33 +2488,49 @@ export default function BankingBotUI() {
       {/* Mobile Device Mockup */}
       <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col h-[85vh] max-h-[850px] border-[6px] border-slate-800 relative">
         
+        {/* Authentic Mobile Status Bar & Dynamic Island */}
+        <div className="bg-white px-6 pt-3 pb-1 flex items-center justify-between text-slate-800 select-none z-20 shrink-0">
+          <span className="text-[12px] font-semibold tracking-tight">9:41</span>
+          <div className="w-24 h-4 bg-slate-900 rounded-full flex items-center justify-center shadow-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-slate-800 mr-2" />
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-900/60" />
+          </div>
+          <div className="flex items-center gap-1.5 text-slate-700">
+            <Signal size={12} strokeWidth={2.5} />
+            <Wifi size={12} strokeWidth={2.5} />
+            <div className="w-5 h-2.5 border border-slate-700 rounded-[3px] p-0.5 flex items-center">
+              <div className="h-full w-full bg-slate-800 rounded-[1px]" />
+            </div>
+          </div>
+        </div>
+
         {/* Dynamic User Identity Header */}
-        <div className="bg-white border-b border-slate-100 p-4 pb-3 flex flex-col gap-3 z-10 shadow-sm">
+        <div className="bg-white border-b border-slate-100 p-4 pb-3.5 flex flex-col gap-3.5 z-10 shadow-xs">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="relative bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-600 w-11 h-11 rounded-2xl flex items-center justify-center shadow-md shadow-blue-500/20 border border-white/20">
-                <Landmark className="text-white drop-shadow-xs" size={22} strokeWidth={2.2} />
+            <div className="flex items-center gap-3.5">
+              <div className="relative bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-600 w-12 h-12 rounded-2xl flex items-center justify-center shadow-md shadow-blue-500/20 border border-white/20 shrink-0">
+                <Landmark className="text-white drop-shadow-xs" size={24} strokeWidth={2.2} />
                 <div className="absolute -bottom-0.5 -right-0.5 bg-indigo-500 rounded-full p-0.5 border-2 border-white shadow-xs">
-                  <Sparkles size={8} className="text-white" />
+                  <Sparkles size={9} className="text-white" />
                 </div>
               </div>
               <div>
-                <h1 className="font-bold text-slate-800 text-lg leading-tight">{t(preferences.language, "header.title")}</h1>
+                <h1 className="font-bold text-slate-900 text-xl tracking-tight leading-tight">{t(preferences.language, "header.title")}</h1>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">{t(preferences.language, "header.secureSession")}</span>
+                  <span className="text-xs text-slate-500 font-medium uppercase tracking-wide">{t(preferences.language, "header.secureSession")}</span>
                 </div>
               </div>
             </div>
             {/* Action Toggles */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               {isLoggedIn && (
-                <button onClick={() => setShowPreferences(true)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors" title={t(preferences.language, "header.preferences")}>
-                  <Settings size={18}/>
+                <button onClick={() => setShowPreferences(true)} className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors" title={t(preferences.language, "header.preferences")}>
+                  <Settings size={19}/>
                 </button>
               )}
-              <button onClick={handleLoginToggle} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors" title={t(preferences.language, "header.toggleUser")}>
-                {isLoggedIn ? <LogOut size={18}/> : <LogIn size={18}/>}
+              <button onClick={handleLoginToggle} className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors" title={t(preferences.language, "header.toggleUser")}>
+                {isLoggedIn ? <LogOut size={19}/> : <LogIn size={19}/>}
               </button>
             </div>
           </div>
@@ -2398,22 +2541,22 @@ export default function BankingBotUI() {
             onMouseEnter={handleBannerMouseEnter}
             onMouseLeave={handleBannerMouseLeave}
           >
-            <div className={`flex items-center justify-between px-3 py-2 transition-all select-none ${
+            <div className={`flex items-center justify-between px-3.5 py-2.5 transition-all select-none ${
               isBannerHovered && isLoggedIn
-                ? 'bg-blue-50/95 border-x border-t border-blue-200 shadow-sm rounded-t-xl rounded-b-none'
-                : (isLoggedIn ? 'bg-blue-50/50 border border-blue-100 hover:bg-blue-50 hover:border-blue-200 rounded-xl cursor-pointer' : 'bg-slate-50 border border-slate-100 rounded-xl')
+                ? 'bg-slate-50/90 border-x border-t border-slate-200/80 rounded-t-xl rounded-b-none'
+                : (isLoggedIn ? 'bg-slate-50/60 border border-slate-200/70 hover:bg-blue-50/30 hover:border-blue-200/60 rounded-xl cursor-pointer' : 'bg-slate-50 border border-slate-100 rounded-xl')
             }`}>
               {/* Left: User Identity & Masked Account */}
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 {isLoggedIn ? (
                   <>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-5 h-5 rounded-full bg-blue-100/90 flex items-center justify-center border border-blue-200/60 shrink-0">
+                      <div className="w-5 h-5 rounded-full bg-blue-100/80 flex items-center justify-center border border-blue-200/50 shrink-0">
                         <UserCheck size={12} className="text-blue-700"/>
                       </div>
                       <span className="text-xs font-semibold text-slate-800">{preferences.nickname || MOCK_PROFILE.displayName}</span>
                     </div>
-                    <span className="text-[10px] font-mono text-slate-500 bg-white/90 px-2 py-0.5 rounded-md border border-slate-200/80 shadow-2xs">
+                    <span className="text-[10px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200/60 shadow-2xs">
                       {t(preferences.language, "misc.maskedAcc")}
                     </span>
                   </>
@@ -2433,7 +2576,7 @@ export default function BankingBotUI() {
                       const pendingCount = serviceRequestList.filter(item => PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)).length;
                       if (pendingCount > 0) {
                         return (
-                          <span className="inline-flex items-center gap-1.5 bg-white border border-blue-200 text-blue-900 text-[10px] font-semibold rounded-full px-2.5 py-0.5 shadow-2xs">
+                          <span className="inline-flex items-center gap-1.5 bg-white border border-blue-200/70 text-blue-900 text-[10px] font-semibold rounded-full px-2.5 py-0.5 shadow-2xs">
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
                             <span className="font-bold text-blue-950">{pendingCount}</span>
                             <span className="text-[9.5px] font-medium text-blue-600">{t(preferences.language, 'serviceRequest.statusPending').toLowerCase()}</span>
@@ -2455,27 +2598,27 @@ export default function BankingBotUI() {
             {/* Binder-Style Service Form Drawer */}
             {isLoggedIn && isBannerHovered && (
               <div
-                className="absolute top-full left-0 right-0 bg-white/98 backdrop-blur-xl rounded-b-2xl border-x border-b border-blue-200 shadow-2xl z-40 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
+                className="absolute top-full left-0 right-0 bg-white/95 backdrop-blur-md rounded-b-2xl border-x border-b border-slate-200/80 shadow-lg z-40 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
                 onMouseEnter={handleBannerMouseEnter}
                 onMouseLeave={handleBannerMouseLeave}
               >
-                {/* Binder Header with 3 Status Index Tabs */}
-                <div className="bg-slate-100/90 border-b border-slate-200 px-3 pt-2.5 flex items-end justify-between gap-1">
-                  <div className="flex items-end gap-1">
+                {/* Lightweight Header with Segmented Status Tabs */}
+                <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                  <div className="flex items-center gap-1 bg-slate-100/90 p-0.5 rounded-lg border border-slate-200/60 w-full">
                     {/* Pending Tab */}
                     <button
                       type="button"
                       onClick={() => { setServiceRequestTab('pending'); setServiceRequestPage(1); }}
-                      className={`px-2.5 py-1.5 rounded-t-lg text-[11px] font-bold transition-all flex items-center gap-1.5 border-t-2 border-x ${
+                      className={`flex-1 py-1 px-2 rounded-md text-[11px] font-semibold transition-all flex items-center justify-center gap-1.5 ${
                         serviceRequestTab === 'pending'
-                          ? 'bg-white text-blue-900 border-t-blue-600 border-x-slate-200 -mb-px shadow-2xs'
-                          : 'bg-slate-200/60 text-slate-500 hover:text-slate-700 border-t-transparent border-x-transparent hover:bg-slate-200'
+                          ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                          : 'text-slate-500 hover:text-slate-700'
                       }`}
                     >
-                      <Clock size={12} className={serviceRequestTab === 'pending' ? 'text-blue-600' : 'text-slate-400'} />
+                      <Clock size={11} className={serviceRequestTab === 'pending' ? 'text-blue-600' : 'text-slate-400'} />
                       <span>{t(preferences.language, 'serviceRequest.statusPending')}</span>
                       <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
-                        serviceRequestTab === 'pending' ? 'bg-blue-100 text-blue-800' : 'bg-slate-300/70 text-slate-600'
+                        serviceRequestTab === 'pending' ? 'bg-blue-100 text-blue-800' : 'bg-slate-200/80 text-slate-500'
                       }`}>
                         {serviceRequestList.filter(item => PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)).length}
                       </span>
@@ -2485,16 +2628,16 @@ export default function BankingBotUI() {
                     <button
                       type="button"
                       onClick={() => { setServiceRequestTab('completed'); setServiceRequestPage(1); }}
-                      className={`px-2.5 py-1.5 rounded-t-lg text-[11px] font-bold transition-all flex items-center gap-1.5 border-t-2 border-x ${
+                      className={`flex-1 py-1 px-2 rounded-md text-[11px] font-semibold transition-all flex items-center justify-center gap-1.5 ${
                         serviceRequestTab === 'completed'
-                          ? 'bg-white text-emerald-800 border-t-emerald-500 border-x-slate-200 -mb-px shadow-2xs'
-                          : 'bg-slate-200/60 text-slate-500 hover:text-slate-700 border-t-transparent border-x-transparent hover:bg-slate-200'
+                          ? 'bg-white text-emerald-700 shadow-2xs font-bold'
+                          : 'text-slate-500 hover:text-slate-700'
                       }`}
                     >
-                      <CheckCircle2 size={12} className={serviceRequestTab === 'completed' ? 'text-emerald-600' : 'text-slate-400'} />
+                      <CheckCircle2 size={11} className={serviceRequestTab === 'completed' ? 'text-emerald-600' : 'text-slate-400'} />
                       <span>{t(preferences.language, 'serviceRequest.statusCompleted')}</span>
                       <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
-                        serviceRequestTab === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-300/70 text-slate-600'
+                        serviceRequestTab === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200/80 text-slate-500'
                       }`}>
                         {serviceRequestList.filter(item => item.status === 'completed').length}
                       </span>
@@ -2504,16 +2647,16 @@ export default function BankingBotUI() {
                     <button
                       type="button"
                       onClick={() => { setServiceRequestTab('expired'); setServiceRequestPage(1); }}
-                      className={`px-2.5 py-1.5 rounded-t-lg text-[11px] font-bold transition-all flex items-center gap-1.5 border-t-2 border-x ${
+                      className={`flex-1 py-1 px-2 rounded-md text-[11px] font-semibold transition-all flex items-center justify-center gap-1.5 ${
                         serviceRequestTab === 'expired'
-                          ? 'bg-white text-slate-700 border-t-slate-400 border-x-slate-200 -mb-px shadow-2xs'
-                          : 'bg-slate-200/60 text-slate-500 hover:text-slate-700 border-t-transparent border-x-transparent hover:bg-slate-200'
+                          ? 'bg-white text-slate-700 shadow-2xs font-bold'
+                          : 'text-slate-500 hover:text-slate-700'
                       }`}
                     >
-                      <XCircle size={12} className={serviceRequestTab === 'expired' ? 'text-slate-500' : 'text-slate-400'} />
+                      <XCircle size={11} className={serviceRequestTab === 'expired' ? 'text-slate-500' : 'text-slate-400'} />
                       <span>{t(preferences.language, 'serviceRequest.statusExpired')}</span>
                       <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
-                        serviceRequestTab === 'expired' ? 'bg-slate-200 text-slate-700' : 'bg-slate-300/70 text-slate-600'
+                        serviceRequestTab === 'expired' ? 'bg-slate-200 text-slate-700' : 'bg-slate-200/80 text-slate-500'
                       }`}>
                         {serviceRequestList.filter(item => item.status === 'expired').length}
                       </span>
@@ -2522,7 +2665,7 @@ export default function BankingBotUI() {
                 </div>
 
                 {/* Binder Content Body */}
-                <div className="p-2.5 max-h-[260px] overflow-y-auto bg-white space-y-1.5">
+                <div className="p-2.5 max-h-[240px] overflow-y-auto bg-white/50 space-y-1.5">
                   {(() => {
                     const filteredList = serviceRequestList.filter(item => {
                       if (serviceRequestTab === 'pending') return PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
@@ -2533,9 +2676,9 @@ export default function BankingBotUI() {
 
                     if (filteredList.length === 0) {
                       return (
-                        <div className="py-6 text-center text-slate-400 flex flex-col items-center gap-1.5">
-                          <ClipboardList size={22} className="text-slate-300" />
-                          <p className="text-xs">{t(preferences.language, 'serviceRequest.listEmpty')}</p>
+                        <div className="py-5 text-center text-slate-400 flex flex-col items-center gap-1">
+                          <ClipboardList size={18} className="text-slate-300" />
+                          <p className="text-[11px] text-slate-400">{t(preferences.language, 'serviceRequest.listEmpty')}</p>
                         </div>
                       );
                     }
@@ -2587,21 +2730,21 @@ export default function BankingBotUI() {
                               }
                             }
                           }}
-                          className={`w-full text-left p-2.5 rounded-xl border transition-all flex flex-col gap-1 ${
+                          className={`w-full text-left p-2.5 rounded-xl transition-all flex flex-col gap-1 ${
                             isPending
-                              ? 'border-blue-200/80 bg-blue-50/40 hover:bg-blue-50 hover:border-blue-300 cursor-pointer shadow-2xs'
-                              : 'border-slate-200/70 bg-slate-50/60 hover:bg-slate-100 cursor-pointer'
+                              ? 'border border-blue-100 bg-blue-50/30 hover:bg-blue-50/70 hover:border-blue-200/90 cursor-pointer shadow-2xs'
+                              : 'border border-slate-100 bg-white/80 hover:bg-slate-50 cursor-pointer shadow-2xs'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-bold text-slate-800 line-clamp-1">{item.action_label || item.description}</span>
-                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold shrink-0 ${meta.className}`}>
+                            <span className="text-xs font-semibold text-slate-800 line-clamp-1">{item.action_label || item.description}</span>
+                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold shrink-0 ${meta.className}`}>
                               {meta.icon}
                               {meta.label}
                             </span>
                           </div>
                           {item.action_label && item.description && (
-                            <p className="text-[11px] text-slate-600 leading-snug line-clamp-1">{item.description}</p>
+                            <p className="text-[11px] text-slate-500 leading-snug line-clamp-1">{item.description}</p>
                           )}
                           <div className="flex items-center justify-between pt-0.5 text-[9px] text-slate-400 font-mono">
                             <span>ID: {item.special_id?.substring(0, 10)}...</span>
@@ -2661,28 +2804,51 @@ export default function BankingBotUI() {
                     <div className="h-px flex-1 bg-slate-200" />
                   </div>
                 )}
-                <div className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className="max-w-[88%]">
-                    {msg.sender === 'bot' && msg.type !== 'blocks' && (
-                      <div className="flex items-end gap-2 mb-1.5 ml-1">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t(preferences.language, "chat.botName")}</span>
-                        {msg.precisionSubstituted && renderPrecisionBadge()}
-                        {msg.personalDataSubstituted && renderDataProtectedBadge()}
-                      </div>
-                    )}
+                {(() => {
+                  const isConsecutive = index > 0 && resolvedMessages[index - 1].sender === msg.sender;
+                  return (
+                    <div className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} ${isConsecutive ? 'mt-1.5' : 'mt-3.5'}`}>
+                      <div className="max-w-[88%] min-w-0">
+                        {msg.sender === 'bot' && !isConsecutive && msg.type !== 'blocks' && (
+                          <div className="flex items-center gap-2 mb-1 ml-0.5">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t(preferences.language, "chat.botName")}</span>
+                            {msg.precisionSubstituted && renderPrecisionBadge()}
+                            {msg.personalDataSubstituted && renderDataProtectedBadge()}
+                          </div>
+                        )}
 
-                    {msg.type !== 'stepper' && msg.type !== 'checklist' && msg.type !== 'blocks' && (
-                      <>
-                        <div className={`p-3.5 text-[15px] leading-relaxed shadow-sm whitespace-pre-wrap
-                          ${msg.sender === 'user'
-                            ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm'
-                            : 'bg-white border border-slate-200 text-slate-700 rounded-2xl rounded-tl-sm'
-                          }`}
-                        >
-                          {msg.sender === 'bot' ? renderTextWithDataChips(msg.text) : msg.text}
-                        </div>
-                      </>
-                    )}
+                        {msg.sender === 'user' && !isConsecutive && (
+                          <div className="flex items-center justify-end gap-1.5 mb-1 mr-0.5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              {isLoggedIn ? (preferences.nickname || MOCK_PROFILE.displayName) : t(preferences.language, "misc.guestUser")}
+                            </span>
+                            <div className="w-4 h-4 rounded-full bg-blue-100/90 flex items-center justify-center text-blue-700 shrink-0 border border-blue-200/60">
+                              <UserCheck size={10} />
+                            </div>
+                          </div>
+                        )}
+
+                          {msg.type !== 'stepper' && msg.type !== 'checklist' && msg.type !== 'blocks' && (
+                            <div className="relative group">
+                              <div className={`p-3.5 text-[15px] leading-relaxed shadow-sm whitespace-pre-wrap ${
+                                msg.sender === 'user'
+                                  ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm'
+                                  : 'bg-white border border-slate-200 text-slate-700 rounded-2xl rounded-tl-sm pr-9'
+                              }`}>
+                                {msg.sender === 'bot' ? renderTextWithDataChips(msg.text) : msg.text}
+                              </div>
+                              {msg.sender === 'bot' && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopyFullMessage(msg.id, msg.text, e)}
+                                  className="absolute top-2.5 right-2.5 p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 bg-white/90 shadow-2xs cursor-pointer"
+                                  title={copiedMessageId === msg.id ? t(preferences.language, "misc.copied") : t(preferences.language, "misc.copy")}
+                                >
+                                  {copiedMessageId === msg.id ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                                </button>
+                              )}
+                            </div>
+                          )}
 
                     {/* Dynamic UI Components */}
                     {msg.type === 'carousel' && renderCarousel(msg.options)}
@@ -2747,6 +2913,8 @@ export default function BankingBotUI() {
                     {msg.type === 'blocks' && msg.options?.length > 0 && renderChips(msg.options)}
                   </div>
                 </div>
+              );
+            })()}
               </React.Fragment>
             );
           })}
@@ -2859,18 +3027,27 @@ export default function BankingBotUI() {
                       }
                     }}
                     placeholder={t(preferences.language, "chat.placeholder")}
-                    className="w-full bg-transparent text-slate-800 text-[15px] pl-3.5 pr-11 py-2 focus:outline-none resize-none leading-relaxed placeholder:text-slate-400 max-h-[140px] overflow-y-auto"
+                    className="w-full bg-transparent text-slate-800 text-[15px] pl-3.5 pr-20 py-2 focus:outline-none resize-none leading-relaxed placeholder:text-slate-400 max-h-[140px] overflow-y-auto"
                     style={{ minHeight: '40px' }}
                     disabled={isTyping || !isLoggedIn || Boolean(activeDeeplink)}
                   />
-                  <button
-                    onClick={() => handleSend(inputValue)}
-                    disabled={!inputValue.trim() || isTyping || !isLoggedIn || Boolean(activeDeeplink)}
-                    className="absolute right-1.5 bottom-1.5 bg-blue-600 text-white w-9 h-9 rounded-xl flex items-center justify-center disabled:opacity-40 disabled:bg-slate-300 hover:bg-blue-700 transition-all shadow-xs shrink-0"
-                    title="Send"
-                  >
-                    <Send size={16} className="ml-0.5" />
-                  </button>
+                  <div className="absolute right-1.5 bottom-1.5 flex items-center gap-1.5">
+                    {inputValue.length > 0 && (
+                      <span className={`text-[10px] font-mono tabular-nums pr-1 select-none transition-colors ${
+                        inputValue.length > 900 ? 'text-amber-600 font-bold' : 'text-slate-400'
+                      }`}>
+                        {inputValue.length}/1000
+                      </span>
+                    )}
+                    <button
+                      onClick={() => handleSend(inputValue)}
+                      disabled={!inputValue.trim() || isTyping || !isLoggedIn || Boolean(activeDeeplink)}
+                      className="bg-blue-600 text-white w-9 h-9 rounded-xl flex items-center justify-center disabled:opacity-40 disabled:bg-slate-300 hover:bg-blue-700 transition-all shadow-xs shrink-0 cursor-pointer"
+                      title="Send"
+                    >
+                      <Send size={16} className="ml-0.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );

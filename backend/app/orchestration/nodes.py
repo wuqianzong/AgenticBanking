@@ -5236,18 +5236,19 @@ def _flatten_response_block_text(block: dict) -> str:
     block_type = block.get("type", "text")
     title = block.get("title", "")
     extended_text = block.get("extendedText", "")
+    lead_text = block.get("contextText", "")
     if block_type == "comparison":
         rows = block.get("rows", [])
-        parts = [title, *[f"{r['feature']}: {', '.join(r['values'])}" for r in rows if isinstance(r, dict)], extended_text]
+        parts = [lead_text, title, *[f"{r['feature']}: {', '.join(r['values'])}" for r in rows if isinstance(r, dict)], extended_text]
     elif block_type == "accordion":
         sections = block.get("sections", [])
-        parts = [title, *[f"{s['title']}: {s['content']}" for s in sections if isinstance(s, dict)], extended_text]
+        parts = [lead_text, title, *[f"{s['title']}: {s['content']}" for s in sections if isinstance(s, dict)], extended_text]
     elif block_type == "timeline":
         steps = block.get("steps", [])
-        parts = [title, block.get("subtitle", ""), *[f"{s['title']}: {s['description']}" for s in steps if isinstance(s, dict)], extended_text]
+        parts = [lead_text, title, block.get("subtitle", ""), *[f"{s['title']}: {s['description']}" for s in steps if isinstance(s, dict)], extended_text]
     elif block_type == "carousel":
         items = block.get("items", [])
-        parts = [title, *[f"{it['title']}: {it.get('highlight', '')}" for it in items if isinstance(it, dict)], extended_text]
+        parts = [lead_text, title, *[f"{it['title']}: {it.get('highlight', '')}" for it in items if isinstance(it, dict)], extended_text]
     elif block_type == "alert":
         parts = [title, block.get("message", ""), extended_text]
         return "\n".join(p for p in parts if p).strip()
@@ -5282,10 +5283,10 @@ _BLOCK_EDITABLE_FIELDS = {
     "text": ["contextText", "text", "extendedText"],
     "checklist": ["listTitle", "listIntro", "items", "extendedText"],
     "stepper": ["progressTitle", "contextText", "items", "extendedText"],
-    "comparison": ["title", "headers", "rows", "actions", "extendedText"],
-    "accordion": ["title", "sections", "extendedText"],
-    "timeline": ["title", "subtitle", "steps", "extendedText"],
-    "carousel": ["title", "items", "extendedText"],
+    "comparison": ["contextText", "title", "headers", "rows", "actions", "extendedText"],
+    "accordion": ["contextText", "title", "sections", "extendedText"],
+    "timeline": ["contextText", "title", "subtitle", "steps", "extendedText"],
+    "carousel": ["contextText", "title", "items", "extendedText"],
     "alert": ["title", "message", "severity", "action", "extendedText"],
 }
 
@@ -6032,10 +6033,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
                 for a in _llm_list(element, "actions") if isinstance(a, dict) and _llm_text(a, "label")
             ]
             if rows:
-                rendered_text = "\n".join([title, *[f"{r['feature']}: {', '.join(r['values'])}" for r in rows], extended_text]).strip()
+                lead_text = "\n\n".join(part for part in [context_text, answer] if part)
+                rendered_text = "\n".join([lead_text, title, *[f"{r['feature']}: {', '.join(r['values'])}" for r in rows], extended_text]).strip()
                 block = {
                     "blockId": f"element_{index}", "sourceTaskIds": source_ids,
-                    "type": "comparison", "title": title, "headers": headers, "rows": rows, "actions": actions,
+                    "type": "comparison", "contextText": lead_text, "title": title, "headers": headers, "rows": rows, "actions": actions,
                     "options": options, "extendedText": extended_text,
                 }
                 response_blocks.append(block)
@@ -6052,10 +6054,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
                     if st and sc:
                         sections.append({"title": st, "content": sc})
             if sections:
-                rendered_text = "\n".join([title, *[f"{s['title']}: {s['content']}" for s in sections], extended_text]).strip()
+                lead_text = "\n\n".join(part for part in [context_text, answer] if part)
+                rendered_text = "\n".join([lead_text, title, *[f"{s['title']}: {s['content']}" for s in sections], extended_text]).strip()
                 block = {
                     "blockId": f"element_{index}", "sourceTaskIds": source_ids,
-                    "type": "accordion", "title": title, "sections": sections,
+                    "type": "accordion", "contextText": lead_text, "title": title, "sections": sections,
                     "options": options, "extendedText": extended_text,
                 }
                 response_blocks.append(block)
@@ -6075,10 +6078,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
                         steps.append({"title": st_title, "description": st_desc, "status": st_status, "date": st_date})
             if steps:
                 subtitle = _llm_text(element, "subtitle")
-                rendered_text = "\n".join([title, subtitle, *[f"{st['title']}: {st['description']}" for st in steps], extended_text]).strip()
+                lead_text = "\n\n".join(part for part in [context_text, answer] if part)
+                rendered_text = "\n".join([lead_text, title, subtitle, *[f"{st['title']}: {st['description']}" for st in steps], extended_text]).strip()
                 block = {
                     "blockId": f"element_{index}", "sourceTaskIds": source_ids,
-                    "type": "timeline", "title": title, "subtitle": subtitle, "steps": steps,
+                    "type": "timeline", "contextText": lead_text, "title": title, "subtitle": subtitle, "steps": steps,
                     "options": options, "extendedText": extended_text,
                 }
                 response_blocks.append(block)
@@ -6104,10 +6108,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
                             "actionLabel": it_act_lbl, "actionMessage": it_act_msg,
                         })
             if c_items:
-                rendered_text = "\n".join([title, *[f"{it['title']}: {it['highlight']}" for it in c_items], extended_text]).strip()
+                lead_text = "\n\n".join(part for part in [context_text, answer] if part)
+                rendered_text = "\n".join([lead_text, title, *[f"{it['title']}: {it['highlight']}" for it in c_items], extended_text]).strip()
                 block = {
                     "blockId": f"element_{index}", "sourceTaskIds": source_ids,
-                    "type": "carousel", "title": title, "items": c_items,
+                    "type": "carousel", "contextText": lead_text, "title": title, "items": c_items,
                     "options": options, "extendedText": extended_text,
                 }
                 response_blocks.append(block)

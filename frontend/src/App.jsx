@@ -1650,6 +1650,11 @@ export default function BankingBotUI() {
           </div>
         )}
         {block.type === 'checklist' && renderChecklist(block.items, block.listTitle, block.options)}
+        {['comparison', 'accordion', 'timeline', 'carousel'].includes(block.type) && block.contextText && (
+          <div className="mb-2 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+            {renderTextWithDataChips(block.contextText)}
+          </div>
+        )}
         {block.type === 'comparison' && renderComparisonTable(block)}
         {block.type === 'accordion' && renderAccordionFaq(block, blockId)}
         {block.type === 'timeline' && renderTimelineTracker(block)}

@@ -35,7 +35,7 @@ const MOCK_PROFILE = {
   displayName: "Mr. Wu"
 };
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
-const HISTORY_PAGE_SIZE = 20;
+const HISTORY_PAGE_SIZE = 6;
 const ACTIVE_SESSION_KEY = `horizon_active_session_${MOCK_PROFILE.userId}`;
 
 const createSessionId = () => `sess_${crypto.randomUUID()}`;
@@ -947,18 +947,8 @@ export default function BankingBotUI() {
     }
   };
 
-  const handleHistoryScroll = (event) => {
-    if (
-      event.currentTarget.scrollTop <= 24
-      && hasMoreHistoryRef.current
-      && oldestSequenceRef.current !== null
-    ) {
-      if (hasMoreCurrentSessionRef.current) {
-        void loadHistoryPage(sessionId, oldestSequenceRef.current);
-      } else {
-        void loadPriorSessionHistory(sessionId);
-      }
-    }
+  const handleHistoryScroll = () => {
+    // User-driven: chat history is only fetched when the user explicitly clicks the "Load earlier messages" button.
   };
 
   // --- UI WIDGET RENDERERS ---
@@ -2553,14 +2543,27 @@ export default function BankingBotUI() {
     );
   };
 
-  const serviceRequestStatusMeta = (status) => {
-    if (PENDING_SERVICE_REQUEST_STATUSES.includes(status)) {
-      return { label: t(preferences.language, 'serviceRequest.statusPending'), icon: <Clock size={13} />, className: 'text-blue-700 bg-blue-50 border-blue-200' };
+  const getEffectiveServiceRequestStatus = (item) => {
+    if (!item) return 'pending';
+    if (item.status === 'completed') return 'completed';
+    if (item.status === 'expired') return 'expired';
+    if (item.expires_at && new Date(item.expires_at).getTime() < Date.now()) {
+      return 'expired';
     }
+    if (PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)) {
+      return 'pending';
+    }
+    return item.status || 'pending';
+  };
+
+  const serviceRequestStatusMeta = (status) => {
     if (status === 'completed') {
       return { label: t(preferences.language, 'serviceRequest.statusCompleted'), icon: <CheckCircle2 size={13} />, className: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
     }
-    return { label: t(preferences.language, 'serviceRequest.statusExpired'), icon: <XCircle size={13} />, className: 'text-slate-500 bg-slate-50 border-slate-200' };
+    if (status === 'expired') {
+      return { label: t(preferences.language, 'serviceRequest.statusExpired'), icon: <XCircle size={13} />, className: 'text-slate-500 bg-slate-50 border-slate-200' };
+    }
+    return { label: t(preferences.language, 'serviceRequest.statusPending'), icon: <Clock size={13} />, className: 'text-blue-700 bg-blue-50 border-blue-200' };
   };
 
   const renderServiceRequestListModal = () => null;
@@ -2802,7 +2805,7 @@ export default function BankingBotUI() {
                 {isLoggedIn && (
                   <>
                     {(() => {
-                      const pendingCount = serviceRequestList.filter(item => PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)).length;
+                      const pendingCount = serviceRequestList.filter(item => getEffectiveServiceRequestStatus(item) === 'pending').length;
                       if (pendingCount > 0) {
                         return (
                           <span className="inline-flex items-center gap-1.5 bg-white border border-blue-200/70 text-blue-900 text-[10px] font-semibold rounded-full px-2.5 py-0.5 shadow-2xs">
@@ -2849,7 +2852,7 @@ export default function BankingBotUI() {
                       <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
                         serviceRequestTab === 'pending' ? 'bg-blue-100 text-blue-800' : 'bg-slate-200/80 text-slate-500'
                       }`}>
-                        {serviceRequestList.filter(item => PENDING_SERVICE_REQUEST_STATUSES.includes(item.status)).length}
+                        {serviceRequestList.filter(item => getEffectiveServiceRequestStatus(item) === 'pending').length}
                       </span>
                     </button>
 
@@ -2868,7 +2871,7 @@ export default function BankingBotUI() {
                       <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
                         serviceRequestTab === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200/80 text-slate-500'
                       }`}>
-                        {serviceRequestList.filter(item => item.status === 'completed').length}
+                        {serviceRequestList.filter(item => getEffectiveServiceRequestStatus(item) === 'completed').length}
                       </span>
                     </button>
 
@@ -2887,7 +2890,7 @@ export default function BankingBotUI() {
                       <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
                         serviceRequestTab === 'expired' ? 'bg-slate-200 text-slate-700' : 'bg-slate-200/80 text-slate-500'
                       }`}>
-                        {serviceRequestList.filter(item => item.status === 'expired').length}
+                        {serviceRequestList.filter(item => getEffectiveServiceRequestStatus(item) === 'expired').length}
                       </span>
                     </button>
                   </div>
@@ -2896,12 +2899,7 @@ export default function BankingBotUI() {
                 {/* Binder Content Body */}
                 <div className="p-2.5 max-h-[240px] overflow-y-auto bg-white/50 space-y-1.5">
                   {(() => {
-                    const filteredList = serviceRequestList.filter(item => {
-                      if (serviceRequestTab === 'pending') return PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
-                      if (serviceRequestTab === 'completed') return item.status === 'completed';
-                      if (serviceRequestTab === 'expired') return item.status === 'expired';
-                      return false;
-                    });
+                    const filteredList = serviceRequestList.filter(item => getEffectiveServiceRequestStatus(item) === serviceRequestTab);
 
                     if (filteredList.length === 0) {
                       return (
@@ -2913,8 +2911,9 @@ export default function BankingBotUI() {
                     }
 
                     return filteredList.map((item) => {
-                      const meta = serviceRequestStatusMeta(item.status);
-                      const isPending = PENDING_SERVICE_REQUEST_STATUSES.includes(item.status);
+                      const effStatus = getEffectiveServiceRequestStatus(item);
+                      const meta = serviceRequestStatusMeta(effStatus);
+                      const isPending = effStatus === 'pending';
 
                       return (
                         <button
@@ -3000,8 +2999,9 @@ export default function BankingBotUI() {
 
 
           {isLoggedIn && hasMoreHistory && (
-            <div className="flex justify-center pb-1">
+            <div className="flex justify-center pb-2 pt-0.5">
               <button
+                type="button"
                 onClick={() => {
                   if (hasMoreCurrentSessionRef.current) {
                     void loadHistoryPage(sessionId, oldestSequenceRef.current);
@@ -3010,9 +3010,10 @@ export default function BankingBotUI() {
                   }
                 }}
                 disabled={isLoadingHistoryRef.current}
-                className="text-xs font-medium text-blue-700 hover:text-blue-900 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-semibold text-blue-700 bg-white border border-blue-200/80 shadow-2xs hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer disabled:opacity-50"
               >
-                Load earlier messages
+                <Clock size={11} className="text-blue-500" />
+                <span>{t(preferences.language, "chat.loadEarlier")}</span>
               </button>
             </div>
           )}

@@ -30,7 +30,7 @@ from backend.app.core.system_logger import log_event
 PENDING = "pending"
 EXPIRED = "expired"
 COMPLETED = "completed"
-NON_TERMINAL_STATUSES = {PENDING}
+NON_TERMINAL_STATUSES = {PENDING, "registered", "submitted", "credential_check_pending"}
 TERMINAL_STATUSES = {COMPLETED, EXPIRED}
 REGISTRATION_TTL_HOURS = 72
 

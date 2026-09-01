@@ -110,6 +110,30 @@ class TaskSufficiencyItem(BaseModel):
     reason: str = Field(description="Brief explanation of how completely the candidate evidence answers the task -- reasoned through before deciding status/approved_parent_ids below, not a restatement of them.")
     status: str = Field(description="Must be SUFFICIENT, PARTIALLY_SUFFICIENT, or INSUFFICIENT.")
     approved_parent_ids: List[str] = Field(description="Only supplied parent IDs that provide material grounded information for this exact task.")
+    # A general-purpose writing directive for whoever composes the customer-
+    # facing text from this evidence -- not a sufficiency-specific concept,
+    # just the one node with enough context to notice when approved evidence
+    # needs a caveat generation wouldn't otherwise reliably add on its own.
+    # The canonical case this exists for: an approved parent's own stated
+    # premise or circumstance (e.g. a card-replacement FAQ that assumes the
+    # card is damaged) does not match the customer's own stated situation
+    # (e.g. they dislike its appearance) -- reusing the evidence's steps
+    # without this note reads as a complete, correct answer when it silently
+    # isn't. Deliberately free-text and general, not a typed flag for this
+    # one case, so it can carry whatever caveat is actually needed here
+    # without requiring a new field for every future nuance discovered --
+    # see GROUNDEDNESS_v2.0.md's Bridge/Applicability discussion. Empty when
+    # the evidence needs no special framing at all, which is the common case.
+    generation_guidance: str = Field(
+        default="",
+        description=(
+            "A directive for whoever writes the customer-facing text from this evidence, only when this "
+            "specific evidence needs special framing or a caveat to be presented honestly -- e.g. its own "
+            "stated premise or circumstance may not match what the customer actually described. Never a new "
+            "fact, and never customer-facing wording itself -- an instruction to the writer, not content to "
+            "relay verbatim. Leave empty when the evidence can be used as-is with no special framing."
+        ),
+    )
     evidence_delta: List[RetryEvidenceDeltaItem] = Field(
         default_factory=list,
         description=(

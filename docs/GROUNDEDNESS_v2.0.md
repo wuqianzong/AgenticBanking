@@ -322,6 +322,58 @@ against the live PayNow payload: a simulated genuine title/intro change now
 propagates correctly instead of being silently dropped, with the token
 restoration behaving identically to the live case.
 
+### Full-skeleton revision: matching the task shape models actually handle reliably
+
+Live-tracing a real "my card is ugly, can i replace it" turn found
+`node_04c_response_reviser` silently losing an entire revision round: the
+model returned its revised block as a bare JSON array
+(`[{"block_id": "element_1", ...}]`) instead of the requested
+`{"revised_blocks": [...]}` wrapper, and the parsing code
+(`raw_revisions = generated.get("revised_blocks", []) if isinstance(generated, dict) else []`)
+silently treated the non-dict response as zero revisions -- no error, no
+retry-count refund, just a wasted round spent re-auditing content nothing
+had actually tried to fix yet.
+
+Root cause, confirmed by reading the prompt as the model would: the
+"Blocks Under Revision" section showed the model its own input as a bare
+array right next to the per-block editing instructions, and only stated
+the `{"revised_blocks": [...]}` wrapper once, ~45 lines later, past
+several other unrelated JSON schema examples. The model mirrored the
+nearer, more salient shape it was just shown instead of the distant
+instruction -- a mismatch between what the model is asked to consume and
+what it's asked to produce, not a one-off model error.
+
+Two fixes, addressing both the symptom and the shape mismatch that causes
+it:
+
+1. **Defensive parsing** (belt-and-suspenders): the merge step now
+   accepts a bare list, the requested `{"response_blocks": [...]}`
+   wrapper, or the legacy `{"revised_blocks": [...]}` key -- whatever the
+   shape, only entries whose `block_id` is in `pending_block_ids` are ever
+   read, so a malformed wrapper can no longer silently discard an entire
+   round.
+2. **Full-skeleton input and output** (the actual fix, not just a
+   safety net): the model is now shown and asked to return the FULL
+   block list -- every block, each tagged
+   `"revision_status": "approved"|"pending"` -- not just the pending
+   subset. "Edit this document and return the whole thing" is the task
+   shape most instruct-tuned models handle reliably; "return only a
+   keyed delta patch of some of it" is a less natural ask. Safety is
+   unaffected: the deterministic merge still reads only `pending`-tagged,
+   `pending_block_ids`-matching entries by `block_id` -- an `"approved"`
+   entry's content, however the model chooses to render it (even a
+   subtly reworded echo), is discarded unconditionally and the stored
+   approved copy is used instead, exactly as before. Fixture-verified
+   directly: a simulated model output that reworded an approved block
+   was confirmed to leave that block's stored content completely
+   untouched in the reassembled result.
+
+Live-verified: re-running the same turn produced a correctly-shaped
+`{"response_blocks": [...]}` response on the very first revision round,
+with the approved `shortcut_fallback_1` block echoed back tagged
+`"approved"` (and correctly ignored) and only the pending `element_1`
+block actually revised -- no wasted round, clean pass on the next audit.
+
 ### Verified against real production data
 
 The PayNow scenario above is the first live, unforced reproduction of the
@@ -365,6 +417,313 @@ new partition path vs. the original whole-response path;
 `node_05_outbound_deterministic_gate`'s leak-veto fail branch resets the
 new state fields); `backend/app/orchestration/graph.py` (new `"n8b"` node
 and `route_n21` branching).
+
+## Systematic guidance: shaping generation before and during the retry loop, not just gating it at the end
+
+### Context: `generation_guidance` and why it needed a different design philosophy
+
+`node_03c_sufficiency_auditor` can attach a free-text `generation_guidance`
+string to a task's approved evidence — a writing directive for whoever
+generates the customer-facing text, never a new fact and never
+customer-facing wording itself (`TaskSufficiencyItem.generation_guidance`,
+`llm_service.py`). It exists because approved evidence can be materially
+useful while its own stated premise doesn't fully match the customer's
+situation — a card-replacement FAQ written for a damaged card, approved
+for a customer who dislikes the card's *appearance*, is the running
+example throughout this section. `generation_guidance` is deliberately
+never shown to the audit: an earlier design that let the audit trust and
+enforce this field was rejected, because the guidance itself would then be
+acting on the response without ever being independently checked. The audit
+instead re-derives the same class of problem itself, directly from
+`approved_parents`' own text and the resolved subquery (the Evidence
+Applicability Rule, in `node_06_outbound_combined_audit_gate`'s prompt) —
+two independent routes to the same finding, never one trusting the other.
+
+Every fix to this mechanism up to this point had the same shape: a real bad
+output was traced, and the fix was one more forbidden phrase or pattern
+added to the rule — first "never claim a new look," then "never claim the
+mismatched procedure works, applies, or is the same," then "acknowledging
+the mismatch doesn't fix it." Each fix was correct for the case it was
+written against, but the rule was a strictly negative, growing list, and
+there is real research explaining why that shape is fragile rather than
+just inelegant: "Semantic Gravity Wells" (arXiv:2601.08070) shows negative
+constraints mechanistically backfire in LLMs — naming forbidden content to
+suppress it measurably *primes* the model toward producing it more often
+than it suppresses it (87.5% of the paper's observed violations were this
+"priming failure"). Stacking more negative phrasings onto
+`generation_guidance` was adding more priming surface, not less.
+
+### The confirmed/unconfirmed partition rule
+
+The replacement is one general, positive rule instead of an accumulating
+blocklist: `_GENERATION_GUIDANCE_SHAPE_RULE` (`nodes.py`), shared verbatim
+by every producer of a `generation_guidance` value. For the exact
+proposition in question, it requires separating what the evidence *does*
+confirm from what it *does not*, and instructing each part on its own
+terms — plain assertion for the confirmed part, a scoped honest admission
+for the unconfirmed part, never blended into one sentence that lets the
+confirmed part's certainty bleed into the unconfirmed remainder.
+
+An early candidate design considered a fixed template instead — always
+admit no information exists, then offer any related evidence as an
+unclaimed courtesy ("ADMIT/OFFER"). Checked against the full scenario
+space this field actually has to cover, that template turned out to be
+correct for only one case, not the general rule:
+
+1. **Clean match** — no premise mismatch at all. No guidance needed.
+2. **Full mismatch, nothing confirmed** (the card-appearance case) — the
+   confirmed part is empty; this is the one case that degenerates to pure
+   ADMIT/OFFER.
+3. **Genuine evidence-supported bridge** — the evidence's own premise
+   already covers the customer's situation (e.g. a replacement FAQ that is
+   itself reason-agnostic). Forcing ADMIT/OFFER here would have been a
+   *new* bug: manufacturing a false "I don't know" over a real, already-
+   confirmed answer — exactly what the existing PARTIAL-EVIDENCE DECISION
+   ORDER rule (`node_03c`'s own prompt) already protects against.
+4. **Partial confirmation on the same question** (e.g. eligibility
+   confirmed, a specific declared use unconfirmed) — assert the confirmed
+   part and, separately, admit the specific unconfirmed remainder.
+5. **Adjacent-scope evidence** (`search_territory: "adjacent_scope"`) —
+   already its own correct, general, `mapping_reason`-bounded mechanism
+   (the Scope-Expansion Honesty Rule); left untouched, just kept
+   vocabulary-consistent with the new rule.
+6. **Pure conduct/tone violations** — no evidence gap to partition at all;
+   the instruction is a direct statement of the correct neutral phrasing.
+7. **Composition-only violations** (a missed decline reference, an
+   invented clarification guess) — likewise no admission needed, just a
+   direct instruction to include the required content or drop the
+   invention.
+
+### Guidance now runs on both sides of the retry loop, not just at the final gate
+
+Before this change, groundedness/compliance enforcement was concentrated
+entirely at the end: generate once, audit the whole thing, and (for a
+`normal_response`-scope turn) let the Per-Task Outbound Response Revision
+Loop's reviser see only a bare diagnostic per violation (`violation`,
+`unsupported_content`, `evidence_gap` — what's wrong, never what to write
+instead). This made both stages a guessing exercise: first-pass generation
+guessed how to phrase evidence it hadn't been told how to frame, and, on a
+failure, the reviser guessed a second time from a critique instead of an
+instruction.
+
+`generation_guidance` now runs proactively *and* reactively, from the same
+shared rule, closing that gap on both ends:
+
+- **Proactively, before generation ever runs**: `node_03c` writes
+  `generation_guidance` per the shape rule above, attached to the task's
+  approved evidence, reaching `node_04b_response_generator` before the
+  first draft is written at all.
+- **Reactively, inside the revision loop**: `conduct_violations` and
+  `grounding_violations` (`node_06_outbound_combined_audit_gate`'s output
+  schema) each gained their own `generation_guidance` field, populated per
+  the identical shape rule but scoped to that specific flagged entry. This
+  flows through `_normalize_conduct_violations`/
+  `_normalize_grounding_violations` and `_group_violations_by_task_id`
+  unchanged (both already forward whatever fields a violation carries), so
+  `node_04c_response_reviser`'s prompt now treats each violation's own
+  `generation_guidance` as the primary fix directive, with the diagnostic
+  fields kept only as supporting context for *why*.
+
+The result is one systematic mechanism reused twice, not two different
+ones: the same rule shapes what generation is told before it writes
+anything, and shapes what it's told when a specific piece of it needs
+correcting — groundedness and compliance are engineered into both entry
+points of the response, not enforced only as a pass/fail check on the way
+out.
+
+### Verified against real production data — and one important correction
+
+Live-traced "my card is ugly, i want to replace it" on a fresh session:
+`node_03c`'s `generation_guidance` came back correctly shaped (*"Provide
+the standard steps... without confirming whether aesthetic preference is a
+valid reason for replacement, as the evidence does not specify this"*),
+and the response passed the combined audit cleanly on the first round.
+
+The delivered response still included one literal line lifted from the
+underlying FAQ's own text — *"Indicate that your card is damaged to
+complete the request"* — as one step inside an otherwise general 4-step
+procedure. This was flagged as a possible miss (an instruction to falsely
+declare a circumstance the customer's own stated reason doesn't support,
+the exact scenario the Evidence Applicability Rule names as its own
+illustrative example) and a fix was proposed: extend the shape rule to
+require checking every individual step or field inside otherwise-confirmed
+evidence for an embedded unconfirmed sub-claim, not just the task-level
+proposition as a whole.
+
+That proposed extension was rejected on review, and correctly so: the
+response's own framing — a lead-in stating these are the "standard steps,"
+and a trailing note that the evidence "does not specify whether aesthetic
+preference is a valid reason for replacement" — already tells the customer
+the specifics are general reference material, not a claim that their exact
+case is covered. The judgment call that matters is whether the response
+*as a whole* could reasonably mislead the customer, not whether any single
+line reproduced from evidence happens to name a circumstance that doesn't
+match theirs. One clear framing-level admission is sufficient coverage for
+an entire bundled procedure; requiring it to be repeated at every
+individual step would have reintroduced exactly the narrow, case-by-case
+patching this redesign exists to move away from. The implementation was
+kept as originally designed, at the task-level proposition granularity.
+
+### Files touched
+
+`backend/app/orchestration/nodes.py`: new `_GENERATION_GUIDANCE_SHAPE_RULE`
+constant; `node_03c_sufficiency_auditor`'s GENERATION GUIDANCE rule
+rewritten to reference it instead of re-deriving the shape inline;
+`node_06_outbound_combined_audit_gate`'s `_run_combined_audit` prompt gains
+`generation_guidance` on both `conduct_violations` and (the
+`normal_response` route's richer) `grounding_violations` schemas, plus an
+`audit_feedback_rules` bullet requiring it be populated per the shared
+rule; the Evidence Applicability Rule gained one bullet tying its own
+firing condition to the rule's "nothing confirmed" case;
+`_normalize_conduct_violations`/`_normalize_grounding_violations` carry the
+new field through; `node_04c_response_reviser`'s prompt now frames each
+violation's `generation_guidance` as the primary fix directive.
+
+## "No info is info": PARTIALLY_SUFFICIENT from guidance alone
+
+### Context
+
+Live-tracing a real 3-part query ("can i buy a car using the personal
+loan, or the credit card, also my credit card is ugly, can i replace
+it?") surfaced a genuine classification bug. `node_03c_sufficiency_auditor`
+wrote a real, useful `generation_guidance` for the card-replacement
+task -- *"State that there is no information available regarding whether
+a card can be replaced due to its appearance. You may then mention that
+the bank provides replacement options for damaged, lost, or stolen cards
+as a courtesy..."* -- but classified the task **INSUFFICIENT** with
+`approved_parent_ids: []`. Since `generation_guidance` was only threaded
+into `current_results[task_id]` at the SUFFICIENT/PARTIALLY_SUFFICIENT
+construction sites, this genuinely useful reasoning was silently
+discarded, and the final response fell back to a bare, deterministic
+`no_info_evidence` statement with no courtesy content at all.
+
+The diagnosis: this is a self-contradiction, not a missing pipeline. The
+existing PARTIAL-EVIDENCE DECISION ORDER rule (`node_03c`'s own prompt)
+already establishes that a parent's fact "can be truthfully presented as
+useful, bounded guidance" should be PARTIALLY_SUFFICIENT -- writing a
+courtesy-worthy `generation_guidance` while still returning INSUFFICIENT
+violates that same rule's own logic. The fix: found information --
+whether a concrete approved parent_id or purely a reasoned observation
+captured as `generation_guidance` -- always makes a task
+PARTIALLY_SUFFICIENT, and always carries forward. INSUFFICIENT is
+reserved strictly for a task where there is truly nothing to convey at
+all. This mirrors the project's existing "piling up" pattern already used
+for retained partial parent evidence (`task_partial_evidence`): the
+turn's final response is meant to be the collective, refined result of
+everything found across every round, never a from-scratch redo that can
+silently drop an earlier round's genuine finding.
+
+Tracing the exact code path surfaced two further, real bugs on the same
+lines, fixed as part of the same change:
+
+1. **Stale cross-task guidance leak**: the terminal PARTIALLY_SUFFICIENT
+   branch already referenced a `generation_guidance` variable, but
+   `pending_decisions` (built in an earlier loop) never actually captured
+   it per task -- by the time the terminal loop ran, the variable held
+   whatever value the *first* loop's *last*-processed task happened to
+   leave behind, silently threading the wrong task's guidance (or a stale
+   leftover) into the response on any multi-task turn.
+2. **No cross-round retention for guidance**: unlike `task_partial_evidence`
+   (parent ids retained across retry rounds even when a later round's raw
+   output doesn't repeat them), `generation_guidance` had no equivalent
+   carry-forward -- a good courtesy guidance written in round 1 could be
+   silently lost if round 2's audit call didn't re-emit it (free text is
+   not guaranteed stable round to round).
+
+### Design
+
+- **New state field** `task_partial_guidance: Dict[str, str]`
+  (`state.py`, alongside `task_partial_evidence`) -- the last-known
+  non-empty `generation_guidance` per task_id, retained across retry
+  rounds the same way `task_partial_evidence` retains parent ids.
+- **`node_03c_sufficiency_auditor`** (`nodes.py`): computes
+  `effective_guidance = generation_guidance or partial_guidance.get(task_id, "")`
+  each round, persisting it forward whenever non-empty. A deterministic
+  code-level upgrade -- `if requested_status == "INSUFFICIENT" and effective_guidance: requested_status = "PARTIALLY_SUFFICIENT"`
+  -- enforces the new rule the same way the existing TERRITORY CEILING
+  downgrade is enforced in code rather than left to the prompt alone;
+  trusting the model to always keep its own `status` field consistent
+  with whether it wrote a `generation_guidance` would silently reintroduce
+  the exact contradiction that caused this bug. The downgrade guard for a
+  PARTIALLY_SUFFICIENT verdict with no fresh parent (previously *"a
+  partial outcome without selected supporting evidence is not a usable
+  partial answer"*) now also checks `effective_guidance`, so a
+  guidance-only partial is no longer downgraded to INSUFFICIENT either.
+  The terminal resolution loop's branch condition changed from
+  `if partial_ids:` to `if partial_ids or generation_guidance:` (reading
+  `generation_guidance` correctly per-decision now, fixing the stale-leak
+  bug above), so a guidance-only task resolves PARTIALLY_SUFFICIENT with
+  an empty `approved_parent_ids` instead of falling through to
+  CLARIFICATION_REQUIRED. `sufficiency_history` entries now also carry
+  `generation_guidance`, so a later round's `prior_sufficiency_audit_history`
+  reflects what was previously reasoned out, supporting genuine
+  round-to-round refinement rather than the model re-deriving from
+  scratch. The prompt gained a "NO INFO IS INFO" rule stating this
+  classification requirement directly.
+- **`_response_evidence_manifest`** (`nodes.py`): the filter
+  `if task_id and parent_ids` relaxed to `if task_id and (parent_ids or guidance)`,
+  so a guidance-only PARTIALLY_SUFFICIENT entry (`approved_parent_ids: []`)
+  still produces a manifest entry instead of being filtered out entirely.
+  Confirmed *not* to touch the three other `ANSWERABLE_TASK_STATUSES`
+  call sites that also require `approved_parent_ids` (cross-turn verified-
+  evidence caching, and "has real retrievable knowledge" checks for
+  triage/continuation planning) -- those correctly still require an
+  actual hydratable parent; only the generation/audit evidence manifest
+  needed the relaxation.
+- **Generation prompts** (`_GENERATION_BRIDGE_GUARDRAILS`'s shared
+  "GENERATION GUIDANCE" paragraph, reaching `_generate_response_blocks`,
+  `_generate_evidence_only_response`, and `node_04c_response_reviser` from
+  one place): a new paragraph states that an evidence entry with an EMPTY
+  `approved_parents` list carries no citable fact at all --
+  `generation_guidance` is the only basis for what to write about it --
+  never invent a fact to fill the gap merely because a manifest entry
+  exists for that task_id.
+- **`node_06_outbound_combined_audit_gate`**: the Direct Factual Grounding
+  rule gained a bullet clarifying that a Task-Level Approved Evidence entry
+  with empty `approved_parents` licenses only the plain admission implied
+  by "no info," never a new factual claim -- its mere presence in the
+  bundle must never be treated as if it were itself a factual source.
+
+### Verified against real production data
+
+Fixture-replayed the exact real round-1/round-2 raw sufficiency payloads
+from the traced session through the updated logic: round 1's guidance
+survives via `task_partial_guidance` into round 2's terminal decision even
+though round 2's raw output never repeated it; the task resolves
+PARTIALLY_SUFFICIENT with `approved_parent_ids: []` and the guidance
+intact, not CLARIFICATION_REQUIRED; `_response_evidence_manifest` produces
+a manifest entry for it; and a genuinely empty negative-control case (no
+parents, no guidance, either round) still resolves CLARIFICATION_REQUIRED
+unchanged.
+
+Live-retraced the exact 3-part query: all three tasks (`task_1`/`task_2`/
+`task_3`) now resolve PARTIALLY_SUFFICIENT with guidance-driven content
+instead of the bare deterministic no-info statement -- e.g. *"I don't have
+information available regarding whether the personal loan or a credit
+card can be used for a car purchase"* and *"While I don't have
+information on whether a card can be replaced specifically because of
+its appearance, if your card has physical damage, you can obtain a new
+one by following these steps..."* Round 1 failed groundedness on the
+combined response; the existing Per-Task Revision Loop fixed it in one
+round; round 2 passed cleanly.
+
+One deliberate non-fix from this same trace: with two elements both
+independently guided to "admit no information," the generator opened them
+with similarly-shaped phrasing ("I don't have information available
+regarding..." / "While I don't have information on..."), reading as
+mildly repetitive. Considered and rejected adding a rule to enforce
+varied phrasing across elements -- the prompt's existing general "write
+one coherent, natural response to the whole customer situation"
+instruction is what should be trusted for this, not a narrow, mechanical
+anti-repetition rule bolted on for one symptom.
+
+### Files touched
+
+`backend/app/orchestration/state.py` (new `task_partial_guidance` field);
+`backend/app/orchestration/nodes.py` (`node_03c_sufficiency_auditor`'s
+per-round and terminal-resolution logic, `_response_evidence_manifest`'s
+filter, `_GENERATION_BRIDGE_GUARDRAILS`'s GENERATION GUIDANCE paragraph,
+`node_06_outbound_combined_audit_gate`'s Direct Factual Grounding rule).
 
 ## Reasoning-before-verdict field order
 

@@ -92,6 +92,7 @@ class AgentState(TypedDict):
     task_feedback: Dict[str, List[Dict[str, str]]]  # Task-specific observed candidate-evidence deltas
     task_sufficiency_history: Dict[str, List[Dict[str, Any]]]  # Current-turn audit trail used to keep repeated sufficiency judgments consistent
     task_partial_evidence: Dict[str, List[str]]  # Parent IDs retained while a task is only partly answerable and continues retrieval
+    task_partial_guidance: Dict[str, str]        # Last-known non-empty generation_guidance per task_id, retained across retry rounds the same way task_partial_evidence retains parent ids -- so a later round that doesn't re-emit guidance doesn't lose an earlier round's genuine finding
     task_rejected_parent_ids: Dict[str, List[str]]  # Parent IDs a prior sufficiency audit explicitly judged not relevant; excluded from future candidate pools for the same task so a widened retry can't waste a selection slot re-surfacing known-bad evidence
     # One standard clarification contract regardless of which node raised
     # it -- see docs/DECLINE_CLARIFICATION_DESIGN_v1.0.md. Entries are

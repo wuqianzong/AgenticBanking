@@ -55,6 +55,7 @@ VOLATILE_STATE_RESET = {
     "task_feedback": {},
     "task_sufficiency_history": {},
     "task_partial_evidence": {},
+    "task_partial_guidance": {},
     "task_rejected_parent_ids": {},
     "clarification_tasks": [],
     "task_resolution_instructions": [],
@@ -1119,7 +1120,7 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
     # identical to a direct answer to whichever node reads it next.
     tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", []) if isinstance(task, dict)}
     approved_by_task = {
-        result.get("task_id"): set(result.get("approved_parent_ids", []))
+        result.get("task_id"): (set(result.get("approved_parent_ids", [])), str(result.get("generation_guidance", "")).strip())
         for result in state.get("task_results", [])
         if result.get("status") in ANSWERABLE_TASK_STATUSES
     }
@@ -1147,9 +1148,23 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
             # in_scope entry's mapping_reason is just its own internal
             # product/intent justification, never customer-facing.
             "mapping_reason": tasks_by_id.get(task_id, {}).get("mapping_reason", ""),
+            # node_03c's own general-purpose writing directive for THIS
+            # specific evidence (TaskSufficiencyItem.generation_guidance) --
+            # unlike mapping_reason (a formulation-time, scope-expansion-
+            # specific justification), this is an audit-time note the
+            # sufficiency auditor sets whenever an approved parent's own
+            # stated premise or circumstance may not match what the
+            # customer actually described. Empty in the common case.
+            "generation_guidance": guidance,
         }
-        for task_id, parent_ids in approved_by_task.items()
-        if task_id and parent_ids
+        for task_id, (parent_ids, guidance) in approved_by_task.items()
+        # "No info is info": a task can be PARTIALLY_SUFFICIENT purely on
+        # generation_guidance, with an empty approved_parent_ids -- still a
+        # real manifest entry, since generation_guidance is the ONLY basis
+        # for what to write about it in that case (see the "GENERATION
+        # GUIDANCE" rule in _GENERATION_BRIDGE_GUARDRAILS and
+        # _GENERATION_GUIDANCE_SHAPE_RULE's "nothing confirmed" case).
+        if task_id and (parent_ids or guidance)
     ]
 
 
@@ -1611,6 +1626,20 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     or customer objective that is not supported by the latest input and trusted
     context. Keep the original Latest User Input as the authoritative wording
     for any later customer-facing response.
+    CONTEXT FILLS GAPS, IT NEVER OVERRIDES: Trusted Conversation Context
+    exists only to resolve what the Latest User Input itself leaves
+    genuinely open -- a pronoun, an ellipsis, a missing target. When the
+    Latest User Input already states a reason, detail, or preference
+    explicitly and unambiguously on its own, that statement is final --
+    never replace or contradict it with something from Trusted Conversation
+    Context instead, even the assistant's own prior phrasing of a pending
+    topic (which is only a paraphrase, never the customer's own words, and
+    may itself be generic or imprecise). For example, "my card is ugly, I
+    want to replace it" is already fully self-contained -- it names the
+    card, the reason, and the action -- so even if a prior turn described
+    the same pending request as being about a damaged card, that prior
+    description must never overwrite "ugly" here. Only reach for context at
+    all when the Latest User Input genuinely does not already say it.
 
     Apply these rules to the resolved TRUE REQUEST in this exact order:
     1. NON_COMPLIANT — Assess the complete resolved TRUE REQUEST exclusively
@@ -2580,8 +2609,22 @@ def _tool_calling_plan_schema(capabilities: list[dict]) -> type:
         clarification_reason=(str, ...),
         clarification_guesses=(list[ClarificationGuess], []),
     )
+    # Domain classification, declared before tool_tasks below -- same
+    # reasoning-before-verdict discipline as TaskSufficiencyItem's reason-
+    # before-status field order (GROUNDEDNESS_v2.0.md): forcing the model to
+    # commit to WHAT KIND of need a subquery represents before it matches a
+    # specific registry entry, rather than jumping straight to keyword-level
+    # capability matching. See the domain framework in the prompt itself for
+    # why each tool maps to exactly one of these.
+    subquery_domain = create_model(
+        "DynamicSubqueryDomain",
+        subquery_id=(str, ...),
+        domain_reasoning=(str, ...),
+        domains=(list[Literal["information", "high_risk_transaction", "personal_data_retrieval", "service_form_submission"]], []),
+    )
     return create_model(
         "DynamicToolCallingPlan",
+        subquery_domains=(list[subquery_domain], []),
         tool_tasks=(list[tool_calling_task], []),
         clarifications=(list[tool_selection_clarification], []),
     )
@@ -2690,7 +2733,47 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         Validated terminal tool results: {json.dumps(validated_attempts_view, ensure_ascii=False)}
         Enabled tool registry: {json.dumps(capabilities, ensure_ascii=False)}
 
+        TOOL DOMAINS -- reason about domain BEFORE matching a specific
+        registry entry (fill in "subquery_domains" below first). Each tool
+        exists for a fundamentally different PURPOSE, not just a different
+        keyword to pattern-match against:
+        - "information" -> "rag": the subquery's core request is asking a
+          policy, eligibility, "can I...", "is X allowed...", "what are the
+          rules/limits/requirements for...", or "how does X work" question.
+        - "high_risk_transaction" -> "deeplink": the subquery is a direct
+          request to perform, or to navigate to where the customer would
+          themselves perform, a high-risk action (money movement, security
+          changes) through the bank's own native app screens.
+        - "personal_data_retrieval" -> "api": the subquery asks for one
+          specific, verified piece of the customer's own data already on
+          file.
+        - "service_form_submission" -> "service_request": the subquery is a
+          direct request for the bank to process an intermediate- or
+          low-risk service or transaction on the customer's behalf,
+          submitted through a guided form.
+        A subquery is not always exactly one domain. In particular: a
+        stated personal REASON attached to a transaction/service request
+        (e.g. "I want to replace my card because I don't like its
+        appearance") carries an embedded INFORMATION question -- whether
+        that stated reason is actually one this bank recognizes or covers
+        -- distinct from the transaction/service need itself, even though
+        the subquery is phrased as a want rather than a literal question.
+        "Can I replace my card because I don't like its appearance?" is,
+        at its core, an information/eligibility question (note the "Can
+        I..." framing) even though replacing a card is also a real,
+        separate service action -- both domains apply.
+
         Rules:
+        - When you exclude a service_request or deeplink candidate
+          specifically because its own description does not cover the
+          customer's stated reason (see the description-scoping rule
+          below), or a stated reason's validity is genuinely unconfirmed by
+          any remaining candidate's description, add a "rag" task for that
+          same subquery in ADDITION to whichever transaction/service tool
+          you do select, tagged "complementary". This is what lets the
+          response honestly address the eligibility question the customer
+          actually raised, instead of silently substituting a tool that
+          never confirms whether their stated reason qualifies.
         - Create only additive tasks. Never recreate a completed, unavailable,
           or pending task.
         - Every task must reference exactly one subquery_id from "Subqueries
@@ -2792,7 +2875,7 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
           inventing an outcome it doesn't actually have.
 
         Output JSON only:
-        {{"tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}},"rag_role":"needed"|"complementary"|"redundant"}}], "clarifications":[{{"subquery_id":"...","unresolved_request":"...","clarification_reason":"...","clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}]}}
+        {{"subquery_domains":[{{"subquery_id":"...","domain_reasoning":"...","domains":["information"|"high_risk_transaction"|"personal_data_retrieval"|"service_form_submission"]}}], "tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}},"rag_role":"needed"|"complementary"|"redundant"}}], "clarifications":[{{"subquery_id":"...","unresolved_request":"...","clarification_reason":"...","clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}]}}
         """
         try:
             planner_result = _parse_json_robustly(
@@ -2800,6 +2883,9 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
             )
             candidates = planner_result.get("tool_tasks", [])
             clarification_candidates = planner_result.get("clarifications", [])
+            subquery_domains = planner_result.get("subquery_domains", [])
+            if isinstance(subquery_domains, list) and subquery_domains:
+                log_event("tool.plan.subquery_domains", planning_round=planning_round, subquery_domains=subquery_domains)
         except Exception as error:
             print(f"⚠️ [TOOL PLANNER ERROR]: {error}")
             candidates = []
@@ -3747,6 +3833,11 @@ def node_03c_sufficiency_auditor(state: AgentState):
         for task_id, parent_ids in state.get("task_partial_evidence", {}).items()
         if isinstance(parent_ids, list)
     }
+    partial_guidance = {
+        str(task_id): text
+        for task_id, text in state.get("task_partial_guidance", {}).items()
+        if isinstance(text, str) and text.strip()
+    }
     rejected_parent_ids = {
         str(task_id): list(dict.fromkeys(parent_ids))
         for task_id, parent_ids in state.get("task_rejected_parent_ids", {}).items()
@@ -3864,6 +3955,19 @@ def node_03c_sufficiency_auditor(state: AgentState):
           because it concerns the same product: its supported fact must
           directly concern the same topic, condition, process, boundary, or
           factual premise in the customer's request.
+        - "NO INFO IS INFO": a non-empty `generation_guidance` is itself found
+          material, on the same footing as an approved parent -- if no
+          supplied parent directly answers the resolved request, but one is
+          genuinely worth mentioning as a hedged courtesy (per the
+          GENERATION GUIDANCE rule below), that alone means the status MUST be
+          PARTIALLY_SUFFICIENT, even though `approved_parent_ids` stays empty
+          -- never INSUFFICIENT. Reserve INSUFFICIENT strictly for a task
+          where there is truly nothing to convey at all: no parent materially
+          answers the request, AND there is nothing worth writing
+          `generation_guidance` about either. Writing a real
+          `generation_guidance` while still returning INSUFFICIENT is a
+          contradiction -- it discards genuine reasoning this turn's response
+          would otherwise never see.
         - The reverse matters just as much: a parent whose own subject is a
           distinctly-named, different product or service is not material
           merely because it is credit/loan-adjacent, belongs to the same
@@ -3879,6 +3983,47 @@ def node_03c_sufficiency_auditor(state: AgentState):
           Only treat a differently-named product's parent as material when
           it explicitly states it also applies to, or is the general form
           of, the customer's named product.
+        - GENERATION GUIDANCE: `generation_guidance` is held to the exact
+          same standard the final customer-facing response itself must pass
+          before it ever reaches the customer. The Bank Conduct Rules and
+          Regulatory/Licensing Constraints below govern not only what you
+          approve as evidence, but the instruction you write about how it
+          gets presented -- reason from these rules directly when deciding
+          what an instruction may and may not say, rather than relying on
+          a memorized list of forbidden phrases; any instruction that would
+          cause the eventual response to violate one of them is itself a
+          violation here, regardless of the specific wording used.
+
+          {BANK_CONDUCT_CONTEXT}
+
+          {REGULATORY_LICENSING_CONTEXT}
+
+          {_GENERATION_GUIDANCE_SHAPE_RULE}
+
+          A recurring instance of the "nothing confirmed" case above: you
+          approve a parent whose own stated premise or circumstance does
+          not match the customer's own stated situation (e.g. a card-
+          replacement parent whose entire procedure assumes physical
+          damage, approved for a customer who instead dislikes the card's
+          appearance, with nothing in any parent stating whether the
+          procedure is available for other reasons too). There, set
+          `generation_guidance` to plainly admit no information resolves
+          whether the procedure applies to the customer's actual stated
+          reason, phrased around that reason, and stop there -- e.g. "There
+          is no information here on whether card replacement is available
+          for appearance-related reasons; admit that plainly, then you may
+          still mention the standard replacement steps as something that
+          may help, without claiming they resolve this." But first check
+          whether any parent's own text actually is reason-agnostic or
+          otherwise already covers the customer's stated reason -- in that
+          case this is the "confirmed" case instead, and the correct
+          instruction is to assert that coverage directly, not admit a gap
+          that isn't really there.
+          `generation_guidance` is never a new fact and never customer-
+          facing wording itself, only a directive to the writer. Leave it
+          empty for the common case where the approved evidence genuinely
+          fits the customer's own stated situation with no caveat needed --
+          do not manufacture a caveat where none is warranted.
         - MECHANISM-BRIDGE REASONING (progressive, work through in this
           order before falling back to INSUFFICIENT): this is a genuinely
           different case from the category-adjacency rule just above --
@@ -4111,7 +4256,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
           shown to the customer immediately instead of a genuinely reasoned
           connection.
 
-        Output JSON only: {{"task_results": [{{"task_id": "...", "reason": "...", "status": "SUFFICIENT" | "PARTIALLY_SUFFICIENT" | "INSUFFICIENT", "approved_parent_ids": ["..."], "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "scope_expansion_lead_reason": "", "scope_expansion_lead_parent_id": "", "likely_ambiguous_request": true|false, "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
+        Output JSON only: {{"task_results": [{{"task_id": "...", "reason": "...", "status": "SUFFICIENT" | "PARTIALLY_SUFFICIENT" | "INSUFFICIENT", "approved_parent_ids": ["..."], "generation_guidance": "", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "scope_expansion_lead_reason": "", "scope_expansion_lead_parent_id": "", "likely_ambiguous_request": true|false, "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
         """
         try:
             auditor_results.update({
@@ -4143,6 +4288,23 @@ def node_03c_sufficiency_auditor(state: AgentState):
             print(f"   🔒 [TERRITORY CEILING]: Task '{task_id}' is adjacent_scope; downgrading model's SUFFICIENT to PARTIALLY_SUFFICIENT.")
             requested_status = "PARTIALLY_SUFFICIENT"
         reason = audit.get("reason", "No sufficient grounded FAQ evidence was selected.")
+        generation_guidance = str(audit.get("generation_guidance", "")).strip()
+        # "No info is info": a genuinely useful observation captured only as
+        # reasoning (no parent worth approving) is still found material, and
+        # must not be lost merely because this round's raw output happened
+        # not to repeat it. Falls back to the last round's retained value
+        # when this round's own audit call left generation_guidance empty.
+        effective_guidance = generation_guidance or partial_guidance.get(str(task_id), "")
+        if requested_status == "INSUFFICIENT" and effective_guidance:
+            # "No info is info": enforced here in code, not left to the
+            # prompt instruction alone -- same discipline as the TERRITORY
+            # CEILING downgrade above. A non-empty generation_guidance is
+            # found material regardless of which status field the model
+            # itself chose; trusting the model to always keep the two
+            # fields consistent would silently reintroduce the exact
+            # contradiction (INSUFFICIENT + a real generation_guidance)
+            # that caused this fix to exist in the first place.
+            requested_status = "PARTIALLY_SUFFICIENT"
         history_delta = [
             {
                 "parent_id": str(item.get("parent_id", "")).strip(),
@@ -4159,6 +4321,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "approved_parent_ids": approved_ids,
             "reason": reason,
             "evidence_delta": history_delta,
+            "generation_guidance": effective_guidance,
         })
         # Candidates shown this round but not approved are explicitly judged
         # not relevant. Excluding them from future candidate pools stops a
@@ -4177,6 +4340,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
                 "origin": result.get("origin", "RAG"),
                 "approved_parent_ids": approved_ids,
                 "reason": reason,
+                "generation_guidance": effective_guidance,
             }
             log_event(
                 "evidence.boundary.approved",
@@ -4185,18 +4349,27 @@ def node_03c_sufficiency_auditor(state: AgentState):
             )
             feedback.pop(task_id, None)
             partial_evidence.pop(str(task_id), None)
+            partial_guidance.pop(str(task_id), None)
             rejected_parent_ids.pop(str(task_id), None)
             continue
 
         retained_ids = partial_evidence.get(str(task_id), [])
         partial_ids = list(dict.fromkeys([*retained_ids, *approved_ids]))
-        if requested_status == "PARTIALLY_SUFFICIENT" and not approved_ids:
-            # A partial outcome without selected supporting evidence is not a
+        if requested_status == "PARTIALLY_SUFFICIENT" and not approved_ids and not effective_guidance:
+            # A partial outcome without selected supporting evidence AND
+            # without even a reasoned observation worth conveying is not a
             # usable partial answer. Treat it as insufficient rather than
-            # retaining an ungrounded state.
+            # retaining an ungrounded state. "No info is info": a genuine
+            # generation_guidance is itself found material, on the same
+            # footing as an approved parent -- it alone is enough to stay
+            # PARTIALLY_SUFFICIENT (see the terminal branch below, which
+            # carries an empty approved_parent_ids list forward in that
+            # case rather than falling back to CLARIFICATION_REQUIRED).
             requested_status = "INSUFFICIENT"
         if requested_status == "PARTIALLY_SUFFICIENT":
             partial_evidence[str(task_id)] = partial_ids
+            if effective_guidance:
+                partial_guidance[str(task_id)] = effective_guidance
 
         attempt_count = retry_counts.get(task_id, 0) + 1
         retry_counts[task_id] = attempt_count
@@ -4311,6 +4484,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "reason": reason,
             "refinement": refinement,
             "requested_status": requested_status,
+            "generation_guidance": effective_guidance,
             "likely_ambiguous_request": bool(audit.get("likely_ambiguous_request", False)),
             "unresolved_term": str(audit.get("unresolved_term", "")).strip(),
             # Distinct from `reason` above: reason explains the evidence
@@ -4442,6 +4616,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         reason = decision["reason"]
         refinement = decision["refinement"]
         requested_status = decision["requested_status"]
+        generation_guidance = decision["generation_guidance"]
         likely_ambiguous_request = decision["likely_ambiguous_request"]
         unresolved_term = decision["unresolved_term"]
         clarification_reason = decision["clarification_reason"]
@@ -4478,12 +4653,20 @@ def node_03c_sufficiency_auditor(state: AgentState):
             clarification_reason = ""
             clarification_guesses = []
         if not should_retry:
-            if partial_ids:
+            # "No info is info": a genuine generation_guidance alone --
+            # even with an empty partial_ids -- is found material that
+            # must carry forward as PARTIALLY_SUFFICIENT, never be
+            # discarded into CLARIFICATION_REQUIRED. approved_parent_ids
+            # stays [] in that case; the generator's only basis for this
+            # task is generation_guidance itself (see
+            # _response_evidence_manifest/_GENERATION_GUIDANCE_SHAPE_RULE).
+            if partial_ids or generation_guidance:
                 current_results[task_id] = {
                     "task_id": task_id,
                     "status": "PARTIALLY_SUFFICIENT",
                     "approved_parent_ids": partial_ids,
                     "reason": reason,
+                    "generation_guidance": generation_guidance,
                     "unresolved_term": unresolved_term,
                     "clarification_reason": clarification_reason,
                     "clarification_guesses": clarification_guesses,
@@ -4750,6 +4933,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             if task_id
         },
         "task_partial_evidence": partial_evidence,
+        "task_partial_guidance": partial_guidance,
         "task_rejected_parent_ids": rejected_parent_ids,
         "task_resolution_instructions": task_resolution_instructions,
         "clarification_tasks": clarification_tasks,
@@ -4958,6 +5142,84 @@ _GENERATION_BRIDGE_GUARDRAILS = """
     Do not solve the bridge-boundary problem by dropping warmth -- solve it
     by keeping the empathy and the capability claim in two distinct moves
     instead of fusing them into one overreaching sentence.
+
+    GENERATION GUIDANCE: an evidence entry's `generation_guidance` field
+    (when non-empty) is a directive on how that specific piece of evidence
+    must be framed or caveated -- never optional context, and never dropped
+    merely because the underlying facts are otherwise correctly grounded.
+    It is never itself a fact to relay verbatim, and never a substitute for
+    stating the actual evidence -- it tells you HOW to write about the
+    evidence, not WHAT to claim instead of it. For example, guidance noting
+    that an approved procedure assumes a different circumstance than the
+    customer described (a card-replacement procedure written for a damaged
+    card, approved for a customer who dislikes the card's appearance)
+    means you must say so plainly before presenting that procedure as the
+    customer's path -- never present it as if it were written for their
+    exact situation when it wasn't.
+
+    An evidence entry whose `approved_parents` list is EMPTY (a task found
+    genuinely nothing that answers the request, but the sufficiency
+    auditor still had a hedged, guidance-worthy observation worth
+    conveying) carries no citable fact at all -- `generation_guidance` is
+    your ONLY basis for what to write about it. Follow it directly
+    (typically: an honest admission that nothing confirms the answer,
+    phrased around the customer's own stated situation, optionally
+    followed by an unclaimed courtesy mention if the guidance itself
+    offers one) -- never invent a fact, procedure, or figure to fill the
+    gap merely because a manifest entry exists for this task_id.
+    """
+
+
+# Shared by node_03c_sufficiency_auditor (writing generation_guidance
+# proactively, before generation ever runs) and node_06_outbound_
+# combined_audit_gate (writing it reactively, into a violation, after
+# generation already got it wrong) -- one shape, two producers, so the
+# writer (node_04b/node_04c, guided by _GENERATION_BRIDGE_GUARDRAILS's own
+# "GENERATION GUIDANCE" paragraph above) never has to reconcile two
+# different vocabularies for the same field. Deliberately NOT a fixed
+# "always admit you don't know" template: that shape is only correct for
+# the one case where nothing about the customer's exact question is
+# confirmed at all (case 2 below), and forcing it onto every mismatch would
+# create a new failure mode -- discarding a genuinely evidence-supported
+# answer (case 3) into a false "I don't know," which is exactly what the
+# PARTIAL-EVIDENCE DECISION ORDER rule (node_03c's own prompt) already
+# exists to prevent.
+_GENERATION_GUIDANCE_SHAPE_RULE = """
+    GENERATION GUIDANCE SHAPE RULE (governs both node_03c's proactive
+    generation_guidance and any violation's own generation_guidance below):
+    Guidance is always a direct instruction of what to write next, never a
+    description of what's wrong or a list of forbidden phrasings -- naming
+    a forbidden phrase tends to make a writer produce it, not avoid it, so
+    a guidance field's job is to say what TO write, in full, every time.
+
+    For the exact proposition in question, first separate what the
+    evidence DOES confirm from what it DOES NOT:
+    - If the evidence confirms it (even if worded differently than the
+      customer's own phrasing, or only a bounded/conditional form of it),
+      instruct asserting that confirmed fact plainly. No admission is
+      warranted here -- manufacturing one would itself be a groundedness
+      failure in the other direction, discarding a real answer.
+    - If part of the same question is confirmed and a different, specific
+      part of it is not, instruct asserting the confirmed part AND,
+      separately, admitting the specific unconfirmed remainder. The two
+      must never be merged into one sentence that lets the confirmed
+      part's certainty bleed into the unconfirmed one.
+    - If nothing about the customer's exact question is confirmed at all,
+      instruct admitting that plainly -- phrased around the customer's own
+      stated situation, not a paraphrase of it -- and stopping there. Only
+      if topically-adjacent evidence exists, additionally instruct offering
+      it as an unclaimed courtesy that may still help, never as an answer,
+      accommodation, or resolution of the admitted gap.
+    - If there is no evidence gap at all (a pure conduct/tone correction, or
+      a composition omission such as a decline reference that must be
+      relayed, or an invented clarification guess that must be dropped),
+      instruct the specific correct neutral phrasing or required content
+      directly -- there is nothing to partition in these cases.
+
+    This is bounded by the Bank Conduct Rules and Regulatory Context
+    already established elsewhere in this prompt -- an instruction that
+    would itself cause a violation of those rules is invalid regardless of
+    which case above it falls under.
     """
 
 
@@ -5169,6 +5431,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
             "approved_parents": entry.get("approved_parents", []),
             "search_territory": entry.get("search_territory", "in_scope"),
             "mapping_reason": entry.get("mapping_reason", ""),
+            "generation_guidance": entry.get("generation_guidance", ""),
         }
         for entry in evidence_by_task
     ]
@@ -6326,14 +6589,23 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     No UI-structure job: it may not change a block's `type`, add, remove,
     or reorder blocks, or touch `next_actions` -- only the natural-language
     leaf fields (answer/context_text/extended_text/title/items/steps/
-    sections/message/etc.) of the specific blocks it is handed. Whatever it
-    returns for a block never reaches the customer directly: the
+    sections/message/etc.) of the specific blocks it is handed.
+
+    The model is shown and asked to return the FULL block skeleton (every
+    block, tagged `revision_status: "approved"|"pending"`), not just the
+    pending subset -- "edit this document and return the whole thing" is
+    the task shape most instruct-tuned models handle reliably; asking for
+    only a keyed delta patch of some of it was traced live returning a bare
+    list instead of the requested wrapper, silently losing a whole retry
+    round. Safety is unaffected by showing/returning the full skeleton:
+    whatever the model writes for an `"approved"` entry, or for any
+    `block_id` outside `pending_block_ids`, is never read -- the
     deterministic `_reassemble_response_blocks` splice, run before the next
-    audit call, reads its output strictly as a keyed lookup by `blockId` --
-    a block it wasn't asked about is never read from its raw output at all,
-    and a block it silently drops keeps its prior content unchanged rather
-    than vanishing. This is what makes "the reviser cannot change what's
-    approved" a structural guarantee rather than a prompt instruction.
+    audit call, reads the output strictly as a keyed lookup restricted to
+    `pending_block_ids`, and a pending block it silently drops keeps its
+    prior content unchanged rather than vanishing. This is what makes "the
+    reviser cannot change what's approved" a structural guarantee rather
+    than a prompt instruction.
     """
     print("🟢 [NODE 04c] Executing Response Reviser (partial retry)")
     payload = state.get("ui_action_payload", {})
@@ -6348,6 +6620,24 @@ def node_04c_response_reviser(state: AgentState) -> dict:
         else [block for block in original_blocks if block.get("blockId") not in approved_ids]
     )
     pending_block_ids = {block.get("blockId") for block in pending_blocks}
+
+    # The model is shown and asked to return the FULL block skeleton, not
+    # just the pending subset -- "edit this document and return the whole
+    # thing" is the task shape most instruct-tuned models actually handle
+    # reliably; "return only a keyed delta patch of some of it" is a less
+    # natural ask and was traced live returning a bare list instead of the
+    # requested wrapper. Safety is unaffected either way: below, only
+    # entries whose block_id is in pending_block_ids are ever read from
+    # this output -- an approved block's entry, however the model chooses
+    # to render it, is always discarded and the stored approved copy is
+    # used instead, exactly as before this change.
+    full_skeleton = [
+        {
+            **_simplify_block_for_revision(block),
+            "revision_status": "pending" if block.get("blockId") in pending_block_ids else "approved",
+        }
+        for block in original_blocks
+    ]
 
     violation_history = state.get("task_violation_history", {})
     scoped_violations = (
@@ -6391,10 +6681,20 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     prompt = f"""
     FLEXIBLE RESPONSE REVISION (partial retry -- edit in place only)
     You are Horizon, revising a customer response that already partly
-    passed a compliance/groundedness audit. Everything NOT listed under
-    "Blocks Under Revision" below has ALREADY BEEN LOCKED IN and will be
-    shown to the customer exactly as-is regardless of anything you write --
-    do not attempt to repeat, restate, contradict, or duplicate it.
+    passed a compliance/groundedness audit. Below is the FULL current
+    response as one ordered list of blocks, "Full Response Skeleton." Each
+    entry's own "revision_status" tells you your job on it:
+    - "approved": ALREADY LOCKED IN and will be shown to the customer
+      exactly as-is regardless of anything you write for it. Repeat it
+      unchanged in your output, or leave its content fields empty -- either
+      way, nothing you write for an "approved" entry is ever used. Do not
+      attempt to repeat, restate, contradict, or duplicate its content
+      inside a "pending" entry either.
+    - "pending": apply the violation fixes listed below to this entry only,
+      and return the corrected version.
+    Never change any entry's "block_id" or "type," never add or remove an
+    entry, never reorder the list -- your output is the same list, in the
+    same order, with only "pending" entries' content actually changed.
 
     {_style_personalization_block(user_profile)}
 
@@ -6402,25 +6702,29 @@ def node_04c_response_reviser(state: AgentState) -> dict:
 
     {_GENERATION_BRIDGE_GUARDRAILS}
 
-    Full current response (READ-ONLY, for tone/coherence only -- never
-    repeat or restate its content, and never treat it as evidence):
+    Full current response, as natural-language text (READ-ONLY, for tone/
+    coherence only -- never repeat or restate its content, and never treat
+    it as evidence; the structured skeleton below is what you actually
+    edit):
     {whole_response_text}
 
     Already-Locked Task IDs This Turn (informational only -- these already
     passed audit; do not re-address them):
     {json.dumps(approved_task_ids, ensure_ascii=False)}
 
-    Blocks Under Revision (edit ONLY these; each entry already shows only
-    the fields that apply to its own "type" -- return each revised block
-    using EXACTLY those same field names, corrected values only. Return
-    the SAME "block_id" and the SAME "type" for each -- never change type,
-    never add a field not present in the entry you were given for it,
-    never add a block not listed here, never omit one you were given):
-    {json.dumps([_simplify_block_for_revision(block) for block in pending_blocks], ensure_ascii=False)}
+    Full Response Skeleton (each entry already shows only the fields that
+    apply to its own "type" -- for a "pending" entry, return corrected
+    values using EXACTLY those same field names, never a field not present
+    in the entry you were given for it):
+    {json.dumps(full_skeleton, ensure_ascii=False)}
 
     Violations you must fix for these blocks (internal constraints only,
-    never evidence -- remove or narrow exactly what is flagged, per
-    task_id; "" task_id means a response-wide issue such as overall tone):
+    never evidence; "" task_id means a response-wide issue such as overall
+    tone). Each entry's own generation_guidance is the direct instruction
+    for what to write instead -- follow it as the primary directive for
+    fixing that entry; violation/unsupported_content/evidence_gap are
+    supporting context for WHY, not a separate instruction to reconcile
+    against it:
     {json.dumps(scoped_violations, ensure_ascii=False)}
 
     Approved evidence for these blocks' task_ids only: {json.dumps(evidence_by_task, ensure_ascii=False)}
@@ -6449,10 +6753,13 @@ def node_04c_response_reviser(state: AgentState) -> dict:
 
     {PERSONAL_DATA_REFERENCE_CONTRACT}
 
-    Output JSON only, one entry per block listed under "Blocks Under
-    Revision," each using precisely that block's own field names and
-    nothing else:
-    {{"revised_blocks":[{{"block_id":"...","type":"...", "<only the fields that entry showed you, corrected values>": "..."}}]}}
+    Output JSON only -- the SAME shape as "Full Response Skeleton" above: a
+    single top-level object with one "response_blocks" key holding the
+    FULL list, one entry per skeleton entry in the same order, "approved"
+    entries repeated unchanged (or with empty content -- never read
+    either way) and "pending" entries corrected, each using precisely that
+    entry's own field names and nothing else. Never a bare list on its own:
+    {{"response_blocks":[{{"block_id":"...","type":"...","revision_status":"approved"|"pending", "<only the fields that entry showed you, corrected values for a pending entry>": "..."}}]}}
     """
     try:
         generated = _parse_json_robustly(call_groq_lpu(prompt))
@@ -6460,7 +6767,19 @@ def node_04c_response_reviser(state: AgentState) -> dict:
         print(f"🚨 [RESPONSE REVISER ERROR]: {error}")
         generated = {}
 
-    raw_revisions = generated.get("revised_blocks", []) if isinstance(generated, dict) else []
+    # Tolerate multiple shapes for the same content -- the model is asked
+    # for the full skeleton back under "response_blocks", but has been
+    # observed deviating to a bare list or the old "revised_blocks" key.
+    # Whatever the wrapper, only entries whose block_id is in
+    # pending_block_ids are ever read below -- an "approved" entry (or an
+    # unrecognized block_id) is always discarded regardless of what the
+    # model wrote for it, and the stored approved copy is used instead.
+    if isinstance(generated, list):
+        raw_revisions = generated
+    elif isinstance(generated, dict):
+        raw_revisions = generated.get("response_blocks", generated.get("revised_blocks", []))
+    else:
+        raw_revisions = []
     revised_by_block_id = {}
     for entry in raw_revisions:
         if not isinstance(entry, dict):
@@ -6473,7 +6792,10 @@ def node_04c_response_reviser(state: AgentState) -> dict:
         # shape -- one vocabulary, so no field-name translation is needed
         # here at all; _reassemble_response_blocks's own merge already
         # ignores blockId/type/sourceTaskIds and any empty value.
-        revised_by_block_id[block_id] = {k: v for k, v in entry.items() if k not in ("block_id", "type")}
+        # "revision_status" is this prompt's own bookkeeping tag, added by
+        # full_skeleton above and never a real block field -- stripped here
+        # so it can never leak into the merged, customer-facing block.
+        revised_by_block_id[block_id] = {k: v for k, v in entry.items() if k not in ("block_id", "type", "revision_status")}
 
     spliced = _reassemble_response_blocks(approved_blocks, original_blocks, pending_block_ids, revised_by_block_id)
     spliced = _apply_response_completeness_nets(
@@ -6616,6 +6938,16 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
             "approved_parents": evidence.get("approved_parents", []),
             "search_territory": evidence.get("search_territory", "in_scope"),
             "mapping_reason": evidence.get("mapping_reason", ""),
+            # Deliberately NOT "generation_guidance": that field is a
+            # generation-side writing aid only (node_04b/node_04c), never
+            # audit-visible. node_03c's own free text is unaudited -- if the
+            # audit were told to enforce compliance WITH it, the audit would
+            # stop being independent and would instead be rubber-stamping
+            # whatever an unverified upstream string said. The Evidence
+            # Applicability Rule below gives the audit its own, independent
+            # way to catch the same class of problem directly from
+            # approved_parents' own text and resolved_subquery above --
+            # never trusting node_03c's summary of that comparison.
         })
 
     response_block_map = []
@@ -6703,6 +7035,7 @@ def _normalize_grounding_violations(raw_violations: Any) -> list[dict]:
             "violation_type": violation_type if violation_type in allowed_types else "other",
             "unsupported_content": [str(value).strip() for value in unsupported_content if str(value).strip()],
             "evidence_gap": str(item.get("evidence_gap", "")).strip(),
+            "generation_guidance": str(item.get("generation_guidance", "")).strip(),
         })
     return normalized
 
@@ -6731,6 +7064,7 @@ def _normalize_conduct_violations(raw_violations: Any) -> list[dict]:
             "rule": str(item.get("rule", "bank_conduct")).strip() or "bank_conduct",
             "violation": str(item.get("violation", "")).strip(),
             "unsupported_content": [str(value).strip() for value in unsupported_content if str(value).strip()],
+            "generation_guidance": str(item.get("generation_guidance", "")).strip(),
         })
     return normalized
 
@@ -6914,6 +7248,12 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
       duties (addressing every Clarification/Decline/No-info entry,
       citation, style, etc.) are unaffected by this feedback and are not
       this field's job to reassert or redefine.
+    - In addition to (never instead of) the diagnostic fields above, set
+      every conduct_violations and evidence_violations entry's own
+      generation_guidance per the Generation Guidance Shape Rule below --
+      this is the one field on the entry that IS allowed to instruct what
+      the next draft should write, scoped strictly to this entry's own
+      flagged content.
     """
     recovery_strategy_field = ', "response_recovery_strategy":"NO_STRATEGY" | "REMOVE_UNSUPPORTED_CONTENT" | "NARROW_TO_EVIDENCE_SCOPE" | "CLARIFY_FROM_ALLOWED_CONTEXT"'
 
@@ -6972,8 +7312,10 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         explained afterward is a rationalization, not a judgment; reasoning
         that precedes the verdict is what actually shapes it.
 
+        {_GENERATION_GUIDANCE_SHAPE_RULE}
+
         Output JSON only:
-        {{"conduct_reason": "...", "conduct_compliant": true/false, "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "task_id": "task_1" | "", "violation": "...", "unsupported_content": ["verbatim phrase"]}}]{conduct_extra_output_fields}, "evidence_reason": "...", "evidence_grounded": true/false, "evidence_violations": [{{"scope": "...", "unsupported_content": ["verbatim phrase"], "evidence_gap": "..."}}]{evidence_extra_output_fields}}}
+        {{"conduct_reason": "...", "conduct_compliant": true/false, "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "task_id": "task_1" | "", "violation": "...", "unsupported_content": ["verbatim phrase"], "generation_guidance": "..."}}]{conduct_extra_output_fields}, "evidence_reason": "...", "evidence_grounded": true/false, "evidence_violations": [{{"scope": "...", "unsupported_content": ["verbatim phrase"], "evidence_gap": "...", "generation_guidance": "..."}}]{evidence_extra_output_fields}}}
         """
         try:
             result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
@@ -7100,6 +7442,16 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         - When an optional response element is mapped to source_task_ids, its
           factual content may use the union of approved evidence for those
           tasks. An unmapped element may use any Task-Level Approved Evidence.
+        - A Task-Level Approved Evidence entry whose "approved_parents" is
+          an EMPTY list ("no info is info": the task found no material
+          parent but the sufficiency auditor still had a hedged observation
+          worth conveying, carried in that entry's own "generation_guidance")
+          licenses ONLY an honest admission that nothing confirms the
+          answer -- never a new factual claim. Its mere presence in this
+          bundle is never itself a factual source: reject any visible
+          content that states or implies a fact, figure, procedure, or
+          outcome for that task_id beyond the plain admission, exactly as
+          you would for a task with no evidence entry at all.
         2. Inferential Grounding (Bridge Check)
         - Natural conclusions that connect approved facts to the resolved
           sub-query are allowed when they are a reasonable, bounded logical
@@ -7164,6 +7516,54 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         - An entry with "search_territory" absent or "in_scope" is graded
           exactly as before this rule; this rule only ever narrows how an
           "adjacent_scope" entry may be used, never how the others are.
+
+        Evidence Applicability Rule (judge this yourself, directly from
+        approved_parents' own text and resolved_subquery above -- never
+        from any writer-side note, since nothing upstream of you here has
+        itself been audited):
+        - An approved parent's own stated premise, question, or
+          circumstance can differ from the customer's own stated situation
+          even when its content is otherwise directly relevant -- e.g. a
+          card-replacement parent whose own question and steps are written
+          entirely for a PHYSICALLY DAMAGED card, approved for a customer
+          who instead stated they dislike the card's appearance. Compare
+          the evidence's own stated circumstance against the customer's own
+          stated circumstance (Original Customer Message / this task's
+          resolved_subquery) directly -- never assume they match merely
+          because the evidence was approved for this task.
+        - Reject as a `task_not_answered` violation any visible content
+          that presents such a procedure, condition, or step as the
+          customer's own direct path with no acknowledgment of the
+          mismatch -- e.g. instructing the customer to declare a
+          circumstance (such as damage) their own stated situation does
+          not support. The underlying steps may be entirely correct and
+          traceable to evidence -- the violation is presenting them as a
+          clean match to THIS customer's situation when the evidence's own
+          premise says otherwise.
+        - ACKNOWLEDGING THE MISMATCH DOES NOT FIX IT -- do not treat mere
+          acknowledgment as satisfying this rule. Also reject as a
+          `wrong_task_evidence` violation any visible content that, after
+          noting the mismatch, goes on to assert, imply, or reassure the
+          customer that the SAME procedure "can be used," "works," "still
+          applies," or "is the same" for their actual different reason --
+          that claim of accommodation is itself a new, unsupported
+          procedural fact no parent here states, not a caveat. A
+          compliant response states the mismatch plainly and stops there
+          (e.g. "this process is documented for a damaged card; if that
+          doesn't match your situation, you can still use the form below
+          and note your actual reason") -- it never goes on to declare the
+          gap resolved.
+        - This rule imposes no requirement when the evidence's own stated
+          circumstance already matches, or is neutral/generic with respect
+          to, the customer's own stated situation -- only an actual,
+          evidenced mismatch triggers it.
+        - When this rule fires, set the violation's generation_guidance per
+          the Generation Guidance Shape Rule above: since the mismatch means
+          nothing here confirms the procedure applies to the customer's
+          actual stated reason, the instruction is the "nothing confirmed"
+          case -- admit that plainly, phrased around the customer's own
+          stated reason, then instruct offering the procedure only as an
+          unclaimed courtesy, never as a resolution.
 
         Clarification Rules:
         - Each Decline Input and No-Info Input carries its own
@@ -7340,7 +7740,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
             },
             evidence_description="Task-Level Approved Evidence, Available Shortcuts, Unavailable Service Requests, Verified Customer-Specific Facts, and Personal Data References — the only factual sources for answers and answer UI",
             evidence_route_specific_rules=evidence_route_specific_rules,
-            evidence_extra_output_fields=f', "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false{recovery_strategy_field}, "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy"}}]',
+            evidence_extra_output_fields=f', "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false{recovery_strategy_field}, "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy", "generation_guidance": "..."}}]',
         )
         audit_scope = "normal_response"
 

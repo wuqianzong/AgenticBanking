@@ -123,6 +123,29 @@ class AgentState(TypedDict):
     outbound_groundedness_result: Dict[str, Any]  # Audit result plus structured, non-evidential grounding_violations for retries
     pending_advance: bool                           # V4.1 Fix: Tracks if the current step should advance upon safety clearance
 
+    # --- OUTBOUND RESPONSE REVISION LOOP (per-task partial retry, node_06/node_04c) ---
+    # Deterministic source of truth carried across retry rounds within one turn: the
+    # exact response_block dicts (verbatim, never re-passed through an LLM) whose full
+    # sourceTaskIds set had zero audit violations as of the most recent audit round.
+    # Written only by _partition_audited_response (via node_06_outbound_audit_join).
+    approved_response_blocks: List[Dict[str, Any]]
+    # Task ids implicated by any conduct or grounding violation this round, expanded to
+    # every co-block sibling id (a block's own sourceTaskIds couples its ids together
+    # for revision -- see _partition_audited_response). Empty == fully approved; this is
+    # the termination signal for a normal_response-scope turn. A non-financial/
+    # evidence-only turn never sets this (stays [] and keeps using the whole-response
+    # retry path).
+    pending_task_ids: List[str]
+    # True when the latest audit round produced at least one conduct/grounding violation
+    # whose own task_id is "" (unattributable to a single block, e.g. overall tone).
+    # When true, nothing is approved this round and node_04c is given every block.
+    response_wide_violation_this_round: bool
+    # This-round-only (overwritten, not accumulated) normalized violations keyed by
+    # task_id ("" key holds response-wide ones), each tagged with its own audit axis.
+    # This is the scoped feedback node_04c_response_reviser's prompt reads, instead of
+    # draft_feedback_history's raw strings, for a normal_response-scope turn only.
+    task_violation_history: Dict[str, List[Dict[str, Any]]]
+
     # --- ISOLATED LOOP TRACKERS ---
     safety_retry_count: int                      # Max 3
     turn_count: int

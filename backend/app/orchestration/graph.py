@@ -25,6 +25,7 @@ def build_agent_graph():
     workflow.add_node("n18", nodes.node_03c_sufficiency_auditor)
     workflow.add_node("n19", nodes.node_04a_resolution_planner)
     workflow.add_node("n8", nodes.node_04b_response_generator)
+    workflow.add_node("n8b", nodes.node_04c_response_reviser)
     workflow.add_node("n20", nodes.node_05_outbound_deterministic_gate)
     workflow.add_node("n21_audit", nodes.node_06_outbound_combined_audit_gate)
     workflow.add_node("n21", nodes.node_06_outbound_audit_join)
@@ -139,7 +140,18 @@ def build_agent_graph():
         # no-info) when there is any, or a plain "I can't answer that right
         # now" apology when there genuinely is none -- see node_11's
         # docstring.
-        return "n8" if count < 3 else "n25"
+        if count >= 3:
+            return "n25"
+        # Per-Task Outbound Response Revision Loop: a normal_response-scope
+        # turn's failure is task-attributed (pending_task_ids/
+        # response_wide_violation_this_round, set by node_06_outbound_
+        # audit_join's new partition branch) and only ever needs the
+        # narrower node_04c reviser, never a full node_04b redraft. Every
+        # other scope (non-financial/evidence-only, _is_pure_conversational_
+        # turn) keeps the original full-redraft path unchanged -- those
+        # turns are short/single-element and were never node_06's new
+        # partition branch to begin with.
+        return "n8" if nodes._is_pure_conversational_turn(state) else "n8b"
 
     workflow.set_conditional_entry_point(route_start, {"n00": "n00", "n3": "n3", "n_svc": "n_svc"})
     workflow.add_edge("n_svc", END)
@@ -173,7 +185,11 @@ def build_agent_graph():
         },
     )
     workflow.add_edge("n21_audit", "n21")
-    workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n25": "n25"})
+    workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n8b": "n8b", "n25": "n25"})
+    # The reassembled candidate re-enters the same deterministic gate
+    # unchanged -- n20 already re-scans whatever is currently in
+    # ui_action_payload regardless of which node produced it.
+    workflow.add_edge("n8b", "n20")
     workflow.add_edge("n22", "n24")
     workflow.add_edge("n24", END)
     workflow.add_edge("n23", END)

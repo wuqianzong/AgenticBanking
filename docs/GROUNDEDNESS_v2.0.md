@@ -71,7 +71,7 @@ inject:
 
 | Route | Evidence bundle | Conduct check | Notes |
 |---|---|---|---|
-| Normal RAG answer (Node 06) | Task-Level Approved Evidence (Node 03c-approved parent IDs) | Yes | Requests extra fields for the evidence/bridge split and `response_recovery_strategy` — see below. |
+| Normal RAG answer (Node 06) | Task-Level Approved Evidence (Node 03c-approved parent IDs) | Yes | Requests extra fields for the evidence/bridge split and `response_recovery_strategy` — see below. A failure on this route now drives the Per-Task Outbound Response Revision Loop, not a full redraft — see its own section below. |
 | Initial greeting (Node 06) | Greeting Memory (last-session + baseline summary) | Yes | |
 | Non-financial conversation (Node 06) | None — the route permits no factual evidence at all; only a courteous, non-material acknowledgement is grounded | Yes | |
 | Memory summaries — rolling, last-session, five-session baseline (`memory_service.py`, outside the graph) | The source transcript being summarized | Yes | Requests one extra field, `has_clarification_dependent_content` — a memory-specific retention rule that is neither an evidence nor a conduct question, folded onto the evidence call rather than justifying a third call. |
@@ -105,6 +105,13 @@ the shared base contract — nothing was dropped in the migration:
 
 ## Response-generator interaction
 
+Everything in this section describes the **whole-response redraft path** --
+still the only mechanism for a `greeting`/`non_financial_response`-scope
+turn. A `normal_response`-scope turn (real `search_tasks`/task_id
+decomposition) no longer redrafts wholesale on any failure -- see the Per-
+Task Outbound Response Revision Loop section below, which supersedes a
+full redraft for that scope specifically.
+
 A `NARROW_TO_EVIDENCE_SCOPE` or `REMOVE_UNSUPPORTED_CONTENT` rejection is
 scoped removal, not permission to abandon the topic. Live tracing found that
 across two or more redraft rounds, the generator could erode toward
@@ -132,6 +139,182 @@ information. Both checks in this document pass such a reply correctly, since
 it genuinely contains no ungrounded claim and no conduct violation — the gap
 is in the generator's own adherence to its instruction, not in either
 Groundedness v2.0 check.
+
+## Per-Task Outbound Response Revision Loop
+
+### Context
+
+Live-tracing a real turn ("what are the eligibility? i want to buy a car,
+can i use it?") surfaced a real bug in the whole-response redraft path
+described above. The turn decomposed into `task_1` (loan eligibility) and
+`task_2` (can the loan be used for a car). Round 1's draft correctly
+answered *both* -- including an explicit sentence confirming the
+car-purchase use case -- but was rejected for an entirely unrelated reason:
+`task_1`'s eligibility numbers were hallucinated literal values instead of
+the required `{{faq_*}}` precision tokens (see `RAG_ETL_SPECIFICATION_v1.0.md`
+for the ETL-time tokenization these tokens come from). By round 3 (the
+version that finally passed), the token issue was fixed, but the
+car-purchase confirmation sentence had silently vanished -- correct,
+already-approved content became collateral damage from a full redraft
+aimed at an unrelated problem.
+
+Root cause: `_generate_response_blocks` regenerates the **entire** response
+from scratch on every retry, with only raw feedback strings
+(`draft_feedback_history`) as guidance. Nothing preserves content the audit
+never flagged. The fix, worked through over several rounds of design
+review: stop trusting the generator's own discipline to "only touch what's
+wrong." Make the *deterministic system* -- not any LLM call -- the sole
+authority over which content is locked in and which is still open, and give
+each LLM call its narrowest possible job (generate once; audit the whole
+thing; revise only what's flagged). This directly mirrors this codebase's
+own established pattern for retrieval retries
+(`_exclude_rejected` in `rag_engine.py` permanently excludes an
+already-rejected candidate) -- this is the mirror image: permanently keep
+what's already been approved, unless a fresh, independent audit round
+legitimately finds a real problem with it, in which case the finding is
+honored, never suppressed.
+
+### Design
+
+1. **First generation round is unchanged.** `node_04b_response_generator`
+   (`"n8"`) still produces the entire response in one call. Every block
+   already carries a `blockId` and `sourceTaskIds`.
+2. **The audit still assesses the whole response every round**, never a
+   partial slice -- a partial audit would still need full-response context
+   to judge coherence/duplication, so there's no real efficiency gain, and
+   only a whole-response audit can catch a problem that only exists in
+   combination (duplication, contradiction between an approved and a
+   newly-revised section).
+3. **Every violation -- both compliance and evidence-groundedness -- is
+   tagged with the `task_id`(s) it concerns.** The evidence axis already
+   did this (`grounding_violations: [{"task_id": "task_1", ...}]`);
+   `conduct_violations` gained the same field, defaulting to `""` only for
+   a genuinely response-wide issue (e.g. overall tone) not traceable to a
+   single claim.
+4. **A deterministic (pure Python, no LLM) partition step runs after every
+   audit round** -- `_partition_audited_response` (`nodes.py`). A block is
+   "approved" only if none of its `sourceTaskIds` appear in any violation
+   this round and there is no response-wide (`task_id: ""`) violation;
+   otherwise every task_id the block names becomes "pending." A block's own
+   `sourceTaskIds` list is its addressability unit: this is what keeps a
+   scope-expansion companion pair (`task_1`/`task_1_scope`, which the
+   Scope-Expansion Honesty Rule requires woven into one sentence) revising
+   together, since they already share one block.
+5. **A new, dedicated revision node** -- `node_04c_response_reviser` (graph
+   label `"n8b"`) -- is invoked only on retry, replacing re-invoking full
+   generation. Its only job: given the full current response as read-only
+   coherence context, plus the specific violations and evidence for the
+   pending blocks only, output revised content for *those blocks only*. No
+   UI-structure job -- it may not change a block's type, add/remove/reorder
+   blocks, or touch `next_actions`.
+6. **Deterministic reassembly happens before the next audit call, not
+   after the revision node** -- `_reassemble_response_blocks` (`nodes.py`).
+   The code takes the stored approved blocks verbatim and splices in only
+   the reviser's output for the pending block ids, reading it strictly as a
+   keyed lookup -- anything else the reviser's raw output might contain is
+   never read. If the reviser drops a block it was asked to revise, that
+   block's *prior* content is kept rather than vanishing. This reassembled
+   candidate -- never the reviser's raw output directly -- is what the next
+   audit call actually sees, which is what makes "the reviser cannot change
+   what's approved" a structural guarantee rather than a prompt
+   instruction.
+7. **The audit can still legitimately reopen a previously-approved
+   task_id** if it finds a genuine new problem with it. The prompt tells
+   the audit which task_ids were already approved this turn
+   (`previously_approved_task_ids_this_turn`), framed explicitly as a
+   noise-reduction hint, never a constraint that could suppress a real
+   finding -- the deterministic system honors such a finding by moving that
+   task_id back to pending, never ignores it.
+8. **Termination**: no pending blocks -> assemble the final payload from
+   the approved set, proceed to `"n22"` (precision substitution) as usual.
+   Retry cap exhausted -> degrade via the existing `"n25"`
+   (`node_11_deterministic_clarification_fallback`) path, unchanged.
+9. **Scope is deliberately narrow**: only `audit_scope == "normal_response"`
+   turns (real `search_tasks`/task_id decomposition) use this path.
+   Non-financial/pure-chitchat turns keep the whole-response redraft logic
+   completely unchanged -- those turns are short, single-element, and don't
+   have the multi-independent-task structure this bug depends on.
+10. **Retry cap stays one turn-wide counter** (`safety_retry_count`, cap 3),
+    not per-task. Every round -- regardless of how many task_ids are
+    pending -- costs exactly one audit call and one reviser call; a
+    per-task counter would let a multi-task turn spend far more rounds than
+    today's cost/latency envelope assumes, for no benefit.
+
+### One canonical vocabulary for the revision node's I/O
+
+An early version of `node_04c_response_reviser` handed each pending block
+to the model in its full, noisy stored shape (every block type carries
+fields it never uses -- a checklist block also always carries
+`contextText`/`text`/`progressTitle`/`stepDetails`/`currentStep`/
+`totalSteps`, all dummy defaults), then asked for a *differently-named*
+output schema (`context_text`/`answer`/`list_items`/`progress_steps`).
+Live-tracing the first real production reopen of this path (a PayNow
+transfer-limit turn hallucinating `S$200,000`/`S$5,000` in place of
+`{{faq_6f4ef9e6_001/002/003}}`) showed the reviser correctly restored the
+tokens, but comparing its raw output to what was actually merged revealed
+it had echoed the block's own native field names (`listTitle`, `listIntro`)
+back rather than the output schema's names -- and the mapping code, which
+only recognized the schema names, silently dropped those two fields. It was
+harmless that time only because the actual fix lived entirely in `items`,
+a field both naming conventions happened to share; a genuine title/intro
+edit would have been silently lost.
+
+Fixed at the root rather than by teaching the mapper both conventions:
+`_simplify_block_for_revision` (`nodes.py`, keyed by
+`_BLOCK_EDITABLE_FIELDS`) strips each block down to only the fields
+meaningful for its own type before it's ever shown to the model, and the
+prompt asks for that *exact same shape* back -- one vocabulary, used
+identically for input and required output. The merge step is now a plain
+`{k: v for k, v in entry.items() if k not in ("block_id", "type")}`, not a
+30-line per-field translator, and there is no longer a class of "field name
+the model might use that the mapper forgot to handle." Verified directly
+against the live PayNow payload: a simulated genuine title/intro change now
+propagates correctly instead of being silently dropped, with the token
+restoration behaving identically to the live case.
+
+### Verified against real production data
+
+The PayNow scenario above is the first live, unforced reproduction of the
+original collateral-damage bug's root cause (a Precision Reference Contract
+violation) since this redesign shipped, and it resolved exactly as
+designed: round 1 hallucinated the currency values; the partition correctly
+scoped `pending_task_ids` to `task_1` alone; `node_04c_response_reviser`
+fired (confirmed via its distinct "FLEXIBLE RESPONSE REVISION (partial
+retry -- edit in place only)" prompt appearing in `system.jsonl` for the
+first time); the reassembled response passed a full, fresh re-audit on the
+very next round. A separate multi-tool-type turn (one RAG task needing its
+own two-round retrieval retry, alongside two unrelated deterministic
+deeplink shortcuts in the same response) also traced cleanly, confirming no
+interference between the RAG retry ladder and this response-level
+mechanism.
+
+Also fixture-verified directly (no LLM call needed, pure deterministic
+logic): a violation on one task_id never touches an unrelated task's
+block; a block shared by two task_ids (a scope-expansion companion pair)
+pulls both into pending together on either one's violation; a response-wide
+(empty `task_id`) violation reopens every block; a block the reviser
+silently omits keeps its prior content instead of vanishing, including when
+simulating a total LLM failure; and a previously-approved task_id
+legitimately reopened by a genuine new finding is honored, not filtered
+out, across a full three-round scripted scenario.
+
+### Files touched
+
+`backend/app/orchestration/state.py` (`approved_response_blocks`,
+`pending_task_ids`, `response_wide_violation_this_round`,
+`task_violation_history`); `backend/app/orchestration/nodes.py`
+(`_partition_audited_response`, `_group_violations_by_task_id`,
+`_reassemble_response_blocks`, `_normalize_conduct_violations`,
+`_flatten_response_block_text`, `_apply_response_completeness_nets`
+(extracted from `_generate_response_blocks`'s tail, now shared),
+`_BLOCK_EDITABLE_FIELDS`/`_simplify_block_for_revision`, new
+`node_04c_response_reviser`; `node_06_outbound_combined_audit_gate` gains
+`task_id` on `conduct_violations` and the previously-approved-task-ids
+framing; `node_06_outbound_audit_join` branches on `audit_scope` into this
+new partition path vs. the original whole-response path;
+`node_05_outbound_deterministic_gate`'s leak-veto fail branch resets the
+new state fields); `backend/app/orchestration/graph.py` (new `"n8b"` node
+and `route_n21` branching).
 
 ## Reasoning-before-verdict field order
 
@@ -188,6 +371,9 @@ flagged for a future pass.
 - `escalation.case_summary.rejected` (log) — new. Fires when either check
   fails for a generated case summary, before the deterministic fallback is
   used; records both axes' pass/fail and reasons.
+- `response.reviser.completed` (log) — new (Per-Task Outbound Response
+  Revision Loop). Fires once per `node_04c_response_reviser` call; records
+  `pending_block_ids`, `revised_block_ids`, and `response_wide`.
 
 ## Verified against real production data
 

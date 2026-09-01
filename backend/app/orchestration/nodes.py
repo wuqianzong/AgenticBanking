@@ -65,6 +65,10 @@ VOLATILE_STATE_RESET = {
     "presentation_plan": {},
     "outbound_compliance_result": {},
     "outbound_groundedness_result": {},
+    "approved_response_blocks": [],
+    "pending_task_ids": [],
+    "response_wide_violation_this_round": False,
+    "task_violation_history": {},
     "active_tool_routes": [],
     "pending_advance": False,
     "service_request_event": {},
@@ -217,8 +221,10 @@ ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "PARTIALLY_SUFFICIENT"}
 # gating too) or adding a fourth tier is a change to this table alone,
 # never a restructuring of the should_retry logic that reads it. See
 # RAG_RETRY_EFFORT_v1.0.md §8c/§8d.
-#   Tier 1 (Wave 1): narrow product/intent, full 4-representation fusion
-#     (procedural/policy/conceptual/direct) -- see execute_multi_angle_search.
+#   Tier 1 (Wave 1): narrow product/intent, all 4 representations searched
+#     (procedural/policy/conceptual/direct) as two independent tracks --
+#     semantic angle-group RRF, and direct query on its own -- unioned, not
+#     RRF-fused together. See execute_multi_angle_search.
 #   Tier 2 (Territory A): SAME query representation, filter widened to
 #     include alternate_products (reasoned once, at fresh-formulation time,
 #     never re-derived here -- see SearchTask.alternate_products) and full
@@ -545,12 +551,16 @@ def _retrieval_mode_for_task(task: dict, retry_counts: dict[str, int]) -> str:
     while varying the metadata filter (intent, then product) -- meaning the
     other three representations node_02e already authors every task with
     (procedural/policy/conceptual) sat unused until the fourth and final
-    attempt. Now the resolved subquery text is folded into the same RRF
-    fusion as a fourth angle (see execute_multi_angle_search's
-    `direct_query` parameter), so every attempt -- including the first --
-    tests all four representations together in one fused ranking, under
-    whatever scope that attempt's filter currently allows. See
-    RAG_RETRY_EFFORT_v1.0.md.
+    attempt. Now every attempt -- including the first -- tests all four
+    representations, under whatever scope that attempt's filter currently
+    allows. They no longer land in one fused ranking, though: the direct
+    query used to be folded in as a fourth angle of the same RRF sum as
+    the three semantic angles, but that let a strong literal-match parent
+    get diluted by the other three and then pruned by the 50%-drop-off
+    rule. `execute_multi_angle_search` now runs the semantic angle-group
+    RRF and the direct query as two independent tracks, each selected on
+    its own scores, then unions the two selections. See
+    RAG_RETRY_EFFORT_v1.0.md S8f.
     """
     return "ANGLE_GROUP_RRF"
 
@@ -3546,12 +3556,14 @@ async def node_03b_rag_worker(state: AgentState):
             parent_ids=verified_session_parent_ids,
             candidate_count=len(verified_session_parent_ids),
         )
-        # Extra Effort v2.0: every attempt fuses all four representations
-        # (procedural/policy/conceptual + the resolved subquery text) into
-        # one RRF ranking -- see _retrieval_mode_for_task and
-        # execute_multi_angle_search's docstring. The standalone DIRECT
-        # path (and its own verified-session fusion) is retired; verified-
-        # session boosting is now a parameter of the same fused search.
+        # Extra Effort v2.0/2.1: every attempt searches all four
+        # representations (procedural/policy/conceptual + the resolved
+        # subquery text) as two independent tracks -- semantic angle-group
+        # RRF, and direct query (with verified-session boosting) on its
+        # own -- unioned before hydration rather than RRF-fused into one
+        # ranking, so a strong literal match can't be diluted by the three
+        # semantic angles or vice versa. See _retrieval_mode_for_task and
+        # execute_multi_angle_search's docstring.
         parents = await engine.execute_multi_angle_search(
             blueprint=task,
             scope_pairs=scope_pairs,
@@ -4898,6 +4910,193 @@ _GENERATION_CONDUCT_GUARDRAILS = f"""
     """
 
 
+def _flatten_response_block_text(block: dict) -> str:
+    """Reconstruct one block's rendered plain-text form from its own stored
+    fields alone -- the same text `_generate_response_blocks` computes
+    inline while first building each block, needed again wherever only the
+    already-built block dict is available (the completeness nets, the
+    per-task-revision loop's `final_answer` reconstruction, and the
+    audit-join's `safe_answer_for_fallback`). Each type's formula below is
+    copied verbatim from the corresponding branch in
+    `_generate_response_blocks`'s element-building loop; keep them in sync.
+    """
+    block_type = block.get("type", "text")
+    title = block.get("title", "")
+    extended_text = block.get("extendedText", "")
+    if block_type == "comparison":
+        rows = block.get("rows", [])
+        parts = [title, *[f"{r['feature']}: {', '.join(r['values'])}" for r in rows if isinstance(r, dict)], extended_text]
+    elif block_type == "accordion":
+        sections = block.get("sections", [])
+        parts = [title, *[f"{s['title']}: {s['content']}" for s in sections if isinstance(s, dict)], extended_text]
+    elif block_type == "timeline":
+        steps = block.get("steps", [])
+        parts = [title, block.get("subtitle", ""), *[f"{s['title']}: {s['description']}" for s in steps if isinstance(s, dict)], extended_text]
+    elif block_type == "carousel":
+        items = block.get("items", [])
+        parts = [title, *[f"{it['title']}: {it.get('highlight', '')}" for it in items if isinstance(it, dict)], extended_text]
+    elif block_type == "alert":
+        parts = [title, block.get("message", ""), extended_text]
+        return "\n".join(p for p in parts if p).strip()
+    elif block_type == "stepper":
+        items = block.get("items", [])
+        step_details = "\n\n".join(it.get("detail", "") for it in items if isinstance(it, dict))
+        return "\n\n".join(p for p in [block.get("contextText", ""), step_details, extended_text] if p)
+    elif block_type == "checklist":
+        return "\n".join(p for p in [block.get("listIntro", ""), *block.get("items", []), extended_text] if p)
+    else:
+        return "\n\n".join(p for p in [block.get("contextText", ""), block.get("text", "")] if p)
+    return "\n".join(p for p in parts if p).strip()
+
+
+# Every stored response block (see _generate_response_blocks's block-
+# building loop) always carries the FULL union of every type's fields, so
+# unrelated types can share dict-shape code -- a checklist block, for
+# instance, also carries "contextText"/"text"/"progressTitle"/"stepDetails"/
+# "currentStep"/"totalSteps", none of which a checklist ever actually uses.
+# That's fine internally, but showing all of it to node_04c_response_reviser
+# is pure noise it has no way to know is irrelevant -- and worse, handing it
+# a shape that doesn't match its own required output shape (a separate,
+# differently-named generation schema) is exactly what caused a live-
+# observed miss: the model echoed the block's own field names back
+# (listTitle/listIntro) instead of the output schema's names (title/
+# context_text), and a title/intro edit would have been silently dropped by
+# a mapper that only recognized the schema names. One canonical vocabulary,
+# used identically for both what the reviser is shown and what it must
+# return, removes the mismatch instead of reconciling two of them after the
+# fact.
+_BLOCK_EDITABLE_FIELDS = {
+    "text": ["contextText", "text", "extendedText"],
+    "checklist": ["listTitle", "listIntro", "items", "extendedText"],
+    "stepper": ["progressTitle", "contextText", "items", "extendedText"],
+    "comparison": ["title", "headers", "rows", "actions", "extendedText"],
+    "accordion": ["title", "sections", "extendedText"],
+    "timeline": ["title", "subtitle", "steps", "extendedText"],
+    "carousel": ["title", "items", "extendedText"],
+    "alert": ["title", "message", "severity", "action", "extendedText"],
+}
+
+
+def _simplify_block_for_revision(block: dict) -> dict:
+    """Strip a stored block down to only the fields meaningful for its own
+    type, for node_04c_response_reviser's "Blocks Under Revision" input.
+    This same simplified shape doubles as the exact output shape the
+    reviser is asked to return -- one vocabulary, not two -- so its output
+    can be merged back with a plain dict update, no field-name translation
+    layer to keep in sync or fall behind."""
+    block_type = block.get("type", "text")
+    fields = _BLOCK_EDITABLE_FIELDS.get(block_type, ["contextText", "text", "extendedText"])
+    return {
+        "block_id": block.get("blockId"),
+        "type": block_type,
+        **{field: block.get(field) for field in fields},
+    }
+
+
+def _apply_response_completeness_nets(
+    response_blocks: list,
+    state: "AgentState",
+    evidence_by_task: list,
+    task_metadata: dict,
+    intent_clarifications: list,
+    decline_context: list,
+    no_info_context: list,
+    conversational_context: list,
+    available_shortcuts: list,
+) -> list:
+    """Deterministic omission nets, extracted verbatim from
+    `_generate_response_blocks`'s tail so both a first generation round and
+    every `node_04c_response_reviser` retry round can re-run them against
+    the FULL current block set -- necessary because a revision to one
+    pending block could still remove text an unrelated shortcut check
+    depends on (the shortcut check is a whole-response substring match,
+    not task-scoped), or because the pending set for this round simply
+    didn't include a task whose element the reviser (correctly) left
+    untouched but which a PRIOR round had already dropped.
+
+    Mutates and returns `response_blocks` (appends fallback blocks; never
+    removes or edits an existing one).
+    """
+    covered_task_ids = {task_id for block in response_blocks for task_id in block.get("sourceTaskIds", [])}
+
+    # 1. Task-omission fallback -- see _generate_response_blocks's original
+    # comment for why a RAG task_id going uncited is not automatically an
+    # omission (a subquery fully RESOLVED via a different tool attempt).
+    subquery_id_by_task_id = {
+        task.get("task_id"): task.get("subquery_id")
+        for task in state.get("search_tasks", [])
+        if task.get("task_id")
+    }
+    resolution_status_by_subquery_id = {
+        subquery.get("subquery_id"): subquery.get("resolution_status") or _compute_subquery_status(subquery)
+        for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(subquery, dict)
+    }
+    for entry in evidence_by_task:
+        task_id = entry.get("task_id")
+        if not task_id or task_id in covered_task_ids:
+            continue
+        if resolution_status_by_subquery_id.get(subquery_id_by_task_id.get(task_id)) == "RESOLVED":
+            continue
+        component = task_metadata.get(task_id, "").strip()
+        fallback_text = (
+            f"Sorry, I don't have a complete answer for the part about {component} right now."
+            if component else
+            "Sorry, I don't have a complete answer for one part of your request right now."
+        )
+        print(f"   ⚠️ [TASK OMITTED IN DRAFT]: {task_id} missing from generated elements — inserting fallback")
+        log_event("response.flexible.task_omitted", task_id=task_id, component=component)
+        response_blocks.append({
+            "blockId": f"element_fallback_{task_id}", "sourceTaskIds": [task_id],
+            "type": "text", "contextText": "", "text": fallback_text,
+            "items": [], "options": [], "progressTitle": "", "stepDetails": [],
+            "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
+        })
+        covered_task_ids.add(task_id)
+
+    # 2. Detection-only logging for clarification/decline/no-info/
+    # conversational entries -- no fallback insertion, see
+    # _generate_response_blocks's original comment for why.
+    for entry, evidence_key in (
+        [(c, None) for c in intent_clarifications]
+        + [(d, "decline_evidence") for d in decline_context]
+        + [(n, "no_info_evidence") for n in no_info_context]
+        + [(v, "customer_component") for v in conversational_context]
+    ):
+        task_id = entry.get("task_id") or entry.get("subquery_id")
+        evidence_text = _clarification_fallback_text(entry) if evidence_key is None else entry.get(evidence_key, "")
+        if not task_id or not evidence_text or task_id in covered_task_ids:
+            continue
+        kind_label = "clarification_evidence" if evidence_key is None else ("conversational" if evidence_key == "customer_component" else evidence_key)
+        print(f"   ℹ️ [ENTRY NOT EXPLICITLY CITED]: {task_id} ({kind_label}) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)")
+        log_event("response.flexible.entry_omitted", task_id=task_id, kind=kind_label, fallback_inserted=False)
+
+    # 3. Shortcut-omission fallback, matched by label substring across the
+    # whole response text so far (not task_id citation -- see
+    # _generate_response_blocks's original comment for why).
+    combined_so_far = "\n\n".join(p for p in (_flatten_response_block_text(b) for b in response_blocks) if p)
+    for shortcut in available_shortcuts:
+        label = str(shortcut.get("label", "")).strip()
+        if not label or label in combined_so_far:
+            continue
+        fallback_text = (
+            f'You can also fill in and submit the "{label}" form below.'
+            if shortcut.get("kind") == "form"
+            else f'You can also use the "{label}" button below.'
+        )
+        print(f"   ⚠️ [SHORTCUT OMITTED IN DRAFT]: '{label}' missing from generated text — inserting deterministic fallback")
+        log_event("response.flexible.shortcut_omitted", label=label, kind=shortcut.get("kind"))
+        response_blocks.append({
+            "blockId": f"shortcut_fallback_{len(response_blocks)}", "sourceTaskIds": [],
+            "type": "text", "contextText": "", "text": fallback_text,
+            "items": [], "options": [], "progressTitle": "", "stepDetails": [],
+            "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
+        })
+        combined_so_far += "\n\n" + fallback_text
+
+    return response_blocks
+
+
 def _generate_response_blocks(state: AgentState) -> dict:
     """Generate freeform, ordered response elements from global resolution.
 
@@ -5676,79 +5875,16 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # simply forget to re-emit an already-correct task's element alongside it.
     # Since nothing is left to flag, outbound audits pass on the truncated
     # draft and the omission would otherwise reach the customer silently.
-    #
-    # A RAG task_id going uncited is not automatically an omission, though:
-    # its owning subquery may have been fully RESOLVED by a different tool
-    # attempt (api/deeplink/service_request) whose evidence isn't part of
-    # this task_id-keyed loop at all. Appending an apology in that case would
-    # contradict a sentence that already answered the customer, which is
-    # exactly the bug this per-subquery check exists to prevent (Tool
-    # Calling v3.0) -- resolution_status is the one deterministic source of
-    # truth for "is this subquery actually covered," computed once in
-    # node_04a from every attempt on it, RAG included.
-    subquery_id_by_task_id = {
-        task.get("task_id"): task.get("subquery_id")
-        for task in state.get("search_tasks", [])
-        if task.get("task_id")
-    }
-    resolution_status_by_subquery_id = {
-        subquery.get("subquery_id"): subquery.get("resolution_status") or _compute_subquery_status(subquery)
-        for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
-        if isinstance(subquery, dict)
-    }
-    covered_task_ids = {task_id for ids in element_sources for task_id in ids}
-    for entry in evidence_by_task:
-        task_id = entry.get("task_id")
-        if not task_id or task_id in covered_task_ids:
-            continue
-        if resolution_status_by_subquery_id.get(subquery_id_by_task_id.get(task_id)) == "RESOLVED":
-            continue
-        component = task_metadata.get(task_id, "").strip()
-        fallback_text = (
-            f"Sorry, I don't have a complete answer for the part about {component} right now."
-            if component else
-            "Sorry, I don't have a complete answer for one part of your request right now."
-        )
-        print(f"   ⚠️ [TASK OMITTED IN DRAFT]: {task_id} missing from generated elements — inserting fallback")
-        log_event("response.flexible.task_omitted", task_id=task_id, component=component)
-        response_blocks.append({
-            "blockId": f"element_fallback_{task_id}", "sourceTaskIds": [task_id],
-            "type": "text", "contextText": "", "text": fallback_text,
-            "items": [], "options": [], "progressTitle": "", "stepDetails": [],
-            "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
-        })
-        answer_parts.append(fallback_text)
-        element_sources.append([task_id])
-        covered_task_ids.add(task_id)
-
-    # Completeness check for clarification/decline/no-info entries --
-    # DETECTION ONLY, bypassed as of this revision: it used to also insert a
-    # deterministic fallback block for any entry it found uncited, which
-    # traded a real reliability guarantee for a real coherence cost. The
-    # false-positive case (a coherent response legitimately blended a
-    # clarification's substance into a broader element without citing that
-    # entry's id) produced a visible, confusing double-clarification --
-    # live-confirmed. Deliberate tradeoff: a genuine omission is uncommon
-    # (most turns carry a single subquery, so there is rarely more than one
-    # entry to lose track of in the first place) and low-severity (the
-    # customer can just ask again), whereas the false-positive duplication
-    # degraded otherwise-good responses. Detection stays -- logged here --
-    # so real frequency data can inform whether a better-targeted fix (e.g.
-    # requiring accurate multi-id citation on blended elements) is worth
-    # building, without that decision being made blind.
-    for entry, evidence_key in (
-        [(c, None) for c in intent_clarifications]
-        + [(d, "decline_evidence") for d in decline_context]
-        + [(n, "no_info_evidence") for n in no_info_context]
-        + [(v, "customer_component") for v in conversational_context]
-    ):
-        task_id = entry.get("task_id") or entry.get("subquery_id")
-        evidence_text = _clarification_fallback_text(entry) if evidence_key is None else entry.get(evidence_key, "")
-        if not task_id or not evidence_text or task_id in covered_task_ids:
-            continue
-        kind_label = "clarification_evidence" if evidence_key is None else ("conversational" if evidence_key == "customer_component" else evidence_key)
-        print(f"   ℹ️ [ENTRY NOT EXPLICITLY CITED]: {task_id} ({kind_label}) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)")
-        log_event("response.flexible.entry_omitted", task_id=task_id, kind=kind_label, fallback_inserted=False)
+    # Task-omission, clarification/decline/no-info-omission detection, and
+    # shortcut-omission are all handled by the shared
+    # _apply_response_completeness_nets (also reused by node_04c_response_
+    # reviser on every retry round) -- see that function for the full
+    # reasoning on each net.
+    response_blocks = _apply_response_completeness_nets(
+        response_blocks, state, evidence_by_task, task_metadata,
+        intent_clarifications, decline_context, no_info_context, conversational_context,
+        available_shortcuts,
+    )
 
     # No equivalent fallback is needed for a pending service request: unlike
     # a RAG task's answer, node_07 attaches every registered form's button
@@ -5824,45 +5960,15 @@ def _generate_response_blocks(state: AgentState) -> dict:
                             existing_keys.add(key)
                     block["options"] = existing
 
-    # Deterministic completeness net for shortcuts, mirroring the one
-    # above for clarification/decline/no-info entries. The prompt already
-    # tells the model a retry is never a reason to drop a shortcut, but it
-    # has been observed doing exactly that when a redraft narrows its
-    # attention to only the flagged sentence -- confirmed live: a
-    # compliance failure on one sentence ("we will help you update it")
-    # produced a redraft that fixed that sentence and silently lost the
-    # entire second shortcut (an unrelated deeplink) that had nothing to
-    # do with the violation. Matched by label substring, not task_id
-    # citation -- citing a shortcut's id was tried before and repeatedly
-    # failed for unrelated reasons (see _available_response_shortcuts's
-    # docstring); the label is already required to appear verbatim by the
-    # CRITICAL prompt rule above, so checking for it directly needs no
-    # cooperation from the model beyond what it's already instructed to do.
-    combined_so_far = "\n\n".join(part for part in answer_parts if part)
-    for shortcut in available_shortcuts:
-        label = str(shortcut.get("label", "")).strip()
-        if not label or label in combined_so_far:
-            continue
-        fallback_text = (
-            f'You can also fill in and submit the "{label}" form below.'
-            if shortcut.get("kind") == "form"
-            else f'You can also use the "{label}" button below.'
-        )
-        print(f"   ⚠️ [SHORTCUT OMITTED IN DRAFT]: '{label}' missing from generated text — inserting deterministic fallback")
-        log_event("response.flexible.shortcut_omitted", label=label, kind=shortcut.get("kind"))
-        response_blocks.append({
-            "blockId": f"shortcut_fallback_{len(response_blocks)}", "sourceTaskIds": [],
-            "type": "text", "contextText": "", "text": fallback_text,
-            "items": [], "options": [], "progressTitle": "", "stepDetails": [],
-            "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
-        })
-        answer_parts.append(fallback_text)
-        combined_so_far += "\n\n" + fallback_text
-
-    answer_text = "\n\n".join(part for part in answer_parts if part)
+    # The shortcut-omission net already ran as part of
+    # _apply_response_completeness_nets above, against the block set before
+    # clarification/chip attachment -- matching this function's own
+    # original ordering (the shortcut check's "combined so far" never
+    # included the terminal clarification's text either way).
+    answer_text = "\n\n".join(p for p in (_flatten_response_block_text(b) for b in response_blocks if b.get("type") != "clarification") if p)
     draft = "\n\n".join(part for part in [answer_text, clarification] if part) or "Sorry, I don't have an answer for that right now."
     print(f"   💬 [FLEXIBLE RESPONSE GENERATED]: {len(response_blocks)} element(s)")
-    log_event("response.flexible.generated", element_types=[block.get("type") for block in response_blocks], element_source_task_ids=element_sources, next_action_count=len(next_actions))
+    log_event("response.flexible.generated", element_types=[block.get("type") for block in response_blocks], element_source_task_ids=[block.get("sourceTaskIds", []) for block in response_blocks], next_action_count=len(next_actions))
     return {
         "final_draft": draft,
         "final_answer": answer_text,
@@ -6155,6 +6261,187 @@ def node_04b_response_generator(state: AgentState):
     return _generate_response_blocks(state)
 
 
+def node_04c_response_reviser(state: AgentState) -> dict:
+    """Revise only this round's pending blocks in place -- never a full
+    redraft (Per-Task Outbound Response Revision Loop). Invoked only on
+    retry from node_06_outbound_audit_join for a normal_response-scope
+    turn (see route_n21 in graph.py); the non-financial/evidence-only
+    paths keep routing failures to node_04b unchanged.
+
+    No UI-structure job: it may not change a block's `type`, add, remove,
+    or reorder blocks, or touch `next_actions` -- only the natural-language
+    leaf fields (answer/context_text/extended_text/title/items/steps/
+    sections/message/etc.) of the specific blocks it is handed. Whatever it
+    returns for a block never reaches the customer directly: the
+    deterministic `_reassemble_response_blocks` splice, run before the next
+    audit call, reads its output strictly as a keyed lookup by `blockId` --
+    a block it wasn't asked about is never read from its raw output at all,
+    and a block it silently drops keeps its prior content unchanged rather
+    than vanishing. This is what makes "the reviser cannot change what's
+    approved" a structural guarantee rather than a prompt instruction.
+    """
+    print("🟢 [NODE 04c] Executing Response Reviser (partial retry)")
+    payload = state.get("ui_action_payload", {})
+    original_blocks = payload.get("responseBlocks", [])
+    approved_blocks = state.get("approved_response_blocks", [])
+    approved_ids = {block.get("blockId") for block in approved_blocks}
+    pending_task_ids = set(state.get("pending_task_ids", []))
+    response_wide = bool(state.get("response_wide_violation_this_round"))
+
+    pending_blocks = (
+        list(original_blocks) if response_wide
+        else [block for block in original_blocks if block.get("blockId") not in approved_ids]
+    )
+    pending_block_ids = {block.get("blockId") for block in pending_blocks}
+
+    violation_history = state.get("task_violation_history", {})
+    scoped_violations = (
+        [v for entries in violation_history.values() for v in entries] if response_wide
+        else [v for task_id in pending_task_ids for v in violation_history.get(task_id, [])]
+             + violation_history.get("", [])
+    )
+
+    # Scoped-to-pending context only -- shortcuts/verified-API/personal-data
+    # stay unfiltered below (they key by free-text for_request, not
+    # task_id, and are small/turn-wide/unconditionally-attached).
+    evidence_by_task = _hydrate_response_evidence(state)
+    task_metadata = {
+        task.get("task_id"): task.get("customer_component", "")
+        for task in state.get("search_tasks", [])
+        if task.get("task_id")
+    }
+    intent_clarifications = _build_clarification_context(state)
+    decline_context = _build_decline_context(state)
+    conversational_context = _build_conversational_context(state)
+    no_info_context, terminal_markers = _split_terminal_markers(
+        state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
+    )
+    if not response_wide:
+        evidence_by_task = [e for e in evidence_by_task if e.get("task_id") in pending_task_ids]
+        intent_clarifications = [c for c in intent_clarifications if c.get("subquery_id") in pending_task_ids]
+        decline_context = [d for d in decline_context if d.get("task_id") in pending_task_ids]
+        conversational_context = [v for v in conversational_context if v.get("subquery_id") in pending_task_ids]
+        no_info_context = [n for n in no_info_context if n.get("task_id") in pending_task_ids]
+        terminal_markers = [t for t in terminal_markers if t.get("task_id") in pending_task_ids]
+
+    available_shortcuts = _available_response_shortcuts(state)
+    unavailable_service_requests = _unavailable_service_requests(state)
+    verified_api_context = _verified_api_context(state)
+    personal_data_placeholders = _personal_data_placeholders(state)
+
+    approved_task_ids = sorted({task_id for block in approved_blocks for task_id in block.get("sourceTaskIds", [])})
+    whole_response_text = state.get("final_answer", state.get("final_draft", ""))
+    user_profile = state.get("user_profile", {})
+
+    prompt = f"""
+    FLEXIBLE RESPONSE REVISION (partial retry -- edit in place only)
+    You are Horizon, revising a customer response that already partly
+    passed a compliance/groundedness audit. Everything NOT listed under
+    "Blocks Under Revision" below has ALREADY BEEN LOCKED IN and will be
+    shown to the customer exactly as-is regardless of anything you write --
+    do not attempt to repeat, restate, contradict, or duplicate it.
+
+    {_style_personalization_block(user_profile)}
+
+    {_GENERATION_CONDUCT_GUARDRAILS}
+
+    Full current response (READ-ONLY, for tone/coherence only -- never
+    repeat or restate its content, and never treat it as evidence):
+    {whole_response_text}
+
+    Already-Locked Task IDs This Turn (informational only -- these already
+    passed audit; do not re-address them):
+    {json.dumps(approved_task_ids, ensure_ascii=False)}
+
+    Blocks Under Revision (edit ONLY these; each entry already shows only
+    the fields that apply to its own "type" -- return each revised block
+    using EXACTLY those same field names, corrected values only. Return
+    the SAME "block_id" and the SAME "type" for each -- never change type,
+    never add a field not present in the entry you were given for it,
+    never add a block not listed here, never omit one you were given):
+    {json.dumps([_simplify_block_for_revision(block) for block in pending_blocks], ensure_ascii=False)}
+
+    Violations you must fix for these blocks (internal constraints only,
+    never evidence -- remove or narrow exactly what is flagged, per
+    task_id; "" task_id means a response-wide issue such as overall tone):
+    {json.dumps(scoped_violations, ensure_ascii=False)}
+
+    Approved evidence for these blocks' task_ids only: {json.dumps(evidence_by_task, ensure_ascii=False)}
+    An entry whose "search_territory" is "adjacent_scope" is RELATED
+    information the customer did not literally ask about -- never present
+    it as a direct answer; its own "mapping_reason" is the only permitted
+    basis for a hedged bridging sentence (e.g. "you may want to...").
+    Clarification inputs for these blocks only (compose your own natural
+    question about "unresolved_request", never answer it):
+    {json.dumps(_clarification_prompt_view(intent_clarifications), ensure_ascii=False)}
+    Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
+    Decline inputs for these blocks only (relay only "decline_evidence"): {json.dumps(decline_context, ensure_ascii=False)}
+    No-info inputs for these blocks only (relay only "no_info_evidence"): {json.dumps(no_info_context, ensure_ascii=False)}
+    Conversational inputs for these blocks only: {json.dumps(conversational_context, ensure_ascii=False)}
+    Available shortcuts this turn (each attached automatically and
+    unconditionally regardless of your text; quote "label" verbatim,
+    phrase the action for its "kind" -- "fill in and submit the ___ form
+    below" for "form", "use the ___ button below" for "navigation"):
+    {json.dumps(available_shortcuts, ensure_ascii=False)}
+    Unavailable service requests (state only the supplied reason): {json.dumps(unavailable_service_requests, ensure_ascii=False)}
+    Verified customer-specific facts (state directly, no extrapolation): {json.dumps(verified_api_context, ensure_ascii=False)}
+    Personal data references (weave "insert_token" verbatim; never guess
+    the real value): {json.dumps(personal_data_placeholders, ensure_ascii=False)}
+
+    {PRECISION_REFERENCE_CONTRACT}
+
+    {PERSONAL_DATA_REFERENCE_CONTRACT}
+
+    Output JSON only, one entry per block listed under "Blocks Under
+    Revision," each using precisely that block's own field names and
+    nothing else:
+    {{"revised_blocks":[{{"block_id":"...","type":"...", "<only the fields that entry showed you, corrected values>": "..."}}]}}
+    """
+    try:
+        generated = _parse_json_robustly(call_groq_lpu(prompt))
+    except Exception as error:
+        print(f"🚨 [RESPONSE REVISER ERROR]: {error}")
+        generated = {}
+
+    raw_revisions = generated.get("revised_blocks", []) if isinstance(generated, dict) else []
+    revised_by_block_id = {}
+    for entry in raw_revisions:
+        if not isinstance(entry, dict):
+            continue
+        block_id = entry.get("block_id")
+        if block_id not in pending_block_ids:
+            continue
+        # _simplify_block_for_revision showed this block using exactly its
+        # own stored field names as both the input AND the required output
+        # shape -- one vocabulary, so no field-name translation is needed
+        # here at all; _reassemble_response_blocks's own merge already
+        # ignores blockId/type/sourceTaskIds and any empty value.
+        revised_by_block_id[block_id] = {k: v for k, v in entry.items() if k not in ("block_id", "type")}
+
+    spliced = _reassemble_response_blocks(approved_blocks, original_blocks, pending_block_ids, revised_by_block_id)
+    spliced = _apply_response_completeness_nets(
+        spliced, state, evidence_by_task=_hydrate_response_evidence(state), task_metadata=task_metadata,
+        intent_clarifications=_build_clarification_context(state), decline_context=_build_decline_context(state),
+        no_info_context=_split_terminal_markers(state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", []))[0],
+        conversational_context=_build_conversational_context(state), available_shortcuts=available_shortcuts,
+    )
+
+    answer_text = "\n\n".join(p for p in (_flatten_response_block_text(b) for b in spliced if b.get("type") != "clarification") if p)
+    clarification_blocks = [b for b in spliced if b.get("type") == "clarification"]
+    clarification = "\n\n".join(b.get("text", "") for b in clarification_blocks if b.get("text"))
+    draft = "\n\n".join(p for p in [answer_text, clarification] if p) or "Sorry, I don't have an answer for that right now."
+
+    print(f"   💬 [RESPONSE REVISED]: {len(pending_block_ids)} block(s) sent for revision, {len(revised_by_block_id)} returned")
+    log_event("response.reviser.completed", pending_block_ids=sorted(pending_block_ids), revised_block_ids=sorted(revised_by_block_id.keys()), response_wide=response_wide)
+    return {
+        "final_draft": draft,
+        "final_answer": answer_text,
+        "final_clarification": clarification,
+        "ui_action_payload": {**payload, "responseBlocks": spliced},
+        "pending_advance": False,
+    }
+
+
 # --- PHASE 4: OUTPUT GUARDRAILS & ESCALATION HANDLER ---
 
 def node_05_outbound_deterministic_gate(state: AgentState):
@@ -6201,12 +6488,19 @@ def node_05_outbound_deterministic_gate(state: AgentState):
         history = state.get("draft_feedback_history", [])
         
         history.append(f"Draft or UI payload contained invalid placeholders: {illegal_detected} or exposed internal parent IDs: {exposed_parent_ids}. Never display FAQ parent IDs; use the supported facts without citations.")
-        
+
         return {
-            "safety_retry_count": count, 
-            "draft_feedback_history": history, 
+            "safety_retry_count": count,
+            "draft_feedback_history": history,
             "preflight_status": "fail",
-            "pending_advance": False # Enforce Atomic State
+            "pending_advance": False, # Enforce Atomic State
+            # This mechanical leak-veto failure isn't task-attributed, and
+            # always routes to a full node_04b regeneration (never the
+            # per-task reviser) -- reset the revision loop's own
+            # bookkeeping so that regeneration, and whatever partial-retry
+            # round follows it, starts from a clean slate.
+            "approved_response_blocks": [],
+            "pending_task_ids": [],
         }
         
     print("   ✅ [HARD GATE PASS]: All placeholders in text and UI validated against DB.")
@@ -6356,6 +6650,126 @@ def _normalize_grounding_violations(raw_violations: Any) -> list[dict]:
     return normalized
 
 
+def _normalize_conduct_violations(raw_violations: Any) -> list[dict]:
+    """Keep conduct-audit feedback structured, the same discipline
+    `_normalize_grounding_violations` already applies to the evidence axis.
+    `task_id` is new (Per-Task Outbound Response Revision Loop): "" means a
+    genuinely response-wide conduct issue (e.g. overall persuasive tone) not
+    traceable to a single claim -- see _partition_audited_response, which
+    treats an empty task_id as forcing every block back to pending.
+    """
+    if not isinstance(raw_violations, list):
+        return []
+    normalized = []
+    for item in raw_violations:
+        if not isinstance(item, dict):
+            continue
+        unsupported_content = item.get("unsupported_content", [])
+        if isinstance(unsupported_content, str):
+            unsupported_content = [unsupported_content]
+        if not isinstance(unsupported_content, list):
+            unsupported_content = []
+        normalized.append({
+            "task_id": str(item.get("task_id", "")).strip(),
+            "rule": str(item.get("rule", "bank_conduct")).strip() or "bank_conduct",
+            "violation": str(item.get("violation", "")).strip(),
+            "unsupported_content": [str(value).strip() for value in unsupported_content if str(value).strip()],
+        })
+    return normalized
+
+
+def _partition_audited_response(
+    response_blocks: list,
+    conduct_violations: list,
+    grounding_violations: list,
+) -> tuple:
+    """Pure, deterministic partition of one audit round's response_blocks --
+    the sole authority over what's locked in vs. still open (Per-Task
+    Outbound Response Revision Loop). Returns
+    (approved_response_blocks, pending_task_ids, response_wide).
+
+    A block's own `sourceTaskIds` list IS its addressability unit: every id
+    it names is coupled for revision purposes. This is what keeps a
+    scope-expansion companion pair (`task_1`/`task_1_scope`, sharing one
+    block because the Scope-Expansion Honesty Rule requires them woven into
+    one sentence) always revising together, and is also the deterministic
+    backstop for any block that still blends two otherwise-independent
+    task_ids: one violation on either id pulls the whole block -- and
+    therefore every id it names -- back into pending_task_ids.
+
+    A violation with an empty task_id can't be attributed to any single
+    block (a genuinely response-wide issue): treat the whole round as
+    response-wide -- nothing approved, every task_id pending.
+    """
+    all_violations = [*conduct_violations, *grounding_violations]
+    if any(not str(v.get("task_id", "")).strip() for v in all_violations):
+        pending = {task_id for block in response_blocks for task_id in block.get("sourceTaskIds", [])}
+        return [], pending, True
+
+    flagged = {v["task_id"] for v in all_violations if str(v.get("task_id", "")).strip()}
+    approved, pending = [], set()
+    for block in response_blocks:
+        ids = set(block.get("sourceTaskIds", []) or [])
+        if ids & flagged:
+            pending.update(ids)
+        else:
+            approved.append(block)
+    return approved, pending, False
+
+
+def _group_violations_by_task_id(conduct_violations: list, grounding_violations: list) -> dict:
+    """Group both audit axes' violations by task_id ("" = response-wide),
+    each tagged with its own axis -- feeds `task_violation_history`, the
+    scoped feedback node_04c_response_reviser's prompt reads instead of
+    draft_feedback_history's raw strings."""
+    grouped: dict = {}
+    for axis, violations in (("conduct", conduct_violations), ("grounding", grounding_violations)):
+        for violation in violations:
+            task_id = str(violation.get("task_id", "")).strip()
+            grouped.setdefault(task_id, []).append({**violation, "axis": axis})
+    return grouped
+
+
+def _reassemble_response_blocks(
+    approved_response_blocks: list,
+    original_response_blocks: list,
+    pending_block_ids: set,
+    revised_by_block_id: dict,
+) -> list:
+    """Deterministic splice, run BEFORE the next audit call -- this is what
+    makes "the reviser cannot change what's approved" a structural
+    guarantee rather than a prompt instruction. Walks
+    original_response_blocks in their existing order (preserving reading
+    order across approved/revised content); keeps an approved block
+    verbatim; for a pending block, shallow-merges only the fields the
+    reviser actually returned onto a COPY of the prior block -- a block_id
+    the reviser silently dropped keeps its prior-round content unchanged
+    rather than vanishing, exactly the omission failure mode this whole
+    redesign exists to prevent. `blockId`/`type`/`sourceTaskIds` are
+    identity/type-locked and are never taken from the reviser's output even
+    if present.
+    """
+    approved_ids = {block.get("blockId") for block in approved_response_blocks}
+    locked_fields = {"blockId", "type", "sourceTaskIds"}
+    result = []
+    for block in original_response_blocks:
+        block_id = block.get("blockId")
+        if block_id in approved_ids or block_id not in pending_block_ids:
+            result.append(block)
+            continue
+        revision = revised_by_block_id.get(block_id)
+        if not revision:
+            result.append(block)
+            continue
+        merged = dict(block)
+        for key, value in revision.items():
+            if key in locked_fields or value in (None, "", [], {}):
+                continue
+            merged[key] = value
+        result.append(merged)
+    return result
+
+
 def node_06_outbound_combined_audit_gate(state: AgentState):
     """Groundedness v2.0, both axes in one model call.
 
@@ -6407,6 +6821,11 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
     audit_feedback_rules = """
     Audit-Feedback Rules:
     - grounding_violations is internal validation data, never customer-facing text.
+    - Set a conduct_violations entry's task_id to the specific task_id/
+      subquery_id this conduct issue traces back to, whenever it concerns a
+      specific claim tied to one task -- use "" only for a genuinely
+      response-wide issue (e.g. overall persuasive tone) not traceable to
+      any single claim.
     - Set response_recovery_strategy to one of these internal constraints:
       * REMOVE_UNSUPPORTED_CONTENT when supported response content can be
         retained after removing the exact unsupported claim or instruction.
@@ -6497,7 +6916,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         that precedes the verdict is what actually shapes it.
 
         Output JSON only:
-        {{"conduct_reason": "...", "conduct_compliant": true/false, "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "violation": "...", "unsupported_content": ["verbatim phrase"]}}]{conduct_extra_output_fields}, "evidence_reason": "...", "evidence_grounded": true/false, "evidence_violations": [{{"scope": "...", "unsupported_content": ["verbatim phrase"], "evidence_gap": "..."}}]{evidence_extra_output_fields}}}
+        {{"conduct_reason": "...", "conduct_compliant": true/false, "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "task_id": "task_1" | "", "violation": "...", "unsupported_content": ["verbatim phrase"]}}]{conduct_extra_output_fields}, "evidence_reason": "...", "evidence_grounded": true/false, "evidence_violations": [{{"scope": "...", "unsupported_content": ["verbatim phrase"], "evidence_gap": "..."}}]{evidence_extra_output_fields}}}
         """
         try:
             result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
@@ -6834,6 +7253,18 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           never legitimately appear as prose) and must never use a
           `{{data-*}}` token that is not present in this list.
         """
+        # Per-Task Outbound Response Revision Loop: a noise-reduction hint
+        # only, never a constraint. These task_ids already passed a full
+        # audit round earlier this turn; naming them here should stop the
+        # auditor from re-flagging one merely because it's re-reading the
+        # whole response fresh, without giving it any reason to suppress a
+        # genuine new finding -- _partition_audited_response honors such a
+        # finding unconditionally if one is reported anyway.
+        previously_approved_task_ids = sorted({
+            task_id
+            for block in state.get("approved_response_blocks", [])
+            for task_id in block.get("sourceTaskIds", [])
+        }) if state.get("safety_retry_count", 0) > 0 else []
         result = _run_combined_audit(
             evidence_bundle={
                 "approved_by_task": grounding_context["approved_by_task"],
@@ -6841,6 +7272,14 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
                 "unavailable_service_requests": grounding_context["unavailable_service_requests"],
                 "verified_api_context": grounding_context["verified_api_context"],
                 "personal_data_placeholders": grounding_context["personal_data_placeholders"],
+                "previously_approved_task_ids_this_turn": previously_approved_task_ids,
+                "previously_approved_task_ids_note": (
+                    "Informational noise-reduction hint only, NOT a constraint -- these already "
+                    "passed a full audit in an earlier round of this same turn. Do not re-flag one "
+                    "merely to be thorough, but if you find a genuine new problem with one, report "
+                    "it exactly as you would any other violation; this list must never suppress a "
+                    "real finding."
+                ) if previously_approved_task_ids else "",
             },
             evidence_description="Task-Level Approved Evidence, Available Shortcuts, Unavailable Service Requests, Verified Customer-Specific Facts, and Personal Data References — the only factual sources for answers and answer UI",
             evidence_route_specific_rules=evidence_route_specific_rules,
@@ -6858,6 +7297,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         "clarification_compliant": clarification_compliant,
         "reason": result.get("conduct_reason", "Compliance audit failed."),
         "rewrite_instruction": result.get("rewrite_instruction", "Rewrite the response to comply with banking regulations."),
+        "conduct_violations": _normalize_conduct_violations(result.get("conduct_violations", [])),
     }
     log_event("outbound.compliance.completed", passed=compliance_passed, reason=compliance_audit["reason"])
 
@@ -6891,6 +7331,11 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         "response_recovery_strategy": response_recovery_strategy,
         "reason": result.get("evidence_reason", "Groundedness audit failed."),
         "grounding_violations": grounding_violations,
+        # Per-Task Outbound Response Revision Loop: lets node_06_outbound_
+        # audit_join branch between the new per-task partition path
+        # (normal_response) and the unchanged whole-response path (every
+        # other scope) without re-deriving _is_pure_conversational_turn.
+        "audit_scope": audit_scope,
     }
     log_event(
         "outbound.groundedness.completed",
@@ -6906,12 +7351,90 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
 
 
 def node_06_outbound_audit_join(state: AgentState):
-    """Join focused audits and retain the existing retry/degradation semantics."""
+    """Join focused audits and retain the existing retry/degradation semantics.
+
+    Per-Task Outbound Response Revision Loop: a `normal_response`-scope
+    turn (real `search_tasks`/task_id decomposition) uses a deterministic
+    per-task partition instead of a single whole-response pass/fail -- see
+    `_partition_audited_response`. Every other scope (non-financial/
+    evidence-only) keeps the original whole-response retry logic
+    byte-for-byte below, since those turns are short/single-element and
+    don't have the multi-independent-task structure this redesign targets.
+    """
     print("🟢 [NODE 06] Joining Outbound Compliance & Groundedness Audits")
     compliance = state.get("outbound_compliance_result", {})
     groundedness = state.get("outbound_groundedness_result", {})
+    audit_scope = groundedness.get("audit_scope", "normal_response")
     compliance_passed = bool(compliance.get("passed", False))
     groundedness_passed = bool(groundedness.get("passed", False))
+
+    if audit_scope == "normal_response":
+        response_blocks = state.get("ui_action_payload", {}).get("responseBlocks", [])
+        conduct_violations = compliance.get("conduct_violations", [])
+        grounding_violations = groundedness.get("grounding_violations", [])
+        approved_blocks, pending_ids, response_wide = _partition_audited_response(
+            response_blocks, conduct_violations, grounding_violations
+        )
+
+        if not pending_ids and not response_wide:
+            print("   ✅ [OUTBOUND AUDIT PASS]: Response is MAS-compliant and evidence-grounded.")
+            plan = state.get("active_plan", {})
+            completed_steps = state.get("completed_steps", [])
+            if state.get("pending_advance"):
+                idx = plan.get("current_step_index", 0)
+                steps = plan.get("steps", [])
+                if steps and idx < len(steps):
+                    completed_steps.append(steps[idx])
+                    plan["current_step_index"] = idx + 1
+                    print(f"   ⏩ [ATOMIC LEDGER UPDATE]: Safely advanced to step index {plan['current_step_index']}")
+            verified_task_history = _append_verified_task_history(state)
+            if verified_task_history:
+                latest_record = verified_task_history[-1]
+                log_event(
+                    "verified_session_evidence.recorded",
+                    turn_number=latest_record.get("turn_number"),
+                    task_ids=[item.get("search_task", {}).get("task_id") for item in latest_record.get("tasks", [])],
+                    parent_ids=[
+                        parent_id
+                        for item in latest_record.get("tasks", [])
+                        for parent_id in item.get("approved_parent_ids", [])
+                    ],
+                    retained_turns=len(verified_task_history),
+                )
+            return {
+                "preflight_status": "pass",
+                "active_plan": plan,
+                "completed_steps": completed_steps,
+                "pending_advance": False,
+                "verified_task_history": verified_task_history,
+                "safe_answer_for_fallback": "",
+                "approved_response_blocks": response_blocks,
+                "pending_task_ids": [],
+                "response_wide_violation_this_round": False,
+                "task_violation_history": {},
+            }
+
+        count = state.get("safety_retry_count", 0) + 1
+        print(f"   🚫 [OUTBOUND AUDIT VETO -- PARTIAL]: pending_task_ids={sorted(pending_ids)} response_wide={response_wide} round={count}")
+        # Strictly more precise than the old whole-answer preserve_answer
+        # heuristic (kept below for the other scope): approved_blocks is,
+        # by construction, exactly the content with zero violations this
+        # round, so it's always safe to surface on eventual exhaustion.
+        safe_answer = "\n\n".join(
+            p for p in (_flatten_response_block_text(b) for b in approved_blocks if b.get("type") != "clarification") if p
+        )
+        return {
+            "safety_retry_count": count,
+            "preflight_status": "fail",
+            "pending_advance": False,
+            "approved_response_blocks": approved_blocks,
+            "pending_task_ids": sorted(pending_ids),
+            "response_wide_violation_this_round": response_wide,
+            "task_violation_history": _group_violations_by_task_id(conduct_violations, grounding_violations),
+            "safe_answer_for_fallback": safe_answer,
+        }
+
+    # --- Every other audit scope: original whole-response logic, unchanged ---
     answer_text = state.get("final_answer", state.get("final_draft", ""))
     answer_compliant = bool(compliance.get("answer_compliant", False))
     answer_grounded = bool(groundedness.get("answer_grounded", False))

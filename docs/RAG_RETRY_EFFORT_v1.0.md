@@ -982,6 +982,81 @@ v2.1's own mechanics (direct-adopt, Territory A/B) were all found to be
 working exactly as designed throughout; they simply inherited an
 unrecoverable bad premise from upstream.
 
+## 8f. Direct query and the semantic angles were RRF-fused together — a real crowd-out, not just a hypothetical one
+
+Tracing a real "I need help understanding how to transfer money between my
+accounts" turn (money-transfer case, traced live) found a genuinely
+relevant FAQ (`faq_40ccc040`: "you can transfer money between your Savings
+Pots and your main Horizon Bank account at any time") that never reached
+the sufficiency auditor at all, despite passing every product/intent
+filter Territory A widened to. Re-running the task's own four query
+representations directly against the live vector store (same filter, same
+text) showed why: `faq_40ccc040` didn't rank in the top 60 for the
+`procedural` or `policy` angles, ranked 16th for `conceptual`, and 42nd
+for the literal customer wording. This particular miss turned out to be a
+genuine embedding-relevance gap (the FAQ's dominant framing is "Savings
+Pot withdrawal," not "transfer between accounts") — no retrieval fusion
+strategy would have rescued this specific case. But investigating it
+surfaced a separate, real, and more general problem in
+`execute_multi_angle_search` itself.
+
+### The bug: direct_query was a fourth angle in the same RRF sum, not its own signal
+
+Since Extra Effort v2.0 Stage 1 (§8c), `direct_query` (the task's own
+literal wording) was folded into the *same* RRF sum as the `procedural`/
+`policy`/`conceptual` angles — one combined score per parent, selected by
+one 50%-drop-off pass. This is the identical failure mode §8c's own Wave 2
+design note already named and rejected for a different combination:
+"pooling narrow- and full-intent results unconditionally... would have
+silently retired intent as a real filter, since top-K retrieval lets noise
+from other intents crowd out a correct narrow match" — that caution was
+applied to intent-scope pooling but never carried over to angle-fusion,
+even though the mechanism is exactly the same. A parent ranked #1 on the
+literal query alone, but absent from the top of the other three angles,
+gets a diluted combined score — and the 50%-drop-off rule can then prune
+it outright, even though its own direct-query rank said it was a strong
+match. Confirmed directly: the live turn's own four representations,
+queried separately against the same live store, ranked the four Wave-1
+winners consistently across angles — this bug hadn't yet been caught
+biting a real turn, but the mechanism was live and unguarded the whole
+time.
+
+### The fix: two independent tracks, unioned before hydration
+
+`execute_multi_angle_search` now runs and selects two tracks separately,
+never RRF-summing across them:
+
+- **Semantic track**: `procedural`/`policy`/`conceptual`, group-RRF then
+  task-RRF exactly as before, selected via the 50%-drop-off rule up to
+  `MAX_PARENTS` — unchanged mechanism, just no longer sharing its sum with
+  the direct query.
+- **Direct track**: the literal `direct_query`, plus
+  `verified_session_parent_ids` boosting (re-queried against the same
+  `direct_query` text, exactly as before) — RRF-summed *only* against each
+  other, then selected via the same 50%-drop-off rule, independently, up
+  to its own `MAX_PARENTS`.
+
+The two tracks' selections are unioned (deduplicated) before hydration —
+up to `2 × MAX_PARENTS` (8, at the current constant) candidates can now
+reach the sufficiency auditor from a single attempt, versus at most
+`MAX_PARENTS` (4) before. This costs one extra vector query per task (the
+direct query already ran; it's simply no longer merged in-flight with the
+semantic angles) and **zero additional LLM calls** — the sufficiency-audit
+prompt already evaluates each supplied parent independently, so a larger
+candidate set is a larger prompt, not a new call.
+
+Live-verified against the exact traced task (`Deposit_Account` /
+`Payments And Transfers`, Wave-1 scope): the old combined fusion selected
+4 parents (`faq_44bb339e`, `faq_05669a00`, `faq_6f4ef9e6`, `faq_4b2d99b1`).
+The split-track version selects the same 4 semantic-track parents *plus* a
+5th, `faq_beeeec2d` ("pay your Horizon credit card from your Horizon
+savings account" — a genuine account-to-account money-movement procedure),
+surfaced only by the direct track and previously invisible to the auditor
+entirely. Also confirmed: excluding an already-rejected parent correctly
+removes it from both tracks independently, each backfilling from its own
+next-ranked candidate; an empty blueprint/direct_query still returns `[]`
+cleanly.
+
 ## 9. Exhausted retries and hard escalation
 
 What happens when even the full ladder exhausts is covered in
@@ -1050,6 +1125,16 @@ restructured around `territory_b_needed_task_ids` and the deterministic
 `TerritoryBCompanion`/`TerritoryBPlan` and narrowed to the no-lead-only
 case; `mapping_reason`'s stale "Type 1 vs Type 2" language removed),
 `backend/app/orchestration/state.py` (`territory_b_unlocked`).
+
+**§8f additionally touched:** `backend/app/orchestration/rag_engine.py`
+(`execute_multi_angle_search` split into two independently-selected
+tracks — semantic angle-group RRF and direct/verified-session — unioned
+before hydration instead of RRF-fused into one sum; new
+`_select_by_dropoff` helper factored out of the old single selection pass
+so both tracks reuse identical selection logic), `backend/app/orchestration/nodes.py`
+(`_retrieval_mode_for_task` and the `execute_multi_angle_search` call-site
+comments updated to describe the two-track design; `EFFORT_TIER_GATE`'s
+Tier 1 comment updated).
 
 **§8e additionally touched:** `backend/app/orchestration/nodes.py`
 (`node_03c`'s MECHANISM-BRIDGE REASONING rule, inserted alongside the

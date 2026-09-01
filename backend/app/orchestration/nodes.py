@@ -4910,6 +4910,57 @@ _GENERATION_CONDUCT_GUARDRAILS = f"""
     """
 
 
+# Same reasoning and precedent as _GENERATION_CONDUCT_GUARDRAILS above, now
+# for the Inferential Grounding ("Bridge Check") rule node_06_outbound_
+# combined_audit_gate already enforces post-hoc -- writing within this
+# boundary from the start reduces how often that audit has a bridge
+# violation to reject, the same way the conduct guardrails already do for
+# conduct violations. Traced live: a card-replacement shortcut whose only
+# supplied topic was "freeze, replace, enable overseas usage" got narrated
+# as "get a new look for your card" -- an invented OUTCOME claim the
+# shortcut's own fields never stated, and the audit's own reasoning missed
+# it (it checked whether the shortcut matched the request, not whether this
+# specific claim about it was itself supported). This constant is
+# deliberately the stricter no-bridging bar the shortcut rule already
+# uses, not the looser bounded-inference bar Task-Level Approved Evidence
+# gets elsewhere in this prompt -- a shortcut's `label`/`topic` are a fixed,
+# short, already-final description, not raw material to reason further from.
+_GENERATION_BRIDGE_GUARDRAILS = """
+    BRIDGE REASONING BOUNDARY:
+    A natural, bounded inference connecting approved evidence to the
+    customer's resolved request is fine -- evidence stating a maximum cap
+    supports concluding coverage cannot exceed it, for instance. Never
+    state or imply an unstated premise, actor, policy, procedure, reason,
+    certainty, exception, capability, or outcome that the evidence itself
+    does not establish.
+    This applies to a shortcut's `label`/`topic` even more strictly than to
+    retrieved evidence: naming a shortcut and what it lets the customer do
+    is grounded, but implying WHAT completing it will produce or change --
+    an outcome its own `topic` never states -- is not, even if it sounds
+    like a natural, helpful inference. For example, a "Manage Card"
+    shortcut whose `topic` is only "freeze, replace, enable overseas usage"
+    supports telling the customer they can request a replacement; it does
+    NOT support telling them the replacement will look different, since no
+    supplied field says so.
+
+    COURTESY ACKNOWLEDGMENT (do this, don't just avoid the violation above):
+    A brief, warm, natural acknowledgment of the customer's own stated
+    feeling, frustration, dissatisfaction, or reason (e.g. "I'm sorry to
+    hear that" for a lost, damaged, or disliked card) is encouraged, not
+    just tolerated -- it is never itself a banking claim, so it never
+    counts against the boundary above, as long as it stays a genuine
+    courtesy reaction to what the customer said and introduces no fact,
+    capability, procedure, or outcome beyond what evidence actually
+    supports. These are two separate moves, not one sentence trying to do
+    both: acknowledge the feeling first, in your own natural words, with
+    no evidence needed for that part at all; then state the actual
+    capability separately, bounded strictly by what evidence supports.
+    Do not solve the bridge-boundary problem by dropping warmth -- solve it
+    by keeping the empathy and the capability claim in two distinct moves
+    instead of fusing them into one overreaching sentence.
+    """
+
+
 def _flatten_response_block_text(block: dict) -> str:
     """Reconstruct one block's rendered plain-text form from its own stored
     fields alone -- the same text `_generate_response_blocks` computes
@@ -5198,6 +5249,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
     {_style_personalization_block(user_profile)}
 
     {_GENERATION_CONDUCT_GUARDRAILS}
+
+    {_GENERATION_BRIDGE_GUARDRAILS}
 
     Customer request: {state.get("user_input", "")}
     Trusted conversation context (use only to understand the customer's current
@@ -6071,6 +6124,8 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
 
     {_GENERATION_CONDUCT_GUARDRAILS}
 
+    {_GENERATION_BRIDGE_GUARDRAILS}
+
     Customer request: {state.get("user_input", "")}
     Trusted conversation context (use only to understand what topic this
     continues, and the customer's own language/tone; never as factual
@@ -6344,6 +6399,8 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     {_style_personalization_block(user_profile)}
 
     {_GENERATION_CONDUCT_GUARDRAILS}
+
+    {_GENERATION_BRIDGE_GUARDRAILS}
 
     Full current response (READ-ONLY, for tone/coherence only -- never
     repeat or restate its content, and never treat it as evidence):

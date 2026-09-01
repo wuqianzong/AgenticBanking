@@ -130,6 +130,56 @@ This principle is deliberately general — it isn't a check for any specific
 topic, and applies to any future turn where approved evidence covers a
 related-but-not-matching scenario.
 
+### Bridge reasoning needed a generation-side guardrail too, not just an audit-side check
+
+Live-tracing "my card is ugly, i want to replace it" found the generator
+narrating a `card-management` navigation shortcut -- whose only supplied
+`topic` is *"View & Manage Card screen — freeze, replace, enable overseas
+usage"* -- as *"If you'd like to **get a new look** for your card, you can
+easily request a replacement using the Manage Card button below."*
+"Get a new look" is an invented outcome claim: nothing in the shortcut's
+own `label`/`topic` says a replacement changes the card's design, so this
+implicitly promised to resolve the customer's actual complaint (disliking
+the current design) without any evidence that it does. The audit passed
+it -- its own reasoning checked whether the *shortcut* matched the
+*request*, and never separately scrutinized whether this specific *claim
+about the shortcut* was itself supported, which is a stricter, no-bridging
+bar than Direct Factual Grounding gets for retrieved evidence (a
+shortcut's `label`/`topic` are a fixed, already-final description, not raw
+material to reason further from).
+
+The audit's own "Inferential Grounding (Bridge Check)" rule already
+existed to catch exactly this class of problem, but only on the audit
+side -- the generator had no equivalent instruction, so it had no reason
+not to over-infer in the first place. Fixed the same way
+`_GENERATION_CONDUCT_GUARDRAILS` already mirrors `BANK_CONDUCT_CONTEXT`/
+`REGULATORY_LICENSING_CONTEXT` into generation: a new shared constant,
+`_GENERATION_BRIDGE_GUARDRAILS`, injected into `_generate_response_blocks`,
+`_generate_evidence_only_response`, and `node_04c_response_reviser` (the
+same three sites `_GENERATION_CONDUCT_GUARDRAILS` already reaches),
+stating the bounded-inference boundary up front and, for shortcuts
+specifically, that naming what a shortcut *lets the customer do* is
+grounded but implying what it *will produce or change* is not unless the
+`topic` says so.
+
+**First live retry over-corrected**: the generator dropped the claim but
+also dropped all warmth, replying with a bare *"You can manage and
+replace your card directly using the Manage Card button below."* --
+technically correct but curt, because nothing told it a courtesy
+acknowledgment of the customer's stated feeling was still safe to include.
+The audit side already has exactly this carve-out (the Courtesy Context
+Rule, above), just never mirrored into generation either. Added a
+**Courtesy Acknowledgment** clause to the same constant: explicitly
+*encouraging*, not just tolerating, a brief empathetic reaction to the
+customer's own stated feeling as a genuinely separate move from the
+capability statement -- one needs no evidence at all, the other stays
+strictly bounded by it. Re-verified live: *"I'm sorry to hear you're not a
+fan of how your card looks! You can request a replacement directly using
+the Manage Card button below."* -- warm, accurate, and (per the
+pre-existing "No Commitments" conduct rule, unaffected by this change)
+still never promises the replacement request will actually succeed, only
+that the mechanism to ask exists.
+
 **Known open item, deliberately not yet fixed**: the separate `Node 12`
 non-financial conversational path (`_generate_conversational_response`) can
 still open with an unfulfilled promise of material information (for example
@@ -388,3 +438,14 @@ identical scenario resolved on the first generation attempt with an honest,
 correctly-scoped answer. Session-checkout memory validation (`last-session`
 and `five-session baseline`) was independently confirmed using the shared
 functions via the `stage: "groundedness_v2"` log field.
+
+A separate, later live trace of a card-replacement turn -- this one routed
+entirely through a navigation shortcut rather than a service_request, and
+requiring no retry at all, since both audit passes were fooled by the
+original draft's invented "new look" outcome claim (see "Bridge reasoning
+needed a generation-side guardrail too" above) -- confirmed the fix in both
+directions on real replays of the identical turn: the pre-fix draft's
+unsupported claim, the immediately-post-fix draft's correct but overly
+curt reply, and the final draft after adding the Courtesy Acknowledgment
+carve-out, which passed compliance and groundedness cleanly on the first
+generation attempt while remaining both accurate and warm.

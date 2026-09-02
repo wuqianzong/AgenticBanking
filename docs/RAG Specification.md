@@ -113,7 +113,7 @@ search\_tasks (List\[Dict\]): Independently formulated retrieval tasks. Each tas
 
 ### **5.2 Tool Calling v2.0 and Node 02e RAG-Internal Formulation**
 
-* **Generic task contract:** Triage emits compliant banking-only `financial_subqueries`. Node 03a turns them into append-only `tool_tasks`; `tool_results` carries only terminal validated outputs. The registry exposes enabled capabilities. RAG is enabled now; API and deeplink contracts remain disabled until they have a read-only executor and validation contract.
+* **Generic task contract:** Triage emits compliant banking-only `financial_subqueries`. Node 03a turns them into append-only `tool_tasks`; `tool_results` carries only terminal validated outputs. The registry exposes enabled capabilities: RAG, registered read-only API fields, centrally resolved deeplinks, and service requests. Deeplink tool results retain only an opaque request ID; routes remain in the central request ledger and never enter chat payloads. See `DEEPLINK_DESIGN_v1.0.md`.
 * **Outer loop:** Node 04a may identify a concrete, enabled, non-duplicate capability gap and return it to Node 03a for an additive task, subject to bounded task and planning-round budgets. Raw RAG candidates and retry feedback never leave the RAG-internal subgraph.
 
 * **Node 02e Function:** RAG-internal task-level semantic query formulation.

@@ -22,7 +22,7 @@ Evidence-Driven User Journey V2.0 with Tool Calling v2.0: The system treats the 
 \- **Groundedness v2.0 (Evidence \+ Conduct):** Every customer-facing surface — normal answers, greetings, non-financial replies, durable memory summaries, and the escalation case summary — is checked by the same two shared functions in `backend/app/core/groundedness.py`: evidence groundedness against that route's own declared evidence, and conduct compliance against the shared `BANK_CONDUCT_CONTEXT` and `MAS_REGULATIONS_CONTEXT` from `backend/app/core/compliance.py`. See `docs/GROUNDEDNESS_v2.0.md`. Inbound prompt-injection assessment remains a separate, dedicated Prompt Guard attack-risk probability cutoff, not a MAS compliance judgment.  
 \- **Clarification Safety Degradation:** Terminal retrieval clarification is retried through the semantic gate up to three times. If it cannot produce a compliant, grounded, and connected clarification, Node 11 returns a deterministic general clarification while preserving any separately safe approved answer.  
 \- **Approved-Evidence Boundary:** Only parent IDs approved by Node 03c may cross the RAG boundary. Rejected candidates, raw retrieval text, and retry evidence remain internal to RAG and cannot support answers, clarification suggestions, instructions, UI actions, or product claims.
-\- **Generic Tool Ledger:** `tool_tasks` and `tool_results` carry validated work between the Tool-Calling Planner and Resolution Planner. RAG is the only enabled executor in this release; API and deeplink contracts are registered but disabled until a read-only executor and validation contract are implemented.
+\- **Generic Tool Ledger:** `tool_tasks` and `tool_results` carry validated work between the Tool-Calling Planner and Resolution Planner. Registered RAG, API, deeplink, and service-request capabilities can run when the planner selects an enabled, scope-valid task. A deeplink result retains only an opaque central request ID; its destination and route remain in the central ledger, never in chat history or a frontend response payload.
 \- **Task-Level Partial Success:** A request with several tasks can return grounded answers for sufficient tasks while requesting clarification only for failed tasks. One unsupported task does not invalidate approved answers for other tasks.
 
 ## **🛠️ Phase-by-Phase Technical Specifications**
@@ -39,7 +39,7 @@ This phase manages chatbot initialization at turn 1 by generating a greeting wit
   * **Routing:** Transitions the user input text directly to **Node 01**.
 
 * **Node 01: Deterministic Ingest Gate (Deterministic Security Rule)**  
-  * **Logic:** User messages are retained in visible chat history as untrusted until inbound safety validation promotes them. It performs deterministic screening for hardcoded malicious strings and placeholder injection. On pass, it routes directly to Node 02c. On failure, it routes to Node 10\.  
+  * **Logic:** User messages are retained in visible chat history as untrusted until inbound safety validation promotes them. It performs deterministic screening for hardcoded malicious strings, illegal placeholders, and database-maintained sensitive disclosure phrases (for example, requests to disclose passwords, PINs, OTPs, CVVs, or secret phrases). This check runs before Prompt Guard and never calls an LLM. On pass, it routes directly to Node 02c. On failure, it routes to Node 10\.
   * **Routing:**  
     * Pass: Directs execution flow to **Node 02c**.  
     * Fail: Routes directly to the rejection node (**Node 10**), which is designed to deterministically return a rejection without much information regarding the cause for safety reasons.
@@ -70,7 +70,7 @@ This phase retrieves and validates FAQ evidence per task. All new and retry task
   * **Routing:** Pending tasks → generic Node 03b dispatcher; no safe additional task → Node 04a.
 
 * **Node 03b: Generic Tool Dispatcher**
-  * **Logic:** Starts registered tasks without graph-level fan-out. Running RAG tasks enter the RAG-internal Node 02e → RAG worker → sufficiency subgraph. A disabled or unavailable tool records a terminal unavailable result and cannot block the turn.
+  * **Logic:** Starts registered tasks without graph-level fan-out. Running RAG tasks enter the RAG-internal Node 02e → RAG worker → sufficiency subgraph. API and service-request tasks execute through their registered deterministic contracts. A deeplink task is registered and scope-validated by the central deeplink service; only its opaque request ID crosses the graph boundary. A disabled or unavailable tool records a terminal unavailable result and cannot block the turn.
   * **Routing:** RAG task → Node 02e; otherwise → Node 04a.
 
 * **Node 03b: Task-Level RAG Worker**  
@@ -139,7 +139,7 @@ This multi-tier verification layer checks outbound responses to maintain accurac
   * **Routing:** End turn.
 
 * **Node 10: Deterministic Message Router (Deterministic Fallback)**  
-  * **Logic:** Returns a safe deterministic rejection for inbound safety failures, routing failures, or non-recoverable deterministic errors.  
+  * **Logic:** Returns a safe deterministic rejection for inbound safety failures, routing failures, or non-recoverable deterministic errors. A deterministic inbound-security failure uses a neutral refusal without asserting a compliance reason; an actual compliance refusal retains the compliance-specific wording.
   * **Routing:** End turn.  
 * **Node 11: Deterministic Clarification Fallback**  
   * **Logic:** Reached either after three failed semantic rewrites of an intent or terminal retrieval clarification, or directly from Node 04a/19 when a pending intent clarification has no search tasks at all to fall back on (nothing else to say). Retains any answer that has independently passed approved-evidence safety, answer groundedness, and advice checks as its own response block. Each clarification and each decline is rendered as its own independent response block — never stitched into one paragraph — using Node 02e's own customer-facing wording (produced in the same call that decided CLARIFY/DECLINE), audited in one combined compliance-and-groundedness pass across every such block, with a fixed deterministic sentence as the fallback for anything left empty or that fails that audit. See `docs/DECLINE_CLARIFICATION_DESIGN_v1.0.md`.

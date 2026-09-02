@@ -7,9 +7,11 @@ Product, intent, and free-form task queries determine what FAQ knowledge is retr
 
 Tool Calling v2.0 sits before RAG. Triage emits only compliant financial
 subqueries; a generic Tool-Calling Planner creates idempotent tool tasks and a
-generic dispatcher runs registered enabled tools. RAG is the only enabled tool
-today. API and deeplink contracts are present but disabled until their
-read-only executors and validation contracts are implemented. The Global
+generic dispatcher runs registered enabled tools. RAG, API, deeplink, and
+service-request capabilities are available when their individual registry and
+scope checks permit them. Deeplinks are centrally registered and persisted as
+opaque link IDs rather than routes in the chat payload; see
+`DEEPLINK_DESIGN_v1.0.md`. The Global
 Resolution Check joins validated terminal tool results and may request a
 bounded, additive non-duplicate capability task. The Response Generator alone
 selects the customer-facing presentation.

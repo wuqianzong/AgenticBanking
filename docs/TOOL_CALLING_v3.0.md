@@ -188,7 +188,7 @@ the way it is today.
 |---|---|---|
 | `api` (placeholder mode) | `{"disclosure_mode": "placeholder", "placeholder_token": "{{data-fe8700b3}}"}` | never the real value — see `docs/AGENTIC_CAPABILITY_ROADMAP_v1.0.md` WP-1/WP-3 |
 | `api` (direct-value mode) | `{"disclosure_mode": "direct_value", "value": "Gold", "fact": "The customer's current loyalty tier is Gold."}` | safe to expose everywhere — WP-5 |
-| `deeplink` | `{"route": "/app/cards/manage"}` | destination_id already lives in `attempt.input` |
+| `deeplink` | `{"deeplink_request_id": "dlr_..."}` | The central `Deep_Link_Request` ledger alone holds the destination ID and route. Node 07 exposes only an opaque `linkId` plus safe label in the UI payload; see `DEEPLINK_DESIGN_v1.0.md`. |
 | `service_request` | `{"special_id": "svc_8f2a...", "description": "...", "form_schema": {...}}` | |
 | `rag` | `{"retrieval_state": "PARTIALLY_SUFFICIENT", "approved_parent_ids": [...], "steps": [...]}` | the only tool whose terminal state comes from more than one internal try — see next section |
 

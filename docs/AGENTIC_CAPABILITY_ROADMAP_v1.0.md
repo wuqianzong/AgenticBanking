@@ -417,6 +417,15 @@ anticipate:
 ## WP-2: `deeplink` Tool — Executor and Validated Destination Registry
 
 **Detailed design:** see `docs/DEEPLINK_DESIGN_v1.0.md` — full end-to-end
+
+> **Implementation status (supersedes the proposal below): IMPLEMENTED.**
+> Deeplink is enabled through the generic inline dispatcher, not through a
+> dedicated graph worker. The dispatcher centrally registers and resolves an
+> allow-listed request in `Deep_Link_Request`; its graph result is only an
+> opaque request ID. Node 07 persists `{linkId, label}`, never a route or
+> destination ID. `GET /api/deeplink/open/{request_id}` re-checks the request
+> and issues the server-side redirect. The proposal retained below is
+> historical context only where it conflicts with this implemented contract.
 flow, destination registry contract, UI payload contract, and the mock-page
 scope for this MVP. That document is the authoritative detail layer for this
 WP; the summary below is kept only for the roadmap's dependency overview.

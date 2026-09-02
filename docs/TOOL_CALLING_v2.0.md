@@ -127,9 +127,11 @@ and continues; it never fabricates data.
   is runnable unless it is registered and enabled.
 - The planner cannot recreate a terminal, pending, or running task with the
   same fingerprint.
-- API and deeplink integrations require a read-only executor, explicit input
-  validation, an approved-result schema, and outbound audit coverage before
-  they can be enabled.
+- API and deeplink integrations now have registered executor, validation, and
+  outbound-audit contracts. Deeplink follows the stronger centralized pattern:
+  its route and destination stay in `Deep_Link_Request`; graph and chat
+  payloads retain only an opaque request ID and safe label. See
+  `DEEPLINK_DESIGN_v1.0.md` and the current `TOOL_CALLING_v3.0.md` contract.
 - Resolution planning sees only validated terminal results. Response
   generation and answer groundedness use only approved evidence for financial
   claims. In a mixed turn, the original user input may support a brief

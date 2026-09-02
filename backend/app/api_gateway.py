@@ -1,22 +1,25 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, AIMessage  # FIXED: Added missing import
 
 import redis
 import json
 import asyncio
+import os
 
 # IMPORT THE NEW COMPILED TRI-TIER ENGINE
 from backend.app.orchestration.graph import app_graph
 from backend.app.services.memory_service import LongTermMemoryManager, ShortTermMemoryManager
 from backend.app.core.system_logger import log_event, reset_request_context, set_request_context
 from backend.app.services import service_request_service
+from backend.app.services import deeplink_service
 from backend.app.services.service_request_mock_api import run_mock_credential_check
 from backend.app.orchestration.service_request_registry import get_service_request_contract
 
 app = FastAPI(title="Production Horizon Core Gateway")
+HORIZON_FRONTEND_ORIGIN = os.getenv("HORIZON_FRONTEND_ORIGIN", "http://localhost:5173").rstrip("/")
 
 app.add_middleware(
     CORSMiddleware,
@@ -327,6 +330,31 @@ async def credential_check_service_request(payload: ServiceRequestCredentialChec
         record["submitted_data"],
     )
     return _completed_service_request_response(record, contract)
+
+
+@app.get("/api/deeplink/open/{request_id}")
+async def open_deeplink_request(request_id: str, user_id: str):
+    """Re-authorize a historic opaque link ID then redirect centrally.
+
+    The route is intentionally never returned in a chat payload or JSON
+    response. In production, authenticated session identity replaces the
+    temporary MVP ``user_id`` query parameter.
+    """
+    record = await asyncio.to_thread(
+        deeplink_service.resolve_registered_request,
+        request_id,
+        user_id,
+    )
+    if record is None:
+        return {"status": "error", "message": "This navigation request could not be found."}
+    if record["status"] != deeplink_service.RESOLVED or not record.get("route"):
+        return {"status": "unavailable", "message": "This navigation destination is not available."}
+    log_event("deeplink.request.opened", request_id=request_id, user_id=user_id)
+    # A relative Location would retain the API host (localhost:8000 in the
+    # MVP) and therefore 404. The route remains exclusively central-service
+    # data; the browser follows this absolute redirect without the chat UI or
+    # frontend JavaScript ever receiving it as a payload field.
+    return RedirectResponse(url=f"{HORIZON_FRONTEND_ORIGIN}{record['route']}", status_code=307)
 
 
 @app.post("/api/feedback/turn-rating")

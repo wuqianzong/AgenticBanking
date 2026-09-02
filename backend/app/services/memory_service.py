@@ -101,6 +101,55 @@ def ensure_memory_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_service_request_session
         ON Service_Request_Registration(session_id, status)
     """)
+    # Deep-link requests follow the same durable request → central-resolution
+    # pattern as service requests. The graph records the requested
+    # destination; the central navigation service alone approves a route.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Deep_Link_Request (
+            request_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            destination_id TEXT NOT NULL,
+            resolved_customer_component TEXT,
+            status TEXT NOT NULL,
+            route TEXT,
+            created_at TEXT NOT NULL,
+            resolved_at TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_deep_link_request_session
+        ON Deep_Link_Request(session_id, status)
+    """)
+    # Database-maintained deterministic inbound veto rules.  Terms are kept
+    # deliberately specific (for example, a disclosure phrase rather than
+    # the word "password") so ordinary security-support questions remain
+    # available to the assistant.  Administrators can add, disable, or
+    # remove rules without changing prompt or graph code.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Inbound_Sensitive_Word (
+            rule_id TEXT PRIMARY KEY,
+            term TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            description TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO Inbound_Sensitive_Word
+        (rule_id, term, is_active, description)
+        VALUES (?, ?, 1, ?)
+        """,
+        [
+            ("credential_password_disclosure", "my password is", "Credential disclosure"),
+            ("credential_pin_disclosure", "my pin is", "Credential disclosure"),
+            ("credential_otp_disclosure", "my otp is", "Credential disclosure"),
+            ("credential_cvv_disclosure", "my cvv is", "Card-security disclosure"),
+            ("secret_api_key_assignment", "api_key=", "Secret/API-key disclosure"),
+            ("secret_private_key_pem", "-----begin private key-----", "Private-key disclosure"),
+        ],
+    )
     # Backward-compatible migration for databases created before structured UI
     # payloads were persisted with each assistant message.
     existing_columns = {
@@ -778,4 +827,3 @@ class LongTermMemoryManager:
             """, (rating, datetime.now().isoformat(timespec="seconds"), session_id, turn_number, customer_id))
             conn.commit()
             return cursor.rowcount > 0
-

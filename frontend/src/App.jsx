@@ -38,6 +38,17 @@ const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 const HISTORY_PAGE_SIZE = 6;
 const ACTIVE_SESSION_KEY = `horizon_active_session_${MOCK_PROFILE.userId}`;
 
+// These are frontend page handlers, not chat payload data. The browser gets
+// here only after the central navigation API has validated an opaque link ID
+// and issued a redirect to one of these app paths.
+const DEEPLINK_SCREEN_BY_PATH = {
+  '/app/cards/manage': { destinationId: 'card-management', label: 'Manage Card' },
+  '/app/accounts/statements': { destinationId: 'account-statements', label: 'View Statements' },
+  '/app/profile/personal-details': { destinationId: 'profile-personal-details', label: 'Update Profile' },
+  '/app/profile/security': { destinationId: 'security-settings', label: 'Security Settings' },
+  '/app/cards/pay': { destinationId: 'pay-credit-card-bill', label: 'Pay Bill' },
+};
+
 const createSessionId = () => `sess_${crypto.randomUUID()}`;
 
 const formatMessageDate = (timestamp) => new Intl.DateTimeFormat('en-SG', {
@@ -92,6 +103,8 @@ export default function BankingBotUI() {
   const [loadingCaption, setLoadingCaption] = useState(t("English", "caption.processing")); // <-- NEW STATE FOR TRACKER
   const [isLowConfidenceMode, setIsLowConfidenceMode] = useState(false);
   const [taskConfidence, setTaskConfidence] = useState(null);
+  const [currentNodeId, setCurrentNodeId] = useState("");
+  const [processingElapsed, setProcessingElapsed] = useState("0.0");
   // Driven by the LATEST turn's own value only (see setSoftEscalationAvailable
   // below), never attached to a past message -- unlike a chip baked into
   // chat history, this banner disappears the moment a turn comes back with
@@ -125,7 +138,9 @@ export default function BankingBotUI() {
   // reopenable, completed/expired ones are shown for reference only.
   const [serviceRequestList, setServiceRequestList] = useState([]);
   const [showServiceRequestList, setShowServiceRequestList] = useState(false);
-  const [activeDeeplink, setActiveDeeplink] = useState(null);
+  const [activeDeeplink, setActiveDeeplink] = useState(
+    () => DEEPLINK_SCREEN_BY_PATH[window.location.pathname] || null
+  );
   const [showReplaceCardModal, setShowReplaceCardModal] = useState(false);
   const [replaceCardReason, setReplaceCardReason] = useState('damaged');
   const [isSubmittingReplaceCard, setIsSubmittingReplaceCard] = useState(false);
@@ -138,6 +153,14 @@ export default function BankingBotUI() {
   // failed credential check is not terminal, it just leaves the
   // registration "pending" and resubmittable until it expires.
   const PENDING_SERVICE_REQUEST_STATUSES = ['pending', 'registered', 'submitted', 'credential_check_pending'];
+
+  useEffect(() => {
+    const syncDeepLinkScreen = () => {
+      setActiveDeeplink(DEEPLINK_SCREEN_BY_PATH[window.location.pathname] || null);
+    };
+    window.addEventListener('popstate', syncDeepLinkScreen);
+    return () => window.removeEventListener('popstate', syncDeepLinkScreen);
+  }, []);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -412,6 +435,19 @@ export default function BankingBotUI() {
     if (!isTyping && inputRef.current) {
       inputRef.current.focus();
     }
+  }, [isTyping]);
+
+  // Live timer for futuristic Agentic Processing Tracker
+  useEffect(() => {
+    let timer;
+    if (isTyping) {
+      setProcessingElapsed("0.0");
+      const startTime = Date.now();
+      timer = setInterval(() => {
+        setProcessingElapsed(((Date.now() - startTime) / 1000).toFixed(1));
+      }, 100);
+    }
+    return () => clearInterval(timer);
   }, [isTyping]);
 
   // Dynamically auto-resize textarea height to fit multiline queries up to 140px
@@ -763,6 +799,7 @@ export default function BankingBotUI() {
       setInputValue('');
     }
     setIsTyping(true);
+    setCurrentNodeId("n00");
     setLoadingCaption(t(preferences.language, "caption.understanding"));
     setIsLowConfidenceMode(false);
     setTaskConfidence(null);
@@ -839,6 +876,7 @@ export default function BankingBotUI() {
 
             // Check if the payload is a node transition update
             if (parsedData.node) {
+              setCurrentNodeId(parsedData.node);
               // Use the dictionary if it exists, otherwise show a generic processing message
               const captionKey = NODE_CAPTIONS[parsedData.node] || "caption.continuing";
               const translatedCaption = t(preferences.language, captionKey);
@@ -947,6 +985,7 @@ export default function BankingBotUI() {
     } finally {
       setIsCompactingMemory(false);
       setIsTyping(false);
+      setCurrentNodeId("");
       scheduleSessionTimeout();
       void fetchServiceRequestList();
     }
@@ -1250,7 +1289,7 @@ export default function BankingBotUI() {
 
   const renderClarificationCard = (text, options = []) => (
     <div className="mt-2.5">
-      <div className="max-w-sm rounded-2xl rounded-tl-sm border-l-2 border-l-blue-400 border-y border-r border-slate-200 bg-white p-3.5 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
+      <div className="max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white p-3.5 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
         {renderTextWithDataChips(text)}
       </div>
       {options?.length > 0 && <div className="mt-2.5">{renderChips(options)}</div>}
@@ -1968,22 +2007,28 @@ export default function BankingBotUI() {
     );
   };
 
-  // The button attached to a message that resolved a deeplink navigation
-  // target. destinationId/route/label all came straight from the backend's
-  // ui_action_payload.navigationActions -- node_07 builds this list straight
-  // from tool_results, unconditionally, the same way serviceRequestActions
-  // is built; it never depends on anything the LLM generated.
-  const renderNavigationAction = (action) => (
+  // Chat history contains only an opaque linkId. Clicking it asks the
+  // central navigation API to re-authorize and redirect; no destination or
+  // route is stored with, or interpreted by, the frontend message payload.
+  const renderNavigationAction = (action) => {
+    if (!action?.linkId) return null;
+    const openCentralizedDeeplink = () => {
+      const linkId = encodeURIComponent(action.linkId);
+      const userId = encodeURIComponent(MOCK_PROFILE.userId);
+      window.location.assign(`http://localhost:8000/api/deeplink/open/${linkId}?user_id=${userId}`);
+    };
+    return (
     <button
       type="button"
-      onClick={() => setActiveDeeplink(action)}
+      onClick={openCentralizedDeeplink}
       disabled={isTyping || isCompactingMemory}
       className="mt-3 flex w-full max-w-sm items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
     >
       <LayoutDashboard size={16} />
-      {action.label}
+      {action.label || 'Open in Horizon App'}
     </button>
-  );
+    );
+  };
 
   const renderDeeplinkContent = () => {
     switch (activeDeeplink.destinationId) {
@@ -2478,15 +2523,8 @@ export default function BankingBotUI() {
       default:
         return (
           <div className="w-full max-w-xs bg-white border border-slate-200 rounded-xl p-4 shadow-sm text-left mt-6">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">{t(preferences.language, "deeplink.destinationData")}</div>
-            <div className="flex justify-between items-center py-2 border-b border-slate-50">
-              <span className="text-sm text-slate-500">{t(preferences.language, "deeplink.destinationId")}</span>
-              <span className="text-sm font-medium text-slate-700">{activeDeeplink.destinationId}</span>
-            </div>
-            <div className="flex justify-between items-center py-2">
-              <span className="text-sm text-slate-500">{t(preferences.language, "deeplink.route")}</span>
-              <span className="text-sm font-medium text-slate-700">{activeDeeplink.route}</span>
-            </div>
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Horizon App</div>
+            <p className="text-sm text-slate-600">You have been redirected to this Horizon App screen.</p>
           </div>
         );
     }
@@ -2518,6 +2556,7 @@ export default function BankingBotUI() {
             <button
               type="button"
               onClick={() => {
+                window.history.replaceState({}, '', '/');
                 setActiveDeeplink(null);
                 setShowReplaceCardModal(false);
                 setReplaceCardSuccess(false);
@@ -2574,6 +2613,22 @@ export default function BankingBotUI() {
       return { label: t(preferences.language, 'serviceRequest.statusExpired'), icon: <XCircle size={13} />, className: 'text-slate-500 bg-slate-50 border-slate-200' };
     }
     return { label: t(preferences.language, 'serviceRequest.statusPending'), icon: <Clock size={13} />, className: 'text-blue-700 bg-blue-50 border-blue-200' };
+  };
+
+  const getPipelineStageInfo = (nodeId) => {
+    const stages = [
+      { id: 'intent', labelKey: 'stage.safety', nodes: ['n00', 'n3', 'n16', 'n2d', 'n2e', 'memory_compaction', 'memory_validation'] },
+      { id: 'retrieval', labelKey: 'stage.retrieval', nodes: ['n14', 'n17_rag', 'n18'] },
+      { id: 'synthesis', labelKey: 'stage.synthesis', nodes: ['n19', 'n8'] },
+      { id: 'audit', labelKey: 'stage.audit', nodes: ['n20', 'n21_audit', 'n21', 'n22', 'n24'] }
+    ];
+
+    let currentStageIndex = 0;
+    if (stages[1].nodes.includes(nodeId)) currentStageIndex = 1;
+    else if (stages[2].nodes.includes(nodeId)) currentStageIndex = 2;
+    else if (stages[3].nodes.includes(nodeId)) currentStageIndex = 3;
+
+    return { stages, currentStageIndex };
   };
 
   const renderServiceRequestListModal = () => null;
@@ -3101,7 +3156,7 @@ export default function BankingBotUI() {
                       </React.Fragment>
                     ))}
                     {msg.navigationActions?.map((action) => (
-                      <React.Fragment key={action.destinationId}>
+                      <React.Fragment key={action.linkId}>
                         {renderNavigationAction(action)}
                       </React.Fragment>
                     ))}
@@ -3171,28 +3226,59 @@ export default function BankingBotUI() {
             );
           })}
           
-          {/* 3. UI RENDERING REQUIREMENT: Agentic Processing Tracker */}
-          {isTyping && (
-            <div className="flex flex-col items-start gap-1.5">
-              {taskConfidence !== null && (
-                <div className="flex items-center gap-1 pl-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  <span>{t(preferences.language, "caption.confidence")}: {Math.round(taskConfidence * 100)}%</span>
+          {/* 3. UI RENDERING REQUIREMENT: Streamlined 4-Step Progress Indicator */}
+          {isTyping && (() => {
+            const { stages, currentStageIndex } = getPipelineStageInfo(currentNodeId);
+            const currentStage = stages[currentStageIndex] || stages[0];
+            const stageLabel = t(preferences.language, currentStage.labelKey);
+            const stepText = `${stageLabel} (${currentStageIndex + 1}/${stages.length})`;
+
+            return (
+              <div className="flex flex-col items-start gap-1 max-w-[85%] animate-in fade-in duration-150">
+                <div className="bg-slate-50/90 border border-slate-200/60 rounded-2xl rounded-tl-xs px-3.5 py-2 shadow-2xs flex items-center justify-between gap-3 w-fit min-w-[210px] max-w-[280px]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Loader2 size={12} className="text-blue-500 animate-spin shrink-0" />
+                    {/* 4 Mini Progress Dots */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {stages.map((_, idx) => (
+                        <span
+                          key={idx}
+                          className={`h-1 rounded-full transition-all duration-300 ${
+                            idx === currentStageIndex
+                              ? 'w-3 bg-blue-500'
+                              : idx < currentStageIndex
+                                ? 'w-1 bg-emerald-400'
+                                : 'w-1 bg-slate-200'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="font-medium text-slate-600 text-[11.5px] truncate">
+                      {stepText}
+                    </span>
+                  </div>
+                  <span className="font-mono text-[9.5px] text-slate-400 shrink-0 tabular-nums">
+                    {processingElapsed}s
+                  </span>
                 </div>
-              )}
-              {isLowConfidenceMode && (
-                <div className="flex items-center gap-1 pl-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600">
-                  <Sparkles size={11} className="shrink-0" />
-                  <span>{t(preferences.language, "caption.thinkingHarder")}</span>
-                </div>
-              )}
-              <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3.5 flex items-center gap-3 shadow-sm max-w-[88%]">
-                <Loader2 size={16} className="text-blue-600 animate-spin shrink-0" />
-                <span className="text-[13px] text-slate-600 font-medium tracking-wide">
-                  {loadingCaption}
-                </span>
+
+                {/* Subtle, quiet sub-text (only if confidence or thinking harder active) */}
+                {(taskConfidence !== null || isLowConfidenceMode) && (
+                  <div className="flex items-center gap-2 pl-1 text-[9.5px] text-slate-400">
+                    {taskConfidence !== null && (
+                      <span>{t(preferences.language, "caption.confidence")}: {Math.round(taskConfidence * 100)}%</span>
+                    )}
+                    {isLowConfidenceMode && (
+                      <span className="text-amber-600/90 flex items-center gap-1">
+                        <Sparkles size={9} />
+                        {t(preferences.language, "caption.thinkingHarder")}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
           
           <div ref={messagesEndRef} />
         </div>

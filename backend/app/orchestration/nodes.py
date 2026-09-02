@@ -30,6 +30,8 @@ from backend.app.orchestration.service_request_registry import get_service_reque
 from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DESTINATION_REGISTRY
 from backend.app.orchestration.api_field_registry import API_FIELD_REGISTRY
 from backend.app.services import service_request_service
+from backend.app.services import deeplink_service
+from backend.app.services.inbound_safety_service import find_sensitive_word_rule_ids
 
 # Define the DB Path (adjust relative path if necessary based on your working directory)
 SQLITE_DB_PATH = "backend/data/knowledge_base.db"
@@ -1512,6 +1514,23 @@ def node_01_deterministic_ingest_gate(state: AgentState):
         return {
             **VOLATILE_STATE_RESET, # 🧹 Wipe state
             "preflight_status": "error_inbound_violation",
+            "chat_history": history,
+        }
+
+    # 3. Database-maintained sensitive-word veto.  This is intentionally
+    # deterministic and runs before Prompt Guard, so a matched message never
+    # enters an LLM prompt.  Only opaque rule IDs are logged.
+    sensitive_rule_ids = find_sensitive_word_rule_ids(user_msg)
+    if sensitive_rule_ids:
+        print(f"   🚫 [INGEST VETO]: Sensitive-word rule matched: {sensitive_rule_ids}")
+        log_event(
+            "inbound.sensitive_word.rejected",
+            rule_ids=sensitive_rule_ids,
+            match_count=len(sensitive_rule_ids),
+        )
+        return {
+            **VOLATILE_STATE_RESET,
+            "preflight_status": "error_sensitive_word",
             "chat_history": history,
         }
 
@@ -3163,6 +3182,36 @@ def _dispatch_service_request_task(state: AgentState, task: dict) -> dict:
     }
 
 
+def _dispatch_deeplink_task(state: AgentState, task: dict) -> dict:
+    """Register then centrally resolve a navigation request.
+
+    The graph requests only a destination ID.  ``deeplink_service`` persists
+    that request first and is the only layer that allow-lists a route.
+    """
+    destination_id = str(task.get("input", {}).get("destination_id", "")).strip()
+    subquery_id = task.get("subquery_id")
+    resolved_component = next(
+        (item.get("customer_component", "") for item in state.get("financial_subqueries", []) if item.get("subquery_id") == subquery_id),
+        "",
+    )
+    record = deeplink_service.register_and_resolve(
+        session_id=state.get("session_id", ""),
+        user_id=state.get("user_id", ""),
+        destination_id=destination_id,
+        resolved_customer_component=resolved_component,
+    )
+    if record is None:
+        return {"status": "unavailable", "reason": "That navigation request could not be found."}
+    if record.get("status") != deeplink_service.RESOLVED or not record.get("route"):
+        return {"status": "unavailable", "reason": "That navigation destination is not available."}
+    return {
+        "status": "completed",
+        "approved_result": {
+            "deeplink_request_id": record["request_id"],
+        },
+    }
+
+
 def _iter_tool_attempts(state: AgentState):
     """Yield every (attempt, for_request) pair across every subquery's
     tool_attempts -- `for_request` is that attempt's own owning subquery's
@@ -3217,21 +3266,19 @@ def _unavailable_service_requests(state: AgentState) -> list[dict]:
     ]
 
 
-def _resolved_deeplink_destinations(state: AgentState) -> list[str]:
-    """Completed deeplink attempts for this turn only.
+def _resolved_deeplink_request_ids(state: AgentState) -> list[str]:
+    """Completed opaque deep-link request IDs for this turn only.
 
-    This is the sole source of truth for which destinations actually
-    resolved this turn, independent of anything the LLM writes. node_07
-    builds every navigation button straight from this list -- a
-    hallucinated destination_id can never produce a working button, and a
-    real one is never dropped because the model's prose omitted it.
+    Node 07 persists only these IDs with the chat UI payload. The central
+    navigation API retains the destination and route, re-authorizing them
+    when the customer later clicks a historic button.
     """
     return [
-        attempt.get("result", {}).get("destination_id")
+        attempt.get("result", {}).get("deeplink_request_id")
         for attempt, _ in _iter_tool_attempts(state)
         if attempt.get("tool_name") == "deeplink"
         and attempt.get("status") == "completed"
-        and attempt.get("result", {}).get("destination_id")
+        and attempt.get("result", {}).get("deeplink_request_id")
     ]
 
 
@@ -3273,7 +3320,10 @@ def _available_response_shortcuts(state: AgentState) -> list[dict]:
                 "for_request": for_request,
             })
         elif attempt.get("tool_name") == "deeplink":
-            contract = DEEPLINK_DESTINATION_REGISTRY.get(result.get("destination_id", ""))
+            request = deeplink_service.get(result.get("deeplink_request_id", ""))
+            if request is None or request.get("status") != deeplink_service.RESOLVED:
+                continue
+            contract = DEEPLINK_DESTINATION_REGISTRY.get(request.get("destination_id", ""))
             if contract is None:
                 continue
             shortcuts.append({
@@ -3379,20 +3429,16 @@ def node_03b_tool_dispatcher(state: AgentState):
                 continue
             if tool_name == "deeplink":
                 destination_id = attempt.get("input", {}).get("destination_id")
-                contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
-                if contract:
-                    attempt["status"] = "completed"
-                    attempt["result"] = {"destination_id": destination_id, "route": contract["route"]}
-                    attempt["availability_reason"] = ""
-                else:
-                    attempt["status"] = "unavailable"
-                    attempt["result"] = {}
-                    attempt["availability_reason"] = f"Destination {destination_id} not in registry"
+                outcome = _dispatch_deeplink_task(state, attempt)
+                attempt["status"] = outcome["status"]
+                attempt["result"] = outcome.get("approved_result", {})
+                attempt["availability_reason"] = outcome.get("reason", "")
                 log_event(
                     "tool.result.deeplink",
                     tool_task_id=attempt["attempt_id"], subquery_id=attempt.get("subquery_id"),
                     status=attempt["status"],
                     destination_id=destination_id,
+                    deeplink_request_id=attempt["result"].get("deeplink_request_id"),
                 )
                 continue
             if tool_name == "api":
@@ -8175,15 +8221,17 @@ def node_07_precision_substitution(state: AgentState):
         payload["serviceRequestActions"] = service_request_actions
 
     navigation_actions = []
-    for destination_id in _resolved_deeplink_destinations(state):
-        contract = DEEPLINK_DESTINATION_REGISTRY.get(destination_id)
+    for link_id in _resolved_deeplink_request_ids(state):
+        # Persist only the opaque central-navigation request ID. Neither a
+        # route nor destination identifier may enter chat history or the
+        # frontend payload; the central API re-checks both at click time.
+        request = deeplink_service.get(link_id)
+        contract = DEEPLINK_DESTINATION_REGISTRY.get(
+            request.get("destination_id", "") if request else ""
+        )
         if contract is None:
             continue
-        navigation_actions.append({
-            "label": contract["label"],
-            "destinationId": destination_id,
-            "route": contract["route"],
-        })
+        navigation_actions.append({"linkId": link_id, "label": contract["label"]})
     if navigation_actions:
         payload["navigationActions"] = navigation_actions
 
@@ -8720,6 +8768,10 @@ def node_10_standard_rejection(state: AgentState):
     # MAS-Approved Deterministic Message Dictionary
     MESSAGE_MAP = {
         "error_malicious": get_message(state.get("user_profile", {}).get("language", "English"), "error_malicious"),
+        # Deterministic inbound vetoes are security/privacy controls, not a
+        # finding that the customer requested a non-compliant bank action.
+        "error_inbound_violation": get_message(state.get("user_profile", {}).get("language", "English"), "error_inbound_violation"),
+        "error_sensitive_word": get_message(state.get("user_profile", {}).get("language", "English"), "error_inbound_violation"),
         "non_compliant": get_message(state.get("user_profile", {}).get("language", "English"), "non_compliant"),
         "non_financial": get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_rejection"),
         "fail": get_message(state.get("user_profile", {}).get("language", "English"), "fail"),

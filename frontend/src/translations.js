@@ -54,6 +54,11 @@ export const TRANSLATIONS = {
     "caption.understanding": "Understanding your question...",
     "caption.contextReady": "Conversation context is ready.",
     "caption.continuing": "Continuing to prepare your response...",
+    // Pipeline Stages
+    "stage.safety": "Understanding Request",
+    "stage.retrieval": "Finding Information",
+    "stage.audit": "Verifying Accuracy",
+    "stage.synthesis": "Preparing Response",
     // Escalation
     "escalation.networkError": "⚠️ Connection Error: Cannot reach the LangGraph backend. Please ensure uvicorn is running on port 8000.",
     "escalation.confirmTitle": "Confirm transfer to a human agent",
@@ -167,6 +172,11 @@ export const TRANSLATIONS = {
     "caption.understanding": "正在理解您的问题...",
     "caption.contextReady": "对话上下文已就绪。",
     "caption.continuing": "继续准备您的回复...",
+    // Pipeline Stages
+    "stage.safety": "理解需求",
+    "stage.retrieval": "查找信息",
+    "stage.audit": "验证准确性",
+    "stage.synthesis": "准备回复",
     "escalation.networkError": "⚠️ 连接错误：无法连接到后端服务器。请确保服务正在端口 8000 运行。",
     "escalation.confirmTitle": "确认转接人工客服",
     "escalation.caseTitle": "当前案例摘要",
@@ -277,6 +287,11 @@ export const TRANSLATIONS = {
     "caption.understanding": "Entendiendo su pregunta...",
     "caption.contextReady": "El contexto de la conversación está listo.",
     "caption.continuing": "Continuando con la preparación de su respuesta...",
+    // Pipeline Stages
+    "stage.safety": "Entendiendo solicitud",
+    "stage.retrieval": "Buscando información",
+    "stage.audit": "Verificando precisión",
+    "stage.synthesis": "Preparando respuesta",
     "escalation.networkError": "⚠️ Error de conexión: No se puede acceder al backend. Asegúrese de que uvicorn esté ejecutándose.",
     "escalation.confirmTitle": "Confirmar transferencia a un agente humano",
     "escalation.caseTitle": "Resumen actual del caso",

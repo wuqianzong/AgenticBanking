@@ -18,7 +18,7 @@ second time).
 | ID | Title | Severity | Confidence | Root Cause | Status |
 |---|---|---|---|---|---|
 | BUG-001 | Mixed-turn decline drops already-resolved actions from other tools | High | Confirmed | **Deterministic code** | **Fixed, live-verified** |
-| BUG-002 | Guidance-only RELEVANT admission sometimes rejected in a loop by the outbound audit | Medium | Confirmed (intermittent) | LLM judgment | Fix implemented, live-verified on original repro |
+| BUG-002 | Guidance-only RELEVANT admission sometimes rejected in a loop by the outbound audit | Medium | Confirmed (intermittent) | LLM judgment | **Superseded, structurally eliminated (see BUG-010)** |
 | BUG-003 | Transient upstream 503 on the Tool-Calling Planner is treated as "nothing found," not retried | Medium | Confirmed | **Deterministic code** | **Fixed, verified (mocked failure)** |
 | BUG-004 | Network-specific questions (Visa/Mastercard) answered with network-agnostic evidence marked SUFFICIENT | Medium | Confirmed (2 occurrences) | LLM judgment, **now deterministically enforced** | **Fixed, live-verified (4 independent cases)** |
 | BUG-005 | Evidence approved as SUFFICIENT can be topically mismatched to the customer's actual request | Medium–High | Confirmed | LLM judgment | Open |
@@ -28,31 +28,39 @@ second time).
 | SUSPECTED-002 | Possible query-intent misinterpretation for an ambiguous "source of funds" question | Low | Suspected | LLM judgment | Needs verification |
 | BUG-008 | `NARROW_TO_EVIDENCE_SCOPE` recovery silently drops the unconfirmed claim instead of admitting it | Low–Medium | Confirmed | LLM judgment (prompt gap) | Fix implemented, live-verified |
 | BUG-009 | Outbound audit silently PASSes a turn when response generation returns zero blocks | Medium–High | Confirmed (2 occurrences) | **Deterministic code** | **Fixed, verified (fixture test)** |
+| BUG-010 | "No Info Is Info" misapplied to RELEVANT let a zero-evidence Territory B task fabricate specific policy details | High | Confirmed | LLM judgment, **now deterministically enforced** | **Fixed, live-verified** |
 
-**All four deterministic-code bugs (001, 003, 007, 009) are fixed**, and
-BUG-004 is now also fixed via a hybrid approach (see its own entry) that
-converts an LLM-judgment problem into a deterministically-enforced contract.
-BUG-002 and BUG-008 have fixes implemented and live-verified but not yet
-proven at scale (see each entry's own caveats). BUG-005, BUG-006, and the
-two suspected items remain open.
+**All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
+BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
+each entry): an LLM-judgment problem converted into a
+deterministically-enforced contract. BUG-002 is now structurally
+eliminated as a side effect of BUG-010's fix (the shape it was about no
+longer exists). BUG-008 has a fix implemented and live-verified but not
+yet proven at scale (see its own caveats). BUG-005, BUG-006, and the two
+suspected items remain open.
 
 **Why the distinction matters:** a deterministic-code bug (001, 003, 007,
 009) has a fix with a guaranteed outcome — patch the logic, the failure mode
-is gone. An LLM-judgment issue (002, 005, 006, both suspected items) is the
+is gone. An LLM-judgment issue (005, 006, both suspected items) is the
 model's own reasoning going wrong on a specific input despite the relevant
 rule already being correctly wired into the prompt; a fix (tightening the
 rule, adding an example) can reduce the rate but can't guarantee elimination
 the way a code patch can — these need re-testing after any prompt change,
-not just a one-time verification. **BUG-004 shows a third pattern worth
-naming**: the underlying judgment (does this evidence confirm what the
-customer specifically named?) is still made by an LLM, but the *consequence*
-of getting it wrong is now closed off deterministically — the model can
-still mis-resolve one item, but it can no longer let that mistake silently
-produce a SUFFICIENT verdict, because the code enforces the downgrade
-regardless of what the model's own `status` field says. This is a reusable
-pattern (see BUG-004's "Reason-to-Guidance Contract" note) worth reaching
-for whenever a similar upstream-can't-know / downstream-can-check gap shows
-up again, rather than relying on prompt wording alone.
+not just a one-time verification. **BUG-004 and BUG-010 show a third
+pattern worth naming**: the underlying judgment (does this evidence confirm
+what the customer specifically named? does a real parent back this
+observation?) is still made by an LLM, but the *consequence* of getting it
+wrong is now closed off deterministically — the model can still misjudge,
+but it can no longer let that mistake silently produce an answerable
+status, because the code enforces the downgrade regardless of what the
+model's own `status` field says. This is a reusable pattern (see BUG-004's
+"Reason-to-Guidance Contract" note) worth reaching for whenever a similar
+upstream-can't-know / downstream-can-check gap shows up again, rather than
+relying on prompt wording alone. BUG-010 additionally shows the value of
+precisely re-checking a design decision against its *original* intent when
+a later extension of it causes trouble — the fix here was less "add a new
+rule" than "notice the rule had drifted from what it was actually meant to
+cover, and restore that."
 
 ---
 
@@ -523,3 +531,82 @@ reviser (`route_n21`) instead of a false PASS. Three regression checks also
 passed: a normal per-block violation still resolves correctly, a genuinely
 clean response with no violations still fully approves, and an empty-`task_id`
 violation still correctly triggers the response-wide path.
+
+---
+
+## BUG-010 — "No Info Is Info" misapplied to RELEVANT let a zero-evidence Territory B task fabricate specific policy details
+
+**Severity:** High **Confidence:** Confirmed **Status: Fixed, live-verified**
+**Found in:** live production session (2026-09-04), "I'm not okay with this fee on my statement" — traced during ongoing BUG-005 investigation
+
+**What happens:** A Territory B (adjacent-scope, scope-expansion) companion
+task resolved `RELEVANT` with `approved_parent_ids: []` — no real evidence
+at all — yet still carried a confident, specific-sounding
+`generation_guidance`: *"Explain that fee waivers are discretionary and
+evaluated based on factors like account tenure and loyalty status. Mention
+that the bank's automated review process determines eligibility..."* None
+of this appears in any evidence the task actually retrieved; its own
+`evidence_delta` cited an unrelated Rewards/Linkpoints spend-threshold
+fact. The response generator faithfully rendered this fabricated guidance,
+which the outbound audit correctly rejected as unsupported across **three
+consecutive rounds** ("inventing specific criteria for fee waivers...
+not present in the provided evidence"), each revision only relocating the
+fabrication rather than removing it, until the turn exhausted retries and
+fell through to a mechanical deterministic fallback.
+
+**Root cause — a genuine misunderstanding of the original design intent,
+corrected mid-investigation:** the "No Info Is Info" mechanism (introduced
+earlier the same session) was built to let a task with zero approved
+parents still earn `RELEVANT` status when the sufficiency auditor had a
+genuinely useful, hedge-worthy `generation_guidance` to offer. This was a
+misapplication of a principle that was only ever meant to govern
+`IRRELEVANT`: the original intent was that a genuinely-nothing-found
+result should let the bot plainly *acknowledge* that nothing was found
+("no info" is itself the information to convey) — never that a
+guidance-only observation should be allowed to manufacture a `RELEVANT`
+status with no citable parent behind it. Once wired into `RELEVANT`, the
+mechanism let the model's own "I can write something plausible-sounding"
+substitute for genuine, evidence-backed materiality — most dangerously for
+a Territory B companion, whose own product/intent pairing is *already* a
+speculative, evidence-free guess (constructed by `node_02e`'s own
+scope-expansion planner before any retrieval happens for it); writing a
+further hedge on top of an already-unverified guess compounds speculation
+rather than grounding it. A contributing factor: Territory B construction
+was previously *mandatory* ("construct exactly ONE new scope-expansion
+companion task" for every failed task), giving the model no way to
+correctly decline when no genuine connection existed — pressuring it
+toward inventing one.
+
+**Fix implemented, three parts, restoring the original intent:**
+1. **"No Info Is Info" now applies to `IRRELEVANT` only.** A task with
+   zero approved parents is always `IRRELEVANT`, unconditionally — no
+   exception, regardless of what `generation_guidance` might say. This
+   status already renders via a fixed, deterministic, never-LLM-generated
+   "I don't have information available" statement, carrying zero
+   fabrication risk.
+2. **`RELEVANT` (and `SUFFICIENT`) now always require at least one real
+   approved parent**, enforced in code (`node_03c_sufficiency_auditor`)
+   independent of what status the model's own output claims, and mirrored
+   in `TaskSufficiencyItem.generation_guidance`'s schema description
+   (`llm_service.py`) and the outbound audit's evidence-manifest
+   construction (a zero-parent entry can no longer appear in the manifest
+   at all). This applies uniformly to the primary search, Territory A's
+   widened retry, and Territory B alike — no per-territory carve-out.
+3. **Territory B construction can now decline.** The prompt and
+   `TerritoryBPlan.companions` schema description were changed from
+   "exactly one companion per failed task" to "at most one... omit a
+   failed task entirely when no genuinely different product/intent with a
+   concrete, statable basis exists for it."
+
+**Verified live**, in a real production turn exercising exactly this
+mechanism after the fix: the same query's Territory B companion resolved
+`RELEVANT` with a *real* directly-adopted approved parent
+(`faq_2ba8c382`, "how late fees are applied to consolidated statements")
+instead of fabricating anything, correctly framed as *"a related note"*
+(Scope-Expansion Honesty Rule) rather than a direct answer. The outbound
+audit passed cleanly on the first round with zero grounding violations —
+no fabrication, no retry loop, no fallback.
+
+**Side effect:** this redesign makes **BUG-002 structurally impossible**,
+not merely fixed — the guidance-only `RELEVANT` (empty `approved_parents`)
+shape it was about no longer exists anywhere in the system to reject.

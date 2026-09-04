@@ -1,7 +1,8 @@
+import json
 import os
 import sqlite3
 import asyncio
-import time  
+import time
 import chromadb
 from typing import List, Dict, Any
 
@@ -189,21 +190,49 @@ class RAGEngine:
         return selected
 
     def _hydrate_parents_from_sqlite(self, parent_ids: list) -> List[Dict[str, str]]:
-        """Fetch full parent text while preserving the evidence identifier."""
+        """Fetch full parent text while preserving the evidence identifier.
+
+        Also surfaces each parent's own product_tags/intent_families --
+        already stored in this table, but previously never selected, which
+        left the sufficiency auditor with no way to independently verify a
+        parent's real product/intent classification and instead relying on
+        a rule telling it to simply trust node_02e's own pre-evidence
+        routing choice. Surfacing the real, stored classification gives the
+        auditor actual grounds for confirming a match (e.g. a parent's
+        marketing name reads as "Instant Loan" but its own product_tags
+        already states Personal_Loan) instead of a directive to stop
+        doubting."""
         if not parent_ids:
             return []
 
+        def _parse_tag_list(raw: Any) -> list[str]:
+            if not raw:
+                return []
+            try:
+                parsed = json.loads(raw)
+                return parsed if isinstance(parsed, list) else [str(parsed)]
+            except (TypeError, ValueError):
+                return [str(raw)]
+
         cursor = sqlite_conn.cursor()
         placeholders = ','.join('?' for _ in parent_ids)
-        query = f"SELECT parent_id, content FROM knowledge_parents WHERE parent_id IN ({placeholders})"
+        query = f"SELECT parent_id, product_tags, intent_families, content FROM knowledge_parents WHERE parent_id IN ({placeholders})"
         cursor.execute(query, parent_ids)
-        rows_by_id = {parent_id: content for parent_id, content in cursor.fetchall()}
+        rows_by_id = {
+            parent_id: (product_tags, intent_families, content)
+            for parent_id, product_tags, intent_families, content in cursor.fetchall()
+        }
         hydrated_payload = [
-            {"parent_id": parent_id, "content": rows_by_id[parent_id]}
+            {
+                "parent_id": parent_id,
+                "content": rows_by_id[parent_id][2],
+                "product_tags": _parse_tag_list(rows_by_id[parent_id][0]),
+                "intent_families": _parse_tag_list(rows_by_id[parent_id][1]),
+            }
             for parent_id in parent_ids
             if parent_id in rows_by_id
         ]
-        
+
         print(f"    🧱 [RAG HYDRATION] Hydrated {len(hydrated_payload)} intact parent chunks from SQLite.")
         return hydrated_payload
 

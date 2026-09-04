@@ -144,7 +144,11 @@ class TaskSufficiencyItem(BaseModel):
             "specific evidence needs special framing or a caveat to be presented honestly -- e.g. its own "
             "stated premise or circumstance may not match what the customer actually described. Never a new "
             "fact, and never customer-facing wording itself -- an instruction to the writer, not content to "
-            "relay verbatim. Leave empty when the evidence can be used as-is with no special framing."
+            "relay verbatim. Leave empty when the evidence can be used as-is with no special framing. MUST be "
+            "empty when approved_parent_ids is empty -- this field frames real, approved evidence, it is never "
+            "a substitute for one. A task with no approved parent is IRRELEVANT; that status already gets a "
+            "safe, fixed 'no information available' statement with no LLM-generated content at all, so there "
+            "is nothing for this field to add and no reason to write anything here."
         ),
     )
     evidence_delta: List[RetryEvidenceDeltaItem] = Field(
@@ -360,7 +364,12 @@ class TerritoryBCompanion(BaseModel):
 class TerritoryBPlan(BaseModel):
     companions: List[TerritoryBCompanion] = Field(
         default_factory=list,
-        description="Exactly one companion for each supplied failed task -- never a revision of the failed task itself; never more than one companion per failed task.",
+        description=(
+            "At most one companion for each supplied failed task -- never a revision of the failed task itself; "
+            "never more than one companion per failed task. Omit a failed task entirely (no companion) when no "
+            "genuinely different product/intent with a concrete, statable basis exists for it -- a forced, remote "
+            "guess is worse than none, since everything built on top of it inherits the same lack of grounding."
+        ),
     )
 
 # 5. USER JOURNEY PLANNER

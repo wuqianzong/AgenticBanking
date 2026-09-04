@@ -1160,13 +1160,11 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
             "generation_guidance": guidance,
         }
         for task_id, (parent_ids, guidance) in approved_by_task.items()
-        # "No info is info": a task can be RELEVANT purely on
-        # generation_guidance, with an empty approved_parent_ids -- still a
-        # real manifest entry, since generation_guidance is the ONLY basis
-        # for what to write about it in that case (see the "GENERATION
-        # GUIDANCE" rule in _GENERATION_BRIDGE_GUARDRAILS and
-        # _GENERATION_GUIDANCE_SHAPE_RULE's "nothing confirmed" case).
-        if task_id and (parent_ids or guidance)
+        # RELEVANT REQUIRES A REAL PARENT: approved_parent_ids is never
+        # empty for a task included here anymore (enforced in
+        # node_03c_sufficiency_auditor) -- guidance is always a caveat on a
+        # real parent, never a standalone basis for a manifest entry.
+        if task_id and parent_ids
     ]
 
 
@@ -1965,7 +1963,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             if task_id in territory_b_needed_task_ids
         }
         retry_context = f"""
-        For EACH task in Failed Tasks below, construct exactly ONE new
+        For EACH task in Failed Tasks below, construct at most ONE new
         scope-expansion companion task -- never a revision of the failed
         task itself, which the backend already widens deterministically to
         its full intent scope regardless of what you do here. Set the
@@ -1978,11 +1976,24 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         Context to a plausible, genuinely different but related
         product/intent -- never the same pairing the failed task already
         searched under (Territory A already covers that), and never a
-        guess you cannot state a concrete basis for. This is ONE committed
-        guess, not a hedge -- write exactly one angle group
-        (`group_id: "scope"`) with all three angles targeting that one new
-        topic, never multiple groups. Set `search_task.search_territory`
-        to "adjacent_scope" on every companion (never "in_scope") and
+        guess you cannot state a concrete basis for. Territory B exists to
+        catch a genuinely plausible alternate reading of the request that
+        you can state a real, specific reason for -- it does not exist to
+        guarantee every failed task gets a companion. If you cannot reason
+        to a genuinely different product/intent with a concrete, statable
+        basis for a given failed task, construct NO companion for it at
+        all -- skip it entirely and move to the next one. A forced, remote
+        guess constructed only because a companion was expected is worse
+        than none: it sends real retrieval effort toward a topic with no
+        genuine connection to what the customer asked, and everything
+        built on top of whatever it happens to find (sufficiency judgment,
+        generation guidance, the eventual response) inherits that same
+        remoteness, compounding rather than correcting it. This is ONE
+        committed guess when you do make one, not a hedge -- write exactly
+        one angle group (`group_id: "scope"`) with all three angles
+        targeting that one new topic, never multiple groups. Set
+        `search_task.search_territory` to "adjacent_scope" on every
+        companion you do construct (never "in_scope") and
         `search_task.source_task_id` to the same failed task_id as the
         entry's own `source_task_id` above.
         """
@@ -4033,19 +4044,30 @@ def node_03c_sufficiency_auditor(state: AgentState):
           because it concerns the same product: its supported fact must
           directly concern the same topic, condition, process, boundary, or
           factual premise in the customer's request.
-        - "NO INFO IS INFO": a non-empty `generation_guidance` is itself found
-          material, on the same footing as an approved parent -- if no
-          supplied parent directly answers the resolved request, but one is
-          genuinely worth mentioning as a hedged courtesy (per the
-          GENERATION GUIDANCE rule below), that alone means the status MUST be
-          RELEVANT, even though `approved_parent_ids` stays empty
-          -- never IRRELEVANT. Reserve IRRELEVANT strictly for a task
-          where there is truly nothing to convey at all: no parent materially
-          answers the request, AND there is nothing worth writing
-          `generation_guidance` about either. Writing a real
-          `generation_guidance` while still returning IRRELEVANT is a
-          contradiction -- it discards genuine reasoning this turn's response
-          would otherwise never see.
+        - RELEVANT REQUIRES A REAL PARENT: RELEVANT means you found at
+          least one approved parent that connects to the request without
+          fully resolving it -- never a status you reach through reasoning
+          alone with nothing to show for it. A task with ZERO approved
+          parents is always IRRELEVANT, full stop, no exception -- there is
+          no "genuinely worth mentioning as a hedge" case that overrides
+          this, regardless of how plausible or well-intentioned the
+          observation feels. `generation_guidance` must be left empty
+          whenever `approved_parent_ids` is empty; write it only when you
+          have at least one real, approved parent to hang it on (typically
+          a caveat on a parent whose own stated circumstance doesn't
+          squarely match the customer's, per the GENERATION GUIDANCE rule
+          below). Being able to compose a plausible-sounding hedge from
+          your own general knowledge is never proof that a genuine,
+          evidence-backed observation exists -- confirmed live: an
+          adjacent-scope task with zero approved parents wrote a confident,
+          specific-sounding `generation_guidance` ("fee waivers are
+          evaluated based on account tenure and loyalty status") that
+          traced to nothing it had actually retrieved. A genuinely
+          empty-evidence task is fully and safely handled downstream by a
+          fixed, deterministic "I don't have information available"
+          statement -- never LLM-generated, so it carries zero risk of
+          inventing anything. There is no benefit to `generation_guidance`
+          worth that risk when no real parent backs it.
         - The reverse matters just as much: a parent whose own subject is a
           distinctly-named, different product or service is not material
           merely because it is credit/loan-adjacent, belongs to the same
@@ -4117,11 +4139,19 @@ def node_03c_sufficiency_auditor(state: AgentState):
           Product-identity note: a parent's own internal or marketing name
           for an offering (e.g. a specific product branded "Instant Loan")
           is never grounds on its own to doubt it concerns the customer's
-          named product just because the two names read differently --
-          every parent supplied to you for this task was already retrieved
-          under this task's own product classification, and that
-          classification is settled before you ever see it; do not
-          re-litigate it here. The category-adjacency rule's stricter bar
+          named product just because the two names read differently -- but
+          verify this directly from that parent's own `product_tags` field
+          (the knowledge base's real, stored classification for that
+          specific piece of content, not a routing decision made about this
+          task before any evidence existed): when `product_tags` itself
+          names the customer's own product, that settles this parent's
+          identity on real grounds, regardless of what its own marketing
+          name happens to be. This is independent verification from actual
+          data, not deference to how this task was routed -- if a parent's
+          own `product_tags` does NOT confirm the customer's named product
+          either, its marketing name reading differently is a real signal
+          worth weighing, not something to explain away. The category-
+          adjacency rule's stricter bar
           (an explicit statement that it also applies to, or is the general
           form of, the named product) is for a parent tagged under a
           genuinely DIFFERENT product than this task's own -- it does not
@@ -4251,40 +4281,58 @@ def node_03c_sufficiency_auditor(state: AgentState):
           response correct -- it will only misinform whoever later has to
           debug why a wrong answer reached the customer.
         {PRECISION_REFERENCE_CONTRACT}
-        - RELEVANT: selected parents are connected to the `customer_component`
-          but do not fully resolve it under the SUFFICIENT test above --
-          either a genuine partial answer (one meaningful part resolved,
-          another material part, or a qualifier the customer specifically
-          named, left genuinely undetermined by the evidence) or evidence
-          that does not itself answer the request but is still worth
-          conveying as bounded, honest guidance (see NO INFO IS INFO
-          above). Select the supporting parent IDs when any exist; when the
-          only material found is a `generation_guidance`-worthy observation
-          with no directly citable parent, leave `approved_parent_ids` empty
-          -- either way, retrieval continues for what remains open.
+        - RELEVANT: at least one selected parent is connected to the
+          `customer_component` but does not fully resolve it under the
+          SUFFICIENT test above -- a genuine partial answer (one
+          meaningful part resolved, another material part, or a qualifier
+          the customer specifically named, left genuinely undetermined by
+          the evidence). Select the supporting parent ID(s); retrieval
+          continues for what remains open. Zero selected parents is never
+          RELEVANT -- see RELEVANT REQUIRES A REAL PARENT above.
         - IRRELEVANT: the supplied parents provide no grounded, materially
           relevant information that could be usefully presented in response
           to the `customer_component`, and there is nothing worth writing
           `generation_guidance` about either.
         - CLARIFICATION AUTHORING: you are the node closest to the actual
-          evidence gap, so YOU decide whether a clarifying question is
-          warranted and what to ask -- the backend only relays what you set
-          here verbatim, it makes no separate judgment call of its own. This
-          follows the same standing rule every clarification-raising node in
-          this pipeline follows: who raises it, who provides the evidence
-          and reason -- scoped strictly to YOUR OWN job (reviewing whether
-          retrieved evidence fully answers this request). Never author a
-          clarification about something outside that scope (e.g. which
-          product or intent the customer meant in the first place -- that
-          was already decided before this task ever reached you).
+          evidence, so YOU independently decide whether a clarifying
+          question is warranted and what to ask -- the backend only relays
+          what you set here verbatim, it makes no separate judgment call of
+          its own. Judge fresh from what the evidence actually shows --
+          never assume the product/intent this task was routed under is
+          correct merely because it already got you this far. It was
+          chosen by the intent formulator before any evidence existed, from
+          the customer's own words alone; that is a reasonable first guess,
+          not a settled fact for you to defer to. You are never authoring a
+          NEW product/intent classification of your own here (leave
+          target_commercial_product/target_intent alone -- that vocabulary
+          is not yours to assign, and this is not you second-guessing which
+          Matrix category the request maps to in the abstract) -- but you
+          ARE the right node to notice when the customer's actual request
+          still isn't genuinely resolved by what was found, for whatever
+          reason, and to ask about that in your own words, grounded in what
+          you actually reviewed.
+          Each supplied parent now also carries its own real, stored
+          `product_tags`/`intent_families` (from the knowledge base itself,
+          not a routing decision) -- use these directly: when a parent's own
+          tags genuinely confirm it concerns the customer's named product or
+          situation regardless of how its content happens to be worded
+          (e.g. a parent's own tag says Personal_Loan even though its
+          marketing name reads "Instant Loan"), that is real confirmation,
+          not a re-litigation of routing -- no clarification is needed on
+          that basis. But when NO supplied parent's own content or tags
+          actually confirm which specific interpretation of the customer's
+          request applies -- and the request was genuinely capable of more
+          than one -- that is a real, independently-observed gap, not
+          evidence to paper over.
           Set `unresolved_term` (else leave it as an empty string) only when
           BOTH of the following hold, regardless of whether this task's
           status is RELEVANT or IRRELEVANT:
           (1) a specific, real detail is genuinely missing from the
-              customer's own words or the conversation history -- never a
-              gap in the evidence, an undocumented topic, or simply a hard
-              judgment call you had to make yourself (e.g. "the fee" without
-              naming which fee, "the loan" without naming which loan type).
+              customer's own words or the conversation history, AND no
+              supplied parent's own content or tags resolve it either --
+              never a gap in the evidence for an otherwise well-defined
+              request, an undocumented topic, or a case where some parent's
+              own tags or content already do settle it.
           (2) supplying that detail would plausibly change the outcome --
               either unlocking a materially different, fuller answer for a
               RELEVANT task, or turning an otherwise-unanswerable IRRELEVANT
@@ -4368,12 +4416,10 @@ def node_03c_sufficiency_auditor(state: AgentState):
           explain references or continuations only; they are never the
           completeness benchmark for an individual task.
         - Return one result for every supplied task_id.
-        - For SUFFICIENT, return only parent IDs from that exact task that
-          materially support the answer -- at least one ID is required. For
-          RELEVANT, return the materially supporting parent IDs when any
-          exist; leave `approved_parent_ids` empty only for the guidance-only
-          case described in NO INFO IS INFO above (a genuine
-          `generation_guidance` with no directly citable parent).
+        - For SUFFICIENT or RELEVANT, return only parent IDs from that exact
+          task that materially support the answer -- at least one ID is
+          required for both. An empty `approved_parent_ids` is only ever
+          valid for IRRELEVANT.
         - For RELEVANT or IRRELEVANT, return an `evidence_delta`
           list. This is internal evidence-only retrieval context for the intent
           formulator, not a query, diagnosis, or rewrite instruction. The
@@ -4444,10 +4490,10 @@ def node_03c_sufficiency_auditor(state: AgentState):
             requested_status = "IRRELEVANT"
         # VERIFICATION ITEMS CONFIRMATION: enforced here in code, not left
         # to the model's own `status` field alone -- same discipline as the
-        # "No info is info" IRRELEVANT-to-RELEVANT override below. A
-        # specific, checkable claim (e.g. Visa vs Mastercard, or a premise/
-        # scope condition) the intent formulator flagged as unconfirmable
-        # at formulation time must be confirmed by SOME parent's own text
+        # RELEVANT REQUIRES A REAL PARENT enforcement below. A specific,
+        # checkable claim (e.g. Visa vs Mastercard, or a premise/scope
+        # condition) the intent formulator flagged as unconfirmable at
+        # formulation time must be confirmed by SOME parent's own text
         # before this task can be SUFFICIENT; trusting the model to always
         # self-police this would silently reintroduce the exact "generally
         # covers the product family" rationalization this field exists to
@@ -4478,23 +4524,24 @@ def node_03c_sufficiency_auditor(state: AgentState):
         # disclosing the different product/intent assumption), just not the
         # status itself.
         reason = audit.get("reason", "No sufficient grounded FAQ evidence was selected.")
-        generation_guidance = str(audit.get("generation_guidance", "")).strip()
-        # "No info is info": a genuinely useful observation captured only as
-        # reasoning (no parent worth approving) is still found material, and
-        # must not be lost merely because this round's raw output happened
-        # not to repeat it. Falls back to the last round's retained value
-        # when this round's own audit call left generation_guidance empty.
-        effective_guidance = generation_guidance or partial_guidance.get(str(task_id), "")
-        if requested_status == "IRRELEVANT" and effective_guidance:
-            # "No info is info": enforced here in code, not left to the
-            # prompt instruction alone -- same discipline as the TERRITORY
-            # CEILING downgrade above. A non-empty generation_guidance is
-            # found material regardless of which status field the model
-            # itself chose; trusting the model to always keep the two
-            # fields consistent would silently reintroduce the exact
-            # contradiction (IRRELEVANT + a real generation_guidance)
-            # that caused this fix to exist in the first place.
-            requested_status = "RELEVANT"
+        # RELEVANT REQUIRES A REAL PARENT: enforced here in code, not left to
+        # the prompt instruction alone. Zero approved parents is always
+        # IRRELEVANT, regardless of what status the model itself chose or
+        # what it wrote in generation_guidance -- the old "no info is info"
+        # exception (a guidance-only observation could earn RELEVANT with
+        # empty approved_parent_ids) is deliberately removed: confirmed live
+        # that a task with zero approved parents can still write a
+        # confident, specific-sounding generation_guidance ("fee waivers are
+        # evaluated based on account tenure and loyalty status") tracing to
+        # nothing it actually retrieved. generation_guidance is discarded
+        # entirely whenever there is no approved parent to hang it on --
+        # the customer gets the safe, fixed, never-LLM-generated "no
+        # information available" statement instead, which carries zero risk
+        # of inventing anything.
+        if not approved_ids:
+            requested_status = "IRRELEVANT"
+        generation_guidance = str(audit.get("generation_guidance", "")).strip() if approved_ids else ""
+        effective_guidance = generation_guidance
         history_delta = [
             {
                 "parent_id": str(item.get("parent_id", "")).strip(),
@@ -4524,15 +4571,12 @@ def node_03c_sufficiency_auditor(state: AgentState):
             # Parent IDs were already constrained to `available_ids`, the
             # candidate set produced by this RAG attempt. Keep only that
             # allow-list here; consumers hydrate lazily and task-by-task.
-            # BUG-007: deliberately `generation_guidance` (this round's own
-            # raw value), never `effective_guidance` -- the partial_guidance
-            # fallback exists to carry a "no info, but here's a courtesy
-            # observation" finding across retries for a task that never
-            # finds a citable parent (see the RELEVANT branch below). A task
-            # that just became SUFFICIENT has real, approved evidence this
-            # round; if its own audit call felt no fresh caveat was needed,
-            # attaching a stale, possibly-contradictory guidance string
-            # left over from an earlier, less-successful round (e.g. "admit
+            # BUG-007: this round's own raw `generation_guidance` only --
+            # never a value carried forward from an earlier, less-successful
+            # round. A task that just became SUFFICIENT has real, approved
+            # evidence this round; if its own audit call felt no fresh
+            # caveat was needed, attaching a stale, possibly-contradictory
+            # guidance string left over from an earlier round (e.g. "admit
             # there is no information...") would actively mislead whoever
             # reads this field, even though the generator correctly ignores
             # it in favor of the real evidence -- confirmed live.
@@ -4557,20 +4601,18 @@ def node_03c_sufficiency_auditor(state: AgentState):
 
         retained_ids = partial_evidence.get(str(task_id), [])
         partial_ids = list(dict.fromkeys([*retained_ids, *approved_ids]))
-        if requested_status == "RELEVANT" and not approved_ids and not effective_guidance:
-            # A partial outcome without selected supporting evidence AND
-            # without even a reasoned observation worth conveying is not a
-            # usable partial answer. Treat it as insufficient rather than
-            # retaining an ungrounded state. "No info is info": a genuine
-            # generation_guidance is itself found material, on the same
-            # footing as an approved parent -- it alone is enough to stay
-            # RELEVANT (see the terminal branch below, which
-            # carries an empty approved_parent_ids list forward in that
-            # case rather than falling back to CLARIFICATION_REQUIRED).
-            requested_status = "IRRELEVANT"
+        # RELEVANT now always implies approved_ids is non-empty (enforced
+        # above), so partial_ids is always non-empty here too -- no separate
+        # "partial answer with nothing to show for it" downgrade is needed
+        # anymore.
         if requested_status == "RELEVANT":
             partial_evidence[str(task_id)] = partial_ids
             if effective_guidance:
+                # Retains a real, evidence-backed caveat across retry rounds
+                # when a later round's raw output doesn't repeat it -- this
+                # task has a real approved parent (RELEVANT requires one),
+                # so this is a genuine caveat on real evidence, never a
+                # guidance-only substitute for one.
                 partial_guidance[str(task_id)] = effective_guidance
 
         attempt_count = retry_counts.get(task_id, 0) + 1
@@ -4852,14 +4894,13 @@ def node_03c_sufficiency_auditor(state: AgentState):
             clarification_reason = ""
             clarification_guesses = []
         if not should_retry:
-            # "No info is info": a genuine generation_guidance alone --
-            # even with an empty partial_ids -- is found material that
-            # must carry forward as RELEVANT, never be
-            # discarded into CLARIFICATION_REQUIRED. approved_parent_ids
-            # stays [] in that case; the generator's only basis for this
-            # task is generation_guidance itself (see
-            # _response_evidence_manifest/_GENERATION_GUIDANCE_SHAPE_RULE).
-            if partial_ids or generation_guidance:
+            # RELEVANT REQUIRES A REAL PARENT: generation_guidance can only
+            # be non-empty when approved_ids (and therefore partial_ids) was
+            # also non-empty at some point this task was scored (see the
+            # per-round enforcement above), so checking partial_ids alone is
+            # sufficient here -- a task with genuinely nothing retained
+            # falls through to CLARIFICATION_REQUIRED below.
+            if partial_ids:
                 current_results[task_id] = {
                     "task_id": task_id,
                     "status": "RELEVANT",
@@ -5798,6 +5839,19 @@ def _generate_response_blocks(state: AgentState) -> dict:
     PREDICTIONS offered to unblock the task if correct, never a report of
     anything the customer actually said:
     {json.dumps(_clarification_prompt_view(intent_clarifications), ensure_ascii=False)}
+    A Clarification Input's own subquery commonly also has real Approved
+    Evidence for the same underlying request -- a RELEVANT task with
+    genuine partial evidence, not a full answer, is exactly what leaves a
+    detail unresolved in the first place. That evidence being present, and
+    being worth sharing, is never a substitute for composing the
+    clarifying question -- do not let a real, useful partial answer
+    silently absorb or replace the question you are required to ask. Both
+    belong in the response together: share what the evidence does show
+    (hedged, since it does not resolve which specific case applies), AND
+    separately ask the clarifying question, in the same or an adjoining
+    statement. An answer that reads as complete on its own, with no
+    question anywhere in it, for a subquery that has a Clarification Input
+    here, is always missing something required.
     No-info inputs -- each is a search that was genuinely attempted but
     found nothing; each already carries the underlying statement to convey
     (in your own words, per the rule below) in its own "no_info_evidence"
@@ -6138,11 +6192,24 @@ def _generate_response_blocks(state: AgentState) -> dict:
       part that evidence didn't cover. Provide a concise, neutral
       availability notice using the customer's wording and leave
       `clarification` empty -- do not ask a clarifying question here or
-      guess what the customer might mean; that judgment already belongs to
-      the sufficiency auditor (see the Clarification Inputs rule above),
-      not to this generation step. Never state that Horizon does not offer
-      a product or feature, and never ask the customer to repeat an
-      already clear request.
+      guess what the customer might mean via THIS field; that judgment
+      already belongs to the sufficiency auditor, not to this generation
+      step.
+      This restriction is scoped to the `clarification` field alone -- it
+      is never grounds to also skip a Clarification Input above for the
+      SAME task_id/subquery. The two commonly co-occur (a RELEVANT task
+      with real partial evidence is exactly what leaves a detail
+      unresolved in the first place, which is precisely when the
+      sufficiency auditor also authors a Clarification Input for it): when
+      they do, that Clarification Input's question is still fully
+      mandatory and entirely unaffected by this rule -- "the sufficiency
+      auditor already made this judgment" describes the Clarification
+      Input's own content (which you must still render as an actual
+      question among your elements), never a reason to treat the question
+      as already asked or already covered by the neutral availability
+      notice alone. Never state that Horizon does not offer a product or
+      feature, and never ask the customer to repeat an already clear
+      request.
     - Correct every failed-audit issue by removing or narrowing only the
       flagged unsupported content. Audit feedback is never a source of facts.
     - If Failed outbound-audit feedback contains
@@ -7699,29 +7766,12 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         - When an optional response element is mapped to source_task_ids, its
           factual content may use the union of approved evidence for those
           tasks. An unmapped element may use any Task-Level Approved Evidence.
-        - A Task-Level Approved Evidence entry whose "approved_parents" is
-          an EMPTY list ("no info is info": the task found no material
-          parent but the sufficiency auditor still had a hedged observation
-          worth conveying, carried in that entry's own "generation_guidance")
-          licenses ONLY an honest admission that nothing confirms the
-          answer -- never a new factual claim. Its mere presence in this
-          bundle is never itself a factual source: reject any visible
-          content that states or implies a fact, figure, procedure, or
-          outcome for that task_id beyond the plain admission, exactly as
-          you would for a task with no evidence entry at all.
-        - This restriction runs in BOTH directions. An entry's mere
-          presence in this bundle -- its task_id, its "resolved_subquery"
-          matching the customer's own words, or its "mapping_reason" -- is
-          NEVER itself evidence that information exists, and is never
-          grounds to fail the plain admission or demand it say more. When
-          "approved_parents" is empty, that empty list is the complete and
-          final word on what was found for this task: do NOT reason from
-          the entry's existence, its subquery match, or its mapping_reason
-          to conclude the assistant "has access to," "should use," or
-          "should have processed" information for that task_id -- there is
-          none, by construction, whenever this list is empty. A plain
-          admission that nothing confirms the answer, for that task_id,
-          always passes this check.
+        - Every Task-Level Approved Evidence entry has a non-empty
+          "approved_parents" (RELEVANT and SUFFICIENT both require at least
+          one real approved parent; a task with none is IRRELEVANT and
+          never appears in this bundle at all) -- so an entry's mere
+          presence here is a genuine signal that real evidence exists for
+          it, not something to independently doubt.
         2. Inferential Grounding (Bridge Check)
         - Natural conclusions that connect approved facts to the resolved
           sub-query are allowed when they are a reasonable, bounded logical

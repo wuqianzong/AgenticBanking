@@ -5,13 +5,14 @@ from typing import Any, List
 from groq import Groq
 from google import genai
 from google.genai import types
+from google.genai.errors import ServerError
 from pydantic import BaseModel, Field
 from backend.app.core.system_logger import log_event
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 #model_A="openai/gpt-oss-120b"  # For response generation
 model_A="gemini-3.5-flash-lite"  # For response generation
-model_B="gemini-3.1-flash-lite"  # For sufficiency, gourndedness, and compliance audits
+model_B="gemini-3.5-flash-lite"  # For sufficiency, gourndedness, and compliance audits
 model_C="gemini-3.1-flash-lite"  # For triage, decomposition, and journey planning
 MODEL_A_GENERATOR = model_A       # Groq: Conversational Engine
 MODEL_B_AUDITOR = model_B            # Google: Safety & Sufficiency Judge
@@ -108,7 +109,7 @@ class TaskSufficiencyItem(BaseModel):
     # have it) only ever produces a post-hoc rationalization of a verdict
     # the model already committed to.
     reason: str = Field(description="Brief explanation of how completely the candidate evidence answers the task -- reasoned through before deciding status/approved_parent_ids below, not a restatement of them.")
-    status: str = Field(description="Must be SUFFICIENT, PARTIALLY_SUFFICIENT, or INSUFFICIENT.")
+    status: str = Field(description="Must be SUFFICIENT, RELEVANT, or IRRELEVANT.")
     approved_parent_ids: List[str] = Field(description="Only supplied parent IDs that provide material grounded information for this exact task.")
     # A general-purpose writing directive for whoever composes the customer-
     # facing text from this evidence -- not a sufficiency-specific concept,
@@ -137,14 +138,14 @@ class TaskSufficiencyItem(BaseModel):
     evidence_delta: List[RetryEvidenceDeltaItem] = Field(
         default_factory=list,
         description=(
-            "For PARTIALLY_SUFFICIENT or INSUFFICIENT only: newly observed, materially task-relevant facts from "
+            "For RELEVANT or IRRELEVANT only: newly observed, materially task-relevant facts from "
             "supplied candidate parents. Empty when no such fact exists."
         ),
     )
     scope_expansion_lead_reason: str = Field(
         default="",
         description=(
-            "Extra Effort v2.0, for PARTIALLY_SUFFICIENT or INSUFFICIENT only: reasoned BEFORE naming the "
+            "Extra Effort v2.0, for RELEVANT or IRRELEVANT only: reasoned BEFORE naming the "
             "candidate below. A concise, statable reason why ONE specific supplied candidate parent -- even "
             "though it does NOT materially answer this task's own customer_component -- has a genuine, real "
             "connection worth pursuing as a related topic if this task's literal request turns out "
@@ -160,29 +161,19 @@ class TaskSufficiencyItem(BaseModel):
         default="",
         description="The exact supplied candidate parent ID scope_expansion_lead_reason justifies. Populate only when scope_expansion_lead_reason is non-empty; otherwise leave empty.",
     )
-    likely_ambiguous_request: bool = Field(
-        default=False,
-        description=(
-            "For INSUFFICIENT only: true when the task genuinely failed because the resolved "
-            "customer_component itself is under-specified or could reasonably mean one of several different "
-            "things (e.g. 'the fee' without naming which fee, 'the loan' without naming which loan type) -- the "
-            "retrieval failed because the request needs more detail, not because the topic is simply "
-            "undocumented. False when the request was already specific and clear but the documentation "
-            "genuinely does not cover it. Always false for SUFFICIENT or PARTIALLY_SUFFICIENT."
-        ),
-    )
     unresolved_term: str = Field(
         default="",
         description=(
-            "Non-empty only when this task's own evidence review revealed something worth asking the customer "
-            "about directly -- either (a) status is PARTIALLY_SUFFICIENT and one meaningful part of the request "
-            "has no supporting evidence at all, and an additional customer detail could plausibly unlock a "
-            "different, more complete answer for that specific part; or (b) status is INSUFFICIENT and "
-            "likely_ambiguous_request is true. A concise phrase naming exactly the ambiguous or unresolved part "
-            "-- never the whole customer_component verbatim unless the whole thing is what's unresolved. Leave "
-            "empty whenever asking would not genuinely help (e.g. a PARTIALLY_SUFFICIENT gap that's simply "
-            "undocumented, not disambiguatable by any customer detail) -- a clarifying question is not required "
-            "just because a task didn't fully resolve."
+            "Non-empty only when BOTH hold, regardless of whether status is RELEVANT or IRRELEVANT: (1) a "
+            "specific, real detail is genuinely missing from the customer's own words or conversation history -- "
+            "never a gap in the evidence, an undocumented topic, or a hard judgment call you had to make "
+            "yourself (e.g. 'the fee' without naming which fee, 'the loan' without naming which loan type); and "
+            "(2) supplying that detail would plausibly change the outcome -- unlocking a materially different, "
+            "fuller answer for a RELEVANT task, or turning an otherwise-unanswerable IRRELEVANT task into an "
+            "answerable one. A concise phrase naming exactly the ambiguous or unresolved part -- never the whole "
+            "customer_component verbatim unless the whole thing is what's unresolved. Leave empty whenever this "
+            "task's evidence is simply incomplete or the topic is undocumented -- that is not an ambiguity, and "
+            "a clarifying question is not required just because a task didn't fully resolve."
         ),
     )
     clarification_reason: str = Field(
@@ -399,7 +390,24 @@ class EscalationCaseSummary(BaseModel):
 
 # =====================================================================
 
-def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_schema_override: Any = None) -> str:
+def _is_transient_llm_error(error: Exception) -> bool:
+    """True for an upstream availability hiccup (a 5xx, or a message
+    unmistakably describing one) -- never for a 4xx (bad request, invalid
+    schema, rate limit) or a local config error (missing API key), where
+    retrying identically would either waste a call or make a rate limit
+    worse. BUG-003: this is what call_llm_router uses to distinguish "the
+    model itself never got a chance to respond" from "the model responded
+    and genuinely found nothing" -- a caller (e.g. the Tool-Calling
+    Planner) that only sees an empty result either way has no way to draw
+    that distinction on its own.
+    """
+    if isinstance(error, ServerError):
+        return True
+    message = str(error)
+    return any(marker in message for marker in ("UNAVAILABLE", "high demand", " 503", "Service Unavailable"))
+
+
+def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_schema_override: Any = None, _max_attempts: int = 2) -> str:
     """
     Centralized remote inference client manager.
     Supports Groq LPUs and dynamic Google GenAI Pydantic Structured Outputs.
@@ -410,11 +418,22 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_sch
     below -- the same mechanism that makes tool_name/operation impossible to
     get wrong under structured output, extended to an id field whose valid
     set is only known at call time, not at class-definition time.
+
+    BUG-003 fix: a transient upstream failure (a real 503 "experiencing
+    high demand," confirmed live) is retried once, here, centrally, before
+    ever reaching a caller -- previously every caller's own except-block
+    treated "the model call itself failed" identically to "the model
+    responded with nothing," which is a materially different situation
+    (e.g. the Tool-Calling Planner silently gave up on a subquery's tool
+    dispatch entirely rather than trying again). Never retried for a 4xx
+    (rate limit, bad schema) or a local config error -- see
+    _is_transient_llm_error.
     """
     started_at = time.perf_counter()
     log_event("llm.request", model_id=model_id, raw_prompt=prompt)
 
-    try:
+    for attempt in range(1, _max_attempts + 1):
+      try:
         # 🟡 BRANCH 1: Google Gemini Models (Bifurcation Judge & Classifiers)
         if "gemini" in model_id.lower():
             if not google_api_key:
@@ -493,8 +512,20 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_sch
             elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
         )
         return result
-        
-    except Exception as e:
+
+      except Exception as e:
+        transient = _is_transient_llm_error(e)
+        if transient and attempt < _max_attempts:
+            print(f"⏳ [LLM Service Transient Error, retrying]: {e}")
+            log_event(
+                "llm.retry",
+                level="WARNING",
+                model_id=model_id,
+                attempt=attempt,
+                error=str(e),
+            )
+            time.sleep(2)
+            continue
         print(f"🚨 [LLM Service Error]: {e}")
         log_event(
             "llm.error",
@@ -502,6 +533,7 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_sch
             model_id=model_id,
             raw_prompt=prompt,
             error=str(e),
+            transient=transient,
             elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
         )
         raise e

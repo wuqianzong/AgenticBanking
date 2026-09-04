@@ -9,6 +9,8 @@ production chatbot at runtime.
 | Study | Purpose | Status |
 |---|---|---|
 | [2026-08-19 Retrieval Query Refinement](2026-08-19_retrieval_query_refinement/RESEARCH_SUMMARY.md) | Child-vector representation, query refinement, RRF, and narrative-angle retrieval experiments | Research complete; no production retrieval change |
+| [2026-09-04 RELEVANT/IRRELEVANT Validation](2026-09-04_relevant_irrelevant_validation/reports/RESEARCH_SUMMARY.md) | Live-API validation of the sufficiency-auditor status rename and Territory Ceiling removal, using real BANKING77 queries | Complete; 15/15 queries live-tested, 2 unrelated bugs surfaced |
+| [2026-09-04 Full-System Validation](2026-09-04_full_system_validation/reports/RESEARCH_SUMMARY.md) | Whole-pipeline live validation (triage, decline, clarify, RAG, tool dispatch, audit/reviser, precision + personal-data substitution) using a fresh BANKING77 query set | Complete; 27/27 queries live-tested, 1 significant bug found (mixed-turn decline can drop already-resolved actions) |
 
 Production specifications and active ETL/runtime assets remain in `docs/` and
 `backend/`.

@@ -216,7 +216,7 @@ TURN_FEEDBACK_SCORE_UPPER_BOUND = 0.85
 # restore the band-gated behavior -- TURN_FEEDBACK_SCORE_LOWER_BOUND/
 # UPPER_BOUND are left untouched below so reverting is a one-line change.
 TURN_FEEDBACK_SHOW_ON_ANY_SCORE = True
-ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "PARTIALLY_SUFFICIENT"}
+ANSWERABLE_TASK_STATUSES = {"SUFFICIENT", "RELEVANT"}
 # Extra Effort v2.1: three named effort tiers, each with its own explicit
 # gate -- "always" (unconditional) or "statistical" (requires
 # extend_if_optional, node_03c's confidence hypothesis test). Moving a
@@ -285,7 +285,7 @@ def _fully_covers(attempt: dict) -> bool:
     -- `completed` always means fully resolved. `rag` is the one tool whose
     `completed` is coarser than that: it only means "the retry loop ended
     with some approved evidence," which may be SUFFICIENT or merely
-    PARTIALLY_SUFFICIENT. Only SUFFICIENT counts as full coverage here.
+    RELEVANT. Only SUFFICIENT counts as full coverage here.
     """
     if not isinstance(attempt, dict):
         return False
@@ -778,8 +778,8 @@ def _build_clarification_context(state: AgentState) -> list[dict]:
       search task), "task_dispatcher" (node_03a, choosing which registered
       tool capability actually addresses an otherwise well-formed
       subquery), or "sufficiency_auditor" (node_03c, after reviewing
-      retrieved evidence -- either a PARTIALLY_SUFFICIENT task's remaining
-      gap was judged worth asking about, or an INSUFFICIENT task's total
+      retrieved evidence -- either a RELEVANT task's remaining
+      gap was judged worth asking about, or an IRRELEVANT task's total
       failure was judged to be genuine ambiguity rather than a coverage
       gap). Every other node in the pipeline is deliberately excluded --
       node_04b/node_11 relay only, node_06 audits someone else's output,
@@ -1160,7 +1160,7 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
             "generation_guidance": guidance,
         }
         for task_id, (parent_ids, guidance) in approved_by_task.items()
-        # "No info is info": a task can be PARTIALLY_SUFFICIENT purely on
+        # "No info is info": a task can be RELEVANT purely on
         # generation_guidance, with an empty approved_parent_ids -- still a
         # real manifest entry, since generation_guidance is the ONLY basis
         # for what to write about it in that case (see the "GENERATION
@@ -1405,6 +1405,10 @@ def node_00b_followup_check(state: AgentState):
     {json.dumps(transcript, ensure_ascii=False)}
 
     Natively generate response in: {language}
+    "Horizon" and every "Horizon <Name>" branded term (Horizon Bank,
+    Horizon App, Horizon Key, etc.) is a proper brand name -- write it
+    exactly as-is, in the original Latin script, regardless of the response
+    language. Never translate, transliterate, or localize it.
 
     Rules:
     - Only identify a topic as unresolved if the transcript clearly shows
@@ -2053,7 +2057,13 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        - "policy": A phrase describing the rules, conditions, eligibility criteria, limits, fees, or restrictions that apply to this specific component. Should sound like it comes from an FAQ answer's requirements or conditions section for this topic.
        - "conceptual": A phrase describing what the product, feature, or service in this specific component is and how it works. Should sound like it comes from an FAQ answer's explanatory introduction for this topic.
        DO NOT use comma-separated keywords. DO NOT paraphrase the customer's original question. Use common banking vocabulary only — do not invent specific product names, amounts, dates, or branch details. Each angle MUST target a structurally different part of a hypothetical FAQ answer about the component's topic.
-    5. For EACH SEARCH task, first write "mapping_reason": reason through, in one or two sentences, why this specific product/intent pairing is the right match for this component -- grounded in the Product/Intent Matrix and, where relevant, Recent Conversation -- BEFORE extracting the exact "target_commercial_product" (Noun) and a list of 1-3 "target_intent" (Verbs) from the Matrix below it. Decide the reasoning first; do not write a pairing and then back-justify it afterward. Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed.
+    5. For EACH SEARCH task, write "mapping_reason" as two explicit, ordered steps -- product before intent, never combined into one pass or decided in the other order:
+       STEP A (PRODUCT): first identify every Matrix PRODUCT (the Matrix's own top-level keys, e.g. Deposit_Account, Credit_Card, Horizon_APP -- normally one, or more than one only when the request genuinely spans multiple products at once) this component concerns, and state the concrete basis for each. When the customer's own wording names no product noun at all -- only an action, operation, or constraint (e.g. "transfer," "limit," "payment") -- you must still explicitly reason about which underlying product an ordinary retail customer would use for that action (e.g. transfers and their daily limits live on the customer's deposit/current account) -- never leave this step implicit, skip it, or defer it merely because the intent seems obvious.
+       STEP B (INTENT): only once STEP A is settled, identify every Matrix INTENT (1-3) that applies to this component under the product(s) just identified. Ranking or prioritizing among several plausible intents happens here, in this step -- it is never a substitute for STEP A, and settling it first is never grounds to skip STEP A.
+       Both PRODUCT and INTENT may be a single value or a short list, exactly as many as the request genuinely calls for -- never pad either to look thorough, and never collapse a genuine multi-product or multi-intent request into just one to keep the reasoning simple.
+       Grounded in the Product/Intent Matrix and, where relevant, Recent Conversation. Decide the reasoning first; do not write a pairing and then back-justify it afterward.
+       ANTI-PATTERN WARNING: "target_commercial_product" must always be drawn from the Matrix's PRODUCT keys (the left-hand side), never one of its INTENT values (the right-hand side, e.g. "Payments And Transfers," "Features And Limits"). If you catch yourself about to write an intent-shaped phrase into target_commercial_product, that is a direct sign STEP A was skipped, not completed -- stop and actually identify the product first.
+       Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed.
        After committing to target_commercial_product/target_intent, ALSO write "alternate_product_reason": could this exact same literal request ALSO plausibly be served by a genuinely different commercial product if your primary classification's own documentation turns out not to cover it? Strongly prefer a cross-cutting FUNCTIONAL product (Horizon_APP, Rewards_Program) over another genuine financial-instrument product (Credit_Card, Deposit_Account, Personal_Loan, Insurance, Mutual_Funds, Stocks, Debit_Card) as the alternate -- a request genuinely spanning two financial products should already be reflected in target_commercial_product or split into a separate component, never deferred to this fallback. Only name a second financial-instrument product when you can state a real, specific reason the SAME literal request is ALSO plausibly filed under it, never merely because it feels topically nearby. Then set "alternate_products" to 0-2 Matrix product nouns that reason justifies, distinct from target_commercial_product -- empty when nothing is genuinely plausible; a forced alternate is worse than none. This is a fallback the backend only ever uses later, if a search under the primary classification finds nothing -- it never affects this turn's own search.
     6. INTENT CLARIFICATION: You are one of several nodes in this pipeline authorized to raise a clarification, and the standing rule is who raises it, who provides the evidence and reason -- scoped strictly to YOUR OWN job here (identifying the correct Product and Intent for this request, before any evidence retrieval is even attempted). Never author a clarification about something outside that scope (e.g. whether retrieved evidence answers the question -- that is the sufficiency auditor's job later in the pipeline, not yours).
        For a CLARIFY component, set clarification.unresolved_request by reasoning directly against Latest User Input and Recent Conversation yourself -- never by quoting `customer_component`, which may already be elaborated with retrieval-oriented wording the customer never actually said. If Latest User Input itself names the ambiguous part clearly, use that wording directly. If it's a short continuation (e.g. "yes") whose own ambiguity is really about what it's confirming, use Recent Conversation to identify specifically what was being confirmed and name that (e.g. "whether you meant the personal loan or the credit card discussed earlier," grounded in an actual prior turn) rather than a generic "which product this refers to" -- and never a guessed product name of your own invention. Also set `clarification.clarification_reason`: name the specific detail in Latest User Input or Recent Conversation that makes Product, Intent, or both missing/ambiguous (e.g. "customer named no product; Recent Conversation has no prior product either") -- never a generic restatement like "the request is too vague," and never reference the Matrix alone without tying it to what the customer actually said or didn't say. Do not guess a product or create a generic task merely to fill the array. The customer-facing question itself is generated deterministically downstream from unresolved_request -- do not draft one here.
@@ -2062,7 +2072,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     8. Use "ALL" only when a component is genuinely universal and its Intent is a valid intent listed under "ALL" in the Product/Intent Matrix. "ALL" is not a fallback for an unknown product.
 
     Output JSON ONLY:
-    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","mapping_reason":"Customer named 'open an account' -- 'account' with no qualifier maps to the base Deposit_Account family, and 'open' is the Application intent verb in the Matrix.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"],"alternate_product_reason":"If Deposit_Account documentation doesn't cover this, opening an account is also a core Horizon_APP onboarding flow.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"the fee","clarification_reason":"No product or service is identified.","clarification_guesses":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"loan","clarification_reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","clarification_guesses":[{{"label":"Personal Loan","message":"I'm asking about a personal loan.","reason":"Personal_Loan is the only loan-type Matrix product."}}]}},"decline":null}},{{"component_id":"component_6","customer_component":"I have a question about my loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"a question about my loan","clarification_reason":"Product (Personal_Loan) is unambiguous, but no verb, action, or outcome is given -- Application, Repayment, and Eligibility are all equally plausible intents with no basis to prefer one.","clarification_guesses":[{{"label":"Applying","message":"I want to know how to apply for a loan.","reason":"Application is a valid Matrix intent for Personal_Loan."}},{{"label":"Repayment","message":"I want to know about repaying my loan.","reason":"Repayment is a valid Matrix intent for Personal_Loan."}},{{"label":"Eligibility","message":"I want to know if I'm eligible for a loan.","reason":"Eligibility is a valid Matrix intent for Personal_Loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
+    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","mapping_reason":"Customer named 'open an account' -- 'account' with no qualifier maps to the base Deposit_Account family, and 'open' is the Application intent verb in the Matrix.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"],"alternate_product_reason":"If Deposit_Account documentation doesn't cover this, opening an account is also a core Horizon_APP onboarding flow.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_7","customer_component":"I want to increase my daily transfer limit","resolution":"SEARCH","search_task":{{"task_id":"task_2","mapping_reason":"STEP A (PRODUCT): the request names no product noun at all, only the action 'transfer' and constraint 'limit' -- but daily transfer limits are configured on the customer's own deposit/current account, so PRODUCT is Deposit_Account. STEP B (INTENT): 'limit' maps to Features And Limits, and 'transfer' maps to Payments And Transfers, both valid intents under Deposit_Account.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Features And Limits","Payments And Transfers"],"alternate_product_reason":"Since transfer limits are also managed via digital banking, Horizon_APP may contain the same setting.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"the fee","clarification_reason":"No product or service is identified.","clarification_guesses":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"loan","clarification_reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","clarification_guesses":[{{"label":"Personal Loan","message":"I'm asking about a personal loan.","reason":"Personal_Loan is the only loan-type Matrix product."}}]}},"decline":null}},{{"component_id":"component_6","customer_component":"I have a question about my loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"a question about my loan","clarification_reason":"Product (Personal_Loan) is unambiguous, but no verb, action, or outcome is given -- Application, Repayment, and Eligibility are all equally plausible intents with no basis to prefer one.","clarification_guesses":[{{"label":"Applying","message":"I want to know how to apply for a loan.","reason":"Application is a valid Matrix intent for Personal_Loan."}},{{"label":"Repayment","message":"I want to know about repaying my loan.","reason":"Repayment is a valid Matrix intent for Personal_Loan."}},{{"label":"Eligibility","message":"I want to know if I'm eligible for a loan.","reason":"Eligibility is a valid Matrix intent for Personal_Loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
     {retry_context}
     """
 
@@ -2462,9 +2472,26 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         # generic RAG tasks rather than leaving a running ledger entry while
         # clarification proceeds directly to resolution planning.
         terminal_financial_subqueries = _finalize_rag_attempts(state, [])
-        if not clarification_tasks and decline_tasks:
+        # BUG-001 fix: "every component THIS call formulated declined" is not
+        # the same claim as "the whole turn has nothing to show the
+        # customer" -- a sibling subquery dispatched to a non-RAG tool this
+        # same round (deeplink/service_request/api) may already have
+        # completed successfully. any_subquery_resolved_by_other_tool above
+        # is scoped per-declining-component (does THIS subquery specifically
+        # have another resolved attempt), which is too narrow here: a
+        # genuinely different subquery (e.g. "activate my card" resolved via
+        # deeplink) sharing this turn with an unrelated declined subquery
+        # (e.g. "open a margin trading account") must not have its already-
+        # completed action silently discarded by short-circuiting straight
+        # to Standard Rejection. Checked turn-wide, not component-scoped.
+        any_sibling_subquery_resolved_by_other_tool = any(
+            _resolved_by_other_tool(sq) for sq in all_financial_subqueries
+        )
+        if not clarification_tasks and decline_tasks and not any_sibling_subquery_resolved_by_other_tool:
             # Every component the formulator received resolved to DECLINE
-            # (out-of-scope product). Nothing valid remains for this turn.
+            # (out-of-scope product), and no sibling subquery this turn was
+            # already resolved by a different tool. Nothing valid remains
+            # for this turn.
             return {
                 "preflight_status": "declined",
                 "search_tasks": [],
@@ -2479,6 +2506,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             not clarification_tasks
             and not unresolvable_search_tasks
             and not any_subquery_resolved_by_other_tool
+            and not any_sibling_subquery_resolved_by_other_tool
             and not (active_plan.get("steps") or has_retrieved_knowledge)
         ):
             # A valid request reached the formulator but no usable structured
@@ -2492,7 +2520,9 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
             # deeplink) -- that isn't "no usable output," it's already
             # resolved, and asking the customer to clarify a request the
             # bot just answered is exactly the self-contradiction this
-            # guard exists to prevent.
+            # guard exists to prevent. BUG-001: this now also covers a
+            # genuinely different sibling subquery resolved by another tool
+            # this same round, not just this exact subquery.
             fallback_unresolved_request = user_msg.strip() or "your banking request"
             fallback_subquery_id = (
                 all_financial_subqueries[0]["subquery_id"] if all_financial_subqueries else "subquery_1"
@@ -2516,7 +2546,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                 "financial_subqueries": terminal_financial_subqueries,
                 "same_intent_streak_count": same_intent_streak_count,
             }
-        if any_subquery_resolved_by_other_tool or active_plan.get("steps") or has_retrieved_knowledge:
+        if any_subquery_resolved_by_other_tool or any_sibling_subquery_resolved_by_other_tool or active_plan.get("steps") or has_retrieved_knowledge:
             return {"preflight_status": "continue_plan", "search_tasks": [], "decline_tasks": decline_tasks, "unresolvable_search_tasks": unresolvable_search_tasks, "financial_subqueries": terminal_financial_subqueries, "same_intent_streak_count": same_intent_streak_count}
         return {"preflight_status": "intent_clarification_needed", "search_tasks": [], "decline_tasks": decline_tasks, "unresolvable_search_tasks": unresolvable_search_tasks, "financial_subqueries": terminal_financial_subqueries, "same_intent_streak_count": same_intent_streak_count}
 
@@ -3629,7 +3659,7 @@ def _finalize_rag_attempts(state: AgentState, task_results: list[dict]) -> list[
                 combined_parent_ids = list(dict.fromkeys(
                     parent_id for item in approved for parent_id in item["approved_parent_ids"]
                 ))
-                retrieval_state = "SUFFICIENT" if any(item["status"] == "SUFFICIENT" for item in approved) else "PARTIALLY_SUFFICIENT"
+                retrieval_state = "SUFFICIENT" if any(item["status"] == "SUFFICIENT" for item in approved) else "RELEVANT"
                 attempt["status"] = "completed"
                 attempt["result"] = {"retrieval_state": retrieval_state, "approved_parent_ids": combined_parent_ids}
                 attempt["availability_reason"] = ""
@@ -3746,7 +3776,7 @@ def _dynamic_task_confidence(result: dict, partial_evidence: dict) -> float:
     status = result.get("status")
     if status == "SUFFICIENT":
         return 1.0
-    if status == "PARTIALLY_SUFFICIENT":
+    if status == "RELEVANT":
         return 0.5
     if status == "RETRY":
         return 0.5 if partial_evidence.get(str(result.get("task_id"))) else 0.0
@@ -3915,7 +3945,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             # against the customer_component, so the verdict is deterministic
             # — a model call here would only spend a call to restate what is
             # already certain.
-            print(f"   ⚡ [SUFFICIENCY SKIPPED]: Task '{task_id}' has no candidate evidence this attempt; treating as INSUFFICIENT without a model call.")
+            print(f"   ⚡ [SUFFICIENCY SKIPPED]: Task '{task_id}' has no candidate evidence this attempt; treating as IRRELEVANT without a model call.")
             log_event(
                 "task.sufficiency.skipped",
                 task_id=task_id,
@@ -3923,7 +3953,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             )
             auditor_results[task_id] = {
                 "task_id": task_id,
-                "status": "INSUFFICIENT",
+                "status": "IRRELEVANT",
                 "approved_parent_ids": [],
                 "reason": "No candidate evidence was retrieved for this component.",
                 "evidence_delta": [],
@@ -3967,35 +3997,36 @@ def node_03c_sufficiency_auditor(state: AgentState):
           sufficiency judgments. This history is internal audit context only;
           it is not customer-facing evidence and does not authorize any new
           factual claim.
-        - Classify each task as SUFFICIENT, PARTIALLY_SUFFICIENT, or
-          INSUFFICIENT. Judge whether the supplied parents provide useful,
+        - Classify each task as SUFFICIENT, RELEVANT, or
+          IRRELEVANT. Judge whether the supplied parents provide useful,
           materially relevant information for the task—not whether they repeat
           the customer's wording or explicitly resolve every possible
           interpretation of the customer's question.
-        - TERRITORY CEILING (Extra Effort v2.0): when `task.search_territory`
-          is `"adjacent_scope"`, this task is a deliberate scope-expansion
-          companion -- by construction, its own product/intent is DIFFERENT
-          from what the customer literally asked about, offered only as
-          related information that might still help. Its status may never
-          be SUFFICIENT, no matter how well its parents match it -- cap at
-          PARTIALLY_SUFFICIENT when they contain a genuinely useful related
-          fact, INSUFFICIENT when they don't. A normal task
-          (`search_territory` absent or `"in_scope"`) has no such ceiling.
-          Never set `likely_ambiguous_request`/`unresolved_term` for an
-          `"adjacent_scope"` task either -- clarification-authoring for
-          this subquery belongs exclusively to its `"in_scope"` sibling
-          task, which reviews the same underlying request.
-        - PARTIAL-EVIDENCE DECISION ORDER: First identify whether any supplied
+        - TERRITORY NOTE (Extra Effort v2.0): `task.search_territory` marks
+          HOW this task's candidates were found, never how good they are.
+          When it is `"adjacent_scope"`, this task is a deliberate scope-
+          expansion companion whose own product/intent is DIFFERENT from
+          what the customer literally asked about -- but judge it by the
+          exact same SUFFICIENT/RELEVANT/IRRELEVANT test as any other task.
+          Do not downgrade a genuinely complete answer merely because of
+          which search found it: if the original task's own product/intent
+          mapping turns out to have been wrong and this companion's
+          different product is actually the right one, its evidence can be
+          SUFFICIENT. Never set `unresolved_term` for an `"adjacent_scope"`
+          task, though -- clarification-authoring for this subquery belongs
+          exclusively to its `"in_scope"` sibling task, which reviews the
+          same underlying request.
+        - RELEVANCE DECISION ORDER: First identify whether any supplied
           parent contains a factual proposition directly relevant to a
           meaningful aspect of the customer's resolved request. If one does,
-          do not return INSUFFICIENT merely because the parent cannot determine
+          do not return IRRELEVANT merely because the parent cannot determine
           the customer's requested outcome, permission, eligibility,
           exception, legality, preferred action, or other broader conclusion.
-          Retain that parent as PARTIALLY_SUFFICIENT when its supported fact
+          Retain that parent as RELEVANT when its supported fact
           can be truthfully presented as useful, bounded Horizon guidance
           while another material aspect remains unresolved. Continue retrieval
           for the unresolved aspect.
-        - Return INSUFFICIENT only when no supplied parent contains any
+        - Return IRRELEVANT only when no supplied parent contains any
           factual proposition that can be truthfully and materially presented
           in relation to the resolved request. A parent is not material merely
           because it concerns the same product: its supported fact must
@@ -4006,12 +4037,12 @@ def node_03c_sufficiency_auditor(state: AgentState):
           supplied parent directly answers the resolved request, but one is
           genuinely worth mentioning as a hedged courtesy (per the
           GENERATION GUIDANCE rule below), that alone means the status MUST be
-          PARTIALLY_SUFFICIENT, even though `approved_parent_ids` stays empty
-          -- never INSUFFICIENT. Reserve INSUFFICIENT strictly for a task
+          RELEVANT, even though `approved_parent_ids` stays empty
+          -- never IRRELEVANT. Reserve IRRELEVANT strictly for a task
           where there is truly nothing to convey at all: no parent materially
           answers the request, AND there is nothing worth writing
           `generation_guidance` about either. Writing a real
-          `generation_guidance` while still returning INSUFFICIENT is a
+          `generation_guidance` while still returning IRRELEVANT is a
           contradiction -- it discards genuine reasoning this turn's response
           would otherwise never see.
         - The reverse matters just as much: a parent whose own subject is a
@@ -4071,7 +4102,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
           fits the customer's own stated situation with no caveat needed --
           do not manufacture a caveat where none is warranted.
         - MECHANISM-BRIDGE REASONING (progressive, work through in this
-          order before falling back to INSUFFICIENT): this is a genuinely
+          order before falling back to IRRELEVANT): this is a genuinely
           different case from the category-adjacency rule just above --
           that rule blocks treating a DIFFERENT product as material merely
           for sharing a category, menu path, or vocabulary; this rule
@@ -4127,45 +4158,77 @@ def node_03c_sufficiency_auditor(state: AgentState):
           treat "no parent mentions a restriction" as a reason to doubt the
           bridge; only an actually-stated restriction qualifies or blocks
           it. When one exists, the bridge does not hold as clean
-          PARTIALLY_SUFFICIENT guidance -- treat the restriction as part of
+          RELEVANT guidance -- treat the restriction as part of
           what must be disclosed, not as grounds to discard the bridge
           entirely, unless it outright forecloses the
           customer's outcome.
           Step 4: If the bridge holds, approve the parent(s) it rests on as
-          PARTIALLY_SUFFICIENT (never SUFFICIENT -- this is one bounded
+          RELEVANT (never SUFFICIENT -- this is one bounded
           logical step removed from a literal answer, not a direct one) and
           state the bridge explicitly in `reason`, including any
           qualifying condition from Step 3 that the response must carry
           forward. If no such resource/capability is described anywhere in
           the supplied parents, this rule simply does not apply -- proceed
-          to INSUFFICIENT under the rules above as normal.
-        - SUFFICIENT: the selected parents contain enough grounded information
-          for a useful response to the `customer_component`, even when that
-          response is an explicit policy boundary, limit, condition,
-          restriction, or other related factual information rather than a
-          literal yes/no answer. The response generator will state only what
-          the evidence supports and must not invent a broader conclusion.
+          to IRRELEVANT under the rules above as normal.
+        - SUFFICIENT (governing principle): the customer's own question,
+          exactly as they framed it, is fully and directly resolved -- every
+          specific detail, qualifier, product, channel, or scope they
+          actually named is either confirmed by a selected parent or
+          NECESSARILY settled by it, with no further assumption or guess
+          required (the way a stated fixed limit necessarily settles a
+          question about exceeding it). No material part of the
+          `customer_component` may be left ambiguous, unaddressed, or
+          simply assumed to be covered because a parent is topically
+          adjacent or shares vocabulary with it. THE TEST: could a careful
+          reader of the selected parents alone state, with no guessing,
+          exactly how every specific thing the customer named is addressed?
+          If yes, SUFFICIENT -- and the response itself need not be a
+          literal yes/no; an explicit policy boundary, limit, condition,
+          restriction, or other related factual information is a fully
+          adequate SUFFICIENT answer, as long as it leaves nothing the
+          customer named still open. If any named detail's answer is
+          genuinely undetermined by the evidence -- including a parent
+          that is simply silent on a scope, channel, product variant, or
+          other qualifier the customer explicitly used (e.g. they said
+          "international," a specific card network, or another
+          distinguishing detail, and no selected parent confirms or rules
+          out whether that detail is covered) -- the task is capped at
+          RELEVANT, never SUFFICIENT, no matter how confidently the parents
+          answer the more generic version of the question. A parent's own
+          topical adjacency, shared category, or use of the same general
+          noun as the customer's more specific request (e.g. a generic
+          "transfer limit" parent against a request specifically about the
+          "international transfer limit") is never itself confirmation
+          that it covers that specific case -- treat the named qualifier as
+          material until some parent actually addresses it, one way or the
+          other. The response generator will state only what the evidence
+          supports and must not invent a broader conclusion.
+        - Before settling on SUFFICIENT, also check every OTHER supplied
+          candidate parent, not only the ones you are about to approve, for
+          anything that contradicts or narrows the premise you are relying
+          on -- e.g. a candidate stating the bank does not offer the
+          specific service, channel, or scope the customer named at all. A
+          candidate does not need to be the one you ultimately cite to be
+          disqualifying: if any supplied parent directly speaks to whether
+          the customer's specific named detail is or is not covered, reason
+          from it rather than silently preferring a more generic,
+          scope-silent parent instead.
         {PRECISION_REFERENCE_CONTRACT}
-        - PARTIALLY_SUFFICIENT: selected parents provide grounded, material
-          information for one meaningful part of the `customer_component`,
-          while another material part has no useful related evidence. Select
-          only the supporting parent IDs; the backend will retain them while
-          retrieval continues.
-        - INSUFFICIENT: the supplied parents provide no grounded, materially
-          relevant information that could be usefully presented in response to
-          the `customer_component`.
-        - For INSUFFICIENT, also set `likely_ambiguous_request`: true only
-          when the retrieval genuinely failed because `customer_component`
-          itself is under-specified or could reasonably mean one of several
-          different things (e.g. "the fee" without naming which fee, "the
-          loan" without naming which loan type) -- the request needs more
-          detail before any evidence search could succeed. False when the
-          request was already specific and clear but the documentation
-          simply does not cover it (a real coverage gap, not an ambiguity).
-          Always false for SUFFICIENT or PARTIALLY_SUFFICIENT. This decides
-          whether the backend later offers the customer a clarifying
-          question instead of a flat "not available" statement -- reserve
-          true for genuine ambiguity, not merely for "no matching content."
+        - RELEVANT: selected parents are connected to the `customer_component`
+          but do not fully resolve it under the SUFFICIENT test above --
+          either a genuine partial answer (one meaningful part resolved,
+          another material part, or a qualifier the customer specifically
+          named, left genuinely undetermined by the evidence) or evidence
+          that does not itself answer the request but is still worth
+          conveying as bounded, honest guidance (see NO INFO IS INFO
+          above). Select the supporting parent IDs when any exist; when the
+          only material found is a `generation_guidance`-worthy observation
+          with no directly citable parent, leave `approved_parent_ids` empty
+          -- either way, retrieval continues for what remains open.
+        - IRRELEVANT: the supplied parents provide no grounded, materially
+          relevant information that could be usefully presented in response
+          to the `customer_component`, and there is nothing worth writing
+          `generation_guidance` about either.
         - CLARIFICATION AUTHORING: you are the node closest to the actual
           evidence gap, so YOU decide whether a clarifying question is
           warranted and what to ask -- the backend only relays what you set
@@ -4177,19 +4240,27 @@ def node_03c_sufficiency_auditor(state: AgentState):
           clarification about something outside that scope (e.g. which
           product or intent the customer meant in the first place -- that
           was already decided before this task ever reached you).
-          Set `unresolved_term` (else leave it as an empty string) in
-          exactly two cases:
-          (a) status is PARTIALLY_SUFFICIENT and the unresolved part is
-              something an additional customer detail could plausibly
-              disambiguate or unlock a materially different answer for --
-              not merely "more evidence would be nice." A gap that's simply
-              undocumented, where no customer detail would change the
-              outcome, does not warrant this; leave it empty and let the
-              backend's own neutral availability notice handle it instead.
-          (b) status is INSUFFICIENT and you just set likely_ambiguous_request
-              to true. In this case always set unresolved_term too --
-              naming the specific ambiguous part is exactly what
-              likely_ambiguous_request=true already asserts.
+          Set `unresolved_term` (else leave it as an empty string) only when
+          BOTH of the following hold, regardless of whether this task's
+          status is RELEVANT or IRRELEVANT:
+          (1) a specific, real detail is genuinely missing from the
+              customer's own words or the conversation history -- never a
+              gap in the evidence, an undocumented topic, or simply a hard
+              judgment call you had to make yourself (e.g. "the fee" without
+              naming which fee, "the loan" without naming which loan type).
+          (2) supplying that detail would plausibly change the outcome --
+              either unlocking a materially different, fuller answer for a
+              RELEVANT task, or turning an otherwise-unanswerable IRRELEVANT
+              task into an answerable one.
+          In other words: ask only when this genuinely blocks you from
+          classifying against a well-defined target or from writing
+          guidance you would actually stand behind -- never merely because a
+          task didn't fully resolve, the evidence was messy or incomplete,
+          or the topic is simply undocumented. A RELEVANT task with one
+          clean, if incomplete, fact needs no clarification at all -- write
+          its `generation_guidance` and move on; a real coverage gap is not
+          an ambiguity, and the backend's own neutral availability notice
+          already covers it.
           `unresolved_term` must be a concise phrase naming exactly the
           ambiguous or unresolved part, derived by reasoning directly
           against Original User Message and Trusted Conversation Context
@@ -4238,13 +4309,20 @@ def node_03c_sufficiency_auditor(state: AgentState):
           guess you cannot state a concrete reason for is not genuinely
           inferable -- leave it out.
         - Use the ordinary meaning of explicit policy boundaries, quantities,
-          conditions, and restrictions when deciding whether a task is
-          response-ready. Do not require a parent to restate the customer's
-          question or explicitly state the customer's requested conclusion.
-          For example, an explicit statutory maximum or fixed policy limit is
-          response-ready for a question about raising that limit, even if the
-          parent does not separately say "no" or describe every possible
-          external arrangement.
+          conditions, and restrictions when applying the SUFFICIENT test
+          above. A parent does not need to restate the customer's question
+          or spell out their requested conclusion in words when that
+          conclusion is NECESSARILY settled by a stated fact with no
+          further assumption needed -- e.g. an explicit statutory maximum
+          or fixed policy limit necessarily settles a question about
+          raising that limit, even though the parent never separately says
+          "no" or enumerates every possible external arrangement. This
+          allowance is narrow and covers only a conclusion that follows
+          with nothing left to determine -- it never extends to a named
+          detail, scope, channel, or qualifier a parent simply never
+          addresses at all; that case is not "necessarily settled," it is
+          silently unaddressed, and stays governed by the SUFFICIENT test
+          above (capped at RELEVANT).
           Preserve each parent's scope and do not infer facts beyond it.
         - Do NOT require a task's evidence to answer the complete original
           user message, another task's customer_component, or another
@@ -4253,10 +4331,13 @@ def node_03c_sufficiency_auditor(state: AgentState):
           explain references or continuations only; they are never the
           completeness benchmark for an individual task.
         - Return one result for every supplied task_id.
-        - For SUFFICIENT or PARTIALLY_SUFFICIENT, return only parent IDs from
-          that exact task that materially support the answer. At least one ID
-          is required for either status.
-        - For PARTIALLY_SUFFICIENT or INSUFFICIENT, return an `evidence_delta`
+        - For SUFFICIENT, return only parent IDs from that exact task that
+          materially support the answer -- at least one ID is required. For
+          RELEVANT, return the materially supporting parent IDs when any
+          exist; leave `approved_parent_ids` empty only for the guidance-only
+          case described in NO INFO IS INFO above (a genuine
+          `generation_guidance` with no directly citable parent).
+        - For RELEVANT or IRRELEVANT, return an `evidence_delta`
           list. This is internal evidence-only retrieval context for the intent
           formulator, not a query, diagnosis, or rewrite instruction. The
           backend determines terminal clarification after the configured retry limit.
@@ -4280,7 +4361,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
           `search_territory` is absent or `"in_scope"` only -- never set
           this for an already-`"adjacent_scope"` task): reasoned through
           BEFORE naming the candidate. When this task's own status is
-          PARTIALLY_SUFFICIENT or INSUFFICIENT, look across its supplied
+          RELEVANT or IRRELEVANT, look across its supplied
           candidate parents for ONE that -- while not materially answering
           this task's own `customer_component` -- has a genuine, real,
           content-based connection worth pursuing as a related topic if
@@ -4302,7 +4383,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
           shown to the customer immediately instead of a genuinely reasoned
           connection.
 
-        Output JSON only: {{"task_results": [{{"task_id": "...", "reason": "...", "status": "SUFFICIENT" | "PARTIALLY_SUFFICIENT" | "INSUFFICIENT", "approved_parent_ids": ["..."], "generation_guidance": "", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "scope_expansion_lead_reason": "", "scope_expansion_lead_parent_id": "", "likely_ambiguous_request": true|false, "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
+        Output JSON only: {{"task_results": [{{"task_id": "...", "reason": "...", "status": "SUFFICIENT" | "RELEVANT" | "IRRELEVANT", "approved_parent_ids": ["..."], "generation_guidance": "", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "scope_expansion_lead_reason": "", "scope_expansion_lead_parent_id": "", "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
         """
         try:
             auditor_results.update({
@@ -4317,22 +4398,25 @@ def node_03c_sufficiency_auditor(state: AgentState):
         available_ids = candidate_ids_by_task.get(task_id, set())
         audit = auditor_results.get(task_id, {})
         approved_ids = [parent_id for parent_id in audit.get("approved_parent_ids", []) if parent_id in available_ids]
-        requested_status = str(audit.get("status", "INSUFFICIENT")).upper()
+        requested_status = str(audit.get("status", "IRRELEVANT")).upper()
         # Accept legacy values during an in-flight backend restart, but never
         # let them shape the three-way state model.
         if requested_status in {"RETRY", "UNAVAILABLE"}:
-            requested_status = "INSUFFICIENT"
-        if requested_status not in {"SUFFICIENT", "PARTIALLY_SUFFICIENT", "INSUFFICIENT"}:
-            requested_status = "INSUFFICIENT"
-        # Extra Effort v2.0 TERRITORY CEILING: enforced here in code, not
-        # left to the prompt instruction alone -- an adjacent_scope task is,
-        # by construction, not the customer's literal request, so a
-        # SUFFICIENT verdict from the model would overstate what its
-        # evidence actually supports. Downgrade deterministically rather
-        # than trust the model never to say it anyway.
-        if requested_status == "SUFFICIENT" and tasks_by_id.get(task_id, {}).get("search_territory") == "adjacent_scope":
-            print(f"   🔒 [TERRITORY CEILING]: Task '{task_id}' is adjacent_scope; downgrading model's SUFFICIENT to PARTIALLY_SUFFICIENT.")
-            requested_status = "PARTIALLY_SUFFICIENT"
+            requested_status = "IRRELEVANT"
+        if requested_status not in {"SUFFICIENT", "RELEVANT", "IRRELEVANT"}:
+            requested_status = "IRRELEVANT"
+        # search_territory ("adjacent_scope" vs "in_scope") is a provenance
+        # marker, not a status ceiling -- an adjacent_scope task is judged by
+        # the exact same SUFFICIENT/RELEVANT/IRRELEVANT test as any other
+        # task. If the original in_scope task's own product/intent mapping
+        # was actually wrong and this companion's different product is the
+        # right one, its evidence can genuinely be SUFFICIENT; forcing a
+        # downgrade here would deny the customer a correct, complete answer
+        # purely because of which search happened to find it. search_territory
+        # still governs presentation downstream (an adjacent_scope entry must
+        # never be blurred into the in_scope task's own direct answer without
+        # disclosing the different product/intent assumption), just not the
+        # status itself.
         reason = audit.get("reason", "No sufficient grounded FAQ evidence was selected.")
         generation_guidance = str(audit.get("generation_guidance", "")).strip()
         # "No info is info": a genuinely useful observation captured only as
@@ -4341,16 +4425,16 @@ def node_03c_sufficiency_auditor(state: AgentState):
         # not to repeat it. Falls back to the last round's retained value
         # when this round's own audit call left generation_guidance empty.
         effective_guidance = generation_guidance or partial_guidance.get(str(task_id), "")
-        if requested_status == "INSUFFICIENT" and effective_guidance:
+        if requested_status == "IRRELEVANT" and effective_guidance:
             # "No info is info": enforced here in code, not left to the
             # prompt instruction alone -- same discipline as the TERRITORY
             # CEILING downgrade above. A non-empty generation_guidance is
             # found material regardless of which status field the model
             # itself chose; trusting the model to always keep the two
             # fields consistent would silently reintroduce the exact
-            # contradiction (INSUFFICIENT + a real generation_guidance)
+            # contradiction (IRRELEVANT + a real generation_guidance)
             # that caused this fix to exist in the first place.
-            requested_status = "PARTIALLY_SUFFICIENT"
+            requested_status = "RELEVANT"
         history_delta = [
             {
                 "parent_id": str(item.get("parent_id", "")).strip(),
@@ -4380,13 +4464,25 @@ def node_03c_sufficiency_auditor(state: AgentState):
             # Parent IDs were already constrained to `available_ids`, the
             # candidate set produced by this RAG attempt. Keep only that
             # allow-list here; consumers hydrate lazily and task-by-task.
+            # BUG-007: deliberately `generation_guidance` (this round's own
+            # raw value), never `effective_guidance` -- the partial_guidance
+            # fallback exists to carry a "no info, but here's a courtesy
+            # observation" finding across retries for a task that never
+            # finds a citable parent (see the RELEVANT branch below). A task
+            # that just became SUFFICIENT has real, approved evidence this
+            # round; if its own audit call felt no fresh caveat was needed,
+            # attaching a stale, possibly-contradictory guidance string
+            # left over from an earlier, less-successful round (e.g. "admit
+            # there is no information...") would actively mislead whoever
+            # reads this field, even though the generator correctly ignores
+            # it in favor of the real evidence -- confirmed live.
             current_results[task_id] = {
                 "task_id": task_id,
                 "status": "SUFFICIENT",
                 "origin": result.get("origin", "RAG"),
                 "approved_parent_ids": approved_ids,
                 "reason": reason,
-                "generation_guidance": effective_guidance,
+                "generation_guidance": generation_guidance,
             }
             log_event(
                 "evidence.boundary.approved",
@@ -4401,18 +4497,18 @@ def node_03c_sufficiency_auditor(state: AgentState):
 
         retained_ids = partial_evidence.get(str(task_id), [])
         partial_ids = list(dict.fromkeys([*retained_ids, *approved_ids]))
-        if requested_status == "PARTIALLY_SUFFICIENT" and not approved_ids and not effective_guidance:
+        if requested_status == "RELEVANT" and not approved_ids and not effective_guidance:
             # A partial outcome without selected supporting evidence AND
             # without even a reasoned observation worth conveying is not a
             # usable partial answer. Treat it as insufficient rather than
             # retaining an ungrounded state. "No info is info": a genuine
             # generation_guidance is itself found material, on the same
             # footing as an approved parent -- it alone is enough to stay
-            # PARTIALLY_SUFFICIENT (see the terminal branch below, which
+            # RELEVANT (see the terminal branch below, which
             # carries an empty approved_parent_ids list forward in that
             # case rather than falling back to CLARIFICATION_REQUIRED).
-            requested_status = "INSUFFICIENT"
-        if requested_status == "PARTIALLY_SUFFICIENT":
+            requested_status = "IRRELEVANT"
+        if requested_status == "RELEVANT":
             partial_evidence[str(task_id)] = partial_ids
             if effective_guidance:
                 partial_guidance[str(task_id)] = effective_guidance
@@ -4460,7 +4556,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             scope_expansion_lead_reason = ""
 
         # Direct-adopt (Extra Effort v2.1): a genuine lead is adopted
-        # immediately as PARTIALLY_SUFFICIENT/adjacent_scope evidence --
+        # immediately as RELEVANT/adjacent_scope evidence --
         # free (no LLM call, no retrieval), and deliberately NOT part of
         # the effort-tier system above (see EFFORT_TIER_GATE): it must fire
         # even on a turn where extend_if_optional is False and this task is
@@ -4503,7 +4599,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             new_direct_adopt_tasks.append(companion_stub)
             current_results[companion_task_id] = {
                 "task_id": companion_task_id,
-                "status": "PARTIALLY_SUFFICIENT",
+                "status": "RELEVANT",
                 "approved_parent_ids": [scope_expansion_lead_parent_id],
                 "reason": scope_expansion_lead_reason,
                 "origin": "DIRECT_ADOPT",
@@ -4531,7 +4627,6 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "refinement": refinement,
             "requested_status": requested_status,
             "generation_guidance": effective_guidance,
-            "likely_ambiguous_request": bool(audit.get("likely_ambiguous_request", False)),
             "unresolved_term": str(audit.get("unresolved_term", "")).strip(),
             # Distinct from `reason` above: reason explains the evidence
             # verdict generally (used for every status); clarification_reason
@@ -4663,7 +4758,6 @@ def node_03c_sufficiency_auditor(state: AgentState):
         refinement = decision["refinement"]
         requested_status = decision["requested_status"]
         generation_guidance = decision["generation_guidance"]
-        likely_ambiguous_request = decision["likely_ambiguous_request"]
         unresolved_term = decision["unresolved_term"]
         clarification_reason = decision["clarification_reason"]
         clarification_guesses = decision["clarification_guesses"]
@@ -4694,14 +4788,13 @@ def node_03c_sufficiency_auditor(state: AgentState):
             # otherwise produce two clarification_tasks entries for one
             # subquery_id, violating the "at most one per subquery_id"
             # guarantee the rest of this design relies on.
-            likely_ambiguous_request = False
             unresolved_term = ""
             clarification_reason = ""
             clarification_guesses = []
         if not should_retry:
             # "No info is info": a genuine generation_guidance alone --
             # even with an empty partial_ids -- is found material that
-            # must carry forward as PARTIALLY_SUFFICIENT, never be
+            # must carry forward as RELEVANT, never be
             # discarded into CLARIFICATION_REQUIRED. approved_parent_ids
             # stays [] in that case; the generator's only basis for this
             # task is generation_guidance itself (see
@@ -4709,7 +4802,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             if partial_ids or generation_guidance:
                 current_results[task_id] = {
                     "task_id": task_id,
-                    "status": "PARTIALLY_SUFFICIENT",
+                    "status": "RELEVANT",
                     "approved_parent_ids": partial_ids,
                     "reason": reason,
                     "generation_guidance": generation_guidance,
@@ -4721,7 +4814,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
                     "evidence.boundary.approved",
                     task_id=task_id,
                     approved_parent_ids=partial_ids,
-                    status="PARTIALLY_SUFFICIENT",
+                    status="RELEVANT",
                 )
             else:
                 current_results[task_id] = {
@@ -4729,7 +4822,6 @@ def node_03c_sufficiency_auditor(state: AgentState):
                     "status": "CLARIFICATION_REQUIRED",
                     "approved_parent_ids": [],
                     "reason": reason,
-                    "likely_ambiguous_request": likely_ambiguous_request,
                     "unresolved_term": unresolved_term,
                     "clarification_reason": clarification_reason,
                     "clarification_guesses": clarification_guesses,
@@ -4740,7 +4832,6 @@ def node_03c_sufficiency_auditor(state: AgentState):
                 status=current_results[task_id]["status"],
                 approved_parent_ids=partial_ids,
                 turn_confidence_if_stopped=provisional_turn_grade,
-                likely_ambiguous_request=likely_ambiguous_request,
                 unresolved_term=unresolved_term,
             )
             feedback.pop(task_id, None)
@@ -4767,7 +4858,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         # subquery, surfacing RAG's own empty result as a no_info entry
         # would tell the customer no information exists for something a
         # working shortcut was just provided for in this same turn.
-        # PARTIALLY_SUFFICIENT is exempt from this filter: it carries real,
+        # RELEVANT is exempt from this filter: it carries real,
         # approved partial evidence to keep, not an absence claim, so it's
         # never contradicted by another tool's success the way an empty
         # result is.
@@ -4818,7 +4909,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "scope": _CLARIFICATION_SCOPE_BY_ORIGINATOR["sufficiency_auditor"],
             # clarification_reason, never the general `reason`: reason
             # explains the evidence verdict (used for every status --
-            # SUFFICIENT/PARTIALLY_SUFFICIENT/INSUFFICIENT alike), not
+            # SUFFICIENT/RELEVANT/IRRELEVANT alike), not
             # specifically why this counts as needing clarification.
             # clarification_reason is required to name a real detail from
             # the customer's own input/history -- see TaskSufficiencyItem.
@@ -4836,7 +4927,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "clarification_guesses": result.get("clarification_guesses", []),
         }
         for result in current_results.values()
-        if result.get("status") in {"CLARIFICATION_REQUIRED", "PARTIALLY_SUFFICIENT"}
+        if result.get("status") in {"CLARIFICATION_REQUIRED", "RELEVANT"}
         and result.get("unresolved_term")
         and _rag_gap_still_matters(result)
         and tasks_by_id.get(result.get("task_id"), {}).get("subquery_id")
@@ -4864,7 +4955,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
     # A CLARIFICATION_REQUIRED task now fully represented by its own
     # evidence-authored clarification above needs no separate no_info
     # statement -- there's no partial answer to caveat and nothing else to
-    # say about it, unlike PARTIALLY_SUFFICIENT (which keeps its terminal
+    # say about it, unlike RELEVANT (which keeps its terminal
     # marker regardless, for the neutral availability notice covering
     # whatever the clarifying question doesn't).
     clarified_task_ids = {
@@ -4878,12 +4969,12 @@ def node_03c_sufficiency_auditor(state: AgentState):
             result.get("status", "CLARIFICATION_REQUIRED"),
         )
         for result in current_results.values()
-        if result.get("status") in {"CLARIFICATION_REQUIRED", "PARTIALLY_SUFFICIENT"}
+        if result.get("status") in {"CLARIFICATION_REQUIRED", "RELEVANT"}
         and result.get("task_id") not in clarified_task_ids
         and _rag_gap_still_matters(result)
     ]
     full_count = sum(result.get("status") == "SUFFICIENT" for result in current_results.values())
-    partial_count = sum(result.get("status") == "PARTIALLY_SUFFICIENT" for result in current_results.values())
+    partial_count = sum(result.get("status") == "RELEVANT" for result in current_results.values())
     print(f"   ✅ [TASK AUDIT]: {full_count} sufficient, {partial_count} terminal partial, {len(unresolved)} pending retry.")
     retry_expansion = _retry_expansion_plan(
         [tasks_by_id[result.get("task_id")] for result in unresolved if result.get("task_id") in tasks_by_id],
@@ -4892,7 +4983,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
     for result in current_results.values():
         event = (
             "task.sufficiency.completed" if result.get("status") == "SUFFICIENT"
-            else "task.partial_terminal" if result.get("status") == "PARTIALLY_SUFFICIENT"
+            else "task.partial_terminal" if result.get("status") == "RELEVANT"
             else "task.retry" if result.get("status") == "RETRY"
             else "task.clarification_required"
         )
@@ -5104,6 +5195,15 @@ def _style_personalization_block(user_profile: dict) -> str:
     STYLE & PERSONALIZATION INSTRUCTIONS:
     (These are phrasing instructions only; do not invent banking facts)
     - Natively generate response in: {user_profile.get("language") or "English"}
+    - "Horizon" and every "Horizon <Name>" branded term (Horizon Bank,
+      Horizon App, Horizon Key, Horizon Card, and any other product/feature
+      name carrying the Horizon brand) is a proper brand name, never a
+      description -- write it EXACTLY as it appears in the evidence, in the
+      original Latin script, regardless of what language the rest of the
+      response is written in. Never translate, transliterate, or localize
+      it into another script or invented equivalent (e.g. never render
+      "Horizon App" as a Chinese phonetic name) -- a brand name does not
+      change with the customer's language.
     - Tone: {user_profile.get("tone", "professional")}
     - Financial Literacy Depth: {literacy_instruction}
     - Emojis: {user_profile.get("emoji", "enabled")}
@@ -5494,7 +5594,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # (CLARIFICATION_REQUIRED) gets the same deterministic-evidence
     # treatment as decline/clarification -- there is nothing left to
     # synthesize, only a fixed "not found" statement to relay. A task with
-    # SOME retained partial evidence (PARTIALLY_SUFFICIENT) is different: it
+    # SOME retained partial evidence (RELEVANT) is different: it
     # already flows through evidence_inputs as real content, so it stays on
     # the looser, narrower `clarification` field's terminal-marker path
     # below rather than being duplicated here.
@@ -5584,10 +5684,12 @@ def _generate_response_blocks(state: AgentState) -> dict:
     {json.dumps(resolution_context, ensure_ascii=False)}
     Approved evidence by retrieval task: {json.dumps(evidence_inputs, ensure_ascii=False)}
     An entry whose "search_territory" is "adjacent_scope" (Extra Effort
-    v2.0) is RELATED information the customer did not literally ask about,
-    surfaced only because their exact request wasn't documented -- never
-    present it as a direct answer to their request, and never blend its
-    claims into the same sentence as an "in_scope" (or absent
+    v2.0) was retrieved under a different product/intent than what the
+    customer's own request was resolved to. When its own status is RELEVANT,
+    treat it as RELATED information the customer did not literally ask
+    about, surfaced only because their exact request wasn't documented --
+    never present it as a direct answer to their request, and never blend
+    its claims into the same sentence as an "in_scope" (or absent
     search_territory) entry's direct answer without making the distinction
     clear. That entry's own "mapping_reason" states WHY this specific
     related topic was chosen (e.g. "buying a car often means saving for a
@@ -5612,6 +5714,15 @@ def _generate_response_blocks(state: AgentState) -> dict:
     Sharing a subquery with an "in_scope" entry is otherwise only
     permitted when both are cited together AND the adjacent_scope framing
     above is preserved in the text itself.
+    When an adjacent_scope entry's own status is instead SUFFICIENT, the
+    sufficiency auditor has judged this different product/intent to
+    genuinely be the right match for what the customer needs -- most often
+    because the original in_scope mapping turned out to be wrong. Present
+    its evidence as a real, direct answer, not a hedged suggestion -- but
+    still name the product/intent it actually concerns, so the customer
+    understands why the answer is framed that way (e.g. "this falls under
+    our Instant Loan product, which covers..." rather than silently
+    answering as if it matched their literal wording).
     Clarification inputs -- never for you to judge WHETHER to ask (that
     decision is already made); your only job is composing the actual
     question. "scope" tells you WHERE in the pipeline the ambiguity is
@@ -5956,7 +6067,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
       open question as before; there is nothing to mention.
     - `clarification` here is ONLY for a terminal unresolved marker still
       listed under "Terminal unresolved task markers" below (always
-      `PARTIALLY_SUFFICIENT` -- a genuinely ambiguous zero-evidence task is
+      `RELEVANT` -- a genuinely ambiguous zero-evidence task is
       instead fully represented as its own Clarification Input above,
       composed the same way, not judged here) -- never for an
       Intent/Clarification input, a Decline input, or a No-info input,
@@ -5976,11 +6087,19 @@ def _generate_response_blocks(state: AgentState) -> dict:
       flagged unsupported content. Audit feedback is never a source of facts.
     - If Failed outbound-audit feedback contains
       `NARROW_TO_EVIDENCE_SCOPE`, treat it as mandatory for this rewrite:
-      return only the explicit, verified scope of the relevant approved
-      evidence. Do not directly answer the broader customer question; do not
-      draw an exclusivity conclusion; do not render a list, progress flow,
-      option, or conditional procedure; do not recommend, warn, comment, or
-      ask a further question. A short plain-text scope statement is sufficient.
+      follow that violation's own generation_guidance (Generation Guidance
+      Shape Rule case 2) -- explicitly admit the specific broader element
+      the evidence does not confirm, phrased around the customer's own
+      question, THEN separately state what the evidence does confirm.
+      Never merge the two into one sentence that lets the confirmed part's
+      certainty bleed into the unconfirmed one, and never present the
+      confirmed remainder as if it resolves the customer's broader,
+      unconfirmed question. The confirmed remainder may keep whatever UI
+      element type its own content naturally calls for -- a genuinely
+      evidence-backed procedure may still render as a stepper; collapsing
+      it to plain text is not required merely because this strategy fired.
+      Do not draw an exclusivity conclusion, add an unsupported step,
+      recommend an action, or ask a further question beyond the admission.
     - If feedback contains `REMOVE_UNSUPPORTED_CONTENT`, preserve only the
       independently supported remainder. If it contains
       `CLARIFY_FROM_ALLOWED_CONTEXT`, ask only the permitted clarification.
@@ -6779,10 +6898,14 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     {json.dumps(scoped_violations, ensure_ascii=False)}
 
     Approved evidence for these blocks' task_ids only: {json.dumps(evidence_by_task, ensure_ascii=False)}
-    An entry whose "search_territory" is "adjacent_scope" is RELATED
-    information the customer did not literally ask about -- never present
-    it as a direct answer; its own "mapping_reason" is the only permitted
-    basis for a hedged bridging sentence (e.g. "you may want to...").
+    An entry whose "search_territory" is "adjacent_scope" and status
+    RELEVANT is RELATED information the customer did not literally ask
+    about -- never present it as a direct answer; its own "mapping_reason"
+    is the only permitted basis for a hedged bridging sentence (e.g. "you
+    may want to..."). One whose status is instead SUFFICIENT has been
+    judged the actual right match for the customer's need (typically
+    because the original product/intent mapping was wrong) -- present it as
+    a real, direct answer, naming the product/intent it actually concerns.
     Clarification inputs for these blocks only (compose your own natural
     question about "unresolved_request", never answer it):
     {json.dumps(_clarification_prompt_view(intent_clarifications), ensure_ascii=False)}
@@ -7273,14 +7396,24 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         retained after removing the exact unsupported claim or instruction.
       * NARROW_TO_EVIDENCE_SCOPE when approved evidence is relevant but
         establishes only a conditional, partial, or narrower policy/process
-        than the customer's broader question. The next response's answer
-        must restate only that explicit evidence scope and must not answer
-        the broader question, infer exclusivity, offer the conditional
-        process as the customer's path, add steps, recommend an action, or
-        invent a new follow-up question unless independently supported --
-        this constrains only the answer's own content, never whether an
-        already-authored Clarification Input for a different entry still
-        gets relayed, which remains required exactly as on any other turn.
+        than the customer's broader question. Set this violation's own
+        generation_guidance per the Generation Guidance Shape Rule's
+        confirmed/unconfirmed split (case 2): explicitly instruct admitting,
+        in the customer's own words, the specific broader element the
+        evidence does NOT confirm (e.g. whether a named narrower procedure
+        also covers the specific product/scenario the customer actually
+        asked about) -- never silently drop it -- and, separately,
+        instruct stating what the evidence DOES confirm. The confirmed
+        remainder may keep whatever presentation its own content naturally
+        calls for (a genuine evidence-backed procedure may still be
+        instructed as a stepper; a policy fact as a plain statement) --
+        what must never happen is presenting that confirmed content AS IF
+        it resolves the customer's broader, unconfirmed question, inferring
+        exclusivity, or inventing a new follow-up question unless
+        independently supported -- this constrains only the answer's own
+        content, never whether an already-authored Clarification Input for
+        a different entry still gets relayed, which remains required
+        exactly as on any other turn.
       * CLARIFY_FROM_ALLOWED_CONTEXT only when a permitted clarification
         source genuinely contains an unresolved term whose answer could
         materially change a grounded response.
@@ -7503,6 +7636,19 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           content that states or implies a fact, figure, procedure, or
           outcome for that task_id beyond the plain admission, exactly as
           you would for a task with no evidence entry at all.
+        - This restriction runs in BOTH directions. An entry's mere
+          presence in this bundle -- its task_id, its "resolved_subquery"
+          matching the customer's own words, or its "mapping_reason" -- is
+          NEVER itself evidence that information exists, and is never
+          grounds to fail the plain admission or demand it say more. When
+          "approved_parents" is empty, that empty list is the complete and
+          final word on what was found for this task: do NOT reason from
+          the entry's existence, its subquery match, or its mapping_reason
+          to conclude the assistant "has access to," "should use," or
+          "should have processed" information for that task_id -- there is
+          none, by construction, whenever this list is empty. A plain
+          admission that nothing confirms the answer, for that task_id,
+          always passes this check.
         2. Inferential Grounding (Bridge Check)
         - Natural conclusions that connect approved facts to the resolved
           sub-query are allowed when they are a reasonable, bounded logical
@@ -7533,21 +7679,30 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         Scope-Expansion Honesty Rule (Extra Effort v2.0):
         - A Task-Level Approved Evidence entry whose "search_territory" is
           "adjacent_scope" was retrieved from a deliberately different
-          product/topic than the customer's own task -- by construction it
-          is related information, not a literal answer to that task's
-          `customer_component`. Its facts are a permitted source, but only
-          for content that is visibly introduced as related or additional
-          information (e.g. "I don't have that exact detail, but here's
-          related information about X that may help:") -- never phrased as
-          if it directly answers the customer's stated request.
+          product/topic than the customer's own task. When its own status
+          is RELEVANT, by construction it is related information, not a
+          literal answer to that task's `customer_component`. Its facts are
+          a permitted source, but only for content that is visibly
+          introduced as related or additional information (e.g. "I don't
+          have that exact detail, but here's related information about X
+          that may help:") -- never phrased as if it directly answers the
+          customer's stated request.
+        - When an "adjacent_scope" entry's own status is instead SUFFICIENT,
+          the sufficiency auditor has judged this different product/intent
+          to genuinely be the right match for the customer's need (typically
+          because the original in_scope mapping was wrong) -- its facts may
+          be presented as a real, direct answer, provided the response names
+          the product/intent it actually concerns rather than silently
+          answering as if it matched the customer's literal wording.
         - Reject as a `wrong_task_evidence` violation any visible claim that
-          draws on an "adjacent_scope" entry's facts while presenting them
-          as the direct, literal answer to that task, or that blends them
-          into the same sentence as an "in_scope" (or absent
-          search_territory) entry's answer without preserving the
+          draws on a RELEVANT "adjacent_scope" entry's facts while
+          presenting them as the direct, literal answer to that task, or
+          that blends them into the same sentence as an "in_scope" (or
+          absent search_territory) entry's answer without preserving the
           related-information framing. The underlying facts may still be
           correct and traceable -- the violation is the missing or
-          erased distinction, not a fabricated fact.
+          erased distinction, not a fabricated fact. This does not apply to
+          a SUFFICIENT "adjacent_scope" entry presented per the rule above.
         - That entry's own "mapping_reason" is the ONLY permitted basis for
           a bridging sentence explaining WHY this related topic is being
           offered (e.g. connecting a car purchase to a downpayment to a
@@ -7643,7 +7798,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           No-Info Input's statement must not imply a banking fact,
           procedure, product alternative, policy, or next action beyond
           what its own `no_info_evidence` says.
-        - A Terminal Unresolved Task Marker is always `PARTIALLY_SUFFICIENT`
+        - A Terminal Unresolved Task Marker is always `RELEVANT`
           here (a `CLARIFICATION_REQUIRED` task the sufficiency auditor
           judged ambiguous is instead fully represented as its own
           Clarification Input above, never as a marker here): a neutral
@@ -8268,7 +8423,7 @@ def _score_subquery(subquery: dict) -> float:
     """Bot-confidence contribution of one financial subquery.
 
     RESOLVED -> 1.0. OPEN with real partial RAG evidence (a `rag` attempt
-    whose retrieval_state is PARTIALLY_SUFFICIENT) -> 0.5, so a genuinely
+    whose retrieval_state is RELEVANT) -> 0.5, so a genuinely
     partial answer isn't scored as a full failure. Everything else -> 0.0.
     Reuses _compute_subquery_status's rollup rather than re-deriving it.
     """
@@ -8278,7 +8433,7 @@ def _score_subquery(subquery: dict) -> float:
     attempts = subquery.get("tool_attempts", []) if isinstance(subquery, dict) else []
     has_partial_rag_evidence = any(
         isinstance(a, dict) and a.get("tool_name") == "rag"
-        and a.get("result", {}).get("retrieval_state") == "PARTIALLY_SUFFICIENT"
+        and a.get("result", {}).get("retrieval_state") == "RELEVANT"
         for a in attempts
     )
     return 0.5 if has_partial_rag_evidence else 0.0
@@ -8616,7 +8771,7 @@ def _build_escalation_case_summary(state: AgentState) -> dict:
     understanding the customer's unresolved case. This is NOT a chronological
     recap of the session.
 
-    IMPORTANT LANGUAGE RULE: You MUST output the case summary strictly in {preferred_language}, as this summary will be presented directly to the user in the frontend UI.
+    IMPORTANT LANGUAGE RULE: You MUST output the case summary strictly in {preferred_language}, as this summary will be presented directly to the user in the frontend UI. Exception: "Horizon" and every "Horizon <Name>" branded term (Horizon Bank, Horizon App, Horizon Key, etc.) is a proper brand name -- write it exactly as-is, in the original Latin script, never translated or transliterated.
 
     Source material (use only this material):
     {_build_current_session_escalation_context(state)}

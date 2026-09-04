@@ -7325,6 +7325,17 @@ def _partition_audited_response(
     A violation with an empty task_id can't be attributed to any single
     block (a genuinely response-wide issue): treat the whole round as
     response-wide -- nothing approved, every task_id pending.
+
+    BUG-009: a violation whose task_id IS known but has no corresponding
+    block at all (e.g. response generation itself failed and returned zero
+    response_blocks) must also count as pending -- there is genuinely
+    nothing approved for that task, regardless of whether a block exists to
+    attribute the violation to. Without this, a real, correctly-attributed
+    violation silently vanishes (the per-block loop below has nothing to
+    iterate), pending_task_ids comes back empty, and the caller reads that
+    as a full PASS despite the audit explicitly having found a problem --
+    confirmed live during a Gemini high-demand spike that made generation
+    return an empty response.
     """
     all_violations = [*conduct_violations, *grounding_violations]
     if any(not str(v.get("task_id", "")).strip() for v in all_violations):
@@ -7339,6 +7350,8 @@ def _partition_audited_response(
             pending.update(ids)
         else:
             approved.append(block)
+    covered_ids = {task_id for block in response_blocks for task_id in (block.get("sourceTaskIds", []) or [])}
+    pending.update(flagged - covered_ids)
     return approved, pending, False
 
 

@@ -27,15 +27,14 @@ second time).
 | SUSPECTED-001 | Triage may misclassify a genuine eligibility question as chitchat | Low | Suspected | LLM judgment | Needs verification |
 | SUSPECTED-002 | Possible query-intent misinterpretation for an ambiguous "source of funds" question | Low | Suspected | LLM judgment | Needs verification |
 | BUG-008 | `NARROW_TO_EVIDENCE_SCOPE` recovery silently drops the unconfirmed claim instead of admitting it | Low–Medium | Confirmed | LLM judgment (prompt gap) | Fix implemented, live-verified |
-| BUG-009 | Outbound audit silently PASSes a turn when response generation returns zero blocks | Medium–High | Confirmed (2 occurrences) | **Deterministic code** | Open |
+| BUG-009 | Outbound audit silently PASSes a turn when response generation returns zero blocks | Medium–High | Confirmed (2 occurrences) | **Deterministic code** | **Fixed, verified (fixture test)** |
 
-**All three deterministic-code bugs (001, 003, 007) are fixed**, and BUG-004
-is now also fixed via a hybrid approach (see its own entry) that converts an
-LLM-judgment problem into a deterministically-enforced contract. BUG-002 and
-BUG-008 have fixes implemented and live-verified but not yet proven at scale
-(see each entry's own caveats). BUG-005, BUG-006, and the two suspected items
-remain open. **BUG-009 is a newly-found, still-open deterministic-code bug**
-— see its own entry.
+**All four deterministic-code bugs (001, 003, 007, 009) are fixed**, and
+BUG-004 is now also fixed via a hybrid approach (see its own entry) that
+converts an LLM-judgment problem into a deterministically-enforced contract.
+BUG-002 and BUG-008 have fixes implemented and live-verified but not yet
+proven at scale (see each entry's own caveats). BUG-005, BUG-006, and the
+two suspected items remain open.
 
 **Why the distinction matters:** a deterministic-code bug (001, 003, 007,
 009) has a fix with a guaranteed outcome — patch the logic, the failure mode
@@ -477,7 +476,7 @@ this project's rate-limit constraints on live testing).
 
 ## BUG-009 — Outbound audit silently PASSes a turn when response generation returns zero blocks
 
-**Severity:** Medium–High **Confidence:** Confirmed, 2 independent occurrences **Status: Open**
+**Severity:** Medium–High **Confidence:** Confirmed, 2 independent occurrences **Status: Fixed, verified (fixture test)**
 **Found in:** live re-testing during a sustained Gemini `gemini-3.5-flash-lite` high-demand spike (2026-09-04) — session `pidnote_1204f45b` and a second independent repeat run, both on "How do I get a visa card?"
 
 **What happens:** The response-generation LLM call itself fails (a `503`
@@ -507,16 +506,20 @@ round as response-wide") but never considered the symmetric case: a
 non-empty `task_id` violation that also can't be attributed to any block,
 because no block exists at all.
 
-**Suggested fix direction:** in `_partition_audited_response`, after
-computing `flagged`, also check for any `task_id` in `flagged` that isn't
-covered by *any* block's `sourceTaskIds` (whether because `response_blocks`
-is empty or a block for that task was simply never produced) and add it to
-`pending` unconditionally — a flagged task_id with nothing to show for it
-should never silently drop out of consideration. This is a deterministic
-fix with a guaranteed outcome, not an LLM-judgment issue: the audit itself
-already correctly detects the problem every time; only the downstream
-partition logic silently discards that finding.
+**Fix implemented:** `_partition_audited_response` now computes
+`covered_ids` (every `task_id` named by any actual block's `sourceTaskIds`)
+after the per-block loop, and adds `flagged - covered_ids` to `pending`
+unconditionally — a flagged task_id with no corresponding block, whether
+because `response_blocks` is completely empty or a block for that
+particular task was simply never produced, can no longer silently drop out
+of consideration.
 
-**Not yet fixed** — found while investigating BUG-004 live-testing during
-an active Gemini spike; deferred at the user's direction to finish the
-BUG-004 investigation first.
+**Verified:** a fixture-level test (no LLM call needed, since this is a
+pure deterministic function) replayed the exact repro shape — empty
+`response_blocks`, one `grounding_violations` entry correctly attributed to
+`task_id: "task_1"` — and confirmed `pending` now correctly comes back as
+`{"task_1"}` instead of an empty set, which will route the turn to the
+reviser (`route_n21`) instead of a false PASS. Three regression checks also
+passed: a normal per-block violation still resolves correctly, a genuinely
+clean response with no violations still fully approves, and an empty-`task_id`
+violation still correctly triggers the response-wide path.

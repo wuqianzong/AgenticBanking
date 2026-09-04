@@ -20,29 +20,40 @@ second time).
 | BUG-001 | Mixed-turn decline drops already-resolved actions from other tools | High | Confirmed | **Deterministic code** | **Fixed, live-verified** |
 | BUG-002 | Guidance-only RELEVANT admission sometimes rejected in a loop by the outbound audit | Medium | Confirmed (intermittent) | LLM judgment | Fix implemented, live-verified on original repro |
 | BUG-003 | Transient upstream 503 on the Tool-Calling Planner is treated as "nothing found," not retried | Medium | Confirmed | **Deterministic code** | **Fixed, verified (mocked failure)** |
-| BUG-004 | Network-specific questions (Visa/Mastercard) answered with network-agnostic evidence marked SUFFICIENT | Medium | Confirmed (2 occurrences) | LLM judgment | Open |
+| BUG-004 | Network-specific questions (Visa/Mastercard) answered with network-agnostic evidence marked SUFFICIENT | Medium | Confirmed (2 occurrences) | LLM judgment, **now deterministically enforced** | **Fixed, live-verified (4 independent cases)** |
 | BUG-005 | Evidence approved as SUFFICIENT can be topically mismatched to the customer's actual request | Medium–High | Confirmed | LLM judgment | Open |
 | BUG-006 | Evidence Applicability Rule missed a real premise mismatch (unauthorized-charge FAQ used for a duplicate-charge complaint) | Medium–High | Confirmed | LLM judgment | Open |
 | BUG-007 | Stale `generation_guidance` from an earlier round can persist into a later round's successful verdict | Low | Confirmed | **Deterministic code** | **Fixed, live-verified** |
 | SUSPECTED-001 | Triage may misclassify a genuine eligibility question as chitchat | Low | Suspected | LLM judgment | Needs verification |
 | SUSPECTED-002 | Possible query-intent misinterpretation for an ambiguous "source of funds" question | Low | Suspected | LLM judgment | Needs verification |
 | BUG-008 | `NARROW_TO_EVIDENCE_SCOPE` recovery silently drops the unconfirmed claim instead of admitting it | Low–Medium | Confirmed | LLM judgment (prompt gap) | Fix implemented, live-verified |
+| BUG-009 | Outbound audit silently PASSes a turn when response generation returns zero blocks | Medium–High | Confirmed (2 occurrences) | **Deterministic code** | Open |
 
-**All three deterministic-code bugs (001, 003, 007) are now fixed** in
-`backend/app/orchestration/nodes.py` and `backend/app/core/llm_service.py`.
-Each fix's own verification is documented in its entry below. The five
-LLM-judgment issues (002, 004, 005, 006, and the two suspected items) remain
-open — per the note above, those need prompt-level work plus re-testing,
-not a one-line patch.
+**All three deterministic-code bugs (001, 003, 007) are fixed**, and BUG-004
+is now also fixed via a hybrid approach (see its own entry) that converts an
+LLM-judgment problem into a deterministically-enforced contract. BUG-002 and
+BUG-008 have fixes implemented and live-verified but not yet proven at scale
+(see each entry's own caveats). BUG-005, BUG-006, and the two suspected items
+remain open. **BUG-009 is a newly-found, still-open deterministic-code bug**
+— see its own entry.
 
-**Why the distinction matters:** a deterministic-code bug (001, 003, 007) has
-a fix with a guaranteed outcome — patch the logic, the failure mode is gone.
-An LLM-judgment issue (002, 004, 005, 006, and both suspected items) is the
+**Why the distinction matters:** a deterministic-code bug (001, 003, 007,
+009) has a fix with a guaranteed outcome — patch the logic, the failure mode
+is gone. An LLM-judgment issue (002, 005, 006, both suspected items) is the
 model's own reasoning going wrong on a specific input despite the relevant
 rule already being correctly wired into the prompt; a fix (tightening the
 rule, adding an example) can reduce the rate but can't guarantee elimination
 the way a code patch can — these need re-testing after any prompt change,
-not just a one-time verification.
+not just a one-time verification. **BUG-004 shows a third pattern worth
+naming**: the underlying judgment (does this evidence confirm what the
+customer specifically named?) is still made by an LLM, but the *consequence*
+of getting it wrong is now closed off deterministically — the model can
+still mis-resolve one item, but it can no longer let that mistake silently
+produce a SUFFICIENT verdict, because the code enforces the downgrade
+regardless of what the model's own `status` field says. This is a reusable
+pattern (see BUG-004's "Reason-to-Guidance Contract" note) worth reaching
+for whenever a similar upstream-can't-know / downstream-can-check gap shows
+up again, rather than relying on prompt wording alone.
 
 ---
 
@@ -206,8 +217,8 @@ instead of surfacing the 503 as an empty result.
 
 ## BUG-004 — Network-specific questions answered with network-agnostic evidence marked SUFFICIENT
 
-**Severity:** Medium **Confidence:** Confirmed, 2 occurrences
-**Found in:** [2026-09-04_full_system_validation](../research/2026-09-04_full_system_validation/reports/RESEARCH_SUMMARY.md), queries 2 and 23
+**Severity:** Medium **Confidence:** Confirmed, 2 occurrences originally, reproduced live **Status: Fixed, live-verified (4 independent cases)**
+**Found in:** [2026-09-04_full_system_validation](../research/2026-09-04_full_system_validation/reports/RESEARCH_SUMMARY.md), queries 2 and 23; re-confirmed live in production sessions on the exact same pattern
 
 **What happens:** Query 2 ("closest Mastercard ATM") was marked `SUFFICIENT`
 using `faq_768b41d9`, which only states overseas ATMs accept **Visa** —
@@ -216,12 +227,91 @@ marked `SUFFICIENT` using three parents that describe the generic
 application process with zero mention of card network at all. In both
 cases, the customer's specific network detail was never actually confirmed
 by the evidence, yet the response reads as though it fully answered the
-question.
+question. A related, more severe live case surfaced during investigation:
+a customer asking to raise their *international wire transfer* limit was
+given *domestic* transfer-limit steps as if they applied, while a
+disqualifying FAQ ("Horizon does not support international wire transfers
+at all") sat unused in the very same retrieval candidate pool.
 
-**Suggested fix direction:** the sufficiency auditor's "material" test
-should be tightened so that a specifically-named attribute in the request
-(a card network, in this case) must be addressed by the evidence, not
-merely adjacent to a topic the evidence does cover.
+**Root-cause chain (three distinct, stacked gaps, found in order):**
+1. The SUFFICIENT/RELEVANT boundary itself had no principle for "a named
+   qualifier the evidence never confirms caps the task at RELEVANT" — it
+   only had narrow, easy-to-miss carve-outs (e.g. an "explicit policy
+   boundary is response-ready even without restating the question," which
+   the model over-applied to justify skipping brand confirmation
+   entirely).
+2. Even after rewriting that boundary around one governing principle
+   ("every named detail must be confirmed or necessarily settled, never
+   silently unaddressed") and adding an explicit brand-attention rule, the
+   model kept rationalizing past it in prose ("the customer asked for a
+   'Visa card' generally, but the evidence covers the relevant product
+   family") — a `node_03c` "Product-identity note" meant only to stop the
+   auditor re-litigating *product* identity (e.g. "Instant Loan" content
+   still counts as `Personal_Loan` evidence) was being over-extended by the
+   model to also treat a customer-named *brand/network* as already
+   settled, since it lives under the same settled product classification.
+3. The eventual fix — a structured field the intent formulator populates
+   and the sufficiency auditor is required to individually resolve — was
+   first added to the prompt text only and silently did nothing: Gemini's
+   controlled generation (`response_schema` in `call_llm_router`)
+   constrains output strictly to whatever is declared on the corresponding
+   Pydantic `BaseModel` class in `llm_service.py`; a prompt-only field,
+   however clearly described with a matching worked example, is simply
+   dropped from the model's actual output with no error. (See the
+   `gemini-structured-output-schema-registration` memory note for the
+   general lesson.)
+
+**Fix implemented — a "Reason-to-Guidance Contract" between two nodes:**
+- `SearchTask.verification_items: List[str]` (`llm_service.py`) — the
+  intent formulator (`node_02e`) lists every specific, checkable claim the
+  customer's own wording implies that PRODUCT/INTENT classification does
+  not need to resolve but real evidence must confirm (a named brand/network,
+  a premise/condition, a scope boundary, or any other specific detail) —
+  phrased as short, self-contained sentences, deliberately general-purpose,
+  not limited to card brands. `node_02e` cannot resolve these itself since
+  no evidence exists yet at formulation time.
+- `TaskSufficiencyItem.verification_results: List[VerificationResult]`
+  (`llm_service.py`) — the sufficiency auditor (`node_03c`) is required to
+  independently resolve every entry against the real retrieved evidence,
+  citing the exact supporting `parent_id` when confirmed.
+- **Deterministic code enforcement** (`node_03c`, right after `status` is
+  parsed): if any `verification_items` entry is not marked `confirmed` in
+  `verification_results`, the code force-downgrades `SUFFICIENT` to
+  `RELEVANT` regardless of what the model's own `status` field says — the
+  model can still mis-resolve one item, but it can no longer let that
+  mistake silently produce a SUFFICIENT verdict.
+- This mirrors the pre-existing `generation_guidance` handoff from
+  `node_03c` to the response generator — both are narrow, structured,
+  independently-checkable asks passed forward when an upstream node can
+  reason about *what* needs checking but not *whether* it holds, never raw
+  unaudited conclusions passed forward as authority.
+
+**Verified live, across four structurally different cases, after the
+Pydantic registration fix:**
+- **Visa** ("How do I get a visa card?"): `verification_items: ["the card
+  network is Visa"]` → `confirmed: true, supporting_parent_id: "faq_d5c931d4"`
+  (a Visa Instalments FAQ that genuinely confirms the primary Horizon
+  credit card runs on Visa) → correctly `SUFFICIENT`.
+- **Mastercard** ("how do i get a mastercard"): `confirmed: false` →
+  correctly capped at `RELEVANT`, with an honest admission and the general
+  process offered as related information, never a bait-and-switch to Visa.
+- **American Express** (a network never mentioned in any prompt example —
+  a genuine generalization test): `confirmed: false` → correctly
+  `IRRELEVANT` (the model's own judgment, not just the code floor), with
+  guidance explicitly forbidding substituting a different network.
+- **Cosmetic vs. physical card damage** (a non-brand premise-mismatch case:
+  "my credit card is ugly, can I replace it?"): `verification_items:
+  ["The replacement procedure covers cosmetic or appearance
+  dissatisfaction, not just physical damage, loss, or theft."]` →
+  `confirmed: false` → correctly `RELEVANT`, with a clean admission plus
+  the standard replacement path offered as a courtesy — confirming the
+  mechanism generalizes beyond card networks to any named premise/condition,
+  not just brand names.
+- Also confirmed across a real 3-turn live production exchange (Visa →
+  Mastercard → a compound "so you only have Visa, right?" question) that
+  the system correctly resolves multiple qualifiers independently within
+  one task, and correctly refuses to confirm or deny an *exclusivity* claim
+  the evidence doesn't address either way.
 
 ---
 
@@ -382,3 +472,51 @@ Sufficiency Auditor's first pass and never re-entered the reviser's
 therefore not independently re-confirmed under live conditions yet — the
 original failure is stochastic and wasn't intentionally re-forced, given
 this project's rate-limit constraints on live testing).
+
+---
+
+## BUG-009 — Outbound audit silently PASSes a turn when response generation returns zero blocks
+
+**Severity:** Medium–High **Confidence:** Confirmed, 2 independent occurrences **Status: Open**
+**Found in:** live re-testing during a sustained Gemini `gemini-3.5-flash-lite` high-demand spike (2026-09-04) — session `pidnote_1204f45b` and a second independent repeat run, both on "How do I get a visa card?"
+
+**What happens:** The response-generation LLM call itself fails (a `503`
+that BUG-003's retry-once logic doesn't absorb, e.g. during a sustained
+outage), so `_generate_response_blocks` catches the exception and produces
+zero `response_blocks`. The outbound audit correctly detects this — *"The
+assistant returned an empty response despite the presence of Task-Level
+Approved Evidence... directly addresses the customer's request"* — and
+flags a real `grounding_violations` entry with a correctly-attributed
+`task_id`. But the turn is still treated as a full **PASS**, so the
+customer receives a bare, unhelpful fallback (49 characters in one
+occurrence, "Sorry, I don't have an answer for that right now" in the
+other) instead of being routed to the reviser or a proper deterministic
+fallback.
+
+**Root cause:** `_partition_audited_response` (`nodes.py`) determines what
+is "pending" by matching each violation's `task_id` against the
+`sourceTaskIds` of the *existing* `response_blocks`. When `response_blocks`
+is completely empty (nothing to iterate), this matching loop never runs,
+so a correctly-flagged, non-empty-`task_id` violation matches nothing —
+`pending_ids` comes back as an empty set, `response_wide` stays `False`,
+and `node_06`'s own check (`if not pending_ids and not response_wide:
+PASS`) reads that as full compliance. The function's own docstring already
+states the intended invariant for an empty `task_id` ("a violation with an
+empty task_id can't be attributed to any single block... treat the whole
+round as response-wide") but never considered the symmetric case: a
+non-empty `task_id` violation that also can't be attributed to any block,
+because no block exists at all.
+
+**Suggested fix direction:** in `_partition_audited_response`, after
+computing `flagged`, also check for any `task_id` in `flagged` that isn't
+covered by *any* block's `sourceTaskIds` (whether because `response_blocks`
+is empty or a block for that task was simply never produced) and add it to
+`pending` unconditionally — a flagged task_id with nothing to show for it
+should never silently drop out of consideration. This is a deterministic
+fix with a guaranteed outcome, not an LLM-judgment issue: the audit itself
+already correctly detects the problem every time; only the downstream
+partition logic silently discards that finding.
+
+**Not yet fixed** — found while investigating BUG-004 live-testing during
+an active Gemini spike; deferred at the user's direction to finish the
+BUG-004 investigation first.

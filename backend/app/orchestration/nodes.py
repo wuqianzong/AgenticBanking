@@ -2063,6 +2063,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        Both PRODUCT and INTENT may be a single value or a short list, exactly as many as the request genuinely calls for -- never pad either to look thorough, and never collapse a genuine multi-product or multi-intent request into just one to keep the reasoning simple.
        Grounded in the Product/Intent Matrix and, where relevant, Recent Conversation. Decide the reasoning first; do not write a pairing and then back-justify it afterward.
        ANTI-PATTERN WARNING: "target_commercial_product" must always be drawn from the Matrix's PRODUCT keys (the left-hand side), never one of its INTENT values (the right-hand side, e.g. "Payments And Transfers," "Features And Limits"). If you catch yourself about to write an intent-shaped phrase into target_commercial_product, that is a direct sign STEP A was skipped, not completed -- stop and actually identify the product first.
+       VERIFICATION ITEMS FIELD: if the component's own wording implies a specific, checkable claim that PRODUCT/INTENT classification does not need to resolve but real evidence must confirm before the request is fully answered, record it as its own entry in "verification_items" (a list of short, precise, self-contained sentences; empty when no such claim exists). This is general-purpose, not limited to product identity: a named brand or network ("the card network is Visa"), a premise or condition an evidence-backed answer would need to actually match ("the replacement procedure covers cosmetic damage, not just physical damage"), a scope boundary ("the stated limit applies per application, not per customer"), or any other specific detail the customer's own wording turns on. Never changes which PRODUCT/INTENT you choose -- you genuinely cannot know from here whether the bank's evidence will confirm any of these, since no evidence has been retrieved yet. This field exists so the sufficiency auditor downstream, who DOES see the retrieved evidence, is required to separately check each one against it before ever calling the task fully answered -- do not fold this into mapping_reason's prose instead, and do not leave it empty merely because the claim seems minor.
        Each search task MUST contain task_id. On a new request use task_1, task_2, task_3 and continue numbering as needed.
        After committing to target_commercial_product/target_intent, ALSO write "alternate_product_reason": could this exact same literal request ALSO plausibly be served by a genuinely different commercial product if your primary classification's own documentation turns out not to cover it? Strongly prefer a cross-cutting FUNCTIONAL product (Horizon_APP, Rewards_Program) over another genuine financial-instrument product (Credit_Card, Deposit_Account, Personal_Loan, Insurance, Mutual_Funds, Stocks, Debit_Card) as the alternate -- a request genuinely spanning two financial products should already be reflected in target_commercial_product or split into a separate component, never deferred to this fallback. Only name a second financial-instrument product when you can state a real, specific reason the SAME literal request is ALSO plausibly filed under it, never merely because it feels topically nearby. Then set "alternate_products" to 0-2 Matrix product nouns that reason justifies, distinct from target_commercial_product -- empty when nothing is genuinely plausible; a forced alternate is worse than none. This is a fallback the backend only ever uses later, if a search under the primary classification finds nothing -- it never affects this turn's own search.
     6. INTENT CLARIFICATION: You are one of several nodes in this pipeline authorized to raise a clarification, and the standing rule is who raises it, who provides the evidence and reason -- scoped strictly to YOUR OWN job here (identifying the correct Product and Intent for this request, before any evidence retrieval is even attempted). Never author a clarification about something outside that scope (e.g. whether retrieved evidence answers the question -- that is the sufficiency auditor's job later in the pipeline, not yours).
@@ -2072,7 +2073,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     8. Use "ALL" only when a component is genuinely universal and its Intent is a valid intent listed under "ALL" in the Product/Intent Matrix. "ALL" is not a fallback for an unknown product.
 
     Output JSON ONLY:
-    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","mapping_reason":"Customer named 'open an account' -- 'account' with no qualifier maps to the base Deposit_Account family, and 'open' is the Application intent verb in the Matrix.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"],"alternate_product_reason":"If Deposit_Account documentation doesn't cover this, opening an account is also a core Horizon_APP onboarding flow.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_7","customer_component":"I want to increase my daily transfer limit","resolution":"SEARCH","search_task":{{"task_id":"task_2","mapping_reason":"STEP A (PRODUCT): the request names no product noun at all, only the action 'transfer' and constraint 'limit' -- but daily transfer limits are configured on the customer's own deposit/current account, so PRODUCT is Deposit_Account. STEP B (INTENT): 'limit' maps to Features And Limits, and 'transfer' maps to Payments And Transfers, both valid intents under Deposit_Account.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Features And Limits","Payments And Transfers"],"alternate_product_reason":"Since transfer limits are also managed via digital banking, Horizon_APP may contain the same setting.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"the fee","clarification_reason":"No product or service is identified.","clarification_guesses":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"loan","clarification_reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","clarification_guesses":[{{"label":"Personal Loan","message":"I'm asking about a personal loan.","reason":"Personal_Loan is the only loan-type Matrix product."}}]}},"decline":null}},{{"component_id":"component_6","customer_component":"I have a question about my loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"a question about my loan","clarification_reason":"Product (Personal_Loan) is unambiguous, but no verb, action, or outcome is given -- Application, Repayment, and Eligibility are all equally plausible intents with no basis to prefer one.","clarification_guesses":[{{"label":"Applying","message":"I want to know how to apply for a loan.","reason":"Application is a valid Matrix intent for Personal_Loan."}},{{"label":"Repayment","message":"I want to know about repaying my loan.","reason":"Repayment is a valid Matrix intent for Personal_Loan."}},{{"label":"Eligibility","message":"I want to know if I'm eligible for a loan.","reason":"Eligibility is a valid Matrix intent for Personal_Loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
+    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","mapping_reason":"Customer named 'open an account' -- 'account' with no qualifier maps to the base Deposit_Account family, and 'open' is the Application intent verb in the Matrix.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"],"verification_items":[],"alternate_product_reason":"If Deposit_Account documentation doesn't cover this, opening an account is also a core Horizon_APP onboarding flow.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_7","customer_component":"I want to increase my daily transfer limit","resolution":"SEARCH","search_task":{{"task_id":"task_2","mapping_reason":"STEP A (PRODUCT): the request names no product noun at all, only the action 'transfer' and constraint 'limit' -- but daily transfer limits are configured on the customer's own deposit/current account, so PRODUCT is Deposit_Account. STEP B (INTENT): 'limit' maps to Features And Limits, and 'transfer' maps to Payments And Transfers, both valid intents under Deposit_Account.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Features And Limits","Payments And Transfers"],"verification_items":[],"alternate_product_reason":"Since transfer limits are also managed via digital banking, Horizon_APP may contain the same setting.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_8","customer_component":"How do I get a visa card?","resolution":"SEARCH","search_task":{{"task_id":"task_3","mapping_reason":"STEP A (PRODUCT): the request names a 'visa card' -- 'Visa' is a card network/brand name, not a product; the underlying product is Credit_Card. STEP B (INTENT): 'How do I get' maps to Application.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Credit_Card","target_intent":["Application"],"verification_items":["the card network is Visa"],"alternate_product_reason":"","alternate_products":[]}},"clarification":null,"decline":null}},{{"component_id":"component_9","customer_component":"my credit card is ugly, can I replace it?","resolution":"SEARCH","search_task":{{"task_id":"task_4","mapping_reason":"STEP A (PRODUCT): the request concerns the customer's own credit card, so PRODUCT is Credit_Card. STEP B (INTENT): 'replace it' maps to Card Logistics.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Credit_Card","target_intent":["Card Logistics"],"verification_items":["the card replacement procedure covers cosmetic/appearance dissatisfaction, not only damage, loss, or theft"],"alternate_product_reason":"","alternate_products":[]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"the fee","clarification_reason":"No product or service is identified.","clarification_guesses":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"loan","clarification_reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","clarification_guesses":[{{"label":"Personal Loan","message":"I'm asking about a personal loan.","reason":"Personal_Loan is the only loan-type Matrix product."}}]}},"decline":null}},{{"component_id":"component_6","customer_component":"I have a question about my loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"a question about my loan","clarification_reason":"Product (Personal_Loan) is unambiguous, but no verb, action, or outcome is given -- Application, Repayment, and Eligibility are all equally plausible intents with no basis to prefer one.","clarification_guesses":[{{"label":"Applying","message":"I want to know how to apply for a loan.","reason":"Application is a valid Matrix intent for Personal_Loan."}},{{"label":"Repayment","message":"I want to know about repaying my loan.","reason":"Repayment is a valid Matrix intent for Personal_Loan."}},{{"label":"Eligibility","message":"I want to know if I'm eligible for a loan.","reason":"Eligibility is a valid Matrix intent for Personal_Loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
     {retry_context}
     """
 
@@ -4126,6 +4127,17 @@ def node_03c_sufficiency_auditor(state: AgentState):
           genuinely DIFFERENT product than this task's own -- it does not
           apply merely because a parent's own brand name for the SAME
           product differs from the generic Matrix noun describing it.
+          This concession is narrow and covers ONLY whether a parent's own
+          product identity counts as the customer's named product -- it is
+          never license to treat a customer-named brand, network, or other
+          specific variant qualifier (e.g. Visa vs Mastercard) as already
+          settled or resolved merely because the surrounding PRODUCT
+          classification is settled. Two different products both existing
+          under the same settled Credit_Card classification does not mean
+          either one satisfies a request naming a specific one -- that
+          qualifier still requires its own check against the parent's
+          actual text, exactly as the VERIFICATION ITEMS CONFIRMATION rule
+          below requires, regardless of how settled the product itself is.
           Step 1: Re-read the request one level more abstractly than its
           literal wording -- what underlying outcome is the customer
           actually after (e.g. a way to pay for something, a way to access
@@ -4213,6 +4225,31 @@ def node_03c_sufficiency_auditor(state: AgentState):
           the customer's specific named detail is or is not covered, reason
           from it rather than silently preferring a more generic,
           scope-silent parent instead.
+        - VERIFICATION ITEMS CONFIRMATION (REQUIRED when this task's own
+          `verification_items` is non-empty): the intent formulator flagged
+          each entry in `verification_items` as a specific, checkable claim
+          the customer's own wording implied -- a named brand/network, a
+          premise or condition an answer would need to actually match, a
+          scope boundary, or any other specific detail -- which it could
+          not check itself since no evidence existed yet; that check is
+          entirely your job now. For EVERY entry in `verification_items`,
+          you MUST output a corresponding entry in `verification_results`:
+          {{"item": "<the exact string>", "confirmed": true/false,
+          "supporting_parent_id": "<parent_id or empty>"}}. Set `confirmed`
+          true ONLY when some parent's own text actually states that exact
+          claim, or explicitly states equivalent/universal coverage --
+          never merely because a parent covers the general topic, is
+          silent on this specific point, or states something different
+          related to it. This is a narrow, factual check on THIS ONE
+          ITEM, deliberately separate from your own overall `status`
+          judgment for the task -- do not let a holistic sense that "the
+          evidence generally answers this" substitute for actually finding
+          the claim stated. An item left unconfirmed caps this task at
+          RELEVANT, never SUFFICIENT, regardless of how complete the rest
+          of the evidence is; this is enforced deterministically
+          downstream, so an inaccurate `confirmed: true` will not make the
+          response correct -- it will only misinform whoever later has to
+          debug why a wrong answer reached the customer.
         {PRECISION_REFERENCE_CONTRACT}
         - RELEVANT: selected parents are connected to the `customer_component`
           but do not fully resolve it under the SUFFICIENT test above --
@@ -4383,7 +4420,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
           shown to the customer immediately instead of a genuinely reasoned
           connection.
 
-        Output JSON only: {{"task_results": [{{"task_id": "...", "reason": "...", "status": "SUFFICIENT" | "RELEVANT" | "IRRELEVANT", "approved_parent_ids": ["..."], "generation_guidance": "", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "scope_expansion_lead_reason": "", "scope_expansion_lead_parent_id": "", "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
+        Output JSON only: {{"task_results": [{{"task_id": "...", "reason": "...", "status": "SUFFICIENT" | "RELEVANT" | "IRRELEVANT", "approved_parent_ids": ["..."], "generation_guidance": "", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "verification_results": [{{"item": "...", "confirmed": true, "supporting_parent_id": "..."}}], "scope_expansion_lead_reason": "", "scope_expansion_lead_parent_id": "", "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
         """
         try:
             auditor_results.update({
@@ -4405,6 +4442,29 @@ def node_03c_sufficiency_auditor(state: AgentState):
             requested_status = "IRRELEVANT"
         if requested_status not in {"SUFFICIENT", "RELEVANT", "IRRELEVANT"}:
             requested_status = "IRRELEVANT"
+        # VERIFICATION ITEMS CONFIRMATION: enforced here in code, not left
+        # to the model's own `status` field alone -- same discipline as the
+        # "No info is info" IRRELEVANT-to-RELEVANT override below. A
+        # specific, checkable claim (e.g. Visa vs Mastercard, or a premise/
+        # scope condition) the intent formulator flagged as unconfirmable
+        # at formulation time must be confirmed by SOME parent's own text
+        # before this task can be SUFFICIENT; trusting the model to always
+        # self-police this would silently reintroduce the exact "generally
+        # covers the product family" rationalization this field exists to
+        # stop (confirmed live: the model can notice a named brand
+        # explicitly and still grant SUFFICIENT anyway).
+        verification_items = [
+            str(q).strip() for q in tasks_by_id.get(task_id, {}).get("verification_items", [])
+            if str(q).strip()
+        ]
+        if verification_items and requested_status == "SUFFICIENT":
+            confirmations = {
+                str(item.get("item", "")).strip(): bool(item.get("confirmed"))
+                for item in audit.get("verification_results", [])
+                if isinstance(item, dict)
+            }
+            if not all(confirmations.get(q, False) for q in verification_items):
+                requested_status = "RELEVANT"
         # search_territory ("adjacent_scope" vs "in_scope") is a provenance
         # marker, not a status ceiling -- an adjacent_scope task is judged by
         # the exact same SUFFICIENT/RELEVANT/IRRELEVANT test as any other

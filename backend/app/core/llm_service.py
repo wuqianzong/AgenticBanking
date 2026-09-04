@@ -11,8 +11,8 @@ from backend.app.core.system_logger import log_event
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 #model_A="openai/gpt-oss-120b"  # For response generation
-model_A="gemini-3.5-flash-lite"  # For response generation
-model_B="gemini-3.5-flash-lite"  # For sufficiency, gourndedness, and compliance audits
+model_A="gemini-3.1-flash-lite"  # For response generation
+model_B="gemini-3.1-flash-lite"  # For sufficiency, gourndedness, and compliance audits
 model_C="gemini-3.1-flash-lite"  # For triage, decomposition, and journey planning
 MODEL_A_GENERATOR = model_A       # Groq: Conversational Engine
 MODEL_B_AUDITOR = model_B            # Google: Safety & Sufficiency Judge
@@ -88,6 +88,18 @@ class RetryEvidenceDeltaItem(BaseModel):
     )
 
 
+class VerificationResult(BaseModel):
+    """Resolution of one specific, checkable claim the intent formulator
+    flagged as unverifiable at formulation time (see
+    SearchTask.verification_items) -- the sufficiency auditor's own,
+    independent, evidence-grounded answer to it. General-purpose: covers a
+    named brand/network exactly as well as a premise, condition, or scope
+    claim -- whatever specific thing classification alone could not settle."""
+    item: str = Field(description="The exact string from this task's own verification_items this entry resolves.")
+    confirmed: bool = Field(description="True ONLY when some supplied parent's own text actually states this exact claim, or explicit equivalent/universal coverage -- never merely because a parent covers the general topic or is silent on this specific point.")
+    supporting_parent_id: str = Field(default="", description="The parent ID that confirms it, when confirmed is true. Empty when confirmed is false.")
+
+
 class ClarificationGuess(BaseModel):
     """A possible customer intention, based on the current context, that
     could resolve this ambiguity if correct -- a prediction of what the
@@ -140,6 +152,19 @@ class TaskSufficiencyItem(BaseModel):
         description=(
             "For RELEVANT or IRRELEVANT only: newly observed, materially task-relevant facts from "
             "supplied candidate parents. Empty when no such fact exists."
+        ),
+    )
+    verification_results: List[VerificationResult] = Field(
+        default_factory=list,
+        description=(
+            "REQUIRED, one entry per string in this task's own verification_items (empty list when "
+            "verification_items is empty). verification_items was flagged by the intent formulator before any "
+            "evidence existed -- a specific, checkable claim (a named brand/network, a premise or condition, a "
+            "scope boundary, or any other specific detail classification alone could not settle) the customer's "
+            "own wording implied, which could not be checked then. Resolve each one now, independently, against "
+            "the supplied candidate parents' own text. An item left unconfirmed caps this task's status at "
+            "RELEVANT, never SUFFICIENT, regardless of status below -- this is enforced deterministically "
+            "downstream, so do not mark confirmed=true unless some parent genuinely states it."
         ),
     )
     scope_expansion_lead_reason: str = Field(
@@ -246,6 +271,21 @@ class SearchTask(BaseModel):
     conceptual: str = Field(description="Comma-separated definition nouns.")
     target_commercial_product: str = Field(description="The exact Noun from the Product Matrix.")
     target_intent: List[str] = Field(description="List of 1-3 Verbs from the Intent Matrix.")
+    verification_items: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Every specific, checkable claim this component's own wording implies that PRODUCT/INTENT "
+            "classification does not need to resolve, but that real evidence must confirm before the request "
+            "can be called fully answered -- e.g. a named brand or network ('the card network is Visa'), a "
+            "premise or condition ('the replacement procedure covers cosmetic damage, not just physical "
+            "damage'), a scope boundary ('the stated limit applies per application, not per customer'), or any "
+            "other specific detail the customer's own wording turns on. Phrase each as a short, precise, "
+            "self-contained sentence describing exactly what needs verifying -- never a bare category label. "
+            "Never affects target_commercial_product/target_intent above -- you cannot know from here whether "
+            "evidence will confirm any of these, since none has been retrieved yet. Empty when the component "
+            "raises no such specific, checkable claim beyond its general topic."
+        ),
+    )
     # Extra Effort v2.1: computed ONCE here, at initial/fresh formulation
     # time, never re-derived at retry time -- this is a Matrix/context
     # question answerable from the customer's request alone ("what are my

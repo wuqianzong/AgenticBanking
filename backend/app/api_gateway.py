@@ -42,6 +42,7 @@ class ChatPayload(BaseModel):
     session_id: str
     message: str
     user_id: str
+    debug_reasoning: bool = False  # Dev-only, per-request opt-in: see _extract_reasoning_snippets
 
 class CloseSessionPayload(BaseModel):
     session_id: str
@@ -465,6 +466,52 @@ async def get_prior_session_history(
     )
     return {"user_id": user_id, "session_id": current_session_id, **page}
 
+def _extract_reasoning_snippets(node_name: str, state_update: dict) -> list[str]:
+    """Dev-only debug aid: surface a node's own already-computed reasoning
+    text to the frontend, for the Development-settings "show reasoning"
+    switch. Deliberately an explicit allowlist of known reasoning-bearing
+    fields on known state keys -- never a blind dump of state_update --
+    so a future state field (e.g. personal_data_reveal_map, or anything
+    else sensitive) can never leak here just by a node happening to
+    return it. Reads only the delta this node just returned, not the full
+    accumulated state, so each snippet reflects what THIS node just
+    decided, not a replay of everything decided so far this turn.
+    """
+    snippets: list[str] = []
+
+    for task in state_update.get("search_tasks", []) or []:
+        reason = str(task.get("mapping_reason", "")).strip()
+        if reason:
+            snippets.append(f"[{node_name}] Task {task.get('task_id', '?')} product/intent mapping: {reason}")
+
+    for result in state_update.get("task_results", []) or []:
+        reason = str(result.get("reason", "")).strip()
+        if reason:
+            snippets.append(f"[{node_name}] Task {result.get('task_id', '?')} sufficiency verdict ({result.get('status', '?')}): {reason}")
+        guidance = str(result.get("generation_guidance", "")).strip()
+        if guidance:
+            snippets.append(f"[{node_name}] Task {result.get('task_id', '?')} generation guidance: {guidance}")
+
+    for entry in state_update.get("clarification_tasks", []) or []:
+        reason = str(entry.get("clarification_reason", "")).strip()
+        if reason:
+            snippets.append(f"[{node_name}] Clarification ({entry.get('subquery_id', '?')}): {reason}")
+
+    compliance = state_update.get("outbound_compliance_result")
+    if isinstance(compliance, dict):
+        reason = str(compliance.get("reason", "")).strip()
+        if reason:
+            snippets.append(f"[{node_name}] Compliance audit: {reason}")
+
+    groundedness = state_update.get("outbound_groundedness_result")
+    if isinstance(groundedness, dict):
+        reason = str(groundedness.get("reason", "")).strip()
+        if reason:
+            snippets.append(f"[{node_name}] Groundedness audit: {reason}")
+
+    return snippets
+
+
 @app.post("/api/chat")
 async def process_chat(payload: ChatPayload):
     """
@@ -560,13 +607,23 @@ async def process_chat(payload: ChatPayload):
                     if "live_task_confidence" in state_update:
                         task_confidence = state_update["live_task_confidence"]
                     log_event("graph.node.completed", node=node_name, state_keys=list(state_update.keys()))
-                    # Yield the name of the node currently executing to the frontend
-                    yield json.dumps({
+                    progress_event = {
                         "type": "progress",
                         "node": node_name,
                         "lowConfidenceMode": low_confidence_mode,
                         "taskConfidence": task_confidence,
-                    }) + "\n"
+                    }
+                    # Dev-only, per-request opt-in (Development settings ->
+                    # "Show reasoning"). Never computed or sent otherwise --
+                    # this is debug-only surfacing of the pipeline's own
+                    # internal reasoning fields, not something a real
+                    # customer session should carry by default.
+                    if payload.debug_reasoning:
+                        reasoning = _extract_reasoning_snippets(node_name, state_update)
+                        if reasoning:
+                            progress_event["reasoning"] = reasoning
+                    # Yield the name of the node currently executing to the frontend
+                    yield json.dumps(progress_event) + "\n"
                     # Pace progress events so React can render each transition.
                     await asyncio.sleep(0.3)
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import time
 import uuid
@@ -21,10 +22,197 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PACING_SECONDS = 25.0
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_RATE_LIMIT_WAIT_SECONDS = 65
+API_KEY_POOL_PATH = REPO_ROOT / "research" / ".research_api_keys"
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+
+
+class ApiKeyPool:
+    """Rotates through multiple Google API keys when one hits its daily
+    quota, for research studies only -- never used by the production
+    chatbot. Never touches backend/app/core/llm_service.py: it reassigns
+    that module's own `google_api_key` global directly, which
+    call_llm_router already reads fresh on every call (a bare module-level
+    name, resolved at call time, not captured into a closure at import
+    time), so this works without any production code change.
+
+    Reads one key per line from research/.research_api_keys (git-ignored;
+    see .gitignore). Absent file means no pool is available -- callers
+    should fall back to whatever single GOOGLE_API_KEY is already in the
+    environment, exactly like before this existed."""
+
+    def __init__(self, keys_file: Path = API_KEY_POOL_PATH):
+        self.keys_file = keys_file
+        self.keys = (
+            [line.strip() for line in keys_file.read_text().splitlines() if line.strip()]
+            if keys_file.exists()
+            else []
+        )
+        self.index = 0
+        self._installed = False
+        self._progress: Any = None
+        if self.keys:
+            self._apply_current()
+
+    def set_progress(self, progress: Any) -> None:
+        """Point future rotation/wait log lines at this (currently open)
+        progress file. Safe to call every round: a multi-round orchestrator
+        shares one pool (and thus one already-installed wrapper) across
+        many rounds, each with its own progress file that gets closed when
+        that round ends -- the wrapper reads self._progress fresh on every
+        log line rather than capturing one file handle in a closure, so it
+        never writes to a file a previous round already closed."""
+        self._progress = progress
+
+    @property
+    def available(self) -> bool:
+        return bool(self.keys)
+
+    def _apply_current(self) -> None:
+        import backend.app.core.llm_service as llm_service
+        llm_service.google_api_key = self.keys[self.index]
+
+    def rotate(self) -> bool:
+        """Advance to the next key. Returns False when every key in the
+        pool has already been tried this cycle (caller decides what to do
+        next -- see install_call_site_rotation, which waits and starts a
+        fresh cycle from key #1 rather than giving up)."""
+        if self.index + 1 >= len(self.keys):
+            return False
+        self.index += 1
+        self._apply_current()
+        return True
+
+    def reset_to_first(self) -> None:
+        """Start a fresh rotation cycle from key #1 -- used after waiting
+        out a full-pool daily exhaustion, since a day boundary may have
+        made the first key usable again."""
+        self.index = 0
+        self._apply_current()
+
+    def install_call_site_rotation(
+        self,
+        progress: Any = None,
+        all_keys_wait_seconds: int = 1800,
+    ) -> None:
+        """Wrap call_llm_router so an unattended research run waits out and
+        retries a failure that production's OWN call_llm_router (see
+        backend/app/core/llm_service.py) could not itself resolve, instead
+        of giving up the way that function correctly does for a live
+        request.
+
+        This used to also do its own key rotation and its own hang-timeout
+        guard here, duplicating logic that has since been built directly
+        into production's call_llm_router itself (9-key rotation,
+        cross-model fallback, and a per-attempt hang-timeout, all internal
+        to that function now). Keeping both layers active created two
+        independent, unsynchronized counters into the same key list --
+        this wrapper's own `self.index` versus production's own internal
+        one -- confirmed live to produce a much longer, more convoluted
+        retry cascade than intended (each of THIS wrapper's own outer
+        "rotate" attempts triggered a full fresh internal 9-key x 2-model
+        cycle inside `original`, before this wrapper's own separate index
+        ever registered "every key exhausted"), and was directly implicated
+        in repeated multi-hour stalls before being simplified. This wrapper
+        now does nothing but wait and retry the exact same call: production
+        owns every decision about which key or model to use.
+
+        Reassigning `llm_service.google_api_key` alone (see `_apply_current`)
+        is not enough on its own: every module that calls the model actually
+        does `from backend.app.core.llm_service import call_groq_lpu` at
+        import time, which binds that name to the original function object
+        in *that module's own namespace*. Patching each of those modules'
+        own `call_groq_lpu` binding (not just llm_service's) intercepts a
+        failure at every real call site. Still zero permanent production
+        code changes -- this only reassigns module attributes at runtime,
+        for the life of this research process.
+
+        One tier: if `original` (production's fully-resilient
+        call_llm_router) still raises a rate-limit or persistent-transient
+        error after its own internal exhaustion, wait `all_keys_wait_seconds`
+        and retry the identical call -- production's own internal state
+        (which key, which model) naturally continues from wherever it left
+        off. Anything else (a real bug, a local config error) is re-raised
+        immediately -- waiting on those would hang forever with no path to
+        success, and would hide a problem worth knowing about right away.
+
+        Idempotent: a second call on the same pool instance (e.g. a
+        multi-round orchestrator calling run_graph_study repeatedly with
+        one shared pool) is a no-op, so the wrapper never double-wraps
+        itself.
+        """
+        self.set_progress(progress)
+        if not self.available or self._installed:
+            return
+        self._installed = True
+        import backend.app.core.groundedness as groundedness
+        import backend.app.core.llm_service as llm_service
+        import backend.app.orchestration.nodes as nodes
+        import backend.app.services.memory_service as memory_service
+
+        original = llm_service.call_llm_router
+
+        def _log(message: str) -> None:
+            if self._progress is not None:
+                self._progress.write(f"{utc_now()} {message}\n")
+                self._progress.flush()
+
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            while True:
+                try:
+                    return original(*args, **kwargs)
+                except Exception as error:
+                    if rate_limit_info(error).get("rate_limited") or _is_persistent_transient_error(error):
+                        _log(
+                            f"production's own internal retry/rotation was exhausted; "
+                            f"waiting {all_keys_wait_seconds}s before trying the same call again: {str(error)[:200]}"
+                        )
+                        time.sleep(all_keys_wait_seconds)
+                        continue
+                    raise
+
+        for module in (llm_service, nodes, groundedness, memory_service):
+            module.call_llm_router = wrapped
+            module.call_groq_lpu = wrapped
+
+
+def _is_persistent_transient_error(error: Exception) -> bool:
+    """Mirrors llm_service._is_transient_llm_error's marker set without
+    importing it (that function only judges whether call_llm_router's own
+    internal one-retry is worth it; this judges whether an unattended
+    research run should keep waiting indefinitely once that internal
+    retry has already been exhausted).
+
+    Also covers the machine going offline entirely (no wifi, DNS down,
+    network unreachable) -- confirmed live that a DNS failure surfaces as
+    httpx.ConnectError with the message "nodename nor servname provided,
+    or not known", which matches none of the provider-specific message
+    markers below. Checking httpx.TransportError structurally (the common
+    base for ConnectError, TimeoutException, ReadTimeout, NetworkError,
+    etc. -- both the Gemini and Groq SDKs are httpx-based under the hood)
+    catches every transport-layer failure regardless of its message
+    wording, which plain string matching on `str(error)` cannot guarantee.
+    An unattended multi-day run must wait out a laptop going to sleep or
+    losing wifi the same way it waits out a rate limit -- not fail every
+    case outright for as long as the network is down."""
+    try:
+        import httpx
+        if isinstance(error, httpx.TransportError):
+            return True
+    except ImportError:
+        pass
+    message = str(error)
+    return any(
+        marker in message
+        for marker in (
+            "UNAVAILABLE", "high demand", " 503", "Service Unavailable", "DEADLINE_EXCEEDED",
+            "ConnectionError", "Timeout", "nodename nor servname", "Name or service not known",
+            "Network is unreachable", "Connection refused", "getaddrinfo failed",
+            "No address associated with hostname",
+        )
+    )
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -202,7 +390,16 @@ def extract_state_summary(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def extract_system_log_events(session_id: str) -> list[dict[str, Any]]:
-    """Read only the current structured log file and return this run's events."""
+    """Read only the current structured log file and return this run's events.
+
+    Only reliable for a short-lived or low-volume run: the production
+    RotatingFileHandler backing this file caps total retention at 60MB
+    (10MB x 5 backups) and this function only reads the live file, not the
+    backups -- confirmed live that a multi-thousand-case research campaign
+    fully cycles that retention in under an hour of real activity, which
+    permanently deletes a case's own events before this can read them back.
+    A multi-round study should use install_dedicated_capture_log plus
+    extract_system_log_events_from instead, which are immune to that."""
     log_path = REPO_ROOT / "backend" / "logs" / "system.jsonl"
     if not log_path.exists():
         return []
@@ -215,6 +412,69 @@ def extract_system_log_events(session_id: str) -> list[dict[str, Any]]:
         if record.get("session_id") == session_id:
             events.append(record)
     return events
+
+
+def install_dedicated_capture_log(path: Path) -> None:
+    """Attach a second, plain (non-rotating) handler to the same production
+    logger (horizon.system) so every event this process logs also lands in
+    a dedicated, uncapped file -- additive only, the production
+    RotatingFileHandler keeps running exactly as before. Exists because
+    that handler's 60MB total retention (see extract_system_log_events)
+    cannot survive a multi-thousand-case campaign; this file has no size
+    cap and is only ever appended to, so a case's own internal
+    prompts/reasoning/guidance can always be read back later regardless of
+    how much the campaign has logged since. Idempotent per path: calling
+    this again with the same path (e.g. an accidental second call within
+    one process) will not attach a duplicate handler.
+
+    Must force system_logger's own one-time setup (log level, propagate,
+    the production rotating handler) to run first, by calling its
+    _get_logger() before adding anything here. Confirmed live: that
+    function's whole idempotency guard is `if logger.handlers: return
+    logger` -- if our own handler is added to this logger before anything
+    else ever has been, that guard sees a non-empty handler list on its
+    own first real call and skips its setup forever, silently leaving the
+    logger at Python's default level (which drops the INFO-level records
+    log_event emits) and never attaching the production handler at all.
+    Calling _get_logger() first guarantees that setup has already run
+    before we add a second handler alongside it."""
+    import os
+
+    from backend.app.core.system_logger import _get_logger
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    logger = _get_logger()
+    target = os.path.abspath(str(path))
+    for existing in logger.handlers:
+        if getattr(existing, "baseFilename", None) == target:
+            return
+    handler = logging.FileHandler(path, mode="a", encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+
+
+def extract_system_log_events_from(path: Path, session_id: str, start_offset: int = 0) -> tuple[list[dict[str, Any]], int]:
+    """Read only the bytes written to `path` since start_offset, returning
+    events matching session_id plus the new offset to pass on the next
+    call. A sequential per-case caller (one case fully finishes before the
+    next starts) should track and reuse that offset across calls -- this
+    keeps per-case extraction O(this case's own new lines) for the whole
+    campaign, instead of re-scanning an ever-growing multi-hundred-MB file
+    from byte zero for every single case."""
+    if not path.exists():
+        return [], start_offset
+    events: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8", errors="replace") as f:
+        f.seek(start_offset)
+        for line in f:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if record.get("session_id") == session_id:
+                events.append(record)
+        new_offset = f.tell()
+    return events, new_offset
 
 
 def evaluate_assertions(summary: dict[str, Any], expected: dict[str, Any]) -> list[dict[str, Any]]:
@@ -297,8 +557,82 @@ def write_markdown_report(path: Path, run: dict[str, Any]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-async def run_graph_study(config: StudyConfig, cases: list[dict[str, Any]], output_dir: Path) -> dict[str, Any]:
-    """Execute a fixture through the real graph without persistence helpers."""
+def find_completed_case_ids(
+    results_dir: Path,
+    case_id_prefix: str,
+    require_study_id: str | None = None,
+    require_full_detail: bool = False,
+) -> set[str]:
+    """Scan every existing *_results.jsonl in results_dir for OK records
+    whose case_id starts with case_id_prefix. Used to resume a round after
+    an interrupted prior attempt (a hang, a crash, a manual restart)
+    without redoing cases that already produced a genuine result -- an
+    unattended multi-day run will get interrupted sometimes, and redoing
+    hours of already-good work every time is real cost worth avoiding.
+
+    require_study_id and require_full_detail exist for a resumed run whose
+    case_ids overlap a DIFFERENT prior study sharing the same results_dir
+    -- a detail backfill re-runs the exact same case_ids an earlier,
+    detail-missing campaign run already produced OK records for. Without
+    these filters, every backfill target would immediately match an old,
+    still-detail-missing record and get wrongly skipped as "already done"
+    on the very first attempt. require_study_id restricts matches to
+    records from this specific study; require_full_detail additionally
+    requires the matched record to actually carry an llm.request event
+    (the thing being backfilled), so an interrupted PRIOR backfill attempt
+    resumes correctly while the original campaign's detail-missing records
+    for the same case_ids are never mistaken for already-backfilled ones."""
+    completed: set[str] = set()
+    if not results_dir.exists():
+        return completed
+    for path in results_dir.glob("*_results.jsonl"):
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            case_id = record.get("case_id", "")
+            if not case_id.startswith(case_id_prefix) or record.get("status") != "OK":
+                continue
+            if require_study_id is not None and record.get("study_id") != require_study_id:
+                continue
+            if require_full_detail:
+                events = record.get("system_log_events", [])
+                if not any(e.get("event") == "llm.request" for e in events if isinstance(e, dict)):
+                    continue
+            completed.add(case_id)
+    return completed
+
+
+async def run_graph_study(
+    config: StudyConfig,
+    cases: list[dict[str, Any]],
+    output_dir: Path,
+    key_pool: "ApiKeyPool | None" = None,
+    skip_case_ids: set[str] | None = None,
+    capture_log_path: Path | None = None,
+) -> dict[str, Any]:
+    """Execute a fixture through the real graph without persistence helpers.
+
+    A multi-round orchestrator that calls this repeatedly should pass its
+    own long-lived key_pool so key state (which key is currently active,
+    and the daily-exhaustion wait/reset cycle) carries across rounds
+    instead of every round wrongly assuming key #1 is fresh again.
+
+    skip_case_ids lets a caller resume an interrupted round: those case_ids
+    are neither invoked nor written to this run's own results file (they
+    already have a genuine OK record in an earlier, interrupted attempt's
+    results file for the same round -- see find_completed_case_ids). This
+    run's results file plus that earlier one together are the complete
+    record for the round; nothing needs merging by hand.
+
+    capture_log_path, if given (paired with install_dedicated_capture_log
+    having been called once by the caller), reads each case's full detail
+    from that uncapped, offset-tracked file instead of re-scanning the
+    production system.jsonl, which cannot survive a multi-round campaign's
+    volume (see extract_system_log_events)."""
+    skip_case_ids = skip_case_ids or set()
+    capture_offset = capture_log_path.stat().st_size if capture_log_path and capture_log_path.exists() else 0
     from backend.app.core.system_logger import reset_request_context, set_request_context
     from backend.app.orchestration.graph import app_graph
 
@@ -310,10 +644,22 @@ async def run_graph_study(config: StudyConfig, cases: list[dict[str, Any]], outp
     report_path.parent.mkdir(parents=True, exist_ok=True)
     started_at = utc_now()
     records: list[dict[str, Any]] = []
+    if key_pool is None:
+        key_pool = ApiKeyPool()
 
     with progress_path.open("w", encoding="utf-8") as progress, results_path.open("w", encoding="utf-8") as results_file:
         progress.write(f"=== run started {started_at} study={config.study_id} cases={len(cases)} ===\n")
+        if key_pool.available:
+            progress.write(f"{utc_now()} API key pool active: {len(key_pool.keys)} key(s) available for daily-quota rotation\n")
+            key_pool.install_call_site_rotation(progress)
+        if skip_case_ids:
+            progress.write(f"{utc_now()} resuming: skipping {len(skip_case_ids)} case(s) already completed OK in an earlier attempt at this round\n")
+            progress.flush()
         for case_index, case in enumerate(cases, start=1):
+            if case["case_id"] in skip_case_ids:
+                progress.write(f"{utc_now()} [{case_index}/{len(cases)}] case={case['case_id']} status=SKIPPED_ALREADY_DONE\n")
+                progress.flush()
+                continue
             session_id = f"eval_{config.study_id}_{case_index}_{uuid.uuid4().hex[:8]}"
             graph_config = {"configurable": {"thread_id": session_id}}
             turn_records: list[dict[str, Any]] = []
@@ -360,6 +706,12 @@ async def run_graph_study(config: StudyConfig, cases: list[dict[str, Any]], outp
                                 turn_records.append({"turn_index": turn_index, "message": message, "status": "ERROR", "attempts": attempts, "error": str(error)[:1000], "elapsed_seconds": round(time.perf_counter() - started, 3), "assertions": []})
                                 break
                             if info.get("is_daily"):
+                                if key_pool.available:
+                                    exhausted_index = key_pool.index
+                                    if key_pool.rotate():
+                                        progress.write(f"{utc_now()} case={case['case_id']} turn={turn_index} daily quota hit on key #{exhausted_index + 1}; rotated to key #{key_pool.index + 1}\n")
+                                        progress.flush()
+                                        continue
                                 case_status = "STOPPED_DAILY_LIMIT"
                                 turn_records.append({"turn_index": turn_index, "message": message, "status": case_status, "attempts": attempts, "error": info.get("raw"), "elapsed_seconds": round(time.perf_counter() - started, 3), "assertions": []})
                                 break
@@ -392,7 +744,11 @@ async def run_graph_study(config: StudyConfig, cases: list[dict[str, Any]], outp
                 "turns": turn_records,
             }
             if config.capture_system_log:
-                record["system_log_events"] = extract_system_log_events(session_id)
+                if capture_log_path is not None:
+                    events, capture_offset = extract_system_log_events_from(capture_log_path, session_id, capture_offset)
+                    record["system_log_events"] = events
+                else:
+                    record["system_log_events"] = extract_system_log_events(session_id)
             records.append(record)
             results_file.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
             results_file.flush()

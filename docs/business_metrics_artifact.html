@@ -1,0 +1,663 @@
+<title>Deflection Economics</title>
+<style>
+  :root {
+    --ink: #16211d;
+    --ink-soft: #3d4a44;
+    --paper: #eef1ec;
+    --surface: #ffffff;
+    --surface-sunk: #e3e8e1;
+    --border: #cdd6cc;
+    --accent: #2f6b54;
+    --accent-soft: #e4ede8;
+    --gold: #a8781f;
+    --gold-soft: #f3e8d3;
+    --good: #3f8f5f;
+    --warn: #b5711f;
+    --critical: #a23d3d;
+    --critical-soft: #f5e3e1;
+    --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --font-body: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #e9ede8;
+      --ink-soft: #b7c2ba;
+      --paper: #11201a;
+      --surface: #17251e;
+      --surface-sunk: #0f1a15;
+      --border: #2b3d33;
+      --accent: #6cb894;
+      --accent-soft: #1c2f26;
+      --gold: #d8a94f;
+      --gold-soft: #2b2013;
+      --good: #6cb894;
+      --warn: #d8a94f;
+      --critical: #e08a8a;
+      --critical-soft: #33201d;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #e9ede8;
+    --ink-soft: #b7c2ba;
+    --paper: #11201a;
+    --surface: #17251e;
+    --surface-sunk: #0f1a15;
+    --border: #2b3d33;
+    --accent: #6cb894;
+    --accent-soft: #1c2f26;
+    --gold: #d8a94f;
+    --gold-soft: #2b2013;
+    --good: #6cb894;
+    --warn: #d8a94f;
+    --critical: #e08a8a;
+    --critical-soft: #33201d;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    padding: 0 20px;
+  }
+
+  .page {
+    max-width: 860px;
+    margin: 0 auto;
+    padding-block: 56px 96px;
+  }
+
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.1rem, 4vw, 2.9rem);
+    font-weight: 600;
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 10px;
+  }
+
+  .subtitle {
+    font-size: 1.08rem;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0 0 34px;
+  }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: 1.55rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+    margin: 64px 0 8px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+  }
+
+  h2 .num {
+    font-family: var(--font-mono);
+    font-size: 0.62em;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+    display: block;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  h3 {
+    font-family: var(--font-display);
+    font-size: 1.18rem;
+    font-weight: 600;
+    margin: 34px 0 6px;
+  }
+
+  h3 .id {
+    font-family: var(--font-mono);
+    color: var(--gold);
+    font-size: 0.85em;
+    margin-right: 8px;
+  }
+
+  p { margin: 0 0 14px; max-width: 68ch; }
+  .full p, .wide-note { max-width: none; }
+
+  .lede {
+    font-size: 1.02rem;
+    color: var(--ink-soft);
+  }
+
+  strong { color: var(--ink); }
+
+  a { color: var(--accent); }
+
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin: 18px 0;
+    max-width: none;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.critical { border-left-color: var(--critical); background: var(--critical-soft); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  /* North Star strip */
+  .northstar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 30px 0 10px;
+  }
+  .ns-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 18px 16px;
+  }
+  .ns-num {
+    font-family: var(--font-display);
+    font-size: 2.1rem;
+    font-weight: 600;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .ns-num.gold { color: var(--gold); }
+  .ns-num.critical { color: var(--critical); }
+  .ns-label {
+    font-size: 0.86rem;
+    color: var(--ink-soft);
+    line-height: 1.4;
+  }
+  @media (max-width: 640px) {
+    .northstar { grid-template-columns: 1fr; }
+  }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; margin: 16px 0 22px; border: 1px solid var(--border); border-radius: 8px; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 460px;
+    background: var(--surface);
+    font-size: 0.92rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+    background: var(--surface-sunk);
+    white-space: nowrap;
+  }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--accent-soft); }
+
+  /* Formula block */
+  .formula {
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    background: var(--surface-sunk);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin: 16px 0 20px;
+    overflow-x: auto;
+    color: var(--ink);
+    line-height: 1.7;
+    max-width: none;
+  }
+  .formula .op { color: var(--accent); }
+  .formula .var { color: var(--gold); }
+
+  /* Tier badge headers */
+  .tier-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .tier-pill {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+  .tier-1 .tier-pill { background: var(--accent-soft); color: var(--accent); }
+  .tier-2 .tier-pill { background: var(--surface-sunk); color: var(--ink-soft); }
+  .tier-3 .tier-pill { background: var(--critical-soft); color: var(--critical); }
+
+  section.tier-1 h2 { border-top-color: var(--accent); }
+  section.tier-3 h2 { border-top-color: var(--critical); }
+
+  .toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 8px 0 40px;
+    font-size: 0.86rem;
+  }
+  .toc a { color: var(--ink-soft); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+  .toc .sep { color: var(--border); }
+
+  .source-note {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+
+  footer {
+    margin-top: 72px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+  }
+  footer code {
+    font-family: var(--font-mono);
+    background: var(--surface-sunk);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<div class="page">
+
+  <p class="kicker">Business Metrics Framework · v2.0 draft</p>
+  <h1>Deflection Economics</h1>
+  <p class="subtitle">A business-first redesign of the bot's evaluation framework — built to answer one question for operations and finance: <strong>does this bot save cost and labour, and does it improve service quality while doing it?</strong> Every number below is measured, not projected, from two completed studies.</p>
+
+  <div class="northstar">
+    <div class="ns-card">
+      <div class="ns-num">69.5<span style="font-size:0.5em;">%</span></div>
+      <div class="ns-label">Full-session resolution rate across 249 real multi-turn conversations — the labour a human would otherwise have handled</div>
+    </div>
+    <div class="ns-card">
+      <div class="ns-num critical">2.1<span style="font-size:0.5em;">%</span></div>
+      <div class="ns-label">of balance-fetch turns produce a false capability claim — the safety gate to close before scaling cost savings</div>
+    </div>
+    <div class="ns-card">
+      <div class="ns-num gold">9.2s</div>
+      <div class="ns-label">median turn latency, vs. an 800ms/2.5s technical target — the lever most likely to cancel out the savings above</div>
+    </div>
+  </div>
+
+  <div class="toc">
+    <a href="#why">Why redesign v3.5</a><span class="sep">/</span>
+    <a href="#tier1">Tier 1 — Business outcomes</a><span class="sep">/</span>
+    <a href="#b1b">Bot vs. KB reliability</a><span class="sep">/</span>
+    <a href="#b1c">Industry benchmarks</a><span class="sep">/</span>
+    <a href="#tier2">Tier 2 — Diagnostics</a><span class="sep">/</span>
+    <a href="#tier3">Tier 3 — Trust &amp; safety</a><span class="sep">/</span>
+    <a href="#sources">Data sources</a><span class="sep">/</span>
+    <a href="#next">Next steps</a><span class="sep">/</span>
+    <a href="#methodology">Statistical methodology</a>
+  </div>
+
+  <section id="why">
+    <h2>Why redesign the v3.5 framework</h2>
+    <p>v3.5 picked the right five things to instrument — containment, first-contact resolution, intent accuracy, groundedness, latency. Two things need fixing before that skeleton can carry a business argument.</p>
+
+    <h3>1. Several of its cited data sources don't exist</h3>
+    <p>It points at <code>langgraph_state.db</code> as a queryable SQLite checkpointer — the real one, <code>MemorySaver()</code>, is in-memory and wiped on every restart. It cites <code>guardrail_violation.log</code> — the real log is <code>backend/logs/system.jsonl</code>. The actual telemetry turns out to be richer than what v3.5 assumed; it just needs the citations corrected (see <a href="#sources">Data sources</a>, below).</p>
+
+    <h3>2. It leads with technical metrics, not business ones</h3>
+    <p>F1 scores and time-to-first-token prove a system is well-engineered to an examiner. They don't prove to a COO that a rollout pays for itself. This framework puts cost, labour, and service quality at the top, and demotes the technical metrics to what they actually are: <strong>diagnostics that explain why the business numbers move.</strong></p>
+  </section>
+
+  <section id="tier1" class="tier-1">
+    <h2><span class="num">Tier 1 · Shown to operations &amp; finance</span>Business Outcome Metrics</h2>
+    <p class="lede">Each metric below has a real measured baseline, and a placeholder for the one input only the bank itself can supply: real agent unit costs.</p>
+
+    <h3><span class="id">B1</span>Automated Containment — the cost-and-labour headline</h3>
+    <p><em>What it answers:</em> of everything customers currently need a human for, how much can the bot take off the queue?</p>
+    <div class="callout">
+      <span class="label">Why not v3.5's definition</span>
+      <p>v3.5 counts containment as failed only when a customer accepts an escalation offer. That signal is real, but it almost never fires in either completed study — <code>soft_escalation_available</code> was true in 0/3,552 BANKING77 turns and 6/1,964 multi-turn turns. Taken literally, that would report ~100% containment and tell operations nothing. This framework uses the three-tier split a call-centre already thinks in instead.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Study</th><th class="num">Fully contained</th><th class="num">Partially contained</th><th class="num">Needs a human</th></tr></thead>
+        <tbody>
+          <tr><td>BANKING77 — single-turn, 3,080 queries</td><td class="num">67.1%</td><td class="num">13.2%</td><td class="num">19.6%</td></tr>
+          <tr><td>Multi-turn — 249 conversations</td><td class="num">69.5%</td><td class="num">30.5%</td><td class="num">0.0%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>Cost translation</strong> — the formula is complete; it only needs the bank's real unit costs to become a dollar figure rather than an illustration:</p>
+    <div class="formula">Monthly Savings <span class="op">=</span> (<span class="var">Fully-Contained Volume</span>)
+  <span class="op">×</span> (<span class="var">Avg. Agent Handle Time</span>)
+  <span class="op">×</span> (<span class="var">Fully-Loaded Agent Cost / min</span>)
+  <span class="op">−</span> (<span class="var">Bot Operating Cost</span>)
+
+Bot Operating Cost <span class="op">=</span> (<span class="var">Total LLM calls</span>) <span class="op">×</span> (<span class="var">Per-call API cost</span>) <span class="op">+</span> (<span class="var">Infra</span>)</div>
+    <p class="source-note">Every <code>llm.request</code> is already timestamped and counted in both studies — this is a real, computable number the moment a per-call price is supplied, not a guess.</p>
+
+    <div class="callout">
+      <span class="label">Computed, using real published API pricing (2026-09-13)</span>
+      <p>Applying published per-token rates (Gemini 3.5-flash-lite $0.30 / $2.50 per million input / output tokens; Gemini 3.1-flash-lite $0.25 / $1.50; Llama Prompt Guard 2 86M via Groq $0.04 / million) to token counts estimated from the logged <code>raw_prompt</code> / <code>raw_response</code> text (~4 characters per token — an approximation, not the model's own exact tokenizer output, so read these as illustrative, not billing-grade):</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Study</th><th class="num">Total LLM spend</th><th class="num">Cost per case</th><th class="num">Cost per resolved case</th></tr></thead>
+        <tbody>
+          <tr><td>BANKING77 — 3,080 cases</td><td class="num">$81.50</td><td class="num">$0.026</td><td class="num"><strong>$0.039</strong></td></tr>
+          <tr><td>Multi-turn — 249 conversations</td><td class="num">$16.45</td><td class="num">$0.066</td><td class="num"><strong>$0.095</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="source-note">BANKING77 breaks down as $58.20 across 15,038 gemini-3.5-flash-lite requests, $23.29 across 13,740 gemini-3.1-flash-lite requests, and effectively $0 across 3,071 llama-prompt-guard-2-86m requests. "Cost per resolved case" divides total spend by the fully-contained volume (this section's own numerator — ~2,066 BANKING77 cases, ~173 multi-turn sessions) rather than total case count, since unresolved cases still spend LLM calls without producing a resolution — the number to compare against agent handle-time cost once the bank's own inputs are supplied.</p>
+
+    <div class="callout warn">
+      <span class="label">Honest caveat</span>
+      <p>Because <code>soft_escalation_available</code> almost never fires, the "needs a human" figures above mean <em>the bot declined or asked for clarification</em>, not <em>a live hand-off was triggered and accepted</em> — a genuinely different signal that needs an adaptive test harness (one that can react to the bot's own hand-off offer) to measure properly.</p>
+    </div>
+
+    <h3 id="b1b"><span class="id">B1b</span>Decomposing containment: Bot Reliability × KB Coverage</h3>
+    <p><em>The problem this fixes:</em> once the bot-failure defects below are fixed, remaining handoff volume will be almost entirely content gaps. One blended containment number then measures knowledge-base completeness, not bot reliability — different things, different owners, different timelines (content coverage rises purely from authoring FAQs, no code change needed).</p>
+    <p><strong>The fix</strong> — the same split real contact centres already use for human agents (did the agent have the right knowledge-base article, vs. did the agent use it correctly), applied to the bot:</p>
+    <div class="formula">Bot Reliability <span class="op">=</span> Resolved / (Resolved <span class="op">+</span> Bot Failures)
+KB Coverage    <span class="op">=</span> (Resolved <span class="op">+</span> Bot Failures) / Total Queries
+Overall Resolution <span class="op">=</span> Bot Reliability <span class="op">×</span> KB Coverage</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Metric</th><th>Formula</th><th class="num">Value</th><th class="num">95% CI</th><th>Owner</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Bot Reliability Rate</strong></td><td>3,866 resolved ÷ 4,033 resolvable (in-scope, unambiguous only)</td><td class="num"><strong>95.9%</strong></td><td class="num">94.3–97.5%</td><td>Engineering</td></tr>
+          <tr><td><strong>KB Coverage Rate</strong></td><td>4,033 resolvable ÷ 4,865 in-scope total</td><td class="num"><strong>82.9%</strong></td><td class="num">81.5–84.3%</td><td>Content / knowledge ops</td></tr>
+          <tr><td>Overall Resolution (all queries)</td><td>3,866 ÷ 4,928</td><td class="num">78.5%</td><td class="num">—</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="label">A retracted first attempt</span>
+      <p>A first pass tried to classify bot-vs-content failure automatically, flagging any unresolved case whose shown evidence contained a negation ("does not…", "cannot…"). Spot-checking 15 flags found it was matching negations from unrelated parts of the same document — discarded rather than reported. The number used instead is the manually-verified rate from the 88-case semantic sample (<code>KNOWN_ISSUES_TRACKER.md</code> BUG-016): <strong>14.8%</strong> (95% CI 7.7%–21.8%) of shown-but-rejected tasks were confirmed genuine bot failures by direct human comparison.</p>
+    </div>
+
+    <div class="callout critical">
+      <span class="label">A second label error, found and corrected 2026-09-13</span>
+      <p>A full open-bug review before finalizing this evaluation (per explicit instruction: check whether anything needs fixing or offsetting first) found that 22 of BUG-015's 24 confirmed cases (a generic failure fallback overwriting an already-resolved turn's text) still carried a <code>task_results</code> status of <code>SUFFICIENT</code>/<code>RELEVANT</code> — every automated metric here was silently counting a total customer-facing failure as a success. No code was fixed; the 26 affected tasks are now tracked as their own <strong>confirmed</strong> bot-failure category, separate from BUG-016's <strong>projected</strong> rate, since this one needed no projection — it's exactly known.</p>
+    </div>
+    <div class="callout critical">
+      <span class="label">A discrepancy, reconciled — not just flagged</span>
+      <p>An earlier pass counted 973 unresolved <em>tasks</em>; a fresh full-corpus count found 1,036. The gap is real and now fully explained: <strong>63 cases are declined or asked for clarification at the dispatcher stage, before any RAG task is ever created</strong>, so they never appear in <code>task_results</code> at all — the earlier count silently excluded them rather than double-counting or erroring.</p>
+    </div>
+    <p>Splitting the corpus across <strong>five</strong> categories rather than the two used originally:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Category</th><th class="num">Count</th><th class="num">Share</th><th>Fixable how</th></tr></thead>
+        <tbody>
+          <tr><td>FAQ / content gap</td><td class="num">832</td><td class="num">78.3%</td><td>Author the missing content</td></tr>
+          <tr><td>Bot failure — confirmed (BUG-015)</td><td class="num">26</td><td class="num">2.4%</td><td>Engineering fix, root cause not yet found</td></tr>
+          <tr><td>Bot failure — projected (BUG-016, 95% CI 73–207)</td><td class="num">141</td><td class="num">13.3%</td><td>Engineering fix (already root-caused)</td></tr>
+          <tr><td>Correctly declined — out of scope</td><td class="num">15</td><td class="num">1.4%</td><td>Not a defect — Horizon genuinely doesn't offer the product asked about</td></tr>
+          <tr><td>Legitimate clarification needed</td><td class="num">48</td><td class="num">4.5%</td><td>Not a defect — genuinely ambiguous query; looks "unresolved" only because BANKING77 is single-turn</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The last two categories are new to this framework and matter precisely because neither is a content gap or a bot competence problem — folding them into either bucket, as the original two-category split implicitly did, would have misattributed 63 tasks (6.1% of all originally-unresolved cases) to the wrong owner.</p>
+
+    <p><strong>Where the content gaps cluster</strong> — ten categories account for 226 of 581 fully-unresolved cases (38.9%), each showing the same missing-fact pattern across nearly every case in it:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Category</th><th class="num">Unresolved</th><th>Nature of the gap</th></tr></thead>
+        <tbody>
+          <tr><td>exchange_rate</td><td class="num">28</td><td>Live data — a current FX rate can never live in a static KB</td></tr>
+          <tr><td>top_up_by_card_charge</td><td class="num">27</td><td>Card-based top-up fees never documented</td></tr>
+          <tr><td>Refund_not_showing_up</td><td class="num">24</td><td>KB covers refund mechanics, never timeline/status</td></tr>
+          <tr><td>top_up_reverted</td><td class="num">23</td><td>No "why was my top-up reversed" content exists</td></tr>
+          <tr><td>disposable_card_limits</td><td class="num">23</td><td>Confused with supplementary cards; not a documented product</td></tr>
+          <tr><td>country_support</td><td class="num">23</td><td>No canonical "which countries we operate in" list</td></tr>
+          <tr><td>verify_source_of_funds</td><td class="num">20</td><td>A real compliance process, never written as a customer FAQ</td></tr>
+          <tr><td>balance_not_updated_after_cheque/cash_deposit</td><td class="num">20</td><td>No deposit-processing-time content</td></tr>
+          <tr><td>fiat_currency_support</td><td class="num">19</td><td>Same enumeration gap as country_support</td></tr>
+          <tr><td>card_payment_wrong_exchange_rate</td><td class="num">19</td><td>Live-data variant of exchange_rate</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>One exception worth naming: <strong>exchange_via_app</strong> (23 unresolved) is the only top category dominated by a confirmed <em>bot</em> failure (BUG-016) rather than a content gap — the KB explicitly states it doesn't handle foreign-currency transfers, but the auditor doesn't recognize that negative statement as a complete answer. Fixing BUG-016 resolves mostly this one category; it has no effect on the other nine.</p>
+    <p><strong>Business implication:</strong> a topic recognized as one of the ten content-gap categories cannot be fixed by retrying generation — no prompt improvement conjures a fact that was never authored. Route those straight to a live-data source or a "let me get you that" hand-off with a content-authoring ticket, rather than spending latency and LLM spend on an attempt certain to fail. Retry budget belongs on the ~15% bot-failure share instead, where an engineering fix genuinely moves the number.</p>
+
+    <h4 style="font-family:var(--font-display);font-size:1.02rem;font-weight:600;margin:30px 0 6px;">Grounding B1b in established standards, not an ad hoc split</h4>
+    <p>Two independent, pre-existing precedents formalize exactly this decomposition — which also means the industry's own literature already warns why a single blended containment number is unsafe to compare across bots or vendors.</p>
+    <p><strong>RAGAS</strong> (the same RAG-evaluation framework v3.5 itself cited for Metric 4) formally splits every evaluation into two independent halves, one per side of our split:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>RAGAS metric</th><th>What it measures</th><th>Maps to</th></tr></thead>
+        <tbody>
+          <tr><td>Context Recall / Context Precision</td><td>Does the retrieved content contain what's needed, and is it relevant</td><td><strong>KB Coverage</strong></td></tr>
+          <tr><td>Faithfulness / Answer Relevance</td><td>Given what was retrieved, did the model use it correctly and stay grounded</td><td><strong>Bot Reliability</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>This is the field's standard evaluation shape for any RAG system, not something invented for this project.</p>
+    <p><strong>SQM Group's Source-of-Error framework</strong>, the standard root-cause methodology contact centres have used for decades to judge First Call Resolution failures, splits blame three ways: Customer 13%, Agent 38%, <strong>Organization 49%</strong> — where "Organization" specifically means policies, systems, and knowledge gaps, deliberately kept separate from agent skill so a human agent is never penalized for a knowledge-base gap outside their control. Our own split (85% content-gap / 15% bot-attributed) skews even further toward "organization" than that decades-old human baseline.</p>
+    <div class="callout critical">
+      <span class="label">The caveat this grounding surfaces</span>
+      <p>The chatbot industry's own literature acknowledges the blended metric is manipulable — "gaps in the knowledge base are the most common cause of low containment" and best practice is to "track [KB coverage] as a separate metric from containment rate," while "standard containment metrics can actively mislead teams... you are manufacturing fake wins" if containment and true resolution diverge (Botpress). In practice this guidance is inconsistently followed — most published vendor containment numbers are blended, with no way to know from outside how much reflects content investment versus orchestration quality. <strong>Bot Reliability is the one claim here that can't be inflated just by adding more FAQ content</strong> — already normalized against whatever the KB contains — making it the correct number to lead with in any external or competitive claim about engineering quality.</p>
+    </div>
+
+    <h3 id="b1c"><span class="id">B1c</span>Industry Benchmark Comparison — Human Handoff Rate</h3>
+    <p><em>Definition, tightened to match how the industry defines containment</em> ("fully resolved without escalation" — a partial resolution does not count as contained under this stricter, externally-comparable reading):</p>
+    <div class="formula">Human Handoff Rate <span class="op">=</span> 1 <span class="op">−</span> (Fully Resolved / Total Queries)
+Containment Rate    <span class="op">=</span> Fully Resolved / Total Queries</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Study</th><th class="num">Containment</th><th class="num">Handoff rate</th></tr></thead>
+        <tbody>
+          <tr><td>BANKING77 (single-turn)</td><td class="num">67.1%</td><td class="num">32.9%</td></tr>
+          <tr><td>Multi-turn (whole session)</td><td class="num">69.5%</td><td class="num">30.5%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Benchmark</th><th class="num">Value</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>Gartner 2025 — mature RAG deployments</td><td class="num">55–65%</td><td>Gartner Customer Service Technology Survey</td></tr>
+          <tr><td>Gartner 2025 — rule-based bots</td><td class="num">20–35%</td><td>Gartner Customer Service Technology Survey</td></tr>
+          <tr><td>Industry-wide "leaders"</td><td class="num">70–90%</td><td>Multiple 2026 chatbot-KPI surveys</td></tr>
+          <tr><td>Industry-wide typical</td><td class="num">20–40%</td><td>Multiple 2026 chatbot-KPI surveys</td></tr>
+          <tr><td>"Healthy" handoff rate</td><td class="num">15–25%</td><td>Conferbot Chatbot Human Handoff Guide</td></tr>
+          <tr><td>NatWest Cora+ (proof-of-concept)</td><td class="num">−67%</td><td>Reported case study (adviser handoffs)</td></tr>
+          <tr><td>Trust Bank Singapore (live)</td><td class="num">−50%</td><td>Fintech Singapore / IBS Intelligence</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Our 67.1–69.5% containment sits <strong>above Gartner's mature-RAG average (55–65%)</strong> — a fair comparison since our architecture is exactly what that bucket describes — and just below the "leaders" bracket. Our 30.5–32.9% handoff rate sits at the edge of the "healthy" 15–25% range, on the high side but not past the &gt;30% "customers distrust it" warning threshold.</p>
+    <div class="callout warn">
+      <span class="label">Caveats that matter more than the raw comparison</span>
+      <p>(1) None of these external numbers are known to be decomposed the way B1b decomposes ours — read the comparison as illustrative positioning, not a rigorous match. (2) Escalation itself is barely exercised in either test corpus (0%/0.3% of turns) — our "handoff rate" means the bot declined or asked for clarification, not that a live hand-off was triggered and accepted. 86% of consumers want the option to reach a human, and 40% abandon entirely when they can't (2025 Salesforce study) — whether our escalation path is discoverable and trusted by real customers remains untested. (3) BANKING77 is a harder-than-real-life test by design (40 balanced queries across all 77 categories) — real production traffic, typically skewed toward common questions, would likely score higher, so 67.6–69.5% is best read as a floor.</p>
+    </div>
+    <p><strong>The differentiated claim worth leading with:</strong> most cited industry figures are a single blended number with no visibility into what drives it. We can say something most competitors publishing a containment rate cannot: our containment already exceeds the mature-RAG average, and we can show exactly what moves it from here — content authoring for ~85% of the remaining gap, three named, already-diagnosed bug fixes for the rest.</p>
+
+    <h3><span class="id">B2</span>Full-Session Resolution Rate — replaces FCR</h3>
+    <p><em>What it answers:</em> can the bot carry a customer through an entire multi-step need — not just one FAQ — in a single sitting?</p>
+    <p>The multi-turn study is direct evidence it can do something more valuable than answer one question: hold a customer through several linked asks (check balance, transfer, re-check balance, close out) inside one uninterrupted session, at <strong>69.5% full resolution</strong> across all 249 sampled conversations, averaging <strong>7.9 turns each</strong>. That's the stronger business claim — closer to "replaces a teller interaction" than "answers one FAQ."</p>
+    <div class="formula">Full-Session Resolution (%) <span class="op">=</span> (<span class="var">Conversations where every turn resolved</span> / <span class="var">Total conversations</span>) <span class="op">×</span> 100</div>
+    <p>Both baselines — 67.1% single-turn, 69.5% full multi-turn session — sit below a reasonable 80% target. A real, quantified gap; the next section explains most of where it comes from.</p>
+
+    <h3><span class="id">B3</span>Customer Effort &amp; Time-to-Resolution</h3>
+    <p><em>What it answers:</em> is the bot fast enough that customers wait for the answer instead of giving up and calling anyway? This is the metric that keeps B1's savings honest — an abandoned bot session that ends in a phone call anyway isn't a saved contact, it's a slower one.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Study</th><th class="num">Median turn</th><th class="num">p90</th><th class="num">Meets 2.5s target</th></tr></thead>
+        <tbody>
+          <tr><td>BANKING77 (single-turn)</td><td class="num">22.7s</td><td class="num">39.5s</td><td class="num">0.9%</td></tr>
+          <tr><td>Multi-turn</td><td class="num">9.2s</td><td class="num">15.2s</td><td class="num">0.0%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>This is structural, not incidental: the pipeline runs several <em>sequential</em> LLM calls per turn (triage → planning → generation → audit → substitution), and the substantive answer only appears once the whole turn completes — nothing about it streams token-by-token today (the system does stream live per-node progress captions, "Thinking…", so the customer isn't staring at a blank screen, but the actual answer is still an all-at-once arrival). Every second here is a direct tax on B1's savings.</p>
+
+    <h3><span class="id">B4</span>Service-Quality Index</h3>
+    <p><em>What it answers:</em> when the bot does answer, is the answer actually good — correct, honest, appropriately toned? This is what answers the "improve service quality" half of the brief, not just "is this cheaper."</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Study</th><th class="num">Sample</th><th class="num">Semantically sound</th><th>95% CI</th></tr></thead>
+        <tbody>
+          <tr><td>BANKING77 (single-turn)</td><td class="num">385</td><td class="num">~96–97%</td><td>tight</td></tr>
+          <tr><td>Multi-turn (whole conversations)</td><td class="num">70</td><td class="num">54.3%</td><td>±9.9pp</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The gap between these two rows is itself the finding — and a constructive one. Single-turn quality is excellent; the multi-turn shortfall traces almost entirely to one already-diagnosed, narrow defect (Tier 2, below), not a broad quality problem. The fix is bounded and the expected lift is quantifiable: <strong>we know precisely what's wrong, and closing it is expected to move this number from ~54% toward the 90%+ range the single-turn row already proves is achievable.</strong></p>
+  </section>
+
+  <section id="tier2" class="tier-2">
+    <h2><span class="num tier-head"><span class="tier-pill">Tier 2 · shown to the team</span></span>Diagnostic Metrics</h2>
+    <p class="lede">These explain why the Tier 1 numbers move. Nobody shows this table to a COO.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Metric</th><th>What it measures</th><th>Current reading</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Bot Reliability Rate</strong></td><td>Of queries the KB could answer, how often the bot delivered it — isolates engineering performance from content completeness (see B1b)</td><td class="num"><strong>95.9%</strong> (94.3–97.5%)</td></tr>
+          <tr><td><strong>KB Coverage Rate</strong></td><td>Of all queries, how many the KB has an answer for at all — a content-ops metric, not engineering (see B1b)</td><td class="num"><strong>82.9%</strong> (81.5–84.3%)</td></tr>
+          <tr><td>Turn-level resolution rate</td><td>Did the retrieval/tool layer complete correctly</td><td class="num">95.8% (multi-turn)</td></tr>
+          <tr><td><strong>RAG retrieval completion rate</strong></td><td>Of every <code>rag</code> dispatch, did it return usable evidence at all — other tool types are 100% by construction, excluded here</td><td class="num"><strong>78.4%</strong> (BANKING77) / <strong>91.7%</strong> (multi-turn)</td></tr>
+          <tr><td><strong>Context Precision</strong></td><td>Of every candidate ever shown to a task, what fraction was actually approved — low by design (wide-net retrieval, filtered downstream), not a defect</td><td class="num"><strong>18.9%</strong> macro / <strong>15.8%</strong> micro</td></tr>
+          <tr><td>Outbound audit pass rate</td><td>Cleared the live compliance/groundedness gate first try</td><td class="num">84.2% (BANKING77)</td></tr>
+          <tr><td><strong>Balance-surfacing rate</strong></td><td>Of every successful fetch, did the customer actually see the number</td><td class="num"><strong>88.0%</strong></td></tr>
+          <tr><td>Multi-turn coherence rate</td><td>Whole-conversation semantic soundness</td><td class="num">54.3%</td></tr>
+          <tr><td>Escalation precision</td><td>Escalated exactly when warranted, no more, no less</td><td>Not yet measurable — near-zero volume in both corpora</td></tr>
+          <tr><td><strong>Tool-Selection Accuracy</strong></td><td>Of every subquery, was the right tool (<code>rag</code>/<code>api</code>/<code>deeplink</code>/<code>service_request</code>) dispatched for what the wording called for</td><td class="num"><strong>94.7%</strong> (n=94, 95% CI ~90.2–99.2%)</td></tr>
+          <tr><td><strong>Outcome-concentration rate (Fairness proxy)</strong></td><td>Same-intent consistency: do a category's 40 phrasings of one nominal intent land on the same outcome</td><td class="num"><strong>72.6%</strong> mean, 24/77 categories &lt;60%</td></tr>
+          <tr><td><strong>Cosine-similarity share rate (Fairness, embedding-based)</strong></td><td>Of question pairs close in embedding space (the production pipeline's own retrieval model), what fraction share a common approved-evidence basis</td><td class="num"><strong>60.9%</strong> at 0.97–1.0 sim, down to <strong>45.1%</strong> at 0.80–0.85</td></tr>
+          <tr><td><strong>Answer-cache live re-test (before vs. after)</strong></td><td>Same exact question, live, before vs. after the cache shipped</td><td class="num">"delete my account": <strong>6/6</strong> identical, up from 9/12 (75%) before</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The balance-surfacing row is the one that matters most right now: 74 of 619 successful balance fetches (12.0%) never reached the customer as text — this single mechanism explains the bulk of B4's multi-turn gap.</p>
+    <div class="callout">
+      <span class="label">Fairness, reframed</span>
+      <p>Neither study varies customer demographics, and the bot's design is not customer-specific — every request is evaluated fresh with no persisted profile shaping the outcome. So the applicable fairness test, per explicit direction, is not demographic variation but <strong>consistency</strong>: does the same underlying intent, in different customer wording, produce the same outcome? 24 of 77 BANKING77 categories fall below 60% concentration — the worst, <code>declined_card_payment</code> (35.0%), shows concrete evidence: <em>"Why was my Payment declined"</em> resolves, but <em>"Please explain why my card was declined?"</em> does not, for functionally the same question. Tracked as <strong>BUG-023</strong>.</p>
+      <p>Confirmed at scale with a second, embedding-based test: every subquery embedded with the production pipeline's own retrieval model and checked pairwise — even in the closest similarity band, only 60.9% of near-duplicate questions share an evidence basis. A more severe sibling result fell out of the same pass: isolating <strong>byte-identical repeated questions</strong> — the same sentence, no wording variation at all — finds a <strong>35.2%</strong> split-outcome rate. No ambiguity argument can excuse that one; tracked separately as <strong>BUG-025</strong>.</p>
+      <p><strong>Architectural mitigation shipped and live-validated.</strong> A cross-session answer cache now surfaces a historically-confirmed FAQ as an extra sufficiency-audit candidate for close-enough repeats. A live re-test through the real system found: re-running <em>"I want to delete my account"</em> 6 times gave <strong>6/6 identical</strong> outcomes — up from 9/12 (75%) historically — even though live retrieval failed to find the right FAQ organically in all 6 fresh attempts; the cache alone carried every resolution. A parallel test on <em>"Why was my payment declined?"</em> reproduced the other half live: the identical cache-suggested candidate was present in all 4 runs, and the auditor still approved it twice and rejected it twice. This draws the exact line between what architecture can and can't fix: retrieval-pool consistency is solved; auditor-judgment consistency on identical evidence is a separate, model-behavior problem. Model-tuning fixes for it (self-consistency voting, a model-tier swap, rubric tightening) were considered and explicitly scoped out of this project by the user — <em>"model tunning is out of scope, so what we can do is surface the same parent and keep the cache update"</em> — so it stands as an accepted permanent limitation, not an open task (<code>docs/FAIRNESS_ANSWER_CACHE_DESIGN.md</code> S6a/S10).</p>
+    </div>
+  </section>
+
+  <section id="tier3" class="tier-3">
+    <h2><span class="num tier-head"><span class="tier-pill">Tier 3 · zero-tolerance</span></span>Trust &amp; Safety Guardrails</h2>
+    <p class="lede">Banking is regulated and trust-sensitive: one bad incident here costs more than a percentage point moved on Tier 1 is worth. Tracked as absolute incident counts trending to zero, not a rate to maximize.</p>
+    <div class="callout">
+      <span class="label">A different statistic than everywhere else in this document, deliberately</span>
+      <p>Every other confidence interval here (Bot Reliability, KB Coverage, Tool-Selection Accuracy) is two-sided — "what's our best estimate." Compliance is a one-sided question — <em>what's the worst this could plausibly be</em> — so these rows use a <strong>95% one-sided upper confidence bound</strong>, via the exact binomial (Clopper-Pearson) method rather than a normal approximation (these are small counts of rare events, where a normal approximation is unreliable). This is the same method real financial and quality audits use ("attribute sampling"), and it turns "not observed" from an unquantified reassurance into an actual number: even zero observed incidents get a real bound.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Incident class</th><th>Found</th><th class="num">Rate (x/n)</th><th class="num">95% upper bound</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><strong>False capability denial</strong></td><td>Yes</td><td class="num">13/619 (2.10%)</td><td class="num"><strong>3.32%</strong></td><td>"While live account balances cannot be checked directly…" — moments after fetching it</td></tr>
+          <tr><td>Fabricated account/entity</td><td>Yes</td><td class="num">2/70 (2.86%)</td><td class="num"><strong>8.72%</strong></td><td>Inventing an "other savings account" rather than correcting a false premise</td></tr>
+          <tr><td>Internal template leakage</td><td>Yes</td><td class="num">6/3,080 (0.19%)</td><td class="num"><strong>0.38%</strong></td><td>Precision Substitution fragment in customer-facing text</td></tr>
+          <tr><td>Unauthorized financial advice</td><td>Not observed (0/455 manually reviewed)</td><td class="num">0.00%</td><td class="num"><strong>0.66%</strong></td><td>True incidence is no higher than this, at 95% confidence — not just "not observed"</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="source-note">Two rows are deliberately excluded from this table, since a confidence interval doesn't apply to either: <strong>PII/personal-data mishandling</strong> rests on the <code>{{data-*}}</code> reveal-token design being structurally incapable of persisting PII — a design guarantee, not a sampled behavior — and <strong>No AI-disclosure to the customer</strong> (<code>translations.py</code> and <code>App.jsx</code>, all languages and UI checked in full — <strong>BUG-024</strong>) came from an exhaustive code read, not a sample of turns. Neither has sampling uncertainty left to bound.</p>
+    <p class="source-note">Full write-ups with root cause and reproduction detail: <code>docs/KNOWN_ISSUES_TRACKER.md</code> — BUG-014, BUG-017, BUG-018, BUG-020, BUG-024. The Fairness/consistency findings (BUG-023, BUG-025, Tier 2 above) are rates rather than zero-tolerance incidents, so they stay there rather than in this table.</p>
+  </section>
+
+  <section id="sources">
+    <h2><span class="num">Corrected against the real codebase</span>How This Is Actually Measured</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>v3.5 said</th><th>Actually use</th></tr></thead>
+        <tbody>
+          <tr><td><code>langgraph_state.db</code> (SQLite checkpointer)</td><td><code>backend/logs/system.jsonl</code> — every <code>llm.request</code>/<code>llm.response</code>/<code>task.*</code>/<code>outbound.*</code> event, timestamped and session-tagged</td></tr>
+          <tr><td><code>guardrail_violation.log</code></td><td><code>outbound.compliance.completed</code> / <code>outbound.groundedness.completed</code> events, each carrying a <code>passed</code> boolean</td></tr>
+          <tr><td>Ad hoc pandas parsing of checkpoint rows</td><td><code>Persistent_Chat_Message</code> / <code>Turn_Resolution_Feedback</code> tables in <code>simulated_ledger.db</code></td></tr>
+          <tr><td>sklearn macro-F1, 3-domain classifier</td><td>Component-level precision/recall against the real multi-product decomposition — not yet built (see next steps)</td></tr>
+          <tr><td>Offline RAGAS/TruLens judge, built from scratch</td><td>Validate the <strong>already-live</strong> compliance/groundedness gate first</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="next">
+    <h2><span class="num">Seven concrete next steps</span>What's Not Yet Measurable</h2>
+    <p><strong>1. Real unit costs (partially resolved).</strong> The API side of B1's cost formula is now real, computed from published pricing — what's still missing is the bank's own fully-loaded agent-minute cost, the other input to Monthly Savings.</p>
+    <p><strong>2. Escalation precision/recall.</strong> Needs a test set deliberately designed to trigger both mandatory and suggestive hand-off paths (fraud language, explicit distress, repeated failure) — neither completed study touches this.</p>
+    <p><strong>3. Component-level intent accuracy.</strong> Needs a one-time mapping of BANKING77's 77 categories onto the real product×intent grid — fully doable from existing data once that mapping exists.</p>
+    <p><strong>4. Content-authoring backlog.</strong> The ten categories in B1b's clustering table are a ready-made, evidence-based priority list for content ops — each already has a confirmed, concentrated gap (20+ cases each) rather than being a guess at where to write next.</p>
+    <p><strong>5. BUG-023 root cause.</strong> The Fairness/phrasing-consistency finding confirms 24 categories split outcomes by wording, but not yet whether retrieval or generation/sufficiency judgment is the dominant driver per category.</p>
+    <p><strong>6. BUG-024 remediation.</strong> The Transparency finding is a content gap, not a measurement gap — the next step is simply deciding and writing the disclosure copy (greeting line, persistent UI badge, or both).</p>
+    <p><strong>7. BUG-025 root cause.</strong> 35.2% of byte-identical repeated questions get a different retrieval outcome, with no wording ambiguity to blame — needs a dedicated trace to localize the non-determinism to the intent/product-mapping step, the sufficiency auditor, or genuine retrieval-side variance.</p>
+  </section>
+
+  <section id="methodology">
+    <h2><span class="num">Appendix</span>Statistical Methodology</h2>
+    <p>Every number in this framework falls into one of five measurement bases, each with a different level of confidence attached. Conflating them — reporting a sample-projected estimate with the same certainty as a full-corpus count — is the single easiest way to overstate precision.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Basis</th><th>What it means</th><th>Which metrics use it</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Full-corpus, deterministic</strong></td><td>Pulled directly from every case's own system-generated verdict — nothing sampled, nothing judged by a human</td><td>Overall Resolution, Containment/Handoff Rate, Turn-level resolution rate, Outbound audit pass rate</td></tr>
+          <tr><td><strong>Full-corpus, automated proxy</strong></td><td>Computed across every case via an automated heuristic rather than a system-native verdict or human judgment</td><td>The 950/23 retrieval-miss split; the 15/48 dispatcher-level split</td></tr>
+          <tr><td><strong>Sample-based, manually verified, then projected</strong></td><td>A human read a statistically-sized sample case-by-case; the resulting rate is applied to the full population, carrying that sample's confidence interval forward</td><td>The 14.8% bot-failure rate underlying Bot Reliability/KB Coverage; the Service-Quality Index; Tool-Selection Accuracy (94.7%, n=94)</td></tr>
+          <tr><td><strong>Full-corpus, deterministic proxy (no sampling)</strong></td><td>A per-category score computed from every case's own already-known outcome classification, with no new sampling beyond spot-checking the result for face validity</td><td>The Fairness outcome-concentration score (72.6% mean, 24/77 categories &lt;60%)</td></tr>
+          <tr><td><strong>Compliance/attribute sampling, one-sided upper bound</strong></td><td>A violation count against a known sample or corpus size, converted to "what's the worst this could plausibly be" via a 95% one-sided exact-binomial bound — never a two-sided normal-approximation CI</td><td>Every Tier 3 row with a real x/n behind it (13/619, 2/70, 6/3,080, 0/455)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Sample sizes were chosen deliberately</strong>, using the standard finite-population-corrected proportion formula for a 95% confidence interval:</p>
+    <div class="formula">n <span class="op">=</span> n₀ / (1 <span class="op">+</span> (n₀ − 1) / N),  where n₀ <span class="op">=</span> z² · p(1−p) / margin²</div>
+    <p>with z=1.96, p=0.5 (most conservative absent prior information). This produced n=385 (±5% margin) against N=3,080 for the BANKING77 semantic review, n=88 (±10%) against N=950 for the bot-failure sample, n=70 (±10%) against N=249 for the multi-turn semantic review, and n=94 (±10%) against N=3,275 for the Tool-Selection Accuracy sample — each sized to the population it was actually drawn from, not reused across different-sized populations.</p>
+    <p><strong>Propagating sample uncertainty.</strong> Bot Reliability and KB Coverage each use the 14.8% (95% CI 7.7–21.8%) sample rate as an input. The correct way to report the result is to run the formula at both ends of that input's interval, not just its point estimate — reporting a bare percentage with no interval would silently claim a precision the underlying sample doesn't support.</p>
+    <p><strong>Two reconciliations, not just caveats.</strong> An earlier draft reported an unresolved-task count (973) that didn't match a later, more complete count (1,036) — tracked down to 63 real cases a narrower script definition had silently excluded (dispatcher-level declines/clarifications that never reach <code>task_results</code>), not a data error. Separately, a full bug-tracker review before finalizing this evaluation found that 22 of BUG-015's 24 confirmed cases carried a <code>task_results</code> status of <code>SUFFICIENT</code>/<code>RELEVANT</code> despite the customer receiving a total-failure generic message — inflating every automated metric here by 26 tasks' worth until corrected. Neither bug was fixed; both were relabeled for accurate reporting instead. The corrected, five-category breakdown in B1b and the restated figures throughout this document are the result.</p>
+  </section>
+
+  <footer>
+    Companion to <code>docs/KNOWN_ISSUES_TRACKER.md</code> and the two completed studies: <code>research/2026-09-05_banking77_full_coverage/</code> and <code>research/2026-09-10_multiturn_banking_extension/</code>.
+  </footer>
+
+</div>

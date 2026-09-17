@@ -1,6 +1,10 @@
+import concurrent.futures
+import contextvars
 import json
 import os
+import threading
 import time
+from pathlib import Path
 from typing import Any, List
 from groq import Groq
 from google import genai
@@ -11,8 +15,8 @@ from backend.app.core.system_logger import log_event
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 #model_A="openai/gpt-oss-120b"  # For response generation
-model_A="gemini-3.1-flash-lite"  # For response generation
-model_B="gemini-3.1-flash-lite"  # For sufficiency, gourndedness, and compliance audits
+model_A="gemini-3.5-flash-lite"  # For response generation
+model_B="gemini-3.5-flash-lite"  # For sufficiency, gourndedness, and compliance audits
 model_C="gemini-3.1-flash-lite"  # For triage, decomposition, and journey planning
 MODEL_A_GENERATOR = model_A       # Groq: Conversational Engine
 MODEL_B_AUDITOR = model_B            # Google: Safety & Sufficiency Judge
@@ -23,6 +27,88 @@ MODEL_E_TRIAGE = model_C             # Google: Journey Classifier
 
 groq_api_key = os.environ.get("GROQ_API_KEY")
 google_api_key = os.environ.get("GOOGLE_API_KEY")
+
+# --- 🔁 GOOGLE API KEY POOL ---
+# Same rotation pool used by the research test harness (research/.research_api_keys),
+# shared by design so both draw from one set of keys. Optional: if the file is
+# absent, falls back to the single GOOGLE_API_KEY above exactly as before this
+# existed -- no behavior change for any deployment that doesn't have it.
+_GOOGLE_KEY_POOL_PATH = Path(__file__).resolve().parents[3] / "research" / ".research_api_keys"
+
+
+def _load_google_key_pool() -> List[str]:
+    if _GOOGLE_KEY_POOL_PATH.exists():
+        keys = [line.strip() for line in _GOOGLE_KEY_POOL_PATH.read_text().splitlines() if line.strip()]
+        if keys:
+            return keys
+    return [google_api_key] if google_api_key else []
+
+
+_google_key_pool = _load_google_key_pool()
+_google_key_pool_index = 0
+_google_key_pool_lock = threading.Lock()
+if _google_key_pool:
+    google_api_key = _google_key_pool[_google_key_pool_index]
+
+
+def _rotate_google_api_key(observed_index: int) -> bool:
+    """Advance past a key that just failed at observed_index. Returns False
+    once every key in the pool has been tried. Compare-and-swap against
+    observed_index rather than unconditionally incrementing: several
+    concurrent live requests can hit the same exhausted key at once, and
+    without this check each of them would call rotate() and each would
+    advance the index by one, skipping past several still-good keys for a
+    single actual exhaustion event. Whichever request's compare succeeds
+    performs the one real rotation; every other concurrent request sees
+    its own observed_index is already stale and just retries against
+    whatever key is current now, without moving the index again."""
+    global _google_key_pool_index, google_api_key
+    with _google_key_pool_lock:
+        if _google_key_pool_index != observed_index:
+            return _google_key_pool_index < len(_google_key_pool)
+        if _google_key_pool_index + 1 >= len(_google_key_pool):
+            return False
+        _google_key_pool_index += 1
+        google_api_key = _google_key_pool[_google_key_pool_index]
+        return True
+
+
+def _reset_google_key_pool() -> None:
+    """Restart the rotation cycle from key #1. Used when switching to a
+    fallback model (see _GEMINI_MODEL_FALLBACK): the quota being exhausted
+    is per (key, model) pair, not just per key -- confirmed live in the
+    429 message itself ("model: gemini-3.5-flash-lite", a separate 500/day
+    counter from gemini-3.1-flash-lite on the same key) -- so a key that's
+    exhausted for the model just given up on may have full headroom left
+    for the fallback model, and should be tried again from the start."""
+    global _google_key_pool_index, google_api_key
+    with _google_key_pool_lock:
+        _google_key_pool_index = 0
+        if _google_key_pool:
+            google_api_key = _google_key_pool[0]
+
+
+_GEMINI_MODEL_FALLBACK = {
+    "gemini-3.5-flash-lite": "gemini-3.1-flash-lite",
+    "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
+}
+
+
+def _is_rate_limited_error(error: Exception) -> bool:
+    """A 429/RESOURCE_EXHAUSTED from the model provider -- daily quota or
+    per-minute throughput, doesn't matter which for a live request: unlike
+    the research harness (which can afford to wait out a per-minute limit
+    on the same key), a live customer can't wait, so any rate limit here
+    just means "try the next key immediately" rather than "wait and retry
+    the same one."""
+    code = getattr(error, "code", None)
+    status = getattr(error, "status", None)
+    message = str(error)
+    return code == 429 or status == "RESOURCE_EXHAUSTED" or "429" in message or "RESOURCE_EXHAUSTED" in message
+
+
+_LLM_CALL_TIMEOUT_SECONDS = 45
+_LLM_CALL_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=16, thread_name_prefix="llm_call_guard")
 
 # =====================================================================
 # 📝 PYDANTIC SCHEMAS FOR GOOGLE GEMINI STRUCTURED OUTPUTS
@@ -456,7 +542,7 @@ def _is_transient_llm_error(error: Exception) -> bool:
     return any(marker in message for marker in ("UNAVAILABLE", "high demand", " 503", "Service Unavailable"))
 
 
-def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_schema_override: Any = None, _max_attempts: int = 2) -> str:
+def _call_llm_router_impl(prompt: str, model_id: str = MODEL_A_GENERATOR, response_schema_override: Any = None, _max_attempts: int = 2) -> str:
     """
     Centralized remote inference client manager.
     Supports Groq LPUs and dynamic Google GenAI Pydantic Structured Outputs.
@@ -587,17 +673,117 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_sch
         )
         raise e
 
+
+def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_schema_override: Any = None, _max_attempts: int = 2) -> str:
+    """Public entrypoint: wraps _call_llm_router_impl with the two live-
+    traffic resilience layers that don't belong in that function's own
+    per-attempt retry loop (which is specifically for a transient upstream
+    5xx, see _is_transient_llm_error):
+
+    - Key rotation: a 429/RESOURCE_EXHAUSTED (from either key's daily quota
+      or a shorter per-minute limit) rotates _google_key_pool_index and
+      retries immediately with the next key -- no waiting, since a live
+      request can't be kept waiting the way an unattended batch job can.
+      Bounded at len(_google_key_pool) total attempts; once every key has
+      been tried, this re-raises so the caller's own existing fallback
+      behavior (every node that calls this already handles an LLM failure
+      gracefully today) runs exactly as it did with a single key.
+    - Hang guard: the underlying client library sets no read timeout, so a
+      dropped/half-closed connection can block _call_llm_router_impl
+      forever with no exception ever raised to retry from (confirmed live
+      in the research harness -- the same client is used here). Each
+      attempt runs in a worker thread with a _LLM_CALL_TIMEOUT_SECONDS cap;
+      a stuck attempt is abandoned (its thread leaks quietly, since Python
+      cannot forcibly cancel a blocked thread) and a fresh attempt is
+      retried, up to the same attempt budget as key rotation.
+
+    contextvars.copy_context() matters here for the same reason it did in
+    the research harness: request_context (session_id, user_id --
+    everything log_event attaches to a live request's own log lines) is
+    thread-local and does NOT cross into the worker thread on its own;
+    without re-applying the calling context inside that thread, every
+    llm.request/llm.response log line from a live request would silently
+    lose its session_id.
+
+    A fresh Context is captured on every attempt inside the loop, not once
+    before it: reusing one Context object across retries raises "cannot
+    enter context: already entered" the moment a retry's ctx.run(...) is
+    invoked while an earlier, timed-out-but-still-running attempt's
+    ctx.run(...) on that same object hasn't finished yet (Python cannot
+    forcibly cancel a blocked thread, so a hung attempt keeps running for
+    as long as its own network call takes, which can easily outlast
+    _LLM_CALL_TIMEOUT_SECONDS) -- confirmed live. copy_context() is cheap
+    and request_context doesn't change mid-call, so this has no downside.
+
+    Cross-model fallback: the daily quota is tracked per (key, model) pair,
+    not just per key -- the 429 message itself names the specific model
+    ("GenerateRequestsPerDayPerProjectPerModel-FreeTier"). So exhausting
+    every key for gemini-3.5-flash-lite says nothing about
+    gemini-3.1-flash-lite's own quota on those same keys, and vice versa.
+    Once every key is exhausted for the model actually requested, this
+    switches to _GEMINI_MODEL_FALLBACK's other Gemini model and restarts
+    the key cycle from key #1 for it, using the identical prompt and
+    schema (the API only cares which model to route to, not which of the
+    two callers originally asked for) -- only after BOTH models have
+    exhausted every key does this finally give up. A non-Gemini model_id
+    (e.g. the Groq prompt guard) has no fallback and behaves exactly as
+    before.
+    """
+    current_model_id = model_id
+    models_to_try = [model_id] + ([_GEMINI_MODEL_FALLBACK[model_id]] if model_id in _GEMINI_MODEL_FALLBACK else [])
+    last_error: Exception | None = None
+    for model_index, current_model_id in enumerate(models_to_try):
+        if model_index > 0:
+            _reset_google_key_pool()
+            log_event("llm.model_fallback", level="WARNING", from_model=models_to_try[model_index - 1], to_model=current_model_id)
+        max_attempts = max(len(_google_key_pool), 1)
+        for attempt in range(1, max_attempts + 1):
+            observed_index = _google_key_pool_index
+            try:
+                ctx = contextvars.copy_context()
+                future = _LLM_CALL_EXECUTOR.submit(ctx.run, _call_llm_router_impl, prompt, current_model_id, response_schema_override, _max_attempts)
+                return future.result(timeout=_LLM_CALL_TIMEOUT_SECONDS)
+            except concurrent.futures.TimeoutError:
+                last_error = TimeoutError(f"{current_model_id} call did not respond within {_LLM_CALL_TIMEOUT_SECONDS}s (likely a dead connection).")
+                log_event("llm.call_timeout", level="WARNING", model_id=current_model_id, timeout_seconds=_LLM_CALL_TIMEOUT_SECONDS, attempt=attempt)
+            except Exception as error:
+                if _is_rate_limited_error(error) and _google_key_pool:
+                    last_error = error
+                    if _rotate_google_api_key(observed_index):
+                        log_event("llm.key_rotated", level="WARNING", model_id=current_model_id, from_index=observed_index, attempt=attempt)
+                        continue
+                    break
+                raise
+    raise last_error
+
+
 # 🔗 BACKWARD COMPATIBILITY ALIAS
 call_groq_lpu = call_llm_router
 
 
 def parse_json_robustly(raw_text: str) -> dict:
-    """Parse an LLM's JSON response, tolerating a ```json fenced code block."""
+    """Parse an LLM's JSON response, tolerating a ```json fenced code block.
+
+    Also tolerates the whole response being wrapped in a single-element
+    list -- confirmed live that a structured-output call can occasionally
+    return `[{...}]` instead of the expected bare `{...}` for the exact
+    same schema/prompt shape that normally comes back unwrapped. Every
+    caller immediately does `.get(...)` on this function's return value,
+    so an unwrapped list crashes with "'list' object has no attribute
+    'get'" with no indication of what actually went wrong. Only the
+    single-dict-element case is unwrapped; any other list shape (empty,
+    multiple elements, non-dict elements) is left as-is and still surfaces
+    as a clear downstream error rather than being guessed at further.
+    """
     clean_text = raw_text.strip()
     if clean_text.startswith("```json"): clean_text = clean_text[7:]
     elif clean_text.startswith("```"): clean_text = clean_text[3:]
     if clean_text.endswith("```"): clean_text = clean_text[:-3]
-    try: return json.loads(clean_text.strip())
+    try:
+        parsed = json.loads(clean_text.strip())
     except Exception as e:
         print(f"🚨 [JSON PARSE ERROR]: {e} \nRaw text was: {raw_text}")
         raise e
+    if isinstance(parsed, list) and len(parsed) == 1 and isinstance(parsed[0], dict):
+        return parsed[0]
+    return parsed

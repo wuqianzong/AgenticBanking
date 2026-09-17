@@ -10,6 +10,7 @@ from pydantic import create_model
 from langchain_core.messages import HumanMessage, AIMessage
 from backend.app.orchestration.state import AgentState
 from backend.app.orchestration.rag_engine import RAGEngine
+from backend.app.orchestration.answer_cache import get_answer_cache
 from backend.app.services.memory_service import LongTermMemoryManager
 from backend.app.core.llm_service import (
     call_groq_lpu,
@@ -59,6 +60,7 @@ VOLATILE_STATE_RESET = {
     "task_partial_evidence": {},
     "task_partial_guidance": {},
     "task_rejected_parent_ids": {},
+    "task_cache_injected_parent_ids": {},
     "clarification_tasks": [],
     "task_resolution_instructions": [],
     "safe_answer_for_fallback": "",
@@ -1188,9 +1190,23 @@ def _build_conversation_context(state: AgentState) -> str:
         if not isinstance(message, HumanMessage)
         or message.additional_kwargs.get("trust_status") == "trusted"
     ]
+    # The most recent AI turn is marked distinctly (not just "AI:") so a
+    # consuming prompt can tell it apart from an older AI turn sitting
+    # earlier in the same flat transcript -- confirmed live that without
+    # this, a vague reply ("i am not sure") got attributed to a stale,
+    # more topically specific AI turn from several exchanges back instead
+    # of the assistant's own immediately preceding (but topic-neutral)
+    # turn, since nothing distinguished "most recent" from "mentioned
+    # somewhere in history" for the model to weigh.
+    last_ai_index = max(
+        (i for i, message in enumerate(trusted_history) if not isinstance(message, HumanMessage)),
+        default=None,
+    )
     recent_history = "\n".join(
-        f"{'User' if isinstance(message, HumanMessage) else 'AI'}: {message.content}"
-        for message in trusted_history
+        f"User: {message.content}" if isinstance(message, HumanMessage)
+        else f"AI (most recent assistant turn, immediately before the Latest User Input): {message.content}" if i == last_ai_index
+        else f"AI: {message.content}"
+        for i, message in enumerate(trusted_history)
     ) or "None"
     return (
         f"Last Session Recall (advisory only; not current state):\n{last_session_summary or 'None'}\n\n"
@@ -1647,6 +1663,22 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     or customer objective that is not supported by the latest input and trusted
     context. Keep the original Latest User Input as the authoritative wording
     for any later customer-facing response.
+    RECENCY ANCHOR: when a short/vague reply could plausibly continue more
+    than one earlier topic, the default anchor is the turn marked "AI (most
+    recent assistant turn, immediately before the Latest User Input)" --
+    never an older AI turn sitting further back in Trusted Conversation
+    Context, even one that is more specific or topically substantive. Only
+    treat an older topic as still live if the most recent assistant turn
+    itself was already continuing or re-raising it. A generic, topic-neutral
+    most-recent turn (e.g. a plain greeting, or an open-ended "how can I
+    help you") means the customer's vague reply responds to THAT turn, not
+    to whatever earlier topic the conversation had previously touched on --
+    the assistant's own neutral turn has already moved past it. For example,
+    if an earlier turn mentioned a pending question about a card fee, but
+    the assistant's most recent turn was a plain "Hello! How can I help you
+    with your banking today?", a following "I am not sure" answers that
+    greeting (i.e. the customer doesn't yet know what they need help with)
+    -- it does not reach back to reactivate the earlier card-fee question.
     CONTEXT FILLS GAPS, IT NEVER OVERRIDES: Trusted Conversation Context
     exists only to resolve what the Latest User Input itself leaves
     genuinely open -- a pronoun, an ellipsis, a missing target. When the
@@ -2028,7 +2060,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     - Each angle must be a short natural-language PHRASE (8-20 words) that reads like a sentence fragment from an FAQ answer.
     - Use common banking vocabulary only. Do not invent specific product names, amounts, dates, or branch details.
 
-    1. CONTEXTUAL INHERITANCE: Read each component's customer_component text first. A Product or Intent may be inherited only when it is unambiguously established by the current-session trusted history, Active Context Matrix, or an active graph plan. Do not use the user baseline or prior-session recall to fill a missing Product or Intent, unless the component explicitly continues that recalled topic (for example, "yes, continue").
+    1. CONTEXTUAL INHERITANCE: Read each component's customer_component text first. A Product or Intent may be inherited only when it is unambiguously established by the current-session trusted history, Active Context Matrix, or an active graph plan. Do not use the user baseline or prior-session recall to fill a missing Product or Intent, unless the component explicitly continues that recalled topic (for example, "yes, continue"). The Active Context Matrix reflects whichever turn last actually searched something -- it is never cleared just because a later turn happened to be conversational, so its mere presence here does not by itself mean the customer's current topic is still that one. Before inheriting from it, check the turn marked "AI (most recent assistant turn, immediately before the Latest User Input)" in Recent Conversation: if that turn itself was already continuing the matrix's product/intent, inheritance is safe; if it was a generic, topic-neutral turn (a plain greeting, an open-ended "how can I help you," or similar) that did not reference that topic, treat the Active Context Matrix as stale for this component and do not inherit from it.
     2. FOR EACH supplied component, evaluate the two mandatory retrieval foundations -- PRODUCT and INTENT matter equally; a clearly-named product with no discernible request type is exactly as unresolved as a request type with no product:
        - PRODUCT: Identify the component's BASE product family by stripping any
          descriptive qualifier, tier name, customer-segment word, or marketing
@@ -3745,6 +3777,24 @@ async def node_03b_rag_worker(state: AgentState):
             direct_query=task.get("direct_query", task.get("customer_component", "")),
             verified_session_parent_ids=verified_session_parent_ids,
         )
+
+        # Fairness/consistency mitigation (BUG-023, BUG-025): a parent id
+        # that has, historically, resolved a close enough question is
+        # added as an *extra* candidate here -- never a replacement, never
+        # a bypass of the sufficiency audit below, which independently
+        # judges every candidate on its own merits regardless of origin.
+        # See answer_cache.py's module docstring and
+        # docs/FAIRNESS_ANSWER_CACHE_DESIGN.md for the full rationale.
+        cache_hits = get_answer_cache().lookup(task.get("direct_query", task.get("customer_component", "")))
+        if cache_hits:
+            existing_ids = {p.get("parent_id") for p in parents if p.get("parent_id")}
+            new_ids = [
+                pid for pid in dict.fromkeys(pid for hit in cache_hits for pid in hit["parent_ids"])
+                if pid not in existing_ids and pid not in excluded_parent_ids
+            ]
+            if new_ids:
+                parents = parents + engine.hydrate_parent_ids(new_ids)
+
         return {
             "task_id": task.get("task_id"),
             "status": "RETRIEVED",
@@ -3752,6 +3802,7 @@ async def node_03b_rag_worker(state: AgentState):
             "retrieval_mode": retrieval_mode,
             "verified_session_parent_ids": verified_session_parent_ids,
             "parents": parents,
+            "cache_hits": cache_hits,
         }
 
     retrieved_results = await asyncio.gather(*(retrieve_task(task) for task in tasks_to_retrieve))
@@ -3769,8 +3820,23 @@ async def node_03b_rag_worker(state: AgentState):
             result.get("task_id"): [parent.get("parent_id") for parent in result.get("parents", [])]
             for result in retrieved_results
         },
+        cache_injected_parent_ids={
+            result.get("task_id"): list(dict.fromkeys(
+                pid for hit in result.get("cache_hits", []) for pid in hit["parent_ids"]
+            ))
+            for result in retrieved_results
+            if result.get("cache_hits")
+        },
     )
-    return {"rag_payload": "", "task_results": list(merged_results.values())}
+    cache_injected_by_task = dict(state.get("task_cache_injected_parent_ids", {}))
+    for result in retrieved_results:
+        if result.get("cache_hits"):
+            cache_injected_by_task[result["task_id"]] = result["cache_hits"]
+    return {
+        "rag_payload": "",
+        "task_results": list(merged_results.values()),
+        "task_cache_injected_parent_ids": cache_injected_by_task,
+    }
 
 def node_03b_deeplink_worker(state: AgentState):
     return {"deeplink_payload": "[DEEPLINK DATA]:\nNo Deep-links requested for this MVP."}
@@ -6312,12 +6378,17 @@ def _generate_response_blocks(state: AgentState) -> dict:
         ]
 
         if requested_type == "COMPARISON":
-            headers = [_llm_text(h) for h in _llm_list(element, "headers") if _llm_text(h)]
+            # headers/values are lists of bare strings, not dicts -- unlike
+            # every other _llm_text call here, which extracts a named field
+            # from a dict element. _llm_text(h)/_llm_text(v) crashed with
+            # "missing 1 required positional argument: 'key'" the moment a
+            # real COMPARISON response actually exercised this path.
+            headers = [str(h).strip() for h in _llm_list(element, "headers") if isinstance(h, str) and str(h).strip()]
             rows = []
             for r in _llm_list(element, "rows"):
                 if isinstance(r, dict):
                     feat = _llm_text(r, "feature") or _llm_text(r, "label")
-                    vals = [_llm_text(v) for v in _llm_list(r, "values")]
+                    vals = [str(v).strip() for v in _llm_list(r, "values") if isinstance(v, str) and str(v).strip()]
                     if feat and vals:
                         rows.append({"feature": feat, "values": vals})
             actions = [
@@ -6390,7 +6461,10 @@ def _generate_response_blocks(state: AgentState) -> dict:
                     it_sub = _llm_text(it, "subtitle")
                     it_badge = _llm_text(it, "badge")
                     it_hi = _llm_text(it, "highlight")
-                    it_dets = [_llm_text(d) for d in _llm_list(it, "details") if _llm_text(d)]
+                    # "details" is a list of bare strings, not dicts -- same
+                    # missing-'key'-argument mistake as the COMPARISON block's
+                    # headers/values (BUG-012); fixed the same way here.
+                    it_dets = [str(d).strip() for d in _llm_list(it, "details") if isinstance(d, str) and str(d).strip()]
                     it_act_lbl = _llm_text(it, "actionLabel") or _llm_text(it, "action_label") or "Select"
                     it_act_msg = _llm_text(it, "actionMessage") or _llm_text(it, "action_message") or it_title
                     if it_title:
@@ -8136,6 +8210,47 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
     return {"outbound_compliance_result": compliance_audit, "outbound_groundedness_result": groundedness_audit}
 
 
+def _record_answer_cache_outcomes(state: AgentState) -> None:
+    """Fairness/consistency mitigation write path (BUG-023, BUG-025):
+    once a turn's OWN outbound compliance/groundedness audit has passed --
+    a stronger bar than the retrieval-level task status alone, chosen
+    because BUG-015 showed task-level SUFFICIENT/RELEVANT can be wrong
+    even when the customer-facing turn actually failed -- record each
+    task's (question text, approved parent ids) outcome into the
+    cross-session answer cache, and credit or blame any cache-suggested
+    candidates this task consulted this round.
+
+    Deliberately best-effort: a cache write is a side effect that
+    improves future fairness, never something this turn's own response
+    depends on. It must never be able to fail or slow down the turn the
+    customer is actually waiting on.
+    """
+    try:
+        tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", [])}
+        cache_injected = state.get("task_cache_injected_parent_ids", {})
+        cache = get_answer_cache()
+        for result in state.get("task_results", []):
+            task_id = result.get("task_id")
+            task = tasks_by_id.get(task_id)
+            if not task:
+                # Skips scope-expansion companion tasks (e.g. "task_1_scope")
+                # and any task without a real subquery behind it -- only the
+                # customer's own primary question is cache-eligible.
+                continue
+            text = task.get("direct_query") or task.get("customer_component") or ""
+            if not text:
+                continue
+            surfaced_doc_ids = [hit["doc_id"] for hit in cache_injected.get(task_id, [])]
+            cache.record_outcome(
+                query_text=text,
+                approved_parent_ids=result.get("approved_parent_ids", []),
+                surfaced_doc_ids=surfaced_doc_ids,
+            )
+    except Exception as exc:  # noqa: BLE001 -- never let a cache side effect break a live turn
+        print(f"   ⚠️ [ANSWER CACHE]: record_outcome failed, continuing without it: {exc}")
+        log_event("answer_cache.record_outcome.failed", error=str(exc))
+
+
 def node_06_outbound_audit_join(state: AgentState):
     """Join focused audits and retain the existing retry/degradation semantics.
 
@@ -8164,6 +8279,7 @@ def node_06_outbound_audit_join(state: AgentState):
 
         if not pending_ids and not response_wide:
             print("   ✅ [OUTBOUND AUDIT PASS]: Response is MAS-compliant and evidence-grounded.")
+            _record_answer_cache_outcomes(state)
             plan = state.get("active_plan", {})
             completed_steps = state.get("completed_steps", [])
             if state.get("pending_advance"):

@@ -94,6 +94,7 @@ class AgentState(TypedDict):
     task_partial_evidence: Dict[str, List[str]]  # Parent IDs retained while a task is only partly answerable and continues retrieval
     task_partial_guidance: Dict[str, str]        # Last-known non-empty generation_guidance per task_id, retained across retry rounds the same way task_partial_evidence retains parent ids -- so a later round that doesn't re-emit guidance doesn't lose an earlier round's genuine finding
     task_rejected_parent_ids: Dict[str, List[str]]  # Parent IDs a prior sufficiency audit explicitly judged not relevant; excluded from future candidate pools for the same task so a widened retry can't waste a selection slot re-surfacing known-bad evidence
+    task_cache_injected_parent_ids: Dict[str, List[Dict[str, Any]]]  # Cross-session answer-cache hits consulted for a task this round (see answer_cache.py, BUG-023/BUG-025 fairness mitigation): each entry is {doc_id, parent_ids, similarity}. Parent ids are already merged into that task's `parents` candidate list for the sufficiency auditor -- this field is the separate provenance record used only to credit/blame the cache's own suggestions once the turn's outbound audit resolves (node_06), never read by any prompt-building function.
     # One standard clarification contract regardless of which node raised
     # it -- see docs/DECLINE_CLARIFICATION_DESIGN_v1.0.md. Entries are
     # {subquery_id, originator, scope, unresolved_request,

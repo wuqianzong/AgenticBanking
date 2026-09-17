@@ -47,6 +47,7 @@ const DEEPLINK_SCREEN_BY_PATH = {
   '/app/profile/personal-details': { destinationId: 'profile-personal-details', label: 'Update Profile' },
   '/app/profile/security': { destinationId: 'security-settings', label: 'Security Settings' },
   '/app/cards/pay': { destinationId: 'pay-credit-card-bill', label: 'Pay Bill' },
+  '/app/payments/transfer': { destinationId: 'money-transfer', label: 'Send Money' },
 };
 
 const createSessionId = () => `sess_${crypto.randomUUID()}`;
@@ -63,6 +64,38 @@ const formatMessageTime = (timestamp) => new Intl.DateTimeFormat('en-SG', {
   second: '2-digit',
   hour12: false
 }).format(new Date(timestamp));
+
+// Development "Show reasoning" live view: the backend can only ever send a
+// reasoning snippet once its whole node call has finished (there's no
+// actual token-by-token reasoning stream in this pipeline -- see
+// api_gateway.py's _extract_reasoning_snippets), so "real time" here is a
+// client-side typewriter reveal over already-complete text, not literal
+// live model tokens. Declared at module scope, not inside the App
+// component, so its own reveal progress survives the parent re-rendering
+// on every streamed progress event -- a component defined inside App's
+// body would remount (and reset its animation) on every one of those.
+const TYPEWRITER_TOTAL_MS = 900;
+const TypewriterLine = ({ text }) => {
+  // `text` never changes after this component mounts for a given key --
+  // reasoningLog entries are only ever appended, never edited in place --
+  // so the initial useState(0) is the only reset this ever needs; no
+  // effect-body reset required for a prop that is effectively static per
+  // instance.
+  const [visibleChars, setVisibleChars] = useState(0);
+  useEffect(() => {
+    if (!text) return undefined;
+    const totalTicks = Math.max(1, Math.ceil(TYPEWRITER_TOTAL_MS / 16));
+    const charsPerTick = Math.max(1, Math.ceil(text.length / totalTicks));
+    let shown = 0;
+    const id = setInterval(() => {
+      shown = Math.min(text.length, shown + charsPerTick);
+      setVisibleChars(shown);
+      if (shown >= text.length) clearInterval(id);
+    }, 16);
+    return () => clearInterval(id);
+  }, [text]);
+  return <>{text.slice(0, visibleChars)}</>;
+};
 
 // WP-1/WP-3: the backend never resolves a {{data-*}} token into visible
 // text -- it only ever sends the token, plus (separately, this turn only)
@@ -105,6 +138,21 @@ export default function BankingBotUI() {
   const [taskConfidence, setTaskConfidence] = useState(null);
   const [currentNodeId, setCurrentNodeId] = useState("");
   const [processingElapsed, setProcessingElapsed] = useState("0.0");
+  // Development-only debug setting (Settings -> Development -> "Show
+  // reasoning"). A local browser preference, not part of the customer
+  // `preferences` profile persisted to the backend -- this never leaves
+  // the browser except as an explicit per-request opt-in flag on
+  // /api/chat, and the backend only computes/sends reasoning text when
+  // that flag is set. See _extract_reasoning_snippets in api_gateway.py.
+  const [devShowReasoning, setDevShowReasoning] = useState(
+    () => localStorage.getItem('dev_show_reasoning') === 'true'
+  );
+  // Transient, turn-scoped accumulation of reasoning snippets streamed
+  // live while isTyping is true. Reset at the start of each turn and
+  // moved onto the finished bot message (msg.reasoning) once the turn
+  // completes, so it can still be expanded after the live progress view
+  // disappears.
+  const [reasoningLog, setReasoningLog] = useState([]);
   // Driven by the LATEST turn's own value only (see setSoftEscalationAvailable
   // below), never attached to a past message -- unlike a chip baked into
   // chat history, this banner disappears the moment a turn comes back with
@@ -430,6 +478,10 @@ export default function BankingBotUI() {
     const frameId = requestAnimationFrame(scrollToBottom);
     return () => cancelAnimationFrame(frameId);
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    localStorage.setItem('dev_show_reasoning', devShowReasoning ? 'true' : 'false');
+  }, [devShowReasoning]);
 
   useEffect(() => {
     if (!isTyping && inputRef.current) {
@@ -805,6 +857,13 @@ export default function BankingBotUI() {
     setTaskConfidence(null);
     setSoftEscalationAvailable(false);
     setNextActions([]);
+    setReasoningLog([]);
+    // React state updates inside the streaming loop below don't
+    // synchronously reflect into a closed-over `reasoningLog` read later
+    // in this same function call, so this turn's full accumulation is
+    // also tracked in a plain local array -- that's what gets attached to
+    // the finished bot message, while setReasoningLog drives the live view.
+    const collectedReasoning = [];
 
     try {
       const response = await fetch("http://localhost:8000/api/chat", {
@@ -816,7 +875,8 @@ export default function BankingBotUI() {
         body: JSON.stringify({
           session_id: targetSessionId,
           message: text,
-          user_id: MOCK_PROFILE.userId
+          user_id: MOCK_PROFILE.userId,
+          debug_reasoning: devShowReasoning
         })
       });
 
@@ -891,6 +951,10 @@ export default function BankingBotUI() {
               // round completes, then holding steady through the rest of
               // the turn) -- so just take whatever it says.
               setTaskConfidence(parsedData.taskConfidence ?? null);
+              if (parsedData.reasoning?.length) {
+                collectedReasoning.push(...parsedData.reasoning);
+                setReasoningLog(prev => [...prev, ...parsedData.reasoning]);
+              }
             }
 
             // Check if the payload contains the final response
@@ -952,12 +1016,14 @@ export default function BankingBotUI() {
             navigationActions: finalBotData.navigationActions || [],
             showFeedbackPrompt: finalBotData.showFeedbackPrompt || false,
             turnNumber: finalBotData.turnNumber,
+            reasoning: collectedReasoning,
             createdAt: new Date().toISOString()
           };
           if (botResponse.type === 'stepper') {
             setExpandedProgressSteps(prev => ({ ...prev, [botResponse.id]: 1 }));
           }
           setMessages(prev => [...prev, botResponse]);
+          setReasoningLog([]);
         }
 
         // Turn 0 is a plain greeting, so it is safe to replace it with the
@@ -2383,6 +2449,60 @@ export default function BankingBotUI() {
           </div>
         );
 
+      case 'money-transfer':
+        return (
+          <div className="w-full text-left space-y-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">Send To</label>
+                <div className="flex justify-between items-center p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center">
+                      <UserCheck size={16} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-slate-800">Select a payee</div>
+                      <div className="text-xs text-slate-500">PayNow mobile number or saved payee</div>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-slate-400" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">Amount</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-slate-500 font-medium">$</span>
+                  </div>
+                  <input type="text" className="block w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-800 font-medium" placeholder="0.00" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">Pay From</label>
+                <div className="flex justify-between items-center p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center">
+                      <Wallet size={16} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-slate-800">Everyday Savings</div>
+                      <div className="text-xs text-slate-500">Available: $8,452.30</div>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-slate-400" />
+                </div>
+              </div>
+            </div>
+
+            <button className="w-full bg-blue-600 text-white font-medium py-3.5 rounded-xl shadow-sm hover:bg-blue-700 transition-colors mt-2 flex justify-center items-center gap-2">
+              <Send size={16} />
+              Send Money
+            </button>
+          </div>
+        );
+
       case 'profile-personal-details':
         return (
           <div className="w-full text-left space-y-4 max-w-md pb-6">
@@ -2756,6 +2876,31 @@ export default function BankingBotUI() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Development section: local-only debug settings, never
+                persisted to the backend preferences profile and never
+                affecting a real customer's experience unless explicitly
+                switched on in this same browser. */}
+            <div className="pt-3 border-t border-slate-100">
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Development</label>
+              <button
+                type="button"
+                onClick={() => setDevShowReasoning(!devShowReasoning)}
+                className="w-full flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5"
+              >
+                <span className="text-left">
+                  <span className="block text-[12px] font-semibold text-slate-700">Show reasoning</span>
+                  <span className="block text-[10.5px] text-slate-400">Displays the bot's internal reasoning while it works, for debugging only</span>
+                </span>
+                <span
+                  className={`shrink-0 w-9 h-5 rounded-full transition-colors relative ${devShowReasoning ? 'bg-blue-600' : 'bg-slate-300'}`}
+                  role="switch"
+                  aria-checked={devShowReasoning}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-2xs transition-transform ${devShowReasoning ? 'translate-x-4' : ''}`} />
+                </span>
+              </button>
             </div>
           </div>
           <div className="p-3.5 border-t border-slate-100 flex justify-end bg-slate-50/50">
@@ -3194,7 +3339,35 @@ export default function BankingBotUI() {
                     )}
                     {msg.type === 'checklist' && msg.listClarificationText && renderClarificationCard(msg.listClarificationText)}
                     {msg.type === 'escalation' && renderEscalation()}
-                    
+
+                    {/* Development-only: this turn's reasoning trace, shrunk
+                        to a click-to-expand toggle once the response is
+                        generated. Reuses the existing expandedAccordions
+                        keyed-toggle pattern rather than a new state shape. */}
+                    {devShowReasoning && msg.sender === 'bot' && msg.reasoning?.length > 0 && (() => {
+                      const accordionKey = `reasoning-${msg.id}`;
+                      const isOpen = expandedAccordions[accordionKey] ?? false;
+                      return (
+                        <div className="mt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedAccordions(prev => ({ ...prev, [accordionKey]: !isOpen }))}
+                            className="flex items-center gap-1 text-[10px] font-semibold text-slate-400 hover:text-slate-600 transition-colors"
+                          >
+                            {isOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                            Reasoning ({msg.reasoning.length})
+                          </button>
+                          {isOpen && (
+                            <div className="mt-1 max-w-sm rounded-xl border border-slate-200 bg-slate-900/95 px-2.5 py-2 text-[10px] font-mono text-slate-300 shadow-2xs max-h-56 overflow-y-auto">
+                              {msg.reasoning.map((line, idx) => (
+                                <div key={idx} className="mb-1 whitespace-pre-wrap break-words leading-snug last:mb-0">{line}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     {/* Message Footer: Timestamp & Retry for user, Timestamp & Thumbs for bot */}
                     <div className={`mt-1 flex items-center ${msg.sender === 'user' ? 'justify-end items-center gap-1.5 mr-0.5' : 'justify-between ml-1 mr-1'}`}>
                       {msg.sender === 'user' && (
@@ -3274,6 +3447,22 @@ export default function BankingBotUI() {
                         {t(preferences.language, "caption.thinkingHarder")}
                       </span>
                     )}
+                  </div>
+                )}
+
+                {/* Development-only: live reasoning trace, printed below the
+                    progress indicator while the turn is still running. Only
+                    ever populated when devShowReasoning sent debug_reasoning
+                    on the request -- see api_gateway.py's
+                    _extract_reasoning_snippets. */}
+                {devShowReasoning && reasoningLog.length > 0 && (
+                  <div className="w-full max-w-[280px] rounded-xl border border-slate-200 bg-slate-900/95 px-2.5 py-2 text-[10px] font-mono text-slate-300 shadow-2xs max-h-40 overflow-y-auto">
+                    <div className="mb-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">Reasoning (debug)</div>
+                    {reasoningLog.map((line, idx) => (
+                      <div key={idx} className="mb-1 whitespace-pre-wrap break-words leading-snug last:mb-0">
+                        <TypewriterLine text={line} />
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

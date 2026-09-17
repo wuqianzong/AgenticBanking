@@ -36,6 +36,13 @@ DEEPLINK_DESTINATION_REGISTRY: dict[str, dict[str, Any]] = {
         "description": "Pay Credit Card Bill screen — pay outstanding balance from a savings account.",
         "label": "Pay Bill",
     },
+    "money-transfer": {
+        "route": "/app/payments/transfer",
+        "allowed_products": ["Deposit_Account"],
+        "allowed_intents": ["Payments And Transfers"],
+        "description": "Send Money screen — transfer funds to a payee via PayNow or FAST.",
+        "label": "Send Money",
+    },
 }
 
 def available_deeplink_destinations() -> list[dict[str, Any]]:

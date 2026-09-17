@@ -28,3 +28,13 @@ _DEFAULT_LOYALTY_TIER = "Silver"
 
 def fetch_loyalty_tier(customer_id: str) -> str:
     return _MOCK_LOYALTY_TIERS.get(customer_id, _DEFAULT_LOYALTY_TIER)
+
+
+_MOCK_ACCOUNT_BALANCES = {
+    "USR_999": "$8,452.30",
+}
+_DEFAULT_ACCOUNT_BALANCE = "$1,000.00"
+
+
+def fetch_account_balance(customer_id: str) -> str:
+    return _MOCK_ACCOUNT_BALANCES.get(customer_id, _DEFAULT_ACCOUNT_BALANCE)

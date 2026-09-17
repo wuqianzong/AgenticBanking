@@ -1,6 +1,10 @@
 from typing import Any
 
-from backend.app.services.api_field_mock_data import fetch_customer_address, fetch_loyalty_tier
+from backend.app.services.api_field_mock_data import (
+    fetch_account_balance,
+    fetch_customer_address,
+    fetch_loyalty_tier,
+)
 
 # `data_classification` is a compliance decision, not an engineering guess --
 # it should be reviewed and owned by whoever is accountable for compliance in
@@ -23,6 +27,12 @@ API_FIELD_REGISTRY: dict[str, dict[str, Any]] = {
         "description": "The customer's current loyalty program tier.",
         "fetch": fetch_loyalty_tier,
         "fact_template": lambda value: f"The customer's current loyalty tier is {value}.",
+    },
+    "account-balance": {
+        "disclosure_mode": "placeholder",  # sensitive financial data
+        "data_classification": "financial_sensitive",
+        "description": "The customer's current account balance.",
+        "fetch": fetch_account_balance,
     },
 }
 

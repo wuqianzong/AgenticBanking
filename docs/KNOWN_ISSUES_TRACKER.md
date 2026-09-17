@@ -29,6 +29,21 @@ second time).
 | BUG-008 | `NARROW_TO_EVIDENCE_SCOPE` recovery silently drops the unconfirmed claim instead of admitting it | Low–Medium | Confirmed | LLM judgment (prompt gap) | Fix implemented, live-verified |
 | BUG-009 | Outbound audit silently PASSes a turn when response generation returns zero blocks | Medium–High | Confirmed (2 occurrences) | **Deterministic code** | **Fixed, verified (fixture test)** |
 | BUG-010 | "No Info Is Info" misapplied to RELEVANT let a zero-evidence Territory B task fabricate specific policy details | High | Confirmed | LLM judgment, **now deterministically enforced** | **Fixed, live-verified** |
+| BUG-011 | A vague reply gets attributed to a stale dormant topic instead of the assistant's own most recent turn | Medium–High | Confirmed | LLM judgment (prompt gap) | **Fixed, live-verified** |
+| BUG-012 | Response blocks with a bare-string list field crash on `_llm_text() missing 1 required positional argument: 'key'` | Medium | Confirmed | **Deterministic code** | **Fixed** |
+| BUG-013 | A structured-output response occasionally wrapped in a single-element list crashes with `'list' object has no attribute 'get'` | Low-Medium | Confirmed | **Deterministic code** | **Fixed** |
+| BUG-014 | Precision Substitution occasionally leaves raw internal template fragments (`faq_xxxxxxxx_NNN`) in customer-facing text | Medium | Confirmed | Not yet root-caused | Open |
+| BUG-015 | A small number of turns return a generic failure fallback ("please rephrase") instead of a real answer, on questions near-identical ones answer correctly -- and 22/24 of these were silently mislabeled "resolved" in every automated metric until corrected 2026-09-13 | Low-Medium | Confirmed (24 unique cases, full-corpus) | Not yet root-caused | Open |
+| BUG-016 | Sufficiency auditor doesn't recognize an explicit negative/declarative fact as a complete answer | Medium | Confirmed (13/88 sample) | LLM judgment | Open |
+| BUG-017 | A successfully fetched account balance is silently dropped when the turn also carries conversational framing | Medium | Confirmed (61/619 turns; 23/70-sample conversations at least once) | Not yet root-caused | Open |
+| BUG-018 | Response generation falsely denies having a balance it just successfully fetched | High | Confirmed (13/619) | Not yet root-caused | Open |
+| BUG-019 | A short account-type follow-up gets reattached to an already-resolved transfer instead of the actual current balance question | Medium | Confirmed (3/70 sample) | LLM judgment | Open |
+| BUG-020 | Bot fabricates a second "other" savings account rather than correcting a customer's false premise | Medium | Confirmed (2/70 sample) | LLM judgment | Open |
+| BUG-021 | Inconsistent handling of "how long will the transfer take" -- sometimes answered correctly, sometimes a generic non-answer | Low-Medium | Confirmed (3/70 sample) | Not yet root-caused | Open |
+| BUG-022 | A balance follow-up ("what about my savings account?") answered with a generic product-info dump instead of the number | Medium | Confirmed (1/70 sample) | Not yet root-caused | Open |
+| BUG-023 | Outcome depends on surface phrasing, not underlying intent -- 24/77 BANKING77 categories show a genuinely split outcome across their 40 phrasings of the same nominal question | Medium | Confirmed (full-corpus, `declined_card_payment` spot-checked) | Not yet root-caused | **Open, partial mitigation shipped** (see below) |
+| BUG-024 | Bot never discloses it is an AI to the customer, in any supported language or anywhere in the UI | Medium | Confirmed (full-corpus, all 3 languages + UI checked) | **Deterministic code (missing content, not a defect in logic)** | Open |
+| BUG-025 | The exact same customer question, asked more than once, does not reliably get the same retrieval outcome -- no wording ambiguity involved | High | Confirmed (31/88 informative exact-duplicate-text groups, full-corpus) | Root-caused: two independent mechanisms found (retrieval-pool variance + auditor-judgment non-determinism) | **Retrieval-pool half: mitigated and live-validated. Auditor-judgment half: accepted permanent limitation, model-tuning scoped out** (see below) |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -36,8 +51,10 @@ each entry): an LLM-judgment problem converted into a
 deterministically-enforced contract. BUG-002 is now structurally
 eliminated as a side effect of BUG-010's fix (the shape it was about no
 longer exists). BUG-008 has a fix implemented and live-verified but not
-yet proven at scale (see its own caveats). BUG-005, BUG-006, and the two
-suspected items remain open.
+yet proven at scale (see its own caveats). BUG-005, BUG-006, the two
+suspected items, and everything from BUG-014 onward (found during the
+BANKING77 and multi-turn SGD research campaigns, all intentionally left
+undiagnosed per explicit instruction to document first) remain open.
 
 **Why the distinction matters:** a deterministic-code bug (001, 003, 007,
 009) has a fix with a guaranteed outcome — patch the logic, the failure mode
@@ -610,3 +627,772 @@ no fabrication, no retry loop, no fallback.
 **Side effect:** this redesign makes **BUG-002 structurally impossible**,
 not merely fixed — the guidance-only `RELEVANT` (empty `approved_parents`)
 shape it was about no longer exists anywhere in the system to reject.
+
+## BUG-011 — A vague reply gets attributed to a stale dormant topic instead of the assistant's own most recent turn
+
+**Severity:** Medium–High **Confidence:** Confirmed **Status: Fixed, live-verified**
+**Found in:** live production session (2026-09-07), 3-turn trace: `**INIT**` → `"helo"` → `"i am not sure"`
+
+**What happens:** Session INIT generated a dormant-topic followup carried
+over from the user's last session: *"Would you like to continue discussing
+the fee on your credit card statement?"* The user then said `"helo"`,
+which triaged correctly as `NON_FINANCIAL` and got a generic reset reply:
+*"Hello! How can I help you with your banking today?"* — deliberately not
+re-raising the fee topic. The user then said `"i am not sure"` — plainly a
+reply to that generic greeting (i.e. "I don't know what I need help with
+yet"). Instead, triage (`node_02d`) classified it as *"I am not sure about
+the fee on my credit card statement,"* reactivating the dormant turn-1
+topic, and the turn launched a full RAG/retrieval pipeline that produced a
+long, unrequested explanation of credit card fees and waiver procedures.
+
+**Root cause:** `_build_conversation_context` (`nodes.py`) renders
+`chat_history` as a flat, unranked `User: ... / AI: ...` transcript with no
+marker distinguishing the assistant's most recent turn from an older one
+sitting earlier in the same window. The triage prompt's only relevant
+instruction — a short/vague reply "may continue the immediately relevant
+prior request" — gives the model no way to choose between two candidate
+prior requests when the assistant's *own* intervening turn was a
+deliberate, topic-neutral reset: with a stale-but-specific topic and a
+recent-but-generic one both present, the model favored specificity over
+recency. This was a genuine missing-rule gap, not a violated existing
+rule — the prompt was internally consistent, it just never anticipated
+that the assistant's own conversational trajectory could invalidate an
+older mention still visible in the same context window.
+
+A second, adjacent gap was found in the same investigation (not the
+proximate cause of this specific trace, since it happened to be empty
+throughout, but a real latent risk for a longer conversation):
+`active_product_intents` (the "Product/Intent Matrix") is reset only at
+session INIT or recomputed inside `node_02e` when a turn actually reaches
+retrieval — there is no branch that clears or decays it after a purely
+conversational turn, so a genuinely stale matrix entry from several turns
+back can outlive the topic it described indefinitely.
+
+**Fix implemented, two parts:**
+1. **`_build_conversation_context`** now labels the single most recent
+   AI-authored entry in the trusted history distinctly — `"AI (most recent
+   assistant turn, immediately before the Latest User Input): ..."` —
+   instead of a plain `"AI: ..."` indistinguishable from any older one.
+   This flows into every prompt that already calls this helper (`node_02d`
+   triage and `node_02e` intent/query formulation both did already), with
+   no prompt needing to change just to receive the new signal.
+2. **Two explicit precedence rules added, both keyed off that new
+   marker:** a "RECENCY ANCHOR" rule in `node_02d`'s triage prompt states
+   that a vague reply defaults to continuing the marked most-recent
+   assistant turn, not an older one, unless that most-recent turn was
+   itself already continuing the older topic. A parallel addition to
+   `node_02e`'s "CONTEXTUAL INHERITANCE" rule (Rule 1) makes the same
+   check a precondition for inheriting from the Active Context Matrix:
+   check whether the most-recent-marked assistant turn actually continued
+   that matrix's topic before treating it as still live.
+
+**Verified live**, re-running the exact same 3-turn sequence against the
+fixed code (same user, same dormant-topic INIT followup): `"i am not
+sure"` now stays on the conversational path (`n2d` → `n19` directly, no
+retrieval nodes at all, matching turn 2's shape) and responds *"That is
+completely fine, take your time figuring out what you might need help
+with today"* — correctly answering the assistant's own greeting rather
+than reactivating the dormant fee topic.
+
+## BUG-012 — Response blocks with a bare-string list field crash on `_llm_text() missing 1 required positional argument: 'key'`
+
+**Severity:** Medium **Confidence:** Confirmed **Status: Fixed**
+**Found in:** BANKING77 full-coverage automated test campaign (2026-09-07 round 2; second occurrence 2026-09-08 round 6)
+
+**What happens:** Any turn whose response generator produces a
+`COMPARISON`-type block, or a `CAROUSEL`-type block whose item has a
+`details` list, crashes the turn with `TypeError: _llm_text() missing 1
+required positional argument: 'key'`.
+
+**Root cause:** `_llm_text(source: dict, key: str, ...)` reads a named
+field out of a dict-shaped element (`nodes.py:1036`) — every other call
+site uses it that way (`_llm_text(r, "feature")`, `_llm_text(a, "label")`,
+etc.). Three spots break this pattern by calling it on a list of *bare
+strings* instead of dicts, with no `key` argument at all: `COMPARISON`'s
+`headers` and each row's `values` (`nodes.py:6345, 6350`, found first),
+and `CAROUSEL`'s per-item `details` list (`nodes.py:6428`, found second,
+same copy-paste mistake in a different block). Each only surfaces the
+moment a real response actually contains that specific block/field
+combination, which a single-category-per-query BANKING77 corpus reaches
+gradually across many hundreds of cases rather than immediately — the
+second occurrence surfaced a full day of testing after the first fix,
+in a block shape the first pass hadn't happened to exercise yet. A full
+sweep for the same single-argument `_llm_text(x)` call pattern after the
+second fix found no further occurrences.
+
+**Fix:** all three spots now clean the bare strings directly instead of
+routing them through the dict-keyed helper: `[str(h).strip() for h in
+_llm_list(element, "headers") if isinstance(h, str) and str(h).strip()]`,
+same pattern for `values` and `details`.
+
+## BUG-013 — A structured-output response occasionally wrapped in a single-element list crashes with `'list' object has no attribute 'get'`
+
+**Severity:** Low-Medium **Confidence:** Confirmed **Status: Fixed**
+**Found in:** BANKING77 detail-backfill run (2026-09-09), 1 occurrence in 170+ cases
+
+**What happens:** A structured-output call for `node_04b`'s response
+generator returned its JSON wrapped in a single-element array --
+`[{"elements": [...], "next_actions": [...]}]` instead of the expected
+bare `{"elements": [...], "next_actions": [...]}` -- for a completely
+ordinary query ("When should I expect to see my transfer hit my
+account?") with no unusual prompt or schema involved. The generated
+content itself was fine (a well-formed, on-topic answer); only the
+wrapping was wrong. `parse_json_robustly` returned that list unchanged,
+and the caller's very next line (`.get("elements")` or similar) crashed
+with `'list' object has no attribute 'get'` -- an opaque error with no
+hint of what actually happened.
+
+**Root cause:** an occasional model-side quirk in how a single structured
+object gets serialized for a given prompt/schema pair -- not something
+tied to any particular node's prompt content, and not reproducible from
+the prompt text alone (the same prompt shape works correctly the
+overwhelming majority of the time). `parse_json_robustly`
+(`llm_service.py:764`) is the single shared JSON-parsing helper nearly
+every LLM-consuming call site in `nodes.py` routes through before calling
+`.get(...)` on the result, so this could in principle surface from any of
+them, not just response generation.
+
+**Fix:** `parse_json_robustly` now unwraps the specific safe case -- a
+parsed list containing exactly one dict -- returning that dict directly,
+fixing every call site at once rather than patching each one. Any other
+list shape (empty, multiple elements, non-dict elements) is left
+untouched so a genuinely different problem still surfaces clearly rather
+than being silently guessed at. Verified against the exact real response
+that crashed (now returns the correct dict) plus both a normal
+already-correct response and an ambiguous multi-element list (both
+behave exactly as before, unaffected).
+
+## BUG-014 — Precision Substitution occasionally leaves raw internal template fragments in customer-facing text
+
+**Severity:** Medium **Confidence:** Confirmed **Status: Open, not yet root-caused**
+**Found in:** BANKING77 semantic Q&A sampling review (2026-09-09), 385-case stratified sample
+
+**What happens:** `banking77_r3_0181` ("I did not make this card payment.")
+produced a response containing: *"您还可以通过 Horizon App 中的实时聊天、请求语音通话，或者拨打我们的热线电话
++faq_bfe32bf8_001 faq_bfe32bf8_002-HORIZ (+faq_bfe32bf8_003
+faq_bfe32bf8_004 faq_bfe32bf8_005)"* — raw internal template-id fragments
+(`faq_bfe32bf8_001` through `_005`) appear directly in the customer-facing
+text in place of an actual phone number.
+
+**Why the existing safeguard didn't catch it:** every automated case in
+this campaign is checked against `must_not_emit: ["unresolved_placeholder"]`,
+which greps for the `{{faq_...}}`-wrapped pattern (`_framework/common.py`'s
+`evaluate_assertions`, `token_map["unresolved_placeholder"] = ["{{faq_",
+"{{data-"]`). This leak has no `{{` wrapper at all — it looks like Node
+07's Precision Substitution step (`nodes.py`, "Executing Precision
+Substitution") ran and partially replaced a templated phone-number
+placeholder, but left behind fragments of the *id* it was substituting
+from rather than either the resolved value or the original wrapped
+placeholder. The automated check has a genuine blind spot for this
+specific malformed-substitution shape; only manual semantic reading
+caught it.
+
+**Full-corpus scope check:** a regex sweep of all 3,080 final responses
+for a bare (non-`{{`-wrapped) `faq_[8-hex-chars]_[3-digits]` fragment
+found **6 occurrences (0.19%)**, confirming this is rare but not a
+one-off.
+
+**Not yet investigated:** which specific field/template produced
+`faq_bfe32bf8_...`, why the substitution partially completed instead of
+either fully resolving or leaving the recognizable `{{faq_...}}` form,
+and the other 5 occurrences beyond this one sampled instance. Left for
+future work per explicit instruction.
+
+## BUG-015 — A small number of turns return a generic failure fallback instead of a real answer
+
+**Severity:** Low-Medium **Confidence:** Confirmed (2 occurrences in a 385-case sample) **Status: Open, not yet root-caused**
+**Found in:** BANKING77 semantic Q&A sampling review (2026-09-09)
+
+**What happens:** Two sampled cases returned a generic, non-contextual
+failure message instead of an answer:
+- `banking77_r4_0333` ("I have an unauthorized transaction on my
+  statement"): *"We cannot process your request. Please try rephrasing or
+  ask another question."*
+- `banking77_r5_0493` ("...link the card with my account..."): *"I'm
+  sorry, I'm not able to answer that right now. Could you try again, or
+  ask in a different way?"*
+
+Both are notable because near-identical questions in the *same*
+categories, elsewhere in the same 385-case sample, received full, correct,
+helpful answers (`banking77_r3_0408`, `banking77_r6_0145`, `banking77_r3_0181`,
+`banking77_r1_0263` for the first category; `banking77_r6_0216`,
+`banking77_r4_0212`, `banking77_r4_0105` for the second). This is a
+different failure shape from the system's normal, appropriate "I don't
+have information about X" honest admission (which names the specific gap)
+— these two are generic, unspecific catch-all messages that don't
+reference the question at all, suggesting an intermittent pipeline
+failure (e.g. an uncaught exception hitting a generic error handler)
+rather than a genuine knowledge-base gap.
+
+**Full-corpus scope check:** an exact-text grep of all 3,080 final
+responses for these two message strings found **27 occurrences (0.88%)**
+— noticeably higher than the 2/385 (0.5%) sample rate suggested, so this
+is worth prioritizing over BUG-014 when it's time to investigate. Against
+the final, deduplicated per-case record (preferring whichever attempt has
+full detail — see `research/2026-09-05_banking77_full_coverage/`), 24
+unique case_ids carry this text; the remaining gap from 27 reflects cases
+where an earlier attempt hit this fallback but a later resumed/backfilled
+attempt (same case_id, genuine LLM non-determinism on retry) did not.
+
+**Evaluation-metric impact, found and corrected 2026-09-13 while building
+the agentic evaluation plan (`docs/AGENTIC_EVALUATION_PLAN_v1.md`):** of
+the 24 case_ids, **22 carry a `task_results` status of
+`SUFFICIENT`/`RELEVANT`** (or no `task_results` at all with no
+decline/clarification recorded) — i.e. the sufficiency/retrieval layer
+recorded a *successful* verdict, and this generic fallback text overwrote
+the customer-facing response only afterward (consistent with the
+mechanism note above: a later-stage failure, most likely repeated
+outbound compliance/groundedness audit exhaustion producing
+`non_financial.response.audit_fallback`, replacing an already-resolved
+turn's text). This means **every automated, `task_results`-based metric
+(Overall Resolution, Containment Rate, Bot Reliability, KB Coverage) was
+silently counting these 22 cases as successes** — the customer received a
+total failure, but the internal verdict said otherwise. This is now
+corrected as a data-labeling adjustment (not a code fix) everywhere these
+metrics are reported: see `docs/BUSINESS_METRICS_FRAMEWORK_v1.md` B1b for
+the corrected figures (Overall Resolution 67.79%→67.08%; Bot Reliability
+96.5%→95.9%; KB Coverage unchanged at 82.9%, since the underlying
+evidence genuinely existed — only *delivery* failed, which is exactly
+what Bot Reliability, not KB Coverage, is supposed to capture). The 26
+tasks these 22 cases contribute are now tracked as a **confirmed** bot
+failure, separate from BUG-016's 14.8%-*projected* bot-failure rate, to
+avoid mixing a fully-known mechanism with a sampled estimate. Checked
+against the multi-turn corpus too: only 1 occurrence there, and it was
+already correctly caught by BUG-017's existing token-presence check (a
+generic fallback obviously contains no `{{data-*}}` token), so no
+equivalent adjustment is needed for that study.
+
+**Not yet investigated:** which node/exception path produces this exact
+generic message, whether it's the same underlying mechanism across all 24
+cases or several coincidentally similar failures, and whether it
+correlates with any particular category, round, or key/model in use at
+the time. Left for future work per explicit instruction.
+
+## BUG-016 — Sufficiency auditor doesn't recognize an explicit negative/declarative fact as a complete answer
+
+**Severity:** Medium **Confidence:** Confirmed (13/88 stratified sample, 95% CI 7.7%–21.8%) **Status: Open, not yet root-caused**
+**Found in:** BANKING77 retrieval-vs-judgment diagnosis (2026-09-10)
+
+**What happens:** For a meaningful share of unresolved BANKING77 tasks,
+the correct answer was already present, word-for-word, in the evidence
+shown to `node_03c_sufficiency_auditor` — but the auditor still declined
+because the candidate wasn't a literal, positively-framed match to the
+question's exact phrasing. The single largest repeat pattern (5 of 13
+sampled cases, all in the `exchange_via_app` category): a query like
+*"How do I change GBP to AUD?"* or *"Can currency exchange be done on
+this app?"*, with a candidate FAQ stating *"Horizon Bank currently
+supports only domestic transfers denominated in SGD. We do not handle
+inbound or outbound foreign‑currency transfers, nor any cross‑border
+payments."* That sentence **is** the answer — "no, this app doesn't do
+that" — but the auditor's reasoning treated it as "doesn't address the
+question" rather than a complete, resolvable admission. Three smaller
+repeat clusters showed the same shape: an *"Apple Watch to top up?"*
+query against *"the Horizon App can only be used on a smartphone"* (2
+cases, not connected to "so no, a Watch won't work"); a *"strange direct
+debit" / "unauthorized fee"* query against a generic *"I don't recognize
+this charge — contact us to investigate"* FAQ (2 cases, not applied to an
+equivalent complaint); and a *"why hasn't my transfer shown up"* query
+against a transfer-security-hold FAQ (*"funds held for a few hours as a
+fraud precaution"*, 2 cases). The remaining 2 sampled cases were one-offs
+of the same shape (an explicit "no foreign transaction fee" statement not
+recognized as answering "what's your exchange fee," and a "no fee for
+SGD transfers into savings" FAQ not matched to its near-identically named
+category "top-up by bank transfer charge").
+
+**How this was found and measured:** a category-based ground truth (the
+FAQ parent IDs that *other* cases in the same BANKING77 category actually
+resolved with) was used to check every unresolved task for whether its
+correct-for-category answer had ever been shown to any LLM call in the
+case (via `task.rag.completed`'s `selected_parent_ids` and a regex sweep
+of every `llm.request`'s `raw_prompt` for `faq_` IDs, since the former
+event isn't emitted on every code path). Of 973 unresolved tasks
+corpus-wide, 950 (97.6%) had their correct-for-category evidence shown as
+a candidate at some point — meaning retrieval itself is not the
+bottleneck; the vast majority of unresolved outcomes are a sufficiency-
+audit judgment call, not a retrieval miss (the remaining 23 genuine
+misses, where the right document was never surfaced at all, are a
+separate, much smaller phenomenon, and on inspection mostly reflect real
+KB content gaps rather than retrieval failures — see the BANKING77
+RESEARCH_SUMMARY.md for detail).
+
+A random sample of 88 of the 950 "retrieved but rejected" tasks (95% CI,
+±10% target margin, single-task cases only for unambiguous candidate
+attribution) was then manually read — query, auditor's stated reason, and
+the full text of every shown candidate — to judge whether the rejection
+was correct (candidate genuinely doesn't address the query) or wrong
+(candidate does, in substance, answer it). 13/88 (14.8%, 95% CI
+7.7%–21.8%) were judged wrong. Scaled to the full "retrieved but
+rejected" population, that's roughly 140 tasks (~4.5% of the entire
+3,080-case corpus, 95% CI ~2.4%–6.7%) where the sufficiency auditor had
+what it needed and still declined.
+
+**Not yet investigated:** the exact prompt wording/rule in
+`node_03c_sufficiency_auditor` responsible for this bias, whether a
+targeted rule addition ("an explicit statement that a feature/fee/service
+does not exist or does not apply is itself a complete, citable answer to
+a query asking about that feature/fee/service") would close most of this
+gap without over-triggering on genuinely unrelated evidence, and whether
+the same bias appears in non-BANKING77 traffic. Left for future work per
+explicit instruction. Scope note: the 88-case sample was drawn only from
+single-task cases (481 of the 950); multi-task cases were excluded for
+attribution cleanliness and were not separately checked.
+
+## BUG-017 — A successfully fetched account balance is silently dropped when the turn also carries conversational framing
+
+**Severity:** Medium **Confidence:** Confirmed (61/619 measured across a full 249-conversation campaign, not a sample) **Status: Open, not yet root-caused**
+**Found in:** Multi-turn SGD Banks_1/Banks_2 depth test (2026-09-10/11), full 249-conversation run
+
+**What happens:** The `account-balance` `api` field (added this campaign — see
+`research/2026-09-10_multiturn_banking_extension/`) is a `disclosure_mode:
+"placeholder"` field: the tool dispatcher correctly creates a subquery,
+correctly calls the field's mock fetch function, and correctly populates
+`personal_data_reveal_map`/`personal_data_reveals` with a fresh `{{data-*}}`
+token and its real value. In 61 of 619 (9.9%) successful fetches across the
+campaign, that token never appeared anywhere in the turn's `final_response`
+at all -- the reply addressed only whatever conversational framing
+accompanied the question (gratitude, a greeting, small talk) and simply
+never mentioned the balance, even though it was already fetched and ready.
+E.g. `mtsgd_32_00011` turn 7: *"Thanks, what's my balance?"* -> *"You are
+very welcome! 😊"* (no balance mentioned at all). Other trigger phrasings:
+"I appreciate your help and want to see about my balance.", "Fantastic. Can
+you please tell me the balance of my savings account?", "Hello. I need to
+check my balance." -> "👋 Hello!". The equivalent `deeplink`
+(money-transfer) path had zero comparable failures (829/829 clean), so this
+is specific to the placeholder-value surfacing step in response generation,
+not a general response-generation problem. This is a distinct defect from
+BUG-018 (below): here the answer is missing, not wrong.
+
+**Full-corpus scope check:** this campaign's own full run, not a sample --
+61/619 (9.9%) of every successful `account-balance` fetch in the study.
+
+**Conversation-level confirmation:** a separate 95%-CI random sample of 70
+whole conversations (out of 249, +/-10% margin -- the same method as the
+BANKING77 semantic review, adapted to the conversation as the review unit
+since this study's purpose is multi-turn coherence, not per-turn
+correctness) found this exact pattern in **23/70 conversations (32.9%,
+95% CI ~23%-43%)** -- a single ~10%-per-turn failure rate compounds to hit
+roughly one in three whole conversations at least once across their ~8
+turns. In most of those 23, the drop is never recovered for the rest of
+the conversation -- the customer simply never receives that balance at
+all, not merely on a delay.
+
+**Not yet investigated:** which prompt/step in response generation drops
+the `{{data-*}}` token when the turn also carries conversational content
+(gratitude, greetings, small talk) or a compound sentence structure, and
+whether the same generation-vs-conversational-framing conflict exists for
+the pre-existing `profile-address` placeholder field (not exercised by this
+study) or is specific to `account-balance`. Left for future work per
+explicit instruction.
+
+## BUG-018 — Response generation falsely denies having a balance it just successfully fetched
+
+**Severity:** High **Confidence:** Confirmed (13/619 measured across a full 249-conversation campaign, not a sample) **Status: Open, not yet root-caused**
+**Found in:** Multi-turn SGD Banks_1/Banks_2 depth test (2026-09-10/11), full 249-conversation run
+
+**What happens:** In 13 of 619 (2.1%) successful `account-balance` fetches,
+the generated response doesn't just omit the fetched value (see BUG-017) --
+it actively contradicts the system's own successful fetch by claiming the
+capability doesn't exist. E.g. `mtsgd_32_00089`: *"I need to know about my
+savings account. Would you please check my current balance?"* -> *"While
+live account balances cannot be checked directly, you can review your
+account history and financial standing by accessing your monthly
+statements..."*, followed by app-navigation instructions -- the system had
+just successfully fetched the real balance in that same turn
+(`personal_data_reveal_map` populated, tool status `completed`), and the
+generated text then falsely denies having that capability at all,
+redirecting the customer to an unrelated workaround instead.
+`mtsgd_32_00014` shows the same shape: a fetched-balance turn answered with
+unrelated content about domestic transfer timing and security holds. This
+is materially worse than BUG-017's silent omission -- it's a false
+statement about the system's own capability made directly to the customer,
+meeting this tracker's own bar for High severity ("a materially wrong
+claim"), not just a missing answer.
+
+**Full-corpus scope check:** this campaign's own full run, not a sample --
+13/619 (2.1%) of every successful `account-balance` fetch in the study.
+
+**Not yet investigated:** why response generation, given a populated
+`personal_data_placeholders` entry for this exact field, sometimes
+constructs a sentence actively denying that capability rather than either
+using the value or (per BUG-017) merely omitting it; whether this
+correlates with any particular phrasing of the customer's question (both
+examples found combine the balance ask with an unrelated secondary clause
+or context); and whether the outbound compliance/groundedness audit should
+already be catching an unsupported capability-denial claim like this
+(`node_06`) but isn't. Left for future work per explicit instruction.
+
+## BUG-019 — A short account-type follow-up gets reattached to an already-resolved transfer instead of the actual current question
+
+**Severity:** Medium **Confidence:** Confirmed (3/70 conversations in the semantic review sample) **Status: Open, not yet root-caused**
+**Found in:** Multi-turn SGD Banks_1/Banks_2 depth test, 70-conversation semantic review (2026-09-11)
+
+**What happens:** After a transfer has already been offered (Send Money
+button shown) and the conversation has since moved on to a new balance
+question, a short follow-up meant to specify *which account* for that
+balance question -- "my savings account", "go with my savings account",
+"savings account, please" -- sometimes gets reattached to the earlier,
+already-resolved transfer topic instead of the actual most recent
+question. E.g. `mtsgd_40_00043`: turn 4 *"Thanks a lot. What's my balance
+now?"* is dropped (BUG-017), then turn 5 *"My savings account, please."* --
+clearly meant to answer the just-asked balance question -- gets *"You can
+transfer funds to your savings account by using the Send Money button
+below."* The customer has to re-ask the balance question explicitly a
+third time before it resolves. `mtsgd_40_00021` shows the identical shape.
+This is inconsistent, not deterministic: near-identical short follow-ups
+in other sampled conversations (`mtsgd_39_00127`, `mtsgd_40_00078`)
+correctly attach to the balance question instead.
+
+**Full-corpus scope check:** not yet run -- found via the 70-conversation
+semantic review sample only (see BUG-017 for that sample's method).
+
+**Not yet investigated:** whether this is a triage/topic-tracking recency
+bug (attaching to the topic with more total turns spent on it rather than
+the most recently active one) or something specific to how a bare
+account-type phrase gets resolved when two candidate topics are both
+still "open"; whether it correlates with the same turns where BUG-017 also
+fired (both sampled instances follow a BUG-017 drop, but the mechanism
+need not be related). Left for future work per explicit instruction.
+
+## BUG-020 — Bot fabricates a second "other" savings account rather than correcting a customer's false premise
+
+**Severity:** Medium **Confidence:** Confirmed (2/70 conversations in the semantic review sample) **Status: Open, not yet root-caused**
+**Found in:** Multi-turn SGD Banks_1/Banks_2 depth test, 70-conversation semantic review (2026-09-11)
+
+**What happens:** The mock `account-balance` field only models a single
+account (see this study's design decision to use one fixed balance value,
+not split by account type). When a customer's phrasing implies a *second*,
+distinct savings account exists -- "Can you check my balance of another
+savings account?" (`mtsgd_32_00012`), "please also check the balance of my
+another savings account" (`mtsgd_40_00042`) -- the response plays along
+with the false premise rather than correcting it: *"Your **other** savings
+account balance is {{data-...}}."*, fetching and presenting the exact same
+single mock value under an invented "other account" label, instead of
+either clarifying that only one savings account exists or simply restating
+the same account's balance without inventing a second one.
+
+**Full-corpus scope check:** not yet run -- found via the 70-conversation
+semantic review sample only (see BUG-017 for that sample's method).
+
+**Not yet investigated:** whether this is specific to the phrase "another
+savings account" or would trigger on any implied second account/entity;
+whether the same play-along-with-a-false-premise behavior appears for
+other single-valued mock fields (e.g. `loyalty-status`, `profile-address`)
+if a customer implies multiplicity there too. Left for future work per
+explicit instruction.
+
+## BUG-021 — Inconsistent handling of "how long will the transfer take"
+
+**Severity:** Low-Medium **Confidence:** Confirmed (3/70 conversations in the semantic review sample) **Status: Open, not yet root-caused**
+**Found in:** Multi-turn SGD Banks_1/Banks_2 depth test, 70-conversation semantic review (2026-09-11)
+
+**What happens:** After the Send Money deeplink is offered, several
+sampled conversations follow up with some form of "how long will it
+take?"/"how many days?". In most sampled instances this is answered
+correctly and specifically, citing real Horizon policy (instant domestic
+processing, plus a security-hold/cooling-off period, sometimes correctly
+noting a new payee needs to clear a waiting period first -- e.g.
+`mtsgd_5_00001`, `mtsgd_5_00005`, `mtsgd_5_00002`, `mtsgd_5_00012`). But in
+3 sampled conversations the identical question shape gets a generic
+non-answer instead: `mtsgd_4_00108` -- *"Sorry, I don't have a complete
+answer for the part about How long will a transfer to Diego's savings
+account take? right now."*; `mtsgd_4_00114` and `mtsgd_4_00126` show the
+same generic decline, each just substituting the recipient's name into an
+otherwise-identical templated non-answer. The same real FAQ content that
+answers the question correctly elsewhere in the sample is evidently
+available -- this isn't a case of it never existing, since near-identical
+turns in other conversations use it successfully.
+
+**Full-corpus scope check:** not yet run -- found via the 70-conversation
+semantic review sample only (see BUG-017 for that sample's method).
+
+**Not yet investigated:** whether the failing cases share something in
+common in how the transfer-timing subquery gets formulated or routed
+(retrieval miss vs. a sufficiency-auditor judgment call, in the spirit of
+BUG-016); whether this correlates with which recipient name or amount was
+used, given the templated-looking non-answer; whether this is the same
+underlying mechanism as BUG-015's generic fallback from the BANKING77
+campaign or a distinct one that merely produces superficially similar
+text. Left for future work per explicit instruction.
+
+## BUG-022 — A balance follow-up answered with a generic product-info dump instead of the number
+
+**Severity:** Medium **Confidence:** Confirmed (1/70 conversations in the semantic review sample) **Status: Open, not yet root-caused**
+**Found in:** Multi-turn SGD Banks_1/Banks_2 depth test, 70-conversation semantic review (2026-09-11)
+
+**What happens:** `mtsgd_4_00114`: turn 1 correctly answers a balance
+question. Turn 2, *"Ok, what about my savings account?"* -- in context, an
+obvious follow-up asking for the same balance figure again -- instead
+produces a long, generic marketing-style paragraph describing the Horizon
+savings account's features, interest rates, fee structure, debit card
+benefits, and cash-access locations, and never states a balance number at
+all. This is a different failure shape from BUG-017 (which at least
+recognizes a balance-adjacent turn exists and either surfaces or drops the
+fetched figure) -- here the turn appears to have been resolved as a
+general "tell me about the savings account" product question rather than
+a balance follow-up, despite the immediately preceding turn establishing
+exactly that context.
+
+**Full-corpus scope check:** not yet run -- a single occurrence in the
+70-conversation semantic review sample; scope and reproducibility are
+unknown pending a full-corpus check.
+
+**Not yet investigated:** whether this is a one-off intent-classification
+error or a reproducible pattern for this specific phrasing ("what about
+my X" as an ellided follow-up); whether it correlates with the same
+conversation also containing BUG-021's failure mode (`mtsgd_4_00114`
+exhibits both). Left for future work per explicit instruction.
+
+## BUG-023 — Outcome depends on surface phrasing, not underlying intent
+
+**Severity:** Medium **Confidence:** Confirmed (full-corpus; `declined_card_payment` spot-checked in detail) **Status: Open, not yet root-caused**
+**Found in:** BANKING77 full-coverage study, Fairness/consistency pass (2026-09-13) — reframed per explicit instruction: since the bot is stateless and not customer-segment-specific, the correct fairness test is not demographic variation but whether the *same underlying intent, expressed in different wording,* produces the *same outcome*.
+
+**What happens:** For each of the 77 BANKING77 categories (40 differently
+worded queries per category, all expressing the same nominal intent), an
+"outcome concentration" score was computed:
+`max(resolved_count, partial_count, unresolved_count) / 40`. A category
+where the bot handled the intent consistently should cluster tightly in
+one outcome; a low score means the 40 phrasings split across resolved/
+partial/unresolved almost evenly, i.e. wording alone is changing the
+result. Mean concentration across all 77 categories is 72.6%, but **24 of
+77 categories fall below 60%** — the worst is `declined_card_payment` at
+35.0% (13 resolved / 13 partial / 14 unresolved, almost an even
+three-way split). Reading the actual query text in that category shows
+this is not noise: near-identical questions receive opposite outcomes
+purely from surface phrasing —
+*"Why was my Payment declined"* → **resolved**, but
+*"Please explain why my card was declined?"* → **unresolved**;
+*"My card payment did not work."* → **resolved**, but
+*"My card was declined in a shop"* → **unresolved**;
+*"I tried using my card and it kept getting declined, Why?"* → **resolved**,
+but *"Why was a transaction on my card declined?"* → **unresolved**.
+Other low-concentration categories: `pending_cash_withdrawal` (35.0%),
+`apple_pay_or_google_pay` (40.0%), `top_up_failed` (42.5%),
+`extra_charge_on_statement` (45.0%), `get_disposable_virtual_card`
+(45.0%), `automatic_top_up` (47.5%), `card_payment_wrong_exchange_rate`
+(47.5%), `fiat_currency_support` (47.5%), `verify_top_up` (47.5%),
+`balance_not_updated_after_cheque_or_cash_deposit` (50.0%),
+`verify_source_of_funds` (50.0%). By contrast, the most consistent
+categories (97.5–100% concentration) are `edit_personal_details`,
+`passcode_forgotten`, `atm_support`, `card_arrival`,
+`cash_withdrawal_not_recognised`, `compromised_card`,
+`lost_or_stolen_card`, `lost_or_stolen_phone` — all narrow, single-shape
+intents with little room for a rephrasing to land differently.
+
+**Full-corpus scope check:** the underlying concentration score is
+computed across the full 3,080-case BANKING77 corpus (all 77 categories,
+40 cases each) — not a sample. Only the illustrative query-pair evidence
+above (`declined_card_payment`) was manually spot-checked; the other 23
+low-concentration categories have the same score computed but have not
+each been individually read through.
+
+**Root-cause trace, one confirmed pair (2026-09-13).** Traced
+`banking77_r2_0060` ("Please explain why my card was declined?",
+unresolved) against `banking77_r1_0077` ("Why was my Payment declined",
+resolved) end to end through the pipeline's own logged reasoning:
+
+- `banking77_r2_0060` ("card"): the intent formulator mapped it to
+  **Credit_Card / Transaction Disputes** — the correct product. But the
+  only FAQs the KB has under that bucket concern **card *applications*
+  being declined** (income, credit exposure, missing documents) and
+  credit-limit reviews/closures — nothing about an already-issued card
+  being rejected at the point of sale. The sufficiency auditor correctly
+  identified the mismatch (*"none of the parents provide the specific
+  reason why an individual customer's credit card transaction was
+  declined"*) and returned `CLARIFICATION_REQUIRED`.
+- `banking77_r1_0077` ("payment"): the intent formulator mapped it
+  instead to **Deposit_Account / Transaction Disputes**, reasoning that
+  *"payments are processed through a customer's primary transaction
+  account."* This is a genuinely **different product** than the card
+  case received, triggered purely by word choice, even though both
+  utterances describe the identical real-world event in the dataset (a
+  card transaction failing at a shop). Under Deposit_Account, retrieval
+  surfaced an FAQ about **automated/recurring payment arrangement
+  failures** (e.g. a GIRO or standing instruction) — also not a real
+  match. Here the auditor's own reasoning admits the mismatch (*"it does
+  not fully resolve a general or manual payment decline inquiry since it
+  specifically addresses automated payment arrangement failures"*) but
+  approved it as `RELEVANT` anyway, with `generation_guidance` broad
+  enough (insufficient funds, blocked account, limits) to produce a
+  plausible-sounding answer.
+
+This one pair shows the mechanism is at least two-layered, not a single
+cause: (1) the intent formulator routes "card" and "payment" phrasings of
+the same event to two different product families (Credit_Card vs.
+Deposit_Account) — not unreasonable for "payment" in isolation (it could
+mean a bank transfer), but it splits an otherwise-identical question into
+two different FAQ search pools; and (2) the sufficiency auditor was
+stricter on one resulting path than the other given comparably
+loosely-matching evidence. Underneath both paths sits a genuine content
+gap: no FAQ exists for "why was my active card declined during a
+purchase," as distinct from "why was a card application declined."
+
+**Still not investigated:** whether this same product-split mechanism
+(word choice routing to a different product family for what the dataset
+treats as one intent) recurs across the other 23 low-concentration
+categories, or whether some of those are driven purely by auditor
+strictness variance with both paths already on the same, correct
+product; whether this correlates with any of the already-known retrieval
+or sufficiency bugs (BUG-005, BUG-006, BUG-016). Left for future work per
+explicit instruction.
+
+**Embedding-based confirmation at scale, not just anecdote (2026-09-17).**
+The `declined_card_payment` finding above was one manually spot-checked
+pair. To test the same question systematically, every BANKING77 primary
+subquery (3,028 usable texts) was embedded with chromadb's own
+`DefaultEmbeddingFunction` (all-MiniLM-L6-v2 -- the same local embedding
+model the production RAG pipeline itself uses, no LLM API calls) and the
+full pairwise cosine-similarity matrix computed. For each pair, "SHARE"
+means both were resolved with at least one common approved parent id
+(consistent answer basis); "DISJOINT" means both resolved but with zero
+common parent id; "MIXED" means one resolved and the other didn't.
+Script: `research/2026-09-05_banking77_full_coverage/scripts/fairness_cosine_consistency.py`,
+full pair listing in `research/2026-09-05_banking77_full_coverage/reports/fairness_cosine_consistency.md`.
+
+| Similarity band | Pairs | SHARE rate |
+|---|---:|---:|
+| 0.97-1.00 (near-duplicate) | 716 | 60.9% |
+| 0.93-0.97 | 1,094 | 52.6% |
+| 0.90-0.93 | 1,236 | 51.1% |
+| 0.85-0.90 | 2,977 | 47.7% |
+| 0.80-0.85 | 4,885 | 45.1% |
+
+Even in the closest band, only 60.9% of near-duplicate questions share an
+evidence basis -- confirming the `declined_card_payment` pattern is
+general, not an isolated pair, though the effect is a gradient (share
+rate degrades steadily with distance) rather than a sharp cliff. See
+**BUG-025** for a related, more severe finding surfaced by the same
+analysis: even *byte-identical* repeated questions (similarity = 1.000,
+no wording variation at all) are inconsistent 35.2% of the time.
+
+**Partial mitigation shipped (2026-09-17).** A cross-session answer cache
+(`backend/app/orchestration/answer_cache.py`, `docs/FAIRNESS_ANSWER_CACHE_DESIGN.md`)
+now surfaces a historically-confirmed parent id as an extra sufficiency-
+audit candidate for any sufficiently close (cosine similarity >= 0.85)
+future question, seeded from the historical BANKING77 corpus. This
+directly helps pairs close enough to clear that threshold, but **not**
+the specific `declined_card_payment` pair traced above: its own
+similarity is only 0.65 (checked directly, same embedding model), well
+below any threshold that could be set without conflating unrelated
+intents. The underlying product-misrouting root cause (S1 above) is
+unpatched; see the design doc's S9 for the full scope of what this
+mitigation does and does not cover.
+
+## BUG-025 — The exact same question, asked twice, does not reliably get the same answer
+
+**Severity:** High **Confidence:** Confirmed (31/88 informative exact-duplicate-text groups, full-corpus) **Status: Open, not yet root-caused**
+**Found in:** BANKING77 full-coverage study, embedding-based Fairness/consistency pass (2026-09-17) -- surfaced as a side effect of the BUG-023 cosine-similarity analysis above, when isolating pairs that are not merely *similar* but the exact same string.
+
+**What happens:** the BANKING77 test campaign ran multiple rounds, and
+several exact customer utterances occur more than once (independently,
+each in its own fresh session, same category label both times). Grouping
+by (category, exact text) across the full corpus finds 110 such
+duplicate-text groups. Of the 88 groups with at least one resolved
+occurrence (informative -- the other 22 groups never resolved at all, in
+any occurrence, so say nothing about consistency), **31 (35.2%) show a
+split outcome**: either some occurrences resolved and others returned
+`CLARIFICATION_REQUIRED`/unresolved, or every occurrence resolved but
+with zero overlapping approved evidence across occurrences. Concrete
+example -- *"I want to delete my account."* (`terminate_account`), asked
+12 separate times across the campaign: 9 times resolved identically
+(`faq_49230a05` + `faq_a1fd1b2a`), but 2 times returned unresolved and
+once resolved with only one of the two FAQs. No wording variation is
+possible here -- it is the same sentence -- so this cannot be explained
+by the ambiguity argument that partly excuses BUG-023 (e.g. "payment"
+being genuinely ambiguous). Other examples: *"My transfer was
+declined."* resolved once, unresolved the next time; *"My card is not
+working."* resolved 3 of 6 times with varying evidence sets each time.
+
+**Full-corpus scope check:** the underlying grouping is full-corpus (all
+3,028 usable primary-subquery texts, every naturally-occurring exact
+duplicate found and classified) -- not a sample.
+
+**Not yet investigated:** the actual mechanism. The leading hypothesis is
+LLM sampling variance (non-zero temperature, no caching) in one or more
+of the per-turn LLM calls that sit between identical input text and the
+final approved-parent decision -- most likely the intent
+formulator's product/intent mapping step (if it maps the same sentence to
+a different product or intent on a different run, it searches a
+different candidate pool entirely) and/or the sufficiency auditor's
+approve/reject judgment (if it is not perfectly consistent given the same
+candidates). Distinguishing between these two candidate loci -- and
+ruling out a genuinely different candidate pool from retrieval-side
+non-determinism -- needs a dedicated trace of a few of the 31 split
+groups' full `system_log_events`, comparable to the `declined_card_payment`
+trace under BUG-023. Left for future work per explicit instruction.
+
+**Root cause found, and partial mitigation shipped (2026-09-17).** A
+concrete trace of the `"I want to delete my account."` duplicate-text
+group (raw `task.rag.completed` candidate pools, not just final verdicts)
+found the 35.2% inconsistency rate is driven by two distinct, independently-
+occurring mechanisms within the same 12-occurrence group: (1) **retrieval-
+pool variance** -- 2 of 4 problem occurrences never had the correct FAQ
+(`faq_49230a05`) surfaced as a candidate at all, a different and smaller
+set having been retrieved that run; (2) **auditor-judgment non-
+determinism** -- the other 2 occurrences had the exact correct two-FAQ
+pair present in the candidate pool, and the auditor still rejected both,
+both times. A cross-session answer cache
+(`backend/app/orchestration/answer_cache.py`, design and rationale in
+`docs/FAIRNESS_ANSWER_CACHE_DESIGN.md`) has been implemented and seeded
+from the historical BANKING77 corpus to address mechanism (1): a parent
+id that has, historically, recurred as the confirmed answer for a
+sufficiently similar question is now always offered as an extra candidate
+to the sufficiency auditor, regardless of what a given run's live
+retrieval happens to surface -- never bypassing the audit itself.
+Mechanism (2) is explicitly untouched by this change (see the design
+doc's S6 and S9). Candidate follow-ups (self-consistency voting, a
+model-tier A/B test, rubric tightening) were proposed and then
+explicitly **scoped out of this project by the user** (2026-09-17,
+design doc S6a): all three are model-level tuning, ruled out as a class
+regardless of which specific one — *"model tunning is out of scope, so
+what we can do is surface the same parent and keep the cache update."*
+Mechanism (2) is therefore a **permanent, accepted limitation of this
+system, not a pending task** — status stays "partial mitigation," and
+will stay there by design, not because the remaining work hasn't been
+done yet.
+
+**Live-validated (2026-09-17).** A 6-rerun live re-test of this exact
+group's text (`research/2026-09-17_fairness_cache_validation/`, full
+detail in `docs/FAIRNESS_ANSWER_CACHE_DESIGN.md` S9) found organic
+retrieval failed to surface either correct FAQ in *any* of the 6 fresh
+runs this time (retrieval reliability on this question appears to have
+drifted further since the original study) — yet all 6 resolved
+identically via the cache-injected candidate, up from 9/12 (75%)
+historically. A parallel 4-rerun test of `"Why was my payment
+declined?"` confirmed the predicted limitation just as directly: the
+same cache-injected candidate was present in all 4 runs, and the
+auditor still split 2/2 on approving it -- live proof the mitigation
+fixes retrieval-pool variance but not auditor-judgment non-determinism.
+
+## BUG-024 — No AI-disclosure anywhere in the product
+
+**Severity:** Medium **Confidence:** Confirmed (all 3 supported languages + frontend UI checked directly) **Status: Open**
+**Found in:** Direct source check of `backend/app/core/translations.py`
+and `frontend/src/App.jsx` (2026-09-13), prompted by the MAS FEAT
+Transparency principle (`AGENTIC_EVALUATION_PLAN_v1.md` Pillar E) and the
+EU AI Act's August 2026 chatbot-disclosure requirement.
+
+**What happens:** none of the four greeting templates
+(`greeting_new`, `greeting_new_named`, `greeting_returning`,
+`greeting_returning_named`), in any of the three supported languages
+(English, Chinese, Spanish), contain any AI-disclosure language (no
+"AI", "assistant", "automated", "chatbot", or equivalent). The frontend
+UI (`App.jsx`) likewise carries no persistent label identifying the
+interface as AI-driven anywhere a customer would see it. A customer who
+never scrolls to a terms-of-service page has no way to learn, from the
+product itself, that they are talking to an AI system rather than a
+human agent.
+
+**Full-corpus scope check:** not applicable — this is a static-content
+gap (the templates and UI markup were read in full, not sampled), so the
+finding is complete by construction: the disclosure text simply does not
+exist anywhere in either file, in any language.
+
+**Not yet investigated:** the specific wording/placement Horizon would
+want for a disclosure (a greeting-line addition vs. a persistent UI
+badge vs. both); whether this is legally required today for Horizon's
+jurisdiction or only anticipated (the EU AI Act provision cited is
+forward-looking); this is a content/feature gap, not a logic defect, so
+"root cause" is simply "never built," and the fix is additive (write and
+insert disclosure copy) rather than corrective. Left for future work per
+explicit instruction.

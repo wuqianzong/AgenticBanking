@@ -1795,6 +1795,9 @@ export default function BankingBotUI() {
         {block.type === 'carousel' && renderHorizontalCarousel(block)}
         {block.type === 'alert' && renderActionableAlert(block)}
         {block.type === 'escalation_confirmation' && renderEscalationConfirmation(block)}
+        {['comparison', 'accordion', 'timeline', 'carousel', 'alert'].includes(block.type) && block.options?.length > 0 && (
+          <div className="mt-2.5">{renderChips(block.options)}</div>
+        )}
         {block.extendedText && (
           <div className="mt-3 max-w-sm rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-3 text-[15px] leading-relaxed text-slate-700 whitespace-pre-wrap shadow-sm">
             {renderTextWithDataChips(block.extendedText)}

@@ -9374,7 +9374,20 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
     response_blocks = []
     answer_parts = []
 
-    if answer:
+    # The retained answer is exactly the text of the last round's approved
+    # (zero-violation) blocks. Keep those blocks themselves when they still
+    # match it, so each block keeps its type and its shortcut/tool handles
+    # (which is what lets the deterministic cards land next to their
+    # sentence); otherwise fall back to the single flattened text.
+    approved_blocks = [
+        b for b in state.get("approved_response_blocks", [])
+        if isinstance(b, dict) and b.get("type") != "clarification"
+    ]
+    approved_text = "\n\n".join(p for p in (_flatten_response_block_text(b) for b in approved_blocks) if p)
+    if answer and approved_blocks and approved_text.strip() == answer:
+        response_blocks.extend(approved_blocks)
+        answer_parts.append(answer)
+    elif answer:
         response_blocks.append({
             "blockId": "retained_answer", "sourceTaskIds": [], "type": "text",
             "contextText": "", "text": answer, "items": [], "options": [],
@@ -9433,6 +9446,20 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
         answer_parts.append(text)
         clarification_parts.append(text)
 
+    # Every deterministic tool result of this turn (shortcut, unavailable
+    # request, verified fact, personal data) still gets its fixed sentence if
+    # nothing retained covers it -- the same net the normal path uses, built
+    # only from tool-supplied text. Its cards are attached below via node_07.
+    blocks_before = {id(b) for b in response_blocks}
+    _apply_response_completeness_nets(
+        response_blocks, state, [], {}, [], [], [], [], _available_response_shortcuts(state),
+    )
+    for block in response_blocks:
+        if id(block) not in blocks_before:
+            added_text = _flatten_response_block_text(block)
+            if added_text:
+                answer_parts.append(added_text)
+
     response = "\n\n".join(answer_parts) if answer_parts else (
         "I'm sorry, I'm not able to answer that right now. Could you try again, or ask in a different way?"
     )
@@ -9474,4 +9501,12 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
     # up showing the customer.
     if state.get("safety_retry_count", 0) >= 3:
         result["turn_escalation_history"] = _append_failed_turn_escalation_history(state)
+    # This node ends the graph, so node_07 never runs for it. Run it here on
+    # the fallback content so the same deterministic steps apply as on a
+    # passing turn: {{faq_*}} substitution, the real form/navigation cards
+    # (anchored via the blocks' handles), and the personal-data reveal map.
+    finalized = node_07_precision_substitution({**state, **result, "final_draft": response})
+    result["final_response"] = finalized["final_response"]
+    result["ui_action_payload"] = finalized["ui_action_payload"]
+    history[-1] = AIMessage(content=result["final_response"])
     return result

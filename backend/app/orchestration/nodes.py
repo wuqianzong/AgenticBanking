@@ -3331,13 +3331,14 @@ def _unavailable_service_requests(state: AgentState) -> list[dict]:
     Only the deterministic reason recorded at dispatch time is exposed; nothing
     here is model-authored.
     """
-    return [
+    entries = [
         {"reason": attempt.get("availability_reason", "")}
         for attempt, _ in _iter_tool_attempts(state)
         if attempt.get("tool_name") == "service_request"
         and attempt.get("status") == "unavailable"
         and attempt.get("availability_reason")
     ]
+    return [dict(entry, handle=f"unavail_{n}") for n, entry in enumerate(entries, start=1)]
 
 
 def _resolved_deeplink_request_ids(state: AgentState) -> list[str]:
@@ -3440,6 +3441,7 @@ def _personal_data_placeholders(state: AgentState) -> list[dict]:
             "for_request": for_request,
             "field_description": field.get("description", ""),
             "insert_token": result["placeholder_token"],
+            "handle": f"data_{len(placeholders) + 1}",
         })
     return placeholders
 
@@ -3463,6 +3465,7 @@ def _verified_api_context(state: AgentState) -> list[dict]:
         facts.append({
             "for_request": for_request,
             "fact": result["fact"],
+            "handle": f"fact_{len(facts) + 1}",
         })
     return facts
 
@@ -5736,6 +5739,44 @@ def _apply_response_completeness_nets(
             "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
         })
 
+    # 4. Other tool results (unavailable service request, verified fact,
+    # personal-data reference): same handle obligation as a shortcut. A
+    # citing block is required; for a personal-data reference that block
+    # must also carry the opaque token itself. Fallback text is built only
+    # from what the tool supplied (reason, fact, or token) -- never generated.
+    def _covered(handle: str, must_contain: str = "") -> bool:
+        return any(
+            handle in block.get("sourceShortcutHandles", [])
+            and (not must_contain or must_contain in _flatten_response_block_text(block))
+            for block in response_blocks
+        )
+
+    fallbacks = []
+    for entry in _unavailable_service_requests(state):
+        if not _covered(entry["handle"]):
+            fallbacks.append((entry["handle"], "unavailable_service_request", str(entry.get("reason", "")).strip()))
+    for entry in _verified_api_context(state):
+        if not _covered(entry["handle"]):
+            fallbacks.append((entry["handle"], "verified_fact", str(entry.get("fact", "")).strip()))
+    for entry in _personal_data_placeholders(state):
+        if not _covered(entry["handle"], entry["insert_token"]):
+            description = str(entry.get("field_description", "")).strip()
+            fallbacks.append((
+                entry["handle"], "personal_data",
+                f"Your {description}: {entry['insert_token']}" if description else str(entry["insert_token"]),
+            ))
+    for handle, kind, fallback_text in fallbacks:
+        if not fallback_text:
+            continue
+        print(f"   ⚠️ [TOOL RESULT OMITTED IN DRAFT]: {handle} ({kind}) not covered by a citing block — inserting deterministic fallback")
+        log_event("response.flexible.tool_result_omitted", handle=handle, kind=kind)
+        response_blocks.append({
+            "blockId": f"tool_fallback_{handle}", "sourceTaskIds": [], "sourceShortcutHandles": [handle],
+            "type": "text", "contextText": "", "text": fallback_text,
+            "items": [], "options": [], "progressTitle": "", "stepDetails": [],
+            "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
+        })
+
     return response_blocks
 
 
@@ -5815,7 +5856,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
     unavailable_service_requests = _unavailable_service_requests(state)
     personal_data_placeholders = _personal_data_placeholders(state)
     verified_api_context = _verified_api_context(state)
-    shortcut_handles = {shortcut["handle"] for shortcut in available_shortcuts}
+    shortcut_handles = {
+        entry["handle"]
+        for entry in (
+            *available_shortcuts, *unavailable_service_requests,
+            *personal_data_placeholders, *verified_api_context,
+        )
+    }
     # A turn with no substantive content beyond a pending clarification/
     # decline gets a narrower, more constrained sub-prompt instead of this
     # open-ended one (see _generate_evidence_only_response) -- the same
@@ -6371,6 +6418,14 @@ def _generate_response_blocks(state: AgentState) -> dict:
     answer content it relates to (or as its own element when it answers a
     subquery by itself), and put its handle in that element's
     source_task_ids next to any task ids. Never skip one.
+
+    TOOL RESULT COVERAGE: every entry in "Unavailable service requests",
+    "Verified customer-specific facts" and "Personal data references" also
+    carries a "handle" and is an obligation on the same footing. Address
+    each one in the element that answers its subquery (state the supplied
+    reason / fact; for a personal data reference put its insert_token
+    verbatim in the sentence) and put its handle in that element's
+    source_task_ids. Never skip one.
 
     Output JSON only:
     {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"","next_actions":["short natural next question, grounded in unfeatured approved evidence"]}}

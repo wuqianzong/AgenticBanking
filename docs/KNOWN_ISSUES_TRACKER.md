@@ -44,6 +44,8 @@ second time).
 | BUG-023 | Outcome depends on surface phrasing, not underlying intent -- 24/77 BANKING77 categories show a genuinely split outcome across their 40 phrasings of the same nominal question | Medium | Confirmed (full-corpus, `declined_card_payment` spot-checked) | Not yet root-caused | **Open, partial mitigation shipped** (see below) |
 | BUG-024 | Bot never discloses it is an AI to the customer, in any supported language or anywhere in the UI | Medium | Confirmed (full-corpus, all 3 languages + UI checked) | **Deterministic code (missing content, not a defect in logic)** | Open |
 | BUG-025 | The exact same customer question, asked more than once, does not reliably get the same retrieval outcome -- no wording ambiguity involved | High | Confirmed (31/88 informative exact-duplicate-text groups, full-corpus) | Root-caused: two independent mechanisms found (retrieval-pool variance + auditor-judgment non-determinism) | **Retrieval-pool half: mitigated and live-validated. Auditor-judgment half: accepted permanent limitation, model-tuning scoped out** (see below) |
+| BUG-026 | The response generator rarely writes the required closing sentence pointing to an attached shortcut button/form -- 20 of 236 logged shortcut turns (8.5%) despite a MUST rule in its prompt | Low-Medium | Confirmed (236 logged generator calls with a shortcut supplied) | Not yet root-caused (LLM instruction-following; no dedicated output slot for the sentence) | Open |
+| BUG-027 | The deterministic fallback for a missing shortcut sentence is skipped whenever the shortcut's label already appears anywhere in the response text (e.g. inside FAQ step wording), so no pointing sentence appears at all | Medium | Confirmed (live case + 58/236 logged calls had the label only inside steps) | **Deterministic code** (plain substring test) | Open |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -1396,3 +1398,66 @@ forward-looking); this is a content/feature gap, not a logic defect, so
 "root cause" is simply "never built," and the fix is additive (write and
 insert disclosure copy) rather than corrective. Left for future work per
 explicit instruction.
+
+## BUG-026 — The response generator rarely writes the required closing sentence for an attached shortcut
+
+**Severity:** Low–Medium **Confidence:** Confirmed (236 logged generator calls with a shortcut supplied) **Status: Open, not yet root-caused**
+**Found in:** live turn review, 2026-09-21 (session `sess_dc50c73d…`, "i lost my card in this raining weather"), then measured across the logged BANKING77 corpus.
+
+**What happens:** when a turn resolves with a real evidence-based answer
+*and* a shortcut is attached (a "navigation" button such as *Manage Card*,
+or a "form" card such as *Replace Card*), the response generator's prompt
+(`nodes.py`, "Available shortcuts this turn" section) tells it it MUST end
+the response with one short closing statement acknowledging every such
+shortcut, quoting the label verbatim and phrasing it for the shortcut's
+`kind`, and that "running out of room, or the response already feeling
+complete is never a reason to drop it." In practice the model writes that
+sentence rarely: across 236 logged generator calls where a shortcut was
+supplied, a closing sentence naming the label with button/form/"below"
+wording appeared in **20 (8.5%)** -- 0/127 in two of the larger runs
+(2026-09-08), 11/74 and 9/33 in the two 2026-09-09 runs, 0/2 in the
+2026-09-17 validation run. The rule was present in every one of those
+prompts. This is a systematic weakness, not a one-off.
+
+**Not yet investigated (hypotheses only, none tested):** the rule is one
+of dozens in a roughly 48k-character prompt and the generator is a small
+model; the output schema has no dedicated field for this sentence, so it
+depends on the model remembering to add it to a freeform element; in
+card-loss cases the FAQ steps themselves say "View & Manage Card", so the
+model may treat the shortcut as already covered. Independent of the model
+question, the design already relies on a deterministic fallback for this
+sentence -- see BUG-027, which currently defeats that fallback in about
+a quarter of cases. Candidate directions to weigh later: always insert the
+sentence in code and drop the rule from the prompt (also shortens the
+prompt), or give the sentence its own output slot. Left for later per
+explicit instruction.
+
+## BUG-027 — The shortcut-omission fallback is skipped when the label appears anywhere in the response
+
+**Severity:** Medium **Confidence:** Confirmed (one live turn traced end to end; 58 of 236 logged calls had the label only inside progress steps) **Status: Open**
+**Found in:** same 2026-09-21 live turn as BUG-026.
+
+**What happens:** `nodes.py` (~5700, "Shortcut-omission fallback") appends
+`You can also use the "<label>" button below.` (or the form equivalent)
+only when `label in combined_so_far` is false -- a plain substring test
+over the whole generated response. In the traced turn the shortcut label
+was `Manage Card`; the model's own step read *choose "View & Manage
+Card."* (wording taken from the FAQ). That contains the label, so the
+fallback treated the shortcut as already mentioned and inserted nothing.
+The button itself was still delivered (`navigationActions` in the
+persisted UI payload contained the *Manage Card* link) -- what is missing
+is only the sentence pointing to it, so the customer sees a button with
+no introduction. Because the generator writes the sentence itself only
+~8.5% of the time (BUG-026), the fallback carries most of the load, and in
+the logged corpus the label appeared *only* inside step text in 58 of 236
+shortcut-supplied calls (about 25%) -- exactly the cases this test wrongly
+passes. Not caused by the 2026-09-21 shorter-reasoning change: the
+sufficiency reason is not part of the generator prompt, and the fallback
+logic is unchanged.
+
+**Not yet investigated:** fix options -- (a) count the shortcut as
+mentioned only when the label appears in a pointing phrase ("button",
+"form", "below", or quoted next to one of those), (b) always append the
+deterministic sentence and only suppress it when the model wrote its own,
+or (c) resolve via BUG-026's "insert in code" direction. Left for later
+per explicit instruction.

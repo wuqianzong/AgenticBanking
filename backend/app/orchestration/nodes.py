@@ -7710,6 +7710,14 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         explained afterward is a rationalization, not a judgment; reasoning
         that precedes the verdict is what actually shapes it.
 
+        Write "conduct_reason" as compact shorthand, not full sentences.
+        Every check must still be made -- brevity comes from wording only,
+        never from skipping or merging a check: one short clause per Bank
+        Conduct Rule and per regulatory point, naming the offending phrase
+        when one exists and "none" when it clearly passes (e.g.
+        "commitments: none; advice: none; ..."). Do not recite rule text or
+        restate the answer.
+
         {_GENERATION_GUIDANCE_SHAPE_RULE}
 
         Output JSON only:

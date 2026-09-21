@@ -3313,19 +3313,40 @@ export default function BankingBotUI() {
 
                     {/* Dynamic UI Components */}
                     {msg.type === 'carousel' && renderCarousel(msg.options)}
-                    {msg.type === 'blocks' && msg.responseBlocks?.map((block, blockIndex) =>
-                      renderResponseBlock(block, msg.id, blockIndex, msg.precisionSubstituted, msg.personalDataSubstituted)
-                    )}
-                    {msg.serviceRequestActions?.map((action) => (
-                      <React.Fragment key={action.specialId}>
-                        {renderEmbeddedServiceRequest(action)}
-                      </React.Fragment>
-                    ))}
-                    {msg.navigationActions?.map((action) => (
-                      <React.Fragment key={action.linkId}>
-                        {renderNavigationAction(action)}
-                      </React.Fragment>
-                    ))}
+                    {(() => {
+                      // Each deterministic card follows the block its sentence
+                      // is in (anchorBlockId, set by the backend). Cards with no
+                      // anchor, or older messages, render after all blocks.
+                      const blockIds = new Set(
+                        msg.type === 'blocks' ? (msg.responseBlocks || []).map((b) => b.blockId) : []
+                      );
+                      const isInline = (action) => action.anchorBlockId && blockIds.has(action.anchorBlockId);
+                      const renderActions = (predicate) => (
+                        <>
+                          {msg.serviceRequestActions?.filter(predicate).map((action) => (
+                            <React.Fragment key={action.specialId}>
+                              {renderEmbeddedServiceRequest(action)}
+                            </React.Fragment>
+                          ))}
+                          {msg.navigationActions?.filter(predicate).map((action) => (
+                            <React.Fragment key={action.linkId}>
+                              {renderNavigationAction(action)}
+                            </React.Fragment>
+                          ))}
+                        </>
+                      );
+                      return (
+                        <>
+                          {msg.type === 'blocks' && msg.responseBlocks?.map((block, blockIndex) => (
+                            <React.Fragment key={`${msg.id}-${block.blockId || blockIndex}-with-actions`}>
+                              {renderResponseBlock(block, msg.id, blockIndex, msg.precisionSubstituted, msg.personalDataSubstituted)}
+                              {renderActions((action) => isInline(action) && action.anchorBlockId === block.blockId)}
+                            </React.Fragment>
+                          ))}
+                          {renderActions((action) => !isInline(action))}
+                        </>
+                      );
+                    })()}
                     {msg.type === 'stepper' && renderStepper(
                       msg.items,
                       msg.progressTitle,

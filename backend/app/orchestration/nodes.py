@@ -3380,33 +3380,8 @@ def _available_response_shortcuts(state: AgentState) -> list[dict]:
     load-bearing for correctness, only for how natural the response reads.
     """
     shortcuts = []
-    for attempt, for_request in _iter_tool_attempts(state):
-        if attempt.get("status") != "completed":
-            continue
-        result = attempt.get("result", {})
-        if attempt.get("tool_name") == "service_request":
-            contract = get_service_request_contract(result.get("service_request_id", ""))
-            if contract is None:
-                continue
-            shortcuts.append({
-                "kind": "form",
-                "label": contract.get("action_label", "Complete Form"),
-                "topic": contract.get("description", ""),
-                "for_request": for_request,
-            })
-        elif attempt.get("tool_name") == "deeplink":
-            request = deeplink_service.get(result.get("deeplink_request_id", ""))
-            if request is None or request.get("status") != deeplink_service.RESOLVED:
-                continue
-            contract = DEEPLINK_DESTINATION_REGISTRY.get(request.get("destination_id", ""))
-            if contract is None:
-                continue
-            shortcuts.append({
-                "kind": "navigation",
-                "label": contract.get("label", "Open"),
-                "topic": contract.get("description", ""),
-                "for_request": for_request,
-            })
+    for shortcut, _action_key, _subquery_id in _iter_shortcut_entries(state):
+        shortcuts.append(shortcut)
     # Per-turn alias, the same kind of handle a RAG task has (task_N). It is
     # NOT a real id -- just a positional label the generator cites in
     # source_task_ids so the shortcut is a tracked obligation like any task.
@@ -3414,6 +3389,64 @@ def _available_response_shortcuts(state: AgentState) -> list[dict]:
     for position, shortcut in enumerate(shortcuts, start=1):
         shortcut["handle"] = f"{'nav' if shortcut['kind'] == 'navigation' else 'svc'}_{position}"
     return shortcuts
+
+
+def _iter_shortcut_entries(state: AgentState):
+    """Yield (sanitized shortcut, action_key, subquery_id) per completed
+    service_request / resolved deeplink, in tool order. `action_key` is what
+    node_07 keys the real UI action by ("service_request", special_id) or
+    ("deeplink", request_id) -- backend-only, never shown to a model."""
+    for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", [])):
+        if not isinstance(subquery, dict):
+            continue
+        for_request = subquery.get("customer_component", "")
+        for attempt in subquery.get("tool_attempts", []):
+            if not isinstance(attempt, dict) or attempt.get("status") != "completed":
+                continue
+            result = attempt.get("result", {})
+            if attempt.get("tool_name") == "service_request":
+                contract = get_service_request_contract(result.get("service_request_id", ""))
+                if contract is None:
+                    continue
+                yield ({
+                    "kind": "form",
+                    "label": contract.get("action_label", "Complete Form"),
+                    "topic": contract.get("description", ""),
+                    "for_request": for_request,
+                }, ("service_request", result.get("special_id")), subquery.get("subquery_id"))
+            elif attempt.get("tool_name") == "deeplink":
+                request = deeplink_service.get(result.get("deeplink_request_id", ""))
+                if request is None or request.get("status") != deeplink_service.RESOLVED:
+                    continue
+                contract = DEEPLINK_DESTINATION_REGISTRY.get(request.get("destination_id", ""))
+                if contract is None:
+                    continue
+                yield ({
+                    "kind": "navigation",
+                    "label": contract.get("label", "Open"),
+                    "topic": contract.get("description", ""),
+                    "for_request": for_request,
+                }, ("deeplink", result.get("deeplink_request_id")), subquery.get("subquery_id"))
+
+
+def _shortcut_anchor_block_ids(state: AgentState, response_blocks: list) -> dict:
+    """Map each shortcut's action_key to the blockId its card should follow.
+
+    The anchor is the last block that cites the shortcut's handle (the
+    sentence the model -- or the coverage net -- wrote for it). Purely
+    positional bookkeeping over final, already-audited blocks; it never
+    changes text. A shortcut with no citing block simply has no anchor, and
+    the frontend then renders its card at the end of the message.
+    """
+    anchors = {}
+    handles = {}
+    for position, (shortcut, action_key, _subquery_id) in enumerate(_iter_shortcut_entries(state), start=1):
+        handles[action_key] = f"{'nav' if shortcut['kind'] == 'navigation' else 'svc'}_{position}"
+    for action_key, handle in handles.items():
+        for block in response_blocks:
+            if isinstance(block, dict) and handle in (block.get("sourceShortcutHandles") or []) and block.get("blockId"):
+                anchors[action_key] = block["blockId"]
+    return anchors
 
 
 def _personal_data_placeholders(state: AgentState) -> list[dict]:
@@ -5714,6 +5747,10 @@ def _apply_response_completeness_nets(
     # handle stays -- and a label sitting somewhere else in the response
     # (e.g. inside FAQ steps) is not a pointing sentence either, which was
     # the old whole-response substring hole (BUG-027).
+    shortcut_subquery_by_handle = {
+        f"{'nav' if entry['kind'] == 'navigation' else 'svc'}_{position}": subquery_id
+        for position, (entry, _key, subquery_id) in enumerate(_iter_shortcut_entries(state), start=1)
+    }
     for shortcut in available_shortcuts:
         label = str(shortcut.get("label", "")).strip()
         handle = shortcut.get("handle", "")
@@ -5732,12 +5769,20 @@ def _apply_response_completeness_nets(
         )
         print(f"   ⚠️ [SHORTCUT OMITTED IN DRAFT]: '{label}' ({handle}) not covered by a citing block — inserting deterministic fallback")
         log_event("response.flexible.shortcut_omitted", label=label, kind=shortcut.get("kind"), handle=handle)
-        response_blocks.append({
+        fallback_block = {
             "blockId": f"shortcut_fallback_{handle}", "sourceTaskIds": [], "sourceShortcutHandles": [handle],
             "type": "text", "contextText": "", "text": fallback_text,
             "items": [], "options": [], "progressTitle": "", "stepDetails": [],
             "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
-        })
+        }
+        # Sit right after the last block answering the same subquery, so the
+        # card that follows lands next to what it relates to; otherwise the end.
+        related_task_ids = {t for t, sq in subquery_id_by_task_id.items() if sq and sq == shortcut_subquery_by_handle.get(handle)}
+        insert_at = len(response_blocks)
+        for position, block in enumerate(response_blocks):
+            if related_task_ids & set(block.get("sourceTaskIds", [])):
+                insert_at = position + 1
+        response_blocks.insert(insert_at, fallback_block)
 
     # 4. Other tool results (unavailable service request, verified fact,
     # personal-data reference): same handle obligation as a shortcut. A
@@ -8543,6 +8588,10 @@ def node_07_precision_substitution(state: AgentState):
     print("🟢 [NODE 07] Executing Precision Substitution")
     draft = state.get("final_draft", "")
     payload = state.get("ui_action_payload", {})
+    # The response has already passed the compliance / groundedness audit by
+    # the time it reaches here. Work out, before any substitution, which
+    # block each deterministic card should follow; only ids, never text.
+    action_anchors = _shortcut_anchor_block_ids(state, payload.get("responseBlocks", []))
     options = payload.get("options", [])
     step_details = payload.get("stepDetails", [])
     list_items = payload.get("items", []) if payload.get("uiType") == "checklist" else []
@@ -8694,7 +8743,9 @@ def node_07_precision_substitution(state: AgentState):
         contract = get_service_request_contract(pending_request.get("service_request_id", ""))
         if contract is None:
             continue
+        anchor = action_anchors.get(("service_request", pending_request.get("special_id")))
         service_request_actions.append({
+            **({"anchorBlockId": anchor} if anchor else {}),
             "label": contract.get("action_label", "Complete Form"),
             "specialId": pending_request.get("special_id"),
             "serviceRequestId": pending_request.get("service_request_id"),
@@ -8715,7 +8766,11 @@ def node_07_precision_substitution(state: AgentState):
         )
         if contract is None:
             continue
-        navigation_actions.append({"linkId": link_id, "label": contract["label"]})
+        anchor = action_anchors.get(("deeplink", link_id))
+        navigation_actions.append({
+            "linkId": link_id, "label": contract["label"],
+            **({"anchorBlockId": anchor} if anchor else {}),
+        })
     if navigation_actions:
         payload["navigationActions"] = navigation_actions
 

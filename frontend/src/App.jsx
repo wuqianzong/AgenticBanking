@@ -1757,6 +1757,9 @@ export default function BankingBotUI() {
             >
               {copiedMessageId === blockId ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
             </button>
+            {/* A text block can carry options too (e.g. a clarification the model
+                typed as TEXT); render them like the clarification card does. */}
+            {block.options?.length > 0 && <div className="mt-2.5">{renderChips(block.options)}</div>}
           </div>
         )}
         {block.type === 'clarification' && renderClarificationCard(block.text, block.options)}

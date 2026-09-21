@@ -97,6 +97,27 @@ const TypewriterLine = ({ text }) => {
   return <>{text.slice(0, visibleChars)}</>;
 };
 
+const ReasoningItemView = ({ line, animate = false }) => {
+  const match = typeof line === 'string' ? line.match(/^\[([^\]]+)\]\s*(.*)$/s) : null;
+  const nodeName = match ? match[1] : null;
+  const content = match ? match[2] : line;
+
+  return (
+    <div className="mb-2 last:mb-0 border-b border-slate-200/60 last:border-0 pb-2 last:pb-0 text-left">
+      {nodeName && (
+        <div className="mb-1 flex items-center gap-1.5">
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold bg-blue-50 text-blue-700 border border-blue-200/60 shadow-2xs">
+            {nodeName}
+          </span>
+        </div>
+      )}
+      <div className="text-[11px] text-slate-600 leading-relaxed font-normal whitespace-pre-wrap break-words pl-0.5">
+        {animate ? <TypewriterLine text={content} /> : content}
+      </div>
+    </div>
+  );
+};
+
 // WP-1/WP-3: the backend never resolves a {{data-*}} token into visible
 // text -- it only ever sends the token, plus (separately, this turn only)
 // the token->value pairs revealed this turn. The tokens are preserved in
@@ -3352,15 +3373,23 @@ export default function BankingBotUI() {
                           <button
                             type="button"
                             onClick={() => setExpandedAccordions(prev => ({ ...prev, [accordionKey]: !isOpen }))}
-                            className="flex items-center gap-1 text-[10px] font-semibold text-slate-400 hover:text-slate-600 transition-colors"
+                            className="inline-flex items-center gap-1.5 text-[10.5px] font-medium text-slate-400 hover:text-blue-600 transition-colors py-0.5 cursor-pointer"
                           >
+                            <Sparkles size={11} className={isOpen ? 'text-blue-600' : 'text-slate-400'} />
+                            <span>Reasoning ({msg.reasoning.length})</span>
                             {isOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                            Reasoning ({msg.reasoning.length})
                           </button>
                           {isOpen && (
-                            <div className="mt-1 max-w-sm rounded-xl border border-slate-200 bg-slate-900/95 px-2.5 py-2 text-[10px] font-mono text-slate-300 shadow-2xs max-h-56 overflow-y-auto">
+                            <div className="mt-1.5 max-w-sm rounded-xl border border-slate-200/80 bg-slate-50/95 p-3 shadow-2xs max-h-60 overflow-y-auto text-left">
+                              <div className="mb-2 flex items-center justify-between border-b border-slate-200/60 pb-1.5 text-[9.5px] font-bold uppercase tracking-wider text-slate-400">
+                                <span className="flex items-center gap-1.5">
+                                  <Sparkles size={10} className="text-blue-600" />
+                                  <span>Audit & Thought Trace</span>
+                                </span>
+                                <span className="font-mono text-[9px] text-slate-400 font-normal">{msg.reasoning.length} steps</span>
+                              </div>
                               {msg.reasoning.map((line, idx) => (
-                                <div key={idx} className="mb-1 whitespace-pre-wrap break-words leading-snug last:mb-0">{line}</div>
+                                <ReasoningItemView key={idx} line={line} animate={false} />
                               ))}
                             </div>
                           )}
@@ -3456,12 +3485,16 @@ export default function BankingBotUI() {
                     on the request -- see api_gateway.py's
                     _extract_reasoning_snippets. */}
                 {devShowReasoning && reasoningLog.length > 0 && (
-                  <div className="w-full max-w-[280px] rounded-xl border border-slate-200 bg-slate-900/95 px-2.5 py-2 text-[10px] font-mono text-slate-300 shadow-2xs max-h-40 overflow-y-auto">
-                    <div className="mb-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">Reasoning (debug)</div>
-                    {reasoningLog.map((line, idx) => (
-                      <div key={idx} className="mb-1 whitespace-pre-wrap break-words leading-snug last:mb-0">
-                        <TypewriterLine text={line} />
+                  <div className="w-full max-w-[280px] rounded-xl border border-slate-200/80 bg-slate-50/95 p-2.5 shadow-2xs max-h-48 overflow-y-auto text-left">
+                    <div className="mb-2 flex items-center justify-between border-b border-slate-200/60 pb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles size={11} className="text-blue-600" />
+                        <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500">Reasoning Trace</span>
                       </div>
+                      <span className="text-[9px] font-mono text-slate-400 font-medium">debug</span>
+                    </div>
+                    {reasoningLog.map((line, idx) => (
+                      <ReasoningItemView key={idx} line={line} animate={true} />
                     ))}
                   </div>
                 )}

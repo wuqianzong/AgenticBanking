@@ -473,9 +473,9 @@ def _extract_reasoning_snippets(node_name: str, state_update: dict) -> list[str]
     fields on known state keys -- never a blind dump of state_update --
     so a future state field (e.g. personal_data_reveal_map, or anything
     else sensitive) can never leak here just by a node happening to
-    return it. Reads only the delta this node just returned, not the full
-    accumulated state, so each snippet reflects what THIS node just
-    decided, not a replay of everything decided so far this turn.
+    return it. Reads only what this node returned -- but several nodes
+    return their whole accumulated search_tasks/task_results list, so the
+    caller (chat_stream) de-duplicates across nodes within a turn.
     """
     snippets: list[str] = []
 
@@ -600,6 +600,11 @@ async def process_chat(payload: ChatPayload):
             # RAG_RETRY_EFFORT_v1.0.md.
             low_confidence_mode = False
             task_confidence = None
+            # Debug-panel de-duplication: several nodes return the WHOLE
+            # accumulated search_tasks/task_results list each time (not just
+            # what they changed), so the same reasoning text would otherwise
+            # be re-emitted by every later node in the turn.
+            seen_reasoning: set[str] = set()
             async for chunk in app_graph.astream(initial_turn_state, config=config):
                 for node_name, state_update in chunk.items():
                     if state_update.get("low_confidence_mode"):
@@ -619,9 +624,17 @@ async def process_chat(payload: ChatPayload):
                     # internal reasoning fields, not something a real
                     # customer session should carry by default.
                     if payload.debug_reasoning:
-                        reasoning = _extract_reasoning_snippets(node_name, state_update)
-                        if reasoning:
-                            progress_event["reasoning"] = reasoning
+                        fresh_reasoning = []
+                        for line in _extract_reasoning_snippets(node_name, state_update):
+                            # Compare on the text after the "[node] " label, so the
+                            # same entry re-returned by a later node is not repeated.
+                            key = line.split("] ", 1)[1] if line.startswith("[") and "] " in line else line
+                            if key in seen_reasoning:
+                                continue
+                            seen_reasoning.add(key)
+                            fresh_reasoning.append(line)
+                        if fresh_reasoning:
+                            progress_event["reasoning"] = fresh_reasoning
                     # Yield the name of the node currently executing to the frontend
                     yield json.dumps(progress_event) + "\n"
                     # Pace progress events so React can render each transition.

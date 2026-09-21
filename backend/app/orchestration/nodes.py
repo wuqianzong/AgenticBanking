@@ -3406,6 +3406,12 @@ def _available_response_shortcuts(state: AgentState) -> list[dict]:
                 "topic": contract.get("description", ""),
                 "for_request": for_request,
             })
+    # Per-turn alias, the same kind of handle a RAG task has (task_N). It is
+    # NOT a real id -- just a positional label the generator cites in
+    # source_task_ids so the shortcut is a tracked obligation like any task.
+    # Positional, so every caller in one turn derives the same handle.
+    for position, shortcut in enumerate(shortcuts, start=1):
+        shortcut["handle"] = f"{'nav' if shortcut['kind'] == 'navigation' else 'svc'}_{position}"
     return shortcuts
 
 
@@ -5698,28 +5704,37 @@ def _apply_response_completeness_nets(
         print(f"   ℹ️ [ENTRY NOT EXPLICITLY CITED]: {task_id} ({kind_label}) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)")
         log_event("response.flexible.entry_omitted", task_id=task_id, kind=kind_label, fallback_inserted=False)
 
-    # 3. Shortcut-omission fallback, matched by label substring across the
-    # whole response text so far (not task_id citation -- see
-    # _generate_response_blocks's original comment for why).
-    combined_so_far = "\n\n".join(p for p in (_flatten_response_block_text(b) for b in response_blocks) if p)
+    # 3. Shortcut-omission fallback. A shortcut counts as covered only when
+    # a block cites its handle (source_task_ids, like a RAG task) AND that
+    # block's own text carries the label. Citing alone is not enough -- a
+    # revision can rewrite a block and drop the sentence while the locked
+    # handle stays -- and a label sitting somewhere else in the response
+    # (e.g. inside FAQ steps) is not a pointing sentence either, which was
+    # the old whole-response substring hole (BUG-027).
     for shortcut in available_shortcuts:
         label = str(shortcut.get("label", "")).strip()
-        if not label or label in combined_so_far:
+        handle = shortcut.get("handle", "")
+        if not label:
+            continue
+        if any(
+            handle in block.get("sourceShortcutHandles", [])
+            and label in _flatten_response_block_text(block)
+            for block in response_blocks
+        ):
             continue
         fallback_text = (
             f'You can also fill in and submit the "{label}" form below.'
             if shortcut.get("kind") == "form"
             else f'You can also use the "{label}" button below.'
         )
-        print(f"   ⚠️ [SHORTCUT OMITTED IN DRAFT]: '{label}' missing from generated text — inserting deterministic fallback")
-        log_event("response.flexible.shortcut_omitted", label=label, kind=shortcut.get("kind"))
+        print(f"   ⚠️ [SHORTCUT OMITTED IN DRAFT]: '{label}' ({handle}) not covered by a citing block — inserting deterministic fallback")
+        log_event("response.flexible.shortcut_omitted", label=label, kind=shortcut.get("kind"), handle=handle)
         response_blocks.append({
-            "blockId": f"shortcut_fallback_{len(response_blocks)}", "sourceTaskIds": [],
+            "blockId": f"shortcut_fallback_{handle}", "sourceTaskIds": [], "sourceShortcutHandles": [handle],
             "type": "text", "contextText": "", "text": fallback_text,
             "items": [], "options": [], "progressTitle": "", "stepDetails": [],
             "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
         })
-        combined_so_far += "\n\n" + fallback_text
 
     return response_blocks
 
@@ -5786,20 +5801,21 @@ def _generate_response_blocks(state: AgentState) -> dict:
         | {v.get("subquery_id") for v in conversational_context if v.get("subquery_id")}
     )
     # The LLM never sees a special_id, service_request_id, destination_id,
-    # route, or form_schema -- only a sanitized label/topic per shortcut, via
-    # _available_response_shortcuts. Citing an id for coverage-tracking or an
-    # exact placeholder token was tried and repeatedly failed (wrong key,
-    # dropped citation, invented key, malformed/missing token); the button
-    # itself is attached later by node_07 straight from tool_attempts,
-    # unconditionally and independent of anything generated here, so nothing
-    # about *whether* or *how* a shortcut appears depends on this text. The
-    # model's only remaining job is the natural language connecting the FAQ
-    # answer to the shortcut's existence -- language is exactly what an LLM
-    # is reliable at, unlike exact id/token reproduction.
+    # route, or form_schema -- only a sanitized label/topic per shortcut plus
+    # a short per-turn handle (nav_1, svc_1), via _available_response_shortcuts.
+    # Citing the real opaque ids failed repeatedly (wrong key, dropped
+    # citation, invented key); a short positional handle in the same
+    # source_task_ids field as a RAG task is a different, much simpler thing
+    # to copy, and it makes the shortcut a tracked obligation like a task.
+    # The button itself is still attached by node_07 straight from
+    # tool_attempts, unconditionally, so nothing about *whether* a shortcut
+    # appears depends on this text; the handle only drives the coverage net
+    # (and, later, where the card is placed).
     available_shortcuts = _available_response_shortcuts(state)
     unavailable_service_requests = _unavailable_service_requests(state)
     personal_data_placeholders = _personal_data_placeholders(state)
     verified_api_context = _verified_api_context(state)
+    shortcut_handles = {shortcut["handle"] for shortcut in available_shortcuts}
     # A turn with no substantive content beyond a pending clarification/
     # decline gets a narrower, more constrained sub-prompt instead of this
     # open-ended one (see _generate_evidence_only_response) -- the same
@@ -6347,6 +6363,15 @@ def _generate_response_blocks(state: AgentState) -> dict:
       "What are the eligibility requirements for this loan?" not
       "Eligibility".
 
+    SHORTCUT COVERAGE (supersedes any earlier instruction about a single
+    closing statement): every entry in "Available shortcuts this turn"
+    carries a "handle" and is an obligation, exactly like an approved-
+    evidence task. Cover EVERY one with one short sentence -- label
+    verbatim, wording matching its kind -- placed immediately after the
+    answer content it relates to (or as its own element when it answers a
+    subquery by itself), and put its handle in that element's
+    source_task_ids next to any task ids. Never skip one.
+
     Output JSON only:
     {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"","next_actions":["short natural next question, grounded in unfeatured approved evidence"]}}
     """
@@ -6363,8 +6388,10 @@ def _generate_response_blocks(state: AgentState) -> dict:
         if not isinstance(element, dict):
             continue
         requested_type = str(element.get("type", "TEXT")).upper()
-        source_ids = [task_id for task_id in _llm_list(element, "source_task_ids") if task_id in valid_task_ids]
+        cited_ids = _llm_list(element, "source_task_ids")
+        source_ids = [task_id for task_id in cited_ids if task_id in valid_task_ids]
         source_ids = list(dict.fromkeys(source_ids))
+        source_handles = list(dict.fromkeys(h for h in cited_ids if h in shortcut_handles))
         context_text = _llm_text(element, "context_text")
         answer = _llm_text(element, "answer")
         extended_text = _llm_text(element, "extended_text")
@@ -6399,7 +6426,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
                 lead_text = "\n\n".join(part for part in [context_text, answer] if part)
                 rendered_text = "\n".join([lead_text, title, *[f"{r['feature']}: {', '.join(r['values'])}" for r in rows], extended_text]).strip()
                 block = {
-                    "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                    "blockId": f"element_{index}", "sourceTaskIds": source_ids, "sourceShortcutHandles": source_handles,
                     "type": "comparison", "contextText": lead_text, "title": title, "headers": headers, "rows": rows, "actions": actions,
                     "options": options, "extendedText": extended_text,
                 }
@@ -6420,7 +6447,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
                 lead_text = "\n\n".join(part for part in [context_text, answer] if part)
                 rendered_text = "\n".join([lead_text, title, *[f"{s['title']}: {s['content']}" for s in sections], extended_text]).strip()
                 block = {
-                    "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                    "blockId": f"element_{index}", "sourceTaskIds": source_ids, "sourceShortcutHandles": source_handles,
                     "type": "accordion", "contextText": lead_text, "title": title, "sections": sections,
                     "options": options, "extendedText": extended_text,
                 }
@@ -6444,7 +6471,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
                 lead_text = "\n\n".join(part for part in [context_text, answer] if part)
                 rendered_text = "\n".join([lead_text, title, subtitle, *[f"{st['title']}: {st['description']}" for st in steps], extended_text]).strip()
                 block = {
-                    "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                    "blockId": f"element_{index}", "sourceTaskIds": source_ids, "sourceShortcutHandles": source_handles,
                     "type": "timeline", "contextText": lead_text, "title": title, "subtitle": subtitle, "steps": steps,
                     "options": options, "extendedText": extended_text,
                 }
@@ -6477,7 +6504,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
                 lead_text = "\n\n".join(part for part in [context_text, answer] if part)
                 rendered_text = "\n".join([lead_text, title, *[f"{it['title']}: {it['highlight']}" for it in c_items], extended_text]).strip()
                 block = {
-                    "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                    "blockId": f"element_{index}", "sourceTaskIds": source_ids, "sourceShortcutHandles": source_handles,
                     "type": "carousel", "contextText": lead_text, "title": title, "items": c_items,
                     "options": options, "extendedText": extended_text,
                 }
@@ -6503,7 +6530,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
             if title or a_msg:
                 rendered_text = "\n".join([title, a_msg, extended_text]).strip()
                 block = {
-                    "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                    "blockId": f"element_{index}", "sourceTaskIds": source_ids, "sourceShortcutHandles": source_handles,
                     "type": "alert", "title": title, "message": a_msg, "severity": a_sev, "action": action_data,
                     "options": options, "extendedText": extended_text,
                 }
@@ -6530,7 +6557,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
                 part for part in [lead_text, "\n\n".join(step["detail"] for step in progress_steps), extended_text] if part
             )
             block = {
-                "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                "blockId": f"element_{index}", "sourceTaskIds": source_ids, "sourceShortcutHandles": source_handles,
                 "type": "stepper", "contextText": lead_text, "text": "", "items": items,
                 "options": options, "progressTitle": _llm_text(element, "progress_title") or title,
                 "stepDetails": [], "currentStep": 1, "totalSteps": len(progress_steps),
@@ -6540,7 +6567,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
             list_intro = "\n\n".join(part for part in [context_text, answer] if part)
             rendered_text = "\n".join([part for part in [list_intro, *list_items, extended_text] if part])
             block = {
-                "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                "blockId": f"element_{index}", "sourceTaskIds": source_ids, "sourceShortcutHandles": source_handles,
                 "type": "checklist", "contextText": "", "text": "", "items": list_items,
                 "options": options, "progressTitle": "", "stepDetails": [], "currentStep": None,
                 "totalSteps": None, "listTitle": _llm_text(element, "list_title") or title,
@@ -6549,7 +6576,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
         else:
             rendered_text = "\n\n".join(part for part in [context_text, answer, extended_text] if part)
             block = {
-                "blockId": f"element_{index}", "sourceTaskIds": source_ids,
+                "blockId": f"element_{index}", "sourceTaskIds": source_ids, "sourceShortcutHandles": source_handles,
                 "type": "text", "contextText": context_text, "text": "\n\n".join(part for part in [answer, extended_text] if part),
                 "items": [], "options": options, "progressTitle": "", "stepDetails": [],
                 "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
@@ -6655,7 +6682,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
     answer_text = "\n\n".join(p for p in (_flatten_response_block_text(b) for b in response_blocks if b.get("type") != "clarification") if p)
     draft = "\n\n".join(part for part in [answer_text, clarification] if part) or "Sorry, I don't have an answer for that right now."
     print(f"   💬 [FLEXIBLE RESPONSE GENERATED]: {len(response_blocks)} element(s)")
-    log_event("response.flexible.generated", element_types=[block.get("type") for block in response_blocks], element_source_task_ids=[block.get("sourceTaskIds", []) for block in response_blocks], next_action_count=len(next_actions))
+    log_event("response.flexible.generated", element_types=[block.get("type") for block in response_blocks], element_source_task_ids=[block.get("sourceTaskIds", []) for block in response_blocks], element_shortcut_handles=[block.get("sourceShortcutHandles", []) for block in response_blocks], next_action_count=len(next_actions))
     return {
         "final_draft": draft,
         "final_answer": answer_text,
@@ -7271,7 +7298,7 @@ def _outbound_response_content(state: AgentState) -> tuple[str, str, str]:
         {
             key: value
             for key, value in block.items()
-            if key not in {"blockId", "taskId", "sourceTaskIds"}
+            if key not in {"blockId", "taskId", "sourceTaskIds", "sourceShortcutHandles"}
         }
         for block in payload.get("responseBlocks", [])
         if isinstance(block, dict)
@@ -7529,7 +7556,7 @@ def _reassemble_response_blocks(
     if present.
     """
     approved_ids = {block.get("blockId") for block in approved_response_blocks}
-    locked_fields = {"blockId", "type", "sourceTaskIds"}
+    locked_fields = {"blockId", "type", "sourceTaskIds", "sourceShortcutHandles"}
     result = []
     for block in original_response_blocks:
         block_id = block.get("blockId")

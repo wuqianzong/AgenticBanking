@@ -6035,13 +6035,16 @@ _GENERATION_GUIDANCE_PARAGRAPH_UNIFIED = """
     both; they answer different questions.
     """
 
-# Preserves the pre-split name/shape for node_04c_response_reviser and
-# _generate_evidence_only_response, which still read a flat evidence_by_task
-# entry and were never meant to change when _generate_response_blocks moved
-# to the unified contract.
+# Preserves the pre-split name/shape for _generate_evidence_only_response,
+# which still reads a flat evidence_by_task entry and was never meant to
+# change when _generate_response_blocks moved to the unified contract.
+# node_04c_response_reviser used this too until its own Stage 2 migration
+# to the unified obligation contract; it now uses the UNIFIED variant below.
 _GENERATION_BRIDGE_GUARDRAILS = _GENERATION_BRIDGE_GUARDRAILS_BASE + _GENERATION_GUIDANCE_PARAGRAPH_FLAT
 
-# For _generate_response_blocks only.
+# For _generate_response_blocks and node_04c_response_reviser -- both read
+# the unified `{id, generation_content, generation_guidance, generation_rule}`
+# obligation shape.
 _GENERATION_BRIDGE_GUARDRAILS_UNIFIED = _GENERATION_BRIDGE_GUARDRAILS_BASE + _GENERATION_GUIDANCE_PARAGRAPH_UNIFIED
 
 
@@ -6049,8 +6052,8 @@ _GENERATION_BRIDGE_GUARDRAILS_UNIFIED = _GENERATION_BRIDGE_GUARDRAILS_BASE + _GE
 # proactively, before generation ever runs) and node_06_outbound_
 # combined_audit_gate (writing it reactively, into a violation, after
 # generation already got it wrong) -- one shape, two producers, so the
-# writer (node_04b/node_04c, guided by _GENERATION_BRIDGE_GUARDRAILS's own
-# "GENERATION GUIDANCE" paragraph above) never has to reconcile two
+# writer (node_04b/node_04c, guided by _GENERATION_BRIDGE_GUARDRAILS_UNIFIED's
+# own "GENERATION GUIDANCE" paragraph above) never has to reconcile two
 # different vocabularies for the same field. Deliberately NOT a fixed
 # "always admit you don't know" template: that shape is only correct for
 # the one case where nothing about the customer's exact question is
@@ -7615,18 +7618,129 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     no_info_context, terminal_markers = _split_terminal_markers(
         state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
     )
-    if not response_wide:
-        evidence_by_task = [e for e in evidence_by_task if e.get("task_id") in pending_task_ids]
-        intent_clarifications = [c for c in intent_clarifications if c.get("subquery_id") in pending_task_ids]
-        decline_context = [d for d in decline_context if d.get("task_id") in pending_task_ids]
-        conversational_context = [v for v in conversational_context if v.get("subquery_id") in pending_task_ids]
-        no_info_context = [n for n in no_info_context if n.get("task_id") in pending_task_ids]
-        terminal_markers = [t for t in terminal_markers if t.get("task_id") in pending_task_ids]
-
     available_shortcuts = _available_response_shortcuts(state)
     unavailable_service_requests = _unavailable_service_requests(state)
     verified_api_context = _verified_api_context(state)
     personal_data_placeholders = _personal_data_placeholders(state)
+
+    # Unified Response Obligation Contract (docs/RESPONSE_OBLIGATION_CONTRACT_
+    # DESIGN.md, Stage 2): the same builder _generate_response_blocks uses,
+    # with `pending_task_ids` filtering applied to the RESULTING obligations
+    # (below) instead of this node's previous five separate typed-list
+    # filters. Handle-keyed obligations (shortcuts, unavailable-requests,
+    # verified-facts, personal-data) are deliberately exempt from the
+    # pending filter, same as before this change -- they key by free-text
+    # for_request, not task_id, and are turn-wide/unconditionally attached
+    # by node_07 regardless of which blocks are pending this round.
+    obligations = _build_response_obligations(
+        evidence_by_task, verified_api_context, decline_context, no_info_context,
+        conversational_context, intent_clarifications, available_shortcuts,
+        unavailable_service_requests, personal_data_placeholders, task_metadata,
+    )
+    obligations_by_id = {o["id"]: o for o in obligations if o.get("id")}
+    handle_ids = {
+        entry["handle"]
+        for entry in (
+            *available_shortcuts, *unavailable_service_requests,
+            *personal_data_placeholders, *verified_api_context,
+        )
+    }
+    if not response_wide:
+        obligations_by_id = {
+            oid: o for oid, o in obligations_by_id.items()
+            if oid in handle_ids or oid in pending_task_ids
+        }
+        terminal_markers = [t for t in terminal_markers if t.get("task_id") in pending_task_ids]
+    evidence_obligations = [obligations_by_id[e["task_id"]] for e in evidence_by_task if e.get("task_id") in obligations_by_id]
+    verified_fact_obligations = [obligations_by_id[e["handle"]] for e in verified_api_context if e.get("handle") in obligations_by_id]
+    conversational_obligations = [obligations_by_id[e["subquery_id"]] for e in conversational_context if e.get("subquery_id") in obligations_by_id]
+    decline_obligations = [obligations_by_id[e["task_id"]] for e in decline_context if e.get("task_id") in obligations_by_id]
+    no_info_obligations = [obligations_by_id[e["task_id"]] for e in no_info_context if e.get("task_id") in obligations_by_id]
+    clarification_obligations = [obligations_by_id[c["subquery_id"]] for c in intent_clarifications if c.get("subquery_id") in obligations_by_id]
+    shortcut_obligations = [obligations_by_id[e["handle"]] for e in available_shortcuts if e.get("handle") in obligations_by_id]
+    unavailable_obligations = [obligations_by_id[e["handle"]] for e in unavailable_service_requests if e.get("handle") in obligations_by_id]
+    personal_data_obligations = [obligations_by_id[e["handle"]] for e in personal_data_placeholders if e.get("handle") in obligations_by_id]
+
+    obligation_sections = []
+    if conversational_obligations:
+        obligation_sections.append(
+            "Conversational inputs for these blocks only (governed by "
+            "CONVERSATIONAL RULES below):\n" + json.dumps(conversational_obligations, ensure_ascii=False)
+        )
+    if evidence_obligations:
+        obligation_sections.append(
+            "Approved evidence for these blocks' task_ids only (governed by "
+            "EVIDENCE RULES below):\n" + json.dumps(evidence_obligations, ensure_ascii=False)
+        )
+    if clarification_obligations:
+        obligation_sections.append(
+            "Clarification inputs for these blocks only (governed by "
+            "CLARIFICATION RULES below):\n" + json.dumps(clarification_obligations, ensure_ascii=False)
+        )
+    if terminal_markers:
+        obligation_sections.append(
+            "Terminal unresolved task markers (topic/status only; never "
+            "evidence, not an obligation itself):\n" + json.dumps(terminal_markers, ensure_ascii=False)
+        )
+    if decline_obligations:
+        obligation_sections.append(
+            "Decline inputs for these blocks only (governed by DECLINE/"
+            "NO-INFO RULES below):\n" + json.dumps(decline_obligations, ensure_ascii=False)
+        )
+    if no_info_obligations:
+        obligation_sections.append(
+            "No-info inputs for these blocks only (governed by DECLINE/"
+            "NO-INFO RULES below):\n" + json.dumps(no_info_obligations, ensure_ascii=False)
+        )
+    if shortcut_obligations:
+        obligation_sections.append(
+            "Available shortcuts this turn (governed by SHORTCUT RULES "
+            "below):\n" + json.dumps(shortcut_obligations, ensure_ascii=False)
+        )
+    if unavailable_obligations:
+        obligation_sections.append(
+            "Unavailable service requests (governed by UNAVAILABLE SERVICE "
+            "REQUEST RULES below):\n" + json.dumps(unavailable_obligations, ensure_ascii=False)
+        )
+    if verified_fact_obligations:
+        obligation_sections.append(
+            "Verified customer-specific facts (governed by EVIDENCE RULES "
+            "below, same footing as approved evidence):\n"
+            + json.dumps(verified_fact_obligations, ensure_ascii=False)
+        )
+    if personal_data_obligations:
+        obligation_sections.append(
+            "Personal data references (governed by PERSONAL DATA RULES "
+            "below):\n" + json.dumps(personal_data_obligations, ensure_ascii=False)
+        )
+    obligations_block = "\n".join(obligation_sections) if obligation_sections else "None this round."
+
+    # Every named rule section is included only when this round's pending
+    # blocks actually have an obligation it governs -- same discipline as
+    # _generate_response_blocks, and the exact same shared section text, so
+    # a reviser round is held to precisely the rules the original generation
+    # round was, with no separately-maintained (and driftable) copy.
+    rule_sections = []
+    if evidence_obligations or verified_fact_obligations:
+        rule_sections.append(_EVIDENCE_RULES_TEXT)
+    if conversational_obligations:
+        rule_sections.append(_CONVERSATIONAL_RULES_TEXT)
+    if clarification_obligations:
+        rule_sections.append(_CLARIFICATION_RULES_TEXT)
+    if decline_obligations or no_info_obligations:
+        rule_sections.append(_DECLINE_NO_INFO_RULES_TEXT)
+    if shortcut_obligations:
+        rule_sections.append(_SHORTCUT_RULES_TEXT)
+    if unavailable_obligations:
+        rule_sections.append(_UNAVAILABLE_SERVICE_REQUEST_RULES_TEXT)
+    if personal_data_obligations:
+        rule_sections.append(_PERSONAL_DATA_RULES_TEXT)
+    rules_block = (
+        "\n\n".join(rule_sections) if rule_sections
+        else "No type-specific rule section applies this round (no shortcut, "
+             "clarification, decline, no-info, unavailable-request, or "
+             "personal-data obligation among this round's pending blocks)."
+    )
 
     approved_task_ids = sorted({task_id for block in approved_blocks for task_id in block.get("sourceTaskIds", [])})
     whole_response_text = state.get("final_answer", state.get("final_draft", ""))
@@ -7654,7 +7768,7 @@ def node_04c_response_reviser(state: AgentState) -> dict:
 
     {_GENERATION_CONDUCT_GUARDRAILS}
 
-    {_GENERATION_BRIDGE_GUARDRAILS}
+    {_GENERATION_BRIDGE_GUARDRAILS_UNIFIED}
 
     Full current response, as natural-language text (READ-ONLY, for tone/
     coherence only -- never repeat or restate its content, and never treat
@@ -7681,31 +7795,22 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     against it:
     {json.dumps(scoped_violations, ensure_ascii=False)}
 
-    Approved evidence for these blocks' task_ids only: {json.dumps(evidence_by_task, ensure_ascii=False)}
-    An entry whose "search_territory" is "adjacent_scope" and status
-    RELEVANT is RELATED information the customer did not literally ask
-    about -- never present it as a direct answer; its own "mapping_reason"
-    is the only permitted basis for a hedged bridging sentence (e.g. "you
-    may want to..."). One whose status is instead SUFFICIENT has been
-    judged the actual right match for the customer's need (typically
-    because the original product/intent mapping was wrong) -- present it as
-    a real, direct answer, naming the product/intent it actually concerns.
-    Clarification inputs for these blocks only (compose your own natural
-    question about "unresolved_request", never answer it):
-    {json.dumps(_clarification_prompt_view(intent_clarifications), ensure_ascii=False)}
-    Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
-    Decline inputs for these blocks only (relay only "decline_evidence"): {json.dumps(decline_context, ensure_ascii=False)}
-    No-info inputs for these blocks only (relay only "no_info_evidence"): {json.dumps(no_info_context, ensure_ascii=False)}
-    Conversational inputs for these blocks only: {json.dumps(conversational_context, ensure_ascii=False)}
-    Available shortcuts this turn (each attached automatically and
-    unconditionally regardless of your text; quote "label" verbatim,
-    phrase the action for its "kind" -- "fill in and submit the ___ form
-    below" for "form", "use the ___ button below" for "navigation"):
-    {json.dumps(available_shortcuts, ensure_ascii=False)}
-    Unavailable service requests (state only the supplied reason): {json.dumps(unavailable_service_requests, ensure_ascii=False)}
-    Verified customer-specific facts (state directly, no extrapolation): {json.dumps(verified_api_context, ensure_ascii=False)}
-    Personal data references (weave "insert_token" verbatim; never guess
-    the real value): {json.dumps(personal_data_placeholders, ensure_ascii=False)}
+    OBLIGATIONS covered by this round's pending blocks -- every entry below,
+    of every kind, carries the same three fields: "id" (already cited in
+    that block's own source_task_ids -- never write it inside customer-
+    facing text), "generation_content" (what you know), and
+    "generation_guidance" (a one-line instruction that names the exact rule
+    section governing this entry -- named sections appear further below,
+    after all the data, only for the kinds actually present among this
+    round's pending blocks). This is the same shape, and the same named
+    rule sections, the original response was generated under -- apply them
+    identically now, whether that means composing an answer, relaying a
+    fixed statement, asking a clarifying question, or mentioning a
+    shortcut, fact, or token:
+
+    {obligations_block}
+
+    {rules_block}
 
     {PRECISION_REFERENCE_CONTRACT}
 

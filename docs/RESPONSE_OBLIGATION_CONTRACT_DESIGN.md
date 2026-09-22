@@ -168,8 +168,14 @@ already works generically over `task_id` strings regardless of namespace.
    only; old five-section prompt removed; net still the current three-pass
    version reading the new list's `id`s (so the net change is isolated from
    the prompt change).
-2. Net rewritten to the single mode-dispatched loop; node_04c switched to
-   the same builder with `pending_ids` filtering.
+2. Net rewritten to the single mode-dispatched loop (done); node_04c
+   switched to the same builder with `pending_ids` filtering, applied to
+   the builder's output rather than to each typed list beforehand so
+   handle-keyed obligations (shortcuts, unavailable-requests, verified-
+   facts, personal-data) stay turn-wide/unfiltered exactly as before; its
+   own prompt now reuses the same named RULES sections
+   `_generate_response_blocks` uses, rather than a separately-maintained
+   (and driftable) short paragraph per type (done).
 3. Audit's grounding-context paragraph collapsed to the one generic rule.
 4. `verified_api_context` mode decision finalized (`compose`, per the
    reasoning above) and confirmed against its existing "same footing as

@@ -5960,10 +5960,18 @@ def _apply_response_completeness_nets(
             fallbacks.append((entry["handle"], "verified_fact", str(entry.get("fact", "")).strip()))
     for entry in _personal_data_placeholders(state):
         if not _covered(entry["handle"], entry["insert_token"]):
-            description = str(entry.get("field_description", "")).strip()
+            # field_description (API_FIELD_REGISTRY) is always a complete,
+            # third-person sentence ("The customer's current account
+            # balance."), never a short noun phrase -- embedding it after
+            # "Your" produced a malformed "Your The customer's current
+            # account balance.: {{data-x}}" (confirmed live). A colon-
+            # separated label is safe regardless of the description's own
+            # grammar, since it never needs to grammatically merge with
+            # anything else.
+            description = str(entry.get("field_description", "")).strip().rstrip(".")
             fallbacks.append((
                 entry["handle"], "personal_data",
-                f"Your {description}: {entry['insert_token']}" if description else str(entry["insert_token"]),
+                f"{description}: {entry['insert_token']}." if description else str(entry["insert_token"]),
             ))
     for handle, kind, fallback_text in fallbacks:
         if not fallback_text:

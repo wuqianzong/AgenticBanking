@@ -6208,13 +6208,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
     statement. An answer that reads as complete on its own, with no
     question anywhere in it, for a subquery that has a Clarification Input
     here, is always missing something required.
-    A Clarification Input has no fixed sentence to relay -- compose your
-    own natural clarifying question asking specifically about its own
-    `generation_content.unresolved_request`, staying within its own
-    `generation_content.scope` (never overstepping into a different job's
-    judgment, and never answering the request in its place), and never
-    asserting a new product, policy, or fact, or offering an option beyond
-    its own `generation_content.clarification_guesses`.
+    Stay within its own `generation_content.scope` when composing --
+    never overstepping into a different job's judgment, and never
+    answering the request in its place -- and never assert a new product,
+    policy, or fact, or offer an option beyond its own
+    `generation_content.clarification_guesses`.
     When a Clarification Input's own `generation_content.clarification_guesses`
     is non-empty, don't leave your restatement of it as a bare question --
     naturally work a brief mention of what those options actually are
@@ -6341,8 +6339,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
       information," an apology, or any decline-style framing for that
       subquery -- present the shortcut(s) themselves, confidently, as the
       direct answer.
-      * CRITICAL, for every shortcut you mention anywhere in the response
-        (here or in the closing statement below): quote its
+      * CRITICAL, for every shortcut you mention anywhere in the response:
+        quote its
         `generation_content.label` field verbatim, character for character,
         inside the sentence -- never
         paraphrase, summarize, rename, or describe it in different words --
@@ -6386,33 +6384,31 @@ def _generate_response_blocks(state: AgentState) -> dict:
         beyond kind, label, and topic -- and never substitute either exact
         label with a paraphrase, or a form's "fill in and submit" action
         with button language.
-      This is that subquery's complete answer -- do not also cover these
-      same shortcuts again in the closing statement below; that rule is
-      for shortcuts offered *alongside* a real evidence-based answer, not
-      ones already presented as the answer here.
+      This is that subquery's complete answer -- do not also add a separate
+      acknowledgment sentence for these same shortcuts elsewhere; the
+      per-shortcut placement rule below is for shortcuts offered
+      *alongside* a real evidence-based answer, not ones already presented
+      as the answer here.
       Reserve apology/decline framing only for a subquery that neither
       approved evidence nor any shortcut's `for_request` addresses.
-    - If "Available shortcuts this turn" contains any shortcut not already
-      covered by the rule above (because it comes with a real,
-      evidence-based answer rather than substituting for a missing one),
-      you MUST end your response with one short closing statement
-      acknowledging every one of those remaining shortcuts, not just the
-      first. Treat this the same as answering every task: covering
-      multiple topics, fixing a flagged issue on a retry, running out of
-      room, or the response already feeling complete is never a reason to
-      drop it -- it is a required closing element whenever such a shortcut
-      exists, not an optional addition. Use only each shortcut's supplied
-      `label`/`topic`, phrased for its `kind` (see the CRITICAL rule above:
-      "click"/"use the ___ button below" for "navigation," "fill in and
-      submit the ___ form below" for "form" -- never the reverse). Good
-      style, one "navigation" shortcut: "If you'd rather skip these steps,
-      you can also do this directly using the ___ button below." Good
-      style, one "form" shortcut: "If you'd rather skip these steps, you
-      can also fill in and submit the ___ form below." Good style,
-      multiple shortcuts for different topics: "If you'd like to skip the
-      manual steps, you can also update your address using the ___ button
-      below or fill in and submit the ___ form to jump straight to your
-      statements." The statement must:
+    - Every "Available shortcuts this turn" entry not already covered by
+      the rule above (because it comes with a real, evidence-based answer
+      rather than substituting for a missing one) still needs its own
+      one-sentence acknowledgment, placed right after the answer content it
+      relates to (see PLACEMENT below) -- never combined with a different
+      shortcut into one shared sentence, and never held back to the end.
+      Treat this the same as answering every task: covering multiple
+      topics, fixing a flagged issue on a retry, running out of room, or
+      the response already feeling complete is never a reason to drop one
+      -- it is required whenever such a shortcut exists, not an optional
+      addition. Use only each shortcut's supplied `label`/`topic`, phrased
+      for its `kind` (see the CRITICAL rule above: "click"/"use the ___
+      button below" for "navigation," "fill in and submit the ___ form
+      below" for "form" -- never the reverse). Good style, "navigation":
+      "If you'd rather skip these steps, you can also do this directly
+      using the ___ button below." Good style, "form": "If you'd rather
+      skip these steps, you can also fill in and submit the ___ form
+      below." Each such sentence must:
       * Make clear the approved-evidence method you just described still
         works -- each shortcut is an alternative or faster path, never a
         replacement or a claim that the manual method no longer applies.
@@ -6427,10 +6423,10 @@ def _generate_response_blocks(state: AgentState) -> dict:
         sentence; you are only introducing that it exists.
       * Never fabricate a shortcut that is not in the list, and never
         mention one when the list is empty.
-    - Do not let a closing shortcut sentence replace the substantive answer
-      for a task with no shortcut. Every task in "Approved evidence by
-      retrieval task" still needs its own real answer regardless of whether
-      any shortcut exists for it.
+    - Do not let a shortcut's acknowledgment sentence replace the
+      substantive answer for a task with no shortcut. Every task in
+      "Approved evidence by retrieval task" still needs its own real answer
+      regardless of whether any shortcut exists for it.
     - A "Verified customer-specific facts" entry may be stated directly and
       confidently, exactly like approved retrieval evidence -- it is already
       verified for this specific customer. State only what its
@@ -6645,13 +6641,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
       "What are the eligibility requirements for this loan?" not
       "Eligibility".
 
-    PLACEMENT (supersedes any earlier instruction about a single closing
-    statement): every "Available shortcuts this turn" entry's sentence goes
+    PLACEMENT: every "Available shortcuts this turn" entry's sentence goes
     immediately after the answer content it relates to (or as its own
     element when it answers a subquery by itself) -- label verbatim,
     wording matching its kind, its `id` in that element's source_task_ids
-    next to any task ids -- not bundled into one closing statement at the
-    end.
+    next to any task ids.
 
     source_task_ids holds every id an element addresses, mixed freely: a
     task's own id, a clarification's/decline's/no-info's id, and a

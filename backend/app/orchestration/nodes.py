@@ -6182,6 +6182,24 @@ def _simplify_block_for_revision(block: dict) -> dict:
     }
 
 
+def _net_block_shell(obligation_id: str, in_handle_namespace: bool, block_type: str = "text") -> dict:
+    """The common frame every net-inserted fallback block shares -- only
+    the id goes in the citation field matching its own namespace
+    (sourceTaskIds for a real task_id/subquery_id, sourceShortcutHandles
+    for a nav_N/svc_N/data_N/fact_N/unavail_N handle), the other stays
+    empty. Never both -- a net-inserted block is always about exactly one
+    obligation.
+    """
+    return {
+        "blockId": f"net_fallback_{obligation_id}",
+        "sourceTaskIds": [obligation_id] if not in_handle_namespace else [],
+        "sourceShortcutHandles": [obligation_id] if in_handle_namespace else [],
+        "type": block_type, "contextText": "", "text": "", "items": [], "options": [],
+        "progressTitle": "", "stepDetails": [], "currentStep": None, "totalSteps": None,
+        "listTitle": "", "listIntro": "", "extendedText": "",
+    }
+
+
 def _apply_response_completeness_nets(
     response_blocks: list,
     state: "AgentState",
@@ -6193,24 +6211,60 @@ def _apply_response_completeness_nets(
     conversational_context: list,
     available_shortcuts: list,
 ) -> list:
-    """Deterministic omission nets, extracted verbatim from
-    `_generate_response_blocks`'s tail so both a first generation round and
-    every `node_04c_response_reviser` retry round can re-run them against
-    the FULL current block set -- necessary because a revision to one
-    pending block could still remove text an unrelated shortcut check
-    depends on (the shortcut check is a whole-response substring match,
-    not task-scoped), or because the pending set for this round simply
-    didn't include a task whose element the reviser (correctly) left
-    untouched but which a PRIOR round had already dropped.
+    """Deterministic omission net: one loop over the unified obligation
+    list (docs/RESPONSE_OBLIGATION_CONTRACT_DESIGN.md Stage 2), replacing
+    the four separate passes this function used to run (task-omission /
+    detection-only clarification-decline-no-info-conversational /
+    shortcut-omission / other-tool-result-omission). Every obligation now
+    gets a real, deterministic repair when uncovered -- previously only
+    RAG tasks and shortcuts/tool-results did; a dropped clarification,
+    decline, no-info, or conversational entry was only logged, never
+    repaired, which is exactly the gap traced live (a clarification
+    silently dropped by the model, missed by the audit, and never asked at
+    all -- see docs/RESPONSE_OBLIGATION_CONTRACT_ADDENDUM_CLARIFICATION_
+    AUTHORING.md and the BUG tracker).
+
+    Signature is unchanged from before this rewrite -- every call site
+    (_generate_response_blocks, node_04c_response_reviser,
+    node_11_deterministic_clarification_fallback) needs no change. This
+    function fetches the three typed lists it didn't already receive as
+    parameters (unavailable_service_requests, verified_api_context,
+    personal_data_placeholders) directly from state, exactly as the
+    previous four-pass version did, then builds one unified obligation
+    list internally via _build_response_obligations.
 
     Mutates and returns `response_blocks` (appends fallback blocks; never
-    removes or edits an existing one).
+    removes or edits an existing one), so it can be re-run against the
+    FULL current block set on every node_04c retry round -- necessary
+    because a revision to one pending block could still remove text an
+    unrelated check depends on, or because the pending set for this round
+    simply didn't include an obligation whose block the reviser (correctly)
+    left untouched but which a PRIOR round had already dropped.
     """
-    covered_task_ids = {task_id for block in response_blocks for task_id in block.get("sourceTaskIds", [])}
+    unavailable_service_requests = _unavailable_service_requests(state)
+    verified_api_context = _verified_api_context(state)
+    personal_data_placeholders = _personal_data_placeholders(state)
 
-    # 1. Task-omission fallback -- see _generate_response_blocks's original
-    # comment for why a RAG task_id going uncited is not automatically an
-    # omission (a subquery fully RESOLVED via a different tool attempt).
+    obligations = _build_response_obligations(
+        evidence_by_task, verified_api_context, decline_context, no_info_context,
+        conversational_context, intent_clarifications, available_shortcuts,
+        unavailable_service_requests, personal_data_placeholders, task_metadata,
+    )
+    # The same id/citation-field partition _generate_response_blocks'
+    # parsing already uses -- a handle-shaped id (nav_N/svc_N/data_N/
+    # fact_N/unavail_N) is checked via sourceShortcutHandles; every other
+    # id (a real task_id or subquery_id) via sourceTaskIds. This is
+    # independent of content_mode/generation_rule: a verified-fact entry
+    # is EVIDENCE RULES (compose) but still handle-namespace, exactly as
+    # it already was before this rewrite.
+    handle_ids = {
+        entry["handle"]
+        for entry in (*available_shortcuts, *unavailable_service_requests, *personal_data_placeholders, *verified_api_context)
+    }
+
+    # RAG-task-only special case: a subquery fully RESOLVED via a
+    # different tool attempt this round means its task_id going uncited
+    # is not an omission -- see the original comment this preserves.
     subquery_id_by_task_id = {
         task.get("task_id"): task.get("subquery_id")
         for task in state.get("search_tasks", [])
@@ -6221,134 +6275,176 @@ def _apply_response_completeness_nets(
         for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
         if isinstance(subquery, dict)
     }
-    for entry in evidence_by_task:
-        task_id = entry.get("task_id")
-        if not task_id or task_id in covered_task_ids:
-            continue
-        if resolution_status_by_subquery_id.get(subquery_id_by_task_id.get(task_id)) == "RESOLVED":
-            continue
-        component = task_metadata.get(task_id, "").strip()
-        fallback_text = (
-            f"Sorry, I don't have a complete answer for the part about {component} right now."
-            if component else
-            "Sorry, I don't have a complete answer for one part of your request right now."
-        )
-        print(f"   ⚠️ [TASK OMITTED IN DRAFT]: {task_id} missing from generated elements — inserting fallback")
-        log_event("response.flexible.task_omitted", task_id=task_id, component=component)
-        response_blocks.append({
-            "blockId": f"element_fallback_{task_id}", "sourceTaskIds": [task_id],
-            "type": "text", "contextText": "", "text": fallback_text,
-            "items": [], "options": [], "progressTitle": "", "stepDetails": [],
-            "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
-        })
-        covered_task_ids.add(task_id)
-
-    # 2. Detection-only logging for clarification/decline/no-info/
-    # conversational entries -- no fallback insertion, see
-    # _generate_response_blocks's original comment for why.
-    for entry, evidence_key in (
-        [(c, None) for c in intent_clarifications]
-        + [(d, "decline_evidence") for d in decline_context]
-        + [(n, "no_info_evidence") for n in no_info_context]
-        + [(v, "customer_component") for v in conversational_context]
-    ):
-        task_id = entry.get("task_id") or entry.get("subquery_id")
-        evidence_text = _clarification_fallback_text(entry) if evidence_key is None else entry.get(evidence_key, "")
-        if not task_id or not evidence_text or task_id in covered_task_ids:
-            continue
-        kind_label = "clarification_evidence" if evidence_key is None else ("conversational" if evidence_key == "customer_component" else evidence_key)
-        print(f"   ℹ️ [ENTRY NOT EXPLICITLY CITED]: {task_id} ({kind_label}) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)")
-        log_event("response.flexible.entry_omitted", task_id=task_id, kind=kind_label, fallback_inserted=False)
-
-    # 3. Shortcut-omission fallback. A shortcut counts as covered only when
-    # a block cites its handle (source_task_ids, like a RAG task) AND that
-    # block's own text carries the label. Citing alone is not enough -- a
-    # revision can rewrite a block and drop the sentence while the locked
-    # handle stays -- and a label sitting somewhere else in the response
-    # (e.g. inside FAQ steps) is not a pointing sentence either, which was
-    # the old whole-response substring hole (BUG-027).
+    # Shortcut placement (subquery-anchored insert position) and
+    # clarification originator (which deterministic template applies) both
+    # need one more lookup each, same as before this rewrite.
     shortcut_subquery_by_handle = {
         f"{'nav' if entry['kind'] == 'navigation' else 'svc'}_{position}": subquery_id
         for position, (entry, _key, subquery_id) in enumerate(_iter_shortcut_entries(state), start=1)
     }
-    for shortcut in available_shortcuts:
-        label = str(shortcut.get("label", "")).strip()
-        handle = shortcut.get("handle", "")
-        if not label:
-            continue
-        if any(
-            handle in block.get("sourceShortcutHandles", [])
-            and label in _flatten_response_block_text(block)
+    clarification_task_by_subquery_id = {
+        task.get("subquery_id"): task for task in state.get("clarification_tasks", []) if isinstance(task, dict)
+    }
+
+    def _cited(block: dict, obligation_id: str, in_handle_namespace: bool) -> bool:
+        field = "sourceShortcutHandles" if in_handle_namespace else "sourceTaskIds"
+        return obligation_id in (block.get(field) or [])
+
+    def _is_covered(obligation_id: str, in_handle_namespace: bool, required_text: str = "") -> bool:
+        return any(
+            _cited(block, obligation_id, in_handle_namespace)
+            and (not required_text or required_text in _flatten_response_block_text(block))
             for block in response_blocks
-        ):
-            continue
-        fallback_text = (
-            f'You can also fill in and submit the "{label}" form below.'
-            if shortcut.get("kind") == "form"
-            else f'You can also use the "{label}" button below.'
         )
-        print(f"   ⚠️ [SHORTCUT OMITTED IN DRAFT]: '{label}' ({handle}) not covered by a citing block — inserting deterministic fallback")
-        log_event("response.flexible.shortcut_omitted", label=label, kind=shortcut.get("kind"), handle=handle)
-        fallback_block = {
-            "blockId": f"shortcut_fallback_{handle}", "sourceTaskIds": [], "sourceShortcutHandles": [handle],
-            "type": "text", "contextText": "", "text": fallback_text,
-            "items": [], "options": [], "progressTitle": "", "stepDetails": [],
-            "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
-        }
-        # Sit right after the last block answering the same subquery, so the
-        # card that follows lands next to what it relates to; otherwise the end.
+
+    def _insert_at_end(block: dict) -> None:
+        response_blocks.append(block)
+
+    def _insert_near_subquery(block: dict, handle: str) -> None:
+        # Sit right after the last block answering the same subquery, so
+        # the card that follows lands next to what it relates to;
+        # otherwise the end -- unchanged from the shortcut-only version.
         related_task_ids = {t for t, sq in subquery_id_by_task_id.items() if sq and sq == shortcut_subquery_by_handle.get(handle)}
         insert_at = len(response_blocks)
-        for position, block in enumerate(response_blocks):
-            if related_task_ids & set(block.get("sourceTaskIds", [])):
+        for position, existing in enumerate(response_blocks):
+            if related_task_ids & set(existing.get("sourceTaskIds", [])):
                 insert_at = position + 1
-        response_blocks.insert(insert_at, fallback_block)
+        response_blocks.insert(insert_at, block)
 
-    # 4. Other tool results (unavailable service request, verified fact,
-    # personal-data reference): same handle obligation as a shortcut. A
-    # citing block is required; for a personal-data reference that block
-    # must also carry the opaque token itself. Fallback text is built only
-    # from what the tool supplied (reason, fact, or token) -- never generated.
-    def _covered(handle: str, must_contain: str = "") -> bool:
-        return any(
-            handle in block.get("sourceShortcutHandles", [])
-            and (not must_contain or must_contain in _flatten_response_block_text(block))
-            for block in response_blocks
-        )
-
-    fallbacks = []
-    for entry in _unavailable_service_requests(state):
-        if not _covered(entry["handle"]):
-            fallbacks.append((entry["handle"], "unavailable_service_request", str(entry.get("reason", "")).strip()))
-    for entry in _verified_api_context(state):
-        if not _covered(entry["handle"]):
-            fallbacks.append((entry["handle"], "verified_fact", str(entry.get("fact", "")).strip()))
-    for entry in _personal_data_placeholders(state):
-        if not _covered(entry["handle"], entry["insert_token"]):
-            # field_description (API_FIELD_REGISTRY) is always a complete,
-            # third-person sentence ("The customer's current account
-            # balance."), never a short noun phrase -- embedding it after
-            # "Your" produced a malformed "Your The customer's current
-            # account balance.: {{data-x}}" (confirmed live). A colon-
-            # separated label is safe regardless of the description's own
-            # grammar, since it never needs to grammatically merge with
-            # anything else.
-            description = str(entry.get("field_description", "")).strip().rstrip(".")
-            fallbacks.append((
-                entry["handle"], "personal_data",
-                f"{description}: {entry['insert_token']}." if description else str(entry["insert_token"]),
-            ))
-    for handle, kind, fallback_text in fallbacks:
-        if not fallback_text:
+    for obligation in obligations:
+        oid = obligation.get("id")
+        if not oid:
             continue
-        print(f"   ⚠️ [TOOL RESULT OMITTED IN DRAFT]: {handle} ({kind}) not covered by a citing block — inserting deterministic fallback")
-        log_event("response.flexible.tool_result_omitted", handle=handle, kind=kind)
-        response_blocks.append({
-            "blockId": f"tool_fallback_{handle}", "sourceTaskIds": [], "sourceShortcutHandles": [handle],
-            "type": "text", "contextText": "", "text": fallback_text,
-            "items": [], "options": [], "progressTitle": "", "stepDetails": [],
-            "currentStep": None, "totalSteps": None, "listTitle": "", "listIntro": "", "extendedText": "",
-        })
+        rule = obligation.get("generation_rule", "")
+        content = obligation.get("generation_content", {})
+        in_handle_namespace = oid in handle_ids
+
+        if rule == "EVIDENCE RULES" and not in_handle_namespace:
+            # A real RAG task. Skip entirely if its subquery was fully
+            # RESOLVED via a different tool attempt this round.
+            if resolution_status_by_subquery_id.get(subquery_id_by_task_id.get(oid)) == "RESOLVED":
+                continue
+            if _is_covered(oid, in_handle_namespace=False):
+                continue
+            component = str(content.get("resolved_request", "")).strip()
+            fallback_text = (
+                f"Sorry, I don't have a complete answer for the part about {component} right now."
+                if component else "Sorry, I don't have a complete answer for one part of your request right now."
+            )
+            print(f"   ⚠️ [TASK OMITTED IN DRAFT]: {oid} missing from generated elements — inserting fallback")
+            log_event("response.flexible.task_omitted", task_id=oid, component=component)
+            block = _net_block_shell(oid, False)
+            block["text"] = fallback_text
+            _insert_at_end(block)
+
+        elif rule == "EVIDENCE RULES":
+            # A verified customer-specific fact (handle-namespace, citation
+            # only -- unchanged strictness from before this rewrite).
+            if _is_covered(oid, in_handle_namespace=True):
+                continue
+            fallback_text = str(content.get("fact", "")).strip()
+            if not fallback_text:
+                continue
+            print(f"   ⚠️ [TOOL RESULT OMITTED IN DRAFT]: {oid} (verified_fact) not covered by a citing block — inserting deterministic fallback")
+            log_event("response.flexible.tool_result_omitted", handle=oid, kind="verified_fact")
+            block = _net_block_shell(oid, True)
+            block["text"] = fallback_text
+            _insert_at_end(block)
+
+        elif rule == "CONVERSATIONAL RULES":
+            if _is_covered(oid, in_handle_namespace=False):
+                continue
+            # Never the customer's own customer_component text -- that is
+            # what THEY said, not something the bot can relay as its own
+            # reply. A short, fixed, always-safe acknowledgment instead;
+            # missing a warm reply to a non-financial aside is a minor
+            # style gap, never a claim that needs to be specific.
+            print(f"   ℹ️ [CONVERSATIONAL OMITTED IN DRAFT]: {oid} not covered by a citing block — inserting deterministic fallback")
+            log_event("response.flexible.entry_omitted", task_id=oid, kind="conversational", fallback_inserted=True)
+            block = _net_block_shell(oid, False)
+            block["text"] = "Thank you for letting us know."
+            _insert_at_end(block)
+
+        elif rule == "DECLINE/NO-INFO RULES":
+            if _is_covered(oid, in_handle_namespace=False):
+                continue
+            kind_label = "decline_evidence" if "decline_evidence" in content else "no_info_evidence"
+            fallback_text = str(content.get("decline_evidence") or content.get("no_info_evidence") or "").strip()
+            if not fallback_text:
+                continue
+            print(f"   ℹ️ [{kind_label.upper()} OMITTED IN DRAFT]: {oid} not covered by a citing block — inserting deterministic fallback")
+            log_event("response.flexible.entry_omitted", task_id=oid, kind=kind_label, fallback_inserted=True)
+            block = _net_block_shell(oid, False)
+            block["text"] = fallback_text
+            _insert_at_end(block)
+
+        elif rule == "CLARIFICATION RULES":
+            if _is_covered(oid, in_handle_namespace=False):
+                continue
+            source_task = clarification_task_by_subquery_id.get(oid, {})
+            fallback_text = _clarification_fallback_text({
+                "unresolved_request": content.get("unresolved_request", ""),
+                "originator": source_task.get("originator", ""),
+            })
+            if not fallback_text:
+                continue
+            print(f"   ℹ️ [CLARIFICATION OMITTED IN DRAFT]: {oid} not covered by a citing block — inserting deterministic clarification")
+            log_event("response.flexible.entry_omitted", task_id=oid, kind="clarification_evidence", fallback_inserted=True)
+            block = _net_block_shell(oid, False, block_type="clarification")
+            block["text"] = fallback_text
+            block["options"] = [
+                {"label": g["label"], "message": g["message"]}
+                for g in content.get("clarification_guesses", []) or []
+                if isinstance(g, dict) and g.get("label") and g.get("message")
+            ]
+            _insert_at_end(block)
+
+        elif rule == "SHORTCUT RULES":
+            label = str(content.get("label", "")).strip()
+            if not label or _is_covered(oid, in_handle_namespace=True, required_text=label):
+                continue
+            fallback_text = (
+                f'You can also fill in and submit the "{label}" form below.'
+                if content.get("kind") == "form"
+                else f'You can also use the "{label}" button below.'
+            )
+            print(f"   ⚠️ [SHORTCUT OMITTED IN DRAFT]: '{label}' ({oid}) not covered by a citing block — inserting deterministic fallback")
+            log_event("response.flexible.shortcut_omitted", label=label, kind=content.get("kind"), handle=oid)
+            block = _net_block_shell(oid, True)
+            block["text"] = fallback_text
+            _insert_near_subquery(block, oid)
+
+        elif rule == "UNAVAILABLE SERVICE REQUEST RULES":
+            if _is_covered(oid, in_handle_namespace=True):
+                continue
+            fallback_text = str(content.get("reason", "")).strip()
+            if not fallback_text:
+                continue
+            print(f"   ⚠️ [TOOL RESULT OMITTED IN DRAFT]: {oid} (unavailable_service_request) not covered by a citing block — inserting deterministic fallback")
+            log_event("response.flexible.tool_result_omitted", handle=oid, kind="unavailable_service_request")
+            block = _net_block_shell(oid, True)
+            block["text"] = fallback_text
+            _insert_at_end(block)
+
+        elif rule == "PERSONAL DATA RULES":
+            insert_token = content.get("insert_token", "")
+            if _is_covered(oid, in_handle_namespace=True, required_text=insert_token):
+                continue
+            # field_description (API_FIELD_REGISTRY) is always a complete,
+            # third-person sentence, never a short noun phrase -- embedding
+            # it after "Your" produced a malformed "Your The customer's
+            # current account balance.: {{data-x}}" (confirmed live). A
+            # colon-separated label is safe regardless of the
+            # description's own grammar.
+            description = str(content.get("field_description", "")).strip().rstrip(".")
+            fallback_text = f"{description}: {insert_token}." if description else str(insert_token)
+            if not fallback_text:
+                continue
+            print(f"   ⚠️ [TOOL RESULT OMITTED IN DRAFT]: {oid} (personal_data) not covered by a citing block — inserting deterministic fallback")
+            log_event("response.flexible.tool_result_omitted", handle=oid, kind="personal_data")
+            block = _net_block_shell(oid, True)
+            block["text"] = fallback_text
+            _insert_at_end(block)
 
     return response_blocks
 
@@ -7073,14 +7169,23 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # capable blocks regardless of which node authored the clarification or
     # which route a turn takes.
     terminal_clarification = _llm_text(generated, "clarification")
-    clarification_texts = []
     if terminal_clarification:
         response_blocks.append({
             "blockId": "clarification", "sourceTaskIds": [], "type": "clarification",
             "text": terminal_clarification, "options": [],
         })
-        clarification_texts.append(terminal_clarification)
-    clarification = "\n\n".join(clarification_texts)
+    # Any "clarification"-typed block -- this terminal-marker one, or one
+    # the completeness net above already inserted for a Clarification Input
+    # the model dropped entirely -- feeds final_clarification/final_draft
+    # the same way node_04c_response_reviser already aggregates them
+    # (clarification_blocks below). Before this, a net-inserted repair
+    # would render correctly in the UI (ui_action_payload.responseBlocks)
+    # but never reach final_draft/chat_history, so a later turn's own
+    # conversation-history context would have no record a question was
+    # ever asked -- this closes that gap, not just the net's own insertion.
+    clarification = "\n\n".join(
+        b.get("text", "") for b in response_blocks if b.get("type") == "clarification" and b.get("text")
+    )
 
     # Next-action suggestions: never a guess about what the customer might
     # want (that risks a dead-end tap the pipeline can't answer) -- each is

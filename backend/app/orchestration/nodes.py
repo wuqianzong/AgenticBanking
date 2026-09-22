@@ -1178,6 +1178,158 @@ def _hydrate_response_evidence(state: AgentState) -> list[dict]:
     ]
 
 
+# Unified Response Obligation Contract (see docs/RESPONSE_OBLIGATION_CONTRACT_
+# DESIGN.md). `content_mode` is a purely internal, deterministic classification
+# -- never shown to any LLM -- fixed by which existing state field an entry
+# came from, not by any per-entry judgment. It is used for exactly two things:
+# picking which one of these four fixed strings to attach as an entry's
+# `generation_guidance`, and (a later stage) the completeness net's per-mode
+# coverage/fallback dispatch. Once attached, `generation_guidance` already
+# fully expresses the instruction in the only form the model reads it in, so
+# `content_mode` itself is never serialized into a prompt alongside it --
+# doing so would hand the model the same fact twice.
+_GENERATION_GUIDANCE_BY_MODE = {
+    "compose": (
+        "Compose a natural answer from this. Never add a fact, procedure, "
+        "or product not present in it."
+    ),
+    "relay": (
+        "This is already the final statement. Rephrase it naturally; never "
+        "elaborate on it or treat it as material to reason further from."
+    ),
+    "ask": (
+        "Compose a natural clarifying question about this. Never assert, "
+        "assume, or answer on the customer's behalf."
+    ),
+    "state": (
+        "State or mention this using its own wording; the real UI/action is "
+        "attached automatically regardless of your text."
+    ),
+}
+
+
+def _build_response_obligations(
+    evidence_by_task: list,
+    verified_api_context: list,
+    decline_context: list,
+    no_info_context: list,
+    conversational_context: list,
+    intent_clarifications: list,
+    available_shortcuts: list,
+    unavailable_service_requests: list,
+    personal_data_placeholders: list,
+) -> list[dict]:
+    """Fold every already-computed, already-typed obligation list into one
+    `{id, generation_content, generation_guidance}` entry per item -- the
+    single list the response generator prompt reads (Stage 1 of the unified
+    contract). Each caller keeps computing its typed lists exactly as it
+    does today (nothing about how any of these is derived changes here);
+    this only changes how they are packaged for generation. A later stage
+    moves the typed-list construction itself into this function, read
+    directly from state, once node_04c and node_06 also consume it -- kept
+    separate for now so the prompt change and the net/reviser change land
+    as independently reviewable, independently rollback-able commits.
+
+    Every id here is one already used elsewhere in the pipeline today
+    (task_id, a decline/no-info entry's own synthetic task_id, a
+    clarification's subquery_id, or a nav_N/svc_N/data_N/fact_N/unavail_N
+    handle) -- this function mints no new id scheme, it only unions the
+    four that already coexist safely in `valid_task_ids`/`source_task_ids`.
+
+    NOTE on naming: a `task_results` entry's own `generation_guidance` field
+    (node_03c's audit-time caveat on a piece of evidence) is CONTENT under
+    this contract, not the envelope's `generation_guidance` -- it describes
+    what was found, not how to use it. It is folded into this entry's
+    `generation_content` as `auditor_note`, never mistaken for the mode-level
+    instruction string above.
+    """
+    obligations = []
+
+    for entry in evidence_by_task:
+        obligations.append({
+            "id": entry.get("task_id"),
+            "generation_content": {
+                "search_territory": entry.get("search_territory", "in_scope"),
+                "mapping_reason": entry.get("mapping_reason", ""),
+                "approved_parents": entry.get("approved_parents", []),
+                "auditor_note": entry.get("generation_guidance", ""),
+            },
+            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["compose"],
+        })
+
+    for entry in verified_api_context:
+        obligations.append({
+            "id": entry.get("handle"),
+            "generation_content": {"for_request": entry.get("for_request", ""), "fact": entry.get("fact", "")},
+            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["compose"],
+        })
+
+    for entry in conversational_context:
+        obligations.append({
+            "id": entry.get("subquery_id"),
+            "generation_content": {"customer_component": entry.get("customer_component", "")},
+            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["compose"],
+        })
+
+    for entry in decline_context:
+        obligations.append({
+            "id": entry.get("task_id"),
+            "generation_content": {
+                "subquery": entry.get("subquery", ""),
+                "decline_evidence": entry.get("decline_evidence", ""),
+            },
+            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["relay"],
+        })
+
+    for entry in no_info_context:
+        obligations.append({
+            "id": entry.get("task_id"),
+            "generation_content": {
+                "resolved_subquery": entry.get("resolved_subquery", ""),
+                "no_info_evidence": entry.get("no_info_evidence", ""),
+            },
+            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["relay"],
+        })
+
+    for entry in _clarification_prompt_view(intent_clarifications):
+        obligations.append({
+            "id": entry.get("subquery_id"),
+            "generation_content": {
+                "scope": entry.get("scope", ""),
+                "unresolved_request": entry.get("unresolved_request", ""),
+                "clarification_guesses": entry.get("clarification_guesses", []),
+            },
+            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["ask"],
+        })
+
+    for entry in available_shortcuts:
+        obligations.append({
+            "id": entry.get("handle"),
+            "generation_content": {k: v for k, v in entry.items() if k != "handle"},
+            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["state"],
+        })
+
+    for entry in unavailable_service_requests:
+        obligations.append({
+            "id": entry.get("handle"),
+            "generation_content": {"reason": entry.get("reason", "")},
+            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["state"],
+        })
+
+    for entry in personal_data_placeholders:
+        obligations.append({
+            "id": entry.get("handle"),
+            "generation_content": {
+                "for_request": entry.get("for_request", ""),
+                "field_description": entry.get("field_description", ""),
+                "insert_token": entry.get("insert_token", ""),
+            },
+            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["state"],
+        })
+
+    return obligations
+
+
 def _build_conversation_context(state: AgentState) -> str:
     """Label the distinct advisory context layers available to a turn."""
     rolling_summary = state.get("compacted_history_summary", "").strip()

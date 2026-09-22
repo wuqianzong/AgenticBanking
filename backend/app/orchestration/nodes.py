@@ -1198,8 +1198,10 @@ _GENERATION_GUIDANCE_BY_MODE = {
         "elaborate on it or treat it as material to reason further from."
     ),
     "ask": (
-        "Compose a natural clarifying question about this. Never assert, "
-        "assume, or answer on the customer's behalf."
+        "Compose a natural clarifying question about this. Follow "
+        "CLARIFICATION RULES below exactly for scope, tone, and how to "
+        "work in clarification_guesses -- never assert, assume, or answer "
+        "on the customer's behalf."
     ),
     "state": (
         "State or mention this using its own wording; the real UI/action is "
@@ -6175,8 +6177,10 @@ def _generate_response_blocks(state: AgentState) -> dict:
     understands why the answer is framed that way (e.g. "this falls under
     our Instant Loan product, which covers..." rather than silently
     answering as if it matched their literal wording).
-    Clarification inputs -- never for you to judge WHETHER to ask (that
-    decision is already made); your only job is composing the actual
+    CLARIFICATION RULES (every clarification obligation's own
+    generation_guidance names this section -- its full rules live here
+    once, not repeated per entry): never for you to judge WHETHER to ask
+    (that decision is already made); your only job is composing the actual
     question. `generation_content.scope` tells you WHERE in the pipeline the
     ambiguity is blocking progress (e.g. identifying the right product/intent
     before any retrieval, versus reviewing whether retrieved evidence answers
@@ -6204,6 +6208,34 @@ def _generate_response_blocks(state: AgentState) -> dict:
     statement. An answer that reads as complete on its own, with no
     question anywhere in it, for a subquery that has a Clarification Input
     here, is always missing something required.
+    A Clarification Input has no fixed sentence to relay -- compose your
+    own natural clarifying question asking specifically about its own
+    `generation_content.unresolved_request`, staying within its own
+    `generation_content.scope` (never overstepping into a different job's
+    judgment, and never answering the request in its place), and never
+    asserting a new product, policy, or fact, or offering an option beyond
+    its own `generation_content.clarification_guesses`.
+    When a Clarification Input's own `generation_content.clarification_guesses`
+    is non-empty, don't leave your restatement of it as a bare question --
+    naturally work a brief mention of what those options actually are
+    into the same sentence or the one right after it (e.g. "...are you
+    asking about applying, checking eligibility, or the fees involved?"),
+    using each guess's own `label`/`message` (inside
+    `generation_content.clarification_guesses`) as the TOPIC to mention,
+    never inventing an option not listed there. A guess's `message` is
+    written in the CUSTOMER's own voice (what they would send if they
+    tapped it) -- never copy or closely paraphrase its sentence
+    structure into your own question, which is YOUR voice speaking to
+    the customer ("I"/"you" reversed from the guess's own phrasing).
+    For example, a guess message "Can you list the other banking
+    services you can help me with?" becomes, in your voice, "...are you
+    looking for other banking services I can help you with...", never
+    reused with its own "you"/"me" left as-is. Tappable chips for these
+    same options render automatically right after your text -- without
+    this, they appear with nothing in the message explaining what
+    they're for. When `clarification_guesses` is empty, ask a plain
+    open question as before; there is nothing to mention. This is the end
+    of CLARIFICATION RULES.
     No-info inputs -- each is a search that was genuinely attempted but
     found nothing; each already carries the underlying statement to convey
     (in your own words, per the rule below) in its own
@@ -6501,13 +6533,6 @@ def _generate_response_blocks(state: AgentState) -> dict:
       phrase it, faithfully convey only what its own evidence field says --
       never add a product, policy, fact, or suggestion beyond it, and never
       answer the request in its place.
-    - A "Clarification inputs" entry has no fixed sentence to relay --
-      compose your own natural clarifying question asking specifically
-      about its `generation_content.unresolved_request`, staying within its
-      `generation_content.scope` (never overstepping into a different job's
-      judgment, and never answering the request in its place), and never
-      asserting a new product, policy, or fact, or offering an option beyond
-      its own `generation_content.clarification_guesses`.
     - Every entry shown above -- Approved evidence, Conversational,
       Clarification, Decline, No-info, Available shortcuts, Unavailable
       service requests, Verified customer-specific facts, and Personal data
@@ -6518,26 +6543,6 @@ def _generate_response_blocks(state: AgentState) -> dict:
       `answer`/customer-facing text itself -- that field is prose the
       customer reads; the id is structural metadata they never see. Do not
       skip any entry, and do not address the same entry more than once.
-    - When a Clarification Input's own `generation_content.clarification_guesses`
-      is non-empty, don't leave your restatement of it as a bare question --
-      naturally work a brief mention of what those options actually are
-      into the same sentence or the one right after it (e.g. "...are you
-      asking about applying, checking eligibility, or the fees involved?"),
-      using each guess's own `label`/`message` (inside
-      `generation_content.clarification_guesses`) as the TOPIC to mention,
-      never inventing an option not listed there. A guess's `message` is
-      written in the CUSTOMER's own voice (what they would send if they
-      tapped it) -- never copy or closely paraphrase its sentence
-      structure into your own question, which is YOUR voice speaking to
-      the customer ("I"/"you" reversed from the guess's own phrasing).
-      For example, a guess message "Can you list the other banking
-      services you can help me with?" becomes, in your voice, "...are you
-      looking for other banking services I can help you with...", never
-      reused with its own "you"/"me" left as-is. Tappable chips for these
-      same options render automatically right after your text -- without
-      this, they appear with nothing in the message explaining what
-      they're for. When `clarification_guesses` is empty, ask a plain
-      open question as before; there is nothing to mention.
     - `clarification` here is ONLY for a terminal unresolved marker still
       listed under "Terminal unresolved task markers" below (always
       `RELEVANT` -- a genuinely ambiguous zero-evidence task is
@@ -6648,8 +6653,17 @@ def _generate_response_blocks(state: AgentState) -> dict:
     next to any task ids -- not bundled into one closing statement at the
     end.
 
+    source_task_ids holds every id an element addresses, mixed freely: a
+    task's own id, a clarification's/decline's/no-info's id, and a
+    shortcut's/tool-result's own id all sit in the exact same array, in any
+    combination -- e.g. an element citing only a shortcut looks like
+    "source_task_ids":["nav_1"], and one blending a task's evidence with a
+    shortcut it substitutes for looks like "source_task_ids":["task_1","svc_1"].
+    Never leave this array empty for an element that addresses an entry
+    from any section above.
+
     Output JSON only:
-    {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"","next_actions":["short natural next question, grounded in unfeatured approved evidence"]}}
+    {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1","nav_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"","next_actions":["short natural next question, grounded in unfeatured approved evidence"]}}
     """
     try:
         generated = _parse_json_robustly(call_groq_lpu(prompt))

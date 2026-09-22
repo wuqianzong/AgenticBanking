@@ -1,7 +1,39 @@
 # Addendum: Pre-Compose Clarification Content Upstream
 
 Extends `RESPONSE_OBLIGATION_CONTRACT_DESIGN.md`'s `ask` mode. Does not
-change `compose`/`relay`/`state`. No production code changed yet.
+change `compose`/`relay`/`state`.
+
+## Outcome: reverted, replaced by a named-link design (see bottom)
+
+The upstream-authoring design below was tested (adding one `draft_question`
+field to node_02e's existing CLARIFY schema, no new call) and **failed
+validation**: across 4 live replays, the model never populated the new
+field at all, and on one case ("How to apply for a loan?") the added
+instruction flipped the call's own primary judgment from the correct
+`CLARIFY` to an incorrect `SEARCH` -- a real regression in the one thing
+that call must get right. Diagnosis: node_02e's own prompt is already
+large (27k+ chars, several full worked examples); bolting one more
+instruction onto an already-loaded call reproduces the same overload
+problem this addendum was meant to avoid, one layer up. Reverted -- no
+node_02e/node_03a/node_03c change was kept.
+
+**Adopted instead**: keep composition in the final generator (unchanged
+call), but stop stating clarification's full rule set generically, at a
+distance from the data. The scattered clarification paragraphs in
+`_generate_response_blocks` were consolidated into one named
+"CLARIFICATION RULES" section, and the `ask`-mode canonical
+`generation_guidance` now explicitly names it ("Follow CLARIFICATION RULES
+below exactly for scope, tone, and how to work in clarification_guesses"),
+giving every clarification obligation an explicit, local pointer to its
+full rule set instead of relying on the model to connect a generic
+type-name to a paragraph placed elsewhere. This keeps the full substance
+(nothing shortened or dropped, per the shortening experiment's own
+finding), adds no new LLM call, and touches no origination node.
+Implemented and live-validated (see Validation, below) -- the rest of this
+document (the upstream-authoring design) is kept for the record, not
+adopted.
+
+## Original design (not adopted)
 
 ## Motivating evidence
 
@@ -132,3 +164,50 @@ generator wording.
 3. Revisit whether `decline`/`no_info`'s own (already short) final-generator
    paragraphs can tighten further now that `ask` follows the same shape,
    as a documentation/consistency pass, not a behavior change.
+
+## Adopted design: named link to a consolidated CLARIFICATION RULES section
+
+In `_generate_response_blocks` (`nodes.py`): the clarification-related
+prose, previously split across an intro paragraph, a co-presence-with-
+partial-evidence paragraph, and two further bullets separated by ~300
+lines of unrelated rules, is now one contiguous block headed
+`CLARIFICATION RULES (every clarification obligation's own
+generation_guidance names this section -- its full rules live here once,
+not repeated per entry)`. Nothing in it was shortened or removed -- the
+scope restriction, the "never assert" rule, the guess-voice-reversal rule,
+and the co-presence rule are all still there, word for word, just
+contiguous and named. `_GENERATION_GUIDANCE_BY_MODE["ask"]` now reads
+"Compose a natural clarifying question about this. Follow CLARIFICATION
+RULES below exactly for scope, tone, and how to work in
+clarification_guesses -- never assert, assume, or answer on the customer's
+behalf." -- an explicit, local pointer sitting directly next to the
+entry's own data, rather than relying on the model to connect a generic
+type name to a paragraph placed elsewhere.
+
+No node_02d/node_02e/task_dispatcher/node_03c change. No new LLM call. The
+final generator is the only thing touched.
+
+### Validation
+
+Fixture: confirmed the entry's own `generation_guidance` names "CLARIFICATION
+RULES" and the heading exists exactly where the entry points.
+
+Live, 3 cases (`gemini-3.5-flash-lite`, temp 0), including the exact 4-part
+turn that had previously dropped its clarification entirely (address +
+balance + apply-for-account + lost card):
+- All 4 obligations covered in one generation call, no reviser round, no
+  `entry_omitted`/`shortcut_omitted` events at all.
+- The application-account clarification was asked correctly, citing
+  `subquery_3`, e.g. "Are you asking about applying for a deposit account
+  or a credit card?"
+- Two single-clarification loan cases ("I have a question about my loan.",
+  "How to apply for a loan?") both asked correctly, with guesses worked
+  into the question in the assistant's own voice (not copied from the
+  guess's own customer-voiced `message`), e.g. "...are you looking to
+  apply for a personal loan, have a question about your personal loan
+  repayment schedule, or want to know if you are eligible..."
+
+n=3 is a sanity check that the change works and doesn't regress voice/scope
+handling, not a measured drop-rate improvement -- consistent with every
+other single-digit-n check in this project, a larger batch would be needed
+before quoting a rate.

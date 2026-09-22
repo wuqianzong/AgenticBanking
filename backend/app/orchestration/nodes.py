@@ -1430,7 +1430,7 @@ _SHORTCUT_RULES_TEXT = """SHORTCUT RULES: each shortcut is attached automaticall
       with button language.
     This is that subquery's complete answer -- do not also add a separate
     acknowledgment sentence for these same shortcuts elsewhere; the
-    per-shortcut placement rule below is for shortcuts offered
+    one-sentence-per-shortcut rule below is for shortcuts offered
     *alongside* a real evidence-based answer, not ones already presented
     as the answer here. Reserve apology/decline framing only for a
     subquery that neither approved evidence nor any shortcut's
@@ -1585,14 +1585,27 @@ def _build_response_obligations(
         })
 
     for entry in _clarification_prompt_view(intent_clarifications):
+        unresolved_request = entry.get("unresolved_request", "")
+        # Unlike the other three modes' fixed guidance string, ask-mode's
+        # guidance is built per entry: it names the actual unresolved_request
+        # directly, deterministically (string formatting only, no LLM
+        # authorship, no new call) -- stating outright "this is a question
+        # about X" rather than leaving the model to separately notice
+        # generation_content.unresolved_request and connect the two itself.
+        guidance = _GENERATION_GUIDANCE_BY_MODE["ask"]
+        if unresolved_request:
+            guidance = (
+                f'This is a clarifying question about "{unresolved_request}". '
+                + guidance
+            )
         obligations.append({
             "id": entry.get("subquery_id"),
             "generation_content": {
                 "scope": entry.get("scope", ""),
-                "unresolved_request": entry.get("unresolved_request", ""),
+                "unresolved_request": unresolved_request,
                 "clarification_guesses": entry.get("clarification_guesses", []),
             },
-            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["ask"],
+            "generation_guidance": guidance,
             "generation_rule": _GENERATION_RULE_BY_TYPE["clarification"],
         })
 
@@ -5913,7 +5926,7 @@ _GENERATION_CONDUCT_GUARDRAILS = f"""
 # uses, not the looser bounded-inference bar Task-Level Approved Evidence
 # gets elsewhere in this prompt -- a shortcut's `label`/`topic` are a fixed,
 # short, already-final description, not raw material to reason further from.
-_GENERATION_BRIDGE_GUARDRAILS = """
+_GENERATION_BRIDGE_GUARDRAILS_BASE = """
     BRIDGE REASONING BOUNDARY:
     A natural, bounded inference connecting approved evidence to the
     customer's resolved request is fine -- evidence stating a maximum cap
@@ -5946,7 +5959,23 @@ _GENERATION_BRIDGE_GUARDRAILS = """
     Do not solve the bridge-boundary problem by dropping warmth -- solve it
     by keeping the empathy and the capability claim in two distinct moves
     instead of fusing them into one overreaching sentence.
+    """
 
+# Two variants of the same evidence-caveat instruction, differing only in
+# which field path actually carries the caveat for that consumer's own
+# data shape -- kept as two named constants, not one paragraph plus a
+# correction note, so each consumer's own prompt is simply correct on its
+# own terms. FLAT is for a consumer still reading a flat evidence_by_task
+# entry (task_id/approved_parents/generation_guidance all top-level):
+# node_04c_response_reviser and _generate_evidence_only_response, neither
+# migrated to the unified obligation contract yet (that migration is
+# stage 2 of docs/RESPONSE_OBLIGATION_CONTRACT_DESIGN.md). UNIFIED is for
+# _generate_response_blocks, the one consumer already on the new contract,
+# where the caveat lives at generation_content.auditor_note and the parent
+# list at generation_content.approved_parents -- generation_guidance at
+# that entry's own top level is a different field entirely (the mode-level
+# instruction shared by every obligation kind, not this caveat).
+_GENERATION_GUIDANCE_PARAGRAPH_FLAT = """
     GENERATION GUIDANCE: an evidence entry's `generation_guidance` field
     (when non-empty) is a directive on how that specific piece of evidence
     must be framed or caveated -- never optional context, and never dropped
@@ -5972,6 +6001,48 @@ _GENERATION_BRIDGE_GUARDRAILS = """
     offers one) -- never invent a fact, procedure, or figure to fill the
     gap merely because a manifest entry exists for this task_id.
     """
+
+_GENERATION_GUIDANCE_PARAGRAPH_UNIFIED = """
+    GENERATION GUIDANCE: an evidence entry's own caveat --
+    `generation_content.auditor_note` (when non-empty) -- is a directive on
+    how that specific piece of evidence must be framed or caveated -- never
+    optional context, and never dropped merely because the underlying
+    facts are otherwise correctly grounded. It is never itself a fact to
+    relay verbatim, and never a substitute for stating the actual evidence
+    -- it tells you HOW to write about the evidence, not WHAT to claim
+    instead of it. For example, a caveat noting that an approved procedure
+    assumes a different circumstance than the customer described (a
+    card-replacement procedure written for a damaged card, approved for a
+    customer who dislikes the card's appearance) means you must say so
+    plainly before presenting that procedure as the customer's path --
+    never present it as if it were written for their exact situation when
+    it wasn't.
+
+    An evidence entry whose `generation_content.approved_parents` list is
+    EMPTY (a task found genuinely nothing that answers the request, but
+    the sufficiency auditor still had a hedged, guidance-worthy observation
+    worth conveying) carries no citable fact at all --
+    `generation_content.auditor_note` is your ONLY basis for what to write
+    about it. Follow it directly (typically: an honest admission that
+    nothing confirms the answer, phrased around the customer's own stated
+    situation, optionally followed by an unclaimed courtesy mention if the
+    note itself offers one) -- never invent a fact, procedure, or figure to
+    fill the gap merely because a manifest entry exists for this id. This
+    is separate from the entry's own top-level `generation_guidance` field,
+    which is the one-line instruction for what kind of obligation this is
+    (shared across every kind: compose from evidence, relay a fixed
+    statement, ask a question, or state a shortcut/token/fact) -- read
+    both; they answer different questions.
+    """
+
+# Preserves the pre-split name/shape for node_04c_response_reviser and
+# _generate_evidence_only_response, which still read a flat evidence_by_task
+# entry and were never meant to change when _generate_response_blocks moved
+# to the unified contract.
+_GENERATION_BRIDGE_GUARDRAILS = _GENERATION_BRIDGE_GUARDRAILS_BASE + _GENERATION_GUIDANCE_PARAGRAPH_FLAT
+
+# For _generate_response_blocks only.
+_GENERATION_BRIDGE_GUARDRAILS_UNIFIED = _GENERATION_BRIDGE_GUARDRAILS_BASE + _GENERATION_GUIDANCE_PARAGRAPH_UNIFIED
 
 
 # Shared by node_03c_sufficiency_auditor (writing generation_guidance
@@ -6478,15 +6549,22 @@ def _generate_response_blocks(state: AgentState) -> dict:
     prompt = f"""
     FLEXIBLE RESPONSE GENERATION
     You are Horizon, a helpful, natural, read-only Horizon Bank customer
-    service representative. Write one coherent conversational response using
-    only approved evidence. Do not perform banking actions, imply account
+    service representative. Write one coherent conversational response by
+    addressing every obligation in OBLIGATIONS below: for each one, follow
+    its own generation_guidance, using only its generation_content as
+    material, and consult the named section its generation_rule points to
+    (further below) for the full rules governing it -- this applies
+    identically whether that means composing an answer, relaying a fixed
+    statement, asking a clarifying question, or mentioning a shortcut,
+    fact, or token; no kind of obligation is the default job and no kind is
+    secondary to another. Do not perform banking actions, imply account
     access, or invent facts, procedures, products, or policies.
 
     {_style_personalization_block(user_profile)}
 
     {_GENERATION_CONDUCT_GUARDRAILS}
 
-    {_GENERATION_BRIDGE_GUARDRAILS}
+    {_GENERATION_BRIDGE_GUARDRAILS_UNIFIED}
 
     Customer request: {state.get("user_input", "")}
     Trusted conversation context (use only to understand the customer's current
@@ -6641,7 +6719,9 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - Do not mention FAQ documents, sources, parent IDs, search, prompts, or
       internal systems. Preserve exact {{placeholders}}.
     - `clarification` here is ONLY for a terminal unresolved marker still
-      listed under "Terminal unresolved task markers" above (always
+      listed under "Terminal unresolved task markers" above, if any (that
+      section, like every OBLIGATIONS entry, appears only when this turn
+      actually has one) -- always
       `RELEVANT` -- a genuinely ambiguous zero-evidence task is
       instead fully represented as its own Clarification Input, composed
       the same way, not judged here) -- never for an Intent/Clarification

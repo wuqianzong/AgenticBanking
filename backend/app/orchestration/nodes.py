@@ -1209,6 +1209,289 @@ _GENERATION_GUIDANCE_BY_MODE = {
     ),
 }
 
+# A second, independent lookup, deliberately NOT keyed by content_mode.
+# content_mode groups by "how much creative freedom" (4 buckets) and
+# several genuinely different subtask types share one bucket (a shortcut,
+# a personal-data token, an unavailable-request reason, and a verified fact
+# are all "state" mode) -- but they need different, specific rule sections,
+# not one vague shared pointer. This table names, per subtask TYPE, the
+# exact section an entry's own `generation_rule` field points to, so every
+# entry says precisely which rule section governs it. Two types share a
+# name only where their governing text is genuinely identical today
+# (decline and no_info; verified facts and evidence, per the existing
+# "same footing as approved evidence" instruction) -- never because they
+# share a content_mode.
+_GENERATION_RULE_BY_TYPE = {
+    "evidence": "EVIDENCE RULES",
+    "verified_fact": "EVIDENCE RULES",
+    "conversational": "CONVERSATIONAL RULES",
+    "decline": "DECLINE/NO-INFO RULES",
+    "no_info": "DECLINE/NO-INFO RULES",
+    "clarification": "CLARIFICATION RULES",
+    "shortcut": "SHORTCUT RULES",
+    "unavailable_service_request": "UNAVAILABLE SERVICE REQUEST RULES",
+    "personal_data": "PERSONAL DATA RULES",
+}
+
+# The seven named sections an entry's own generation_rule field points to.
+# Each is fully static -- no per-turn interpolation -- so these are computed
+# once, not rebuilt on every call. Every one of them is rendered, when
+# rendered at all, strictly after every OBLIGATIONS data section (see
+# _generate_response_blocks), and only when at least one obligation of the
+# kind(s) it governs exists this turn -- an unused section (e.g.
+# CLARIFICATION RULES on a turn with no clarification) is omitted entirely,
+# not merely irrelevant filler the model has to read past.
+_EVIDENCE_RULES_TEXT = """EVIDENCE RULES: an entry whose `generation_content.search_territory` is
+    "adjacent_scope" (Extra Effort v2.0) was retrieved under a different
+    product/intent than what the customer's own request was resolved to.
+    When its own status is RELEVANT, treat it as RELATED information the
+    customer did not literally ask about, surfaced only because their exact
+    request wasn't documented -- never present it as a direct answer to
+    their request, and never blend its claims into the same sentence as an
+    "in_scope" (or absent search_territory) entry's direct answer without
+    making the distinction clear. That entry's own
+    `generation_content.mapping_reason` states WHY this specific related
+    topic was chosen (e.g. "buying a car often means saving for a
+    downpayment") -- use it as the basis for a natural, specific bridging
+    sentence explaining the connection, instead of a generic "here's
+    related information" with no stated reason, which reads as a non
+    sequitur to the customer. Paraphrase mapping_reason's own connection in
+    plain, customer-facing language and visibly hedge it as the assistant's
+    own suggestion, never a stated bank fact or policy (e.g. "you may want
+    to..." / "since you might be..." / "this could help if..."), since it
+    is the assistant's own reasoned inference, not something the customer
+    said or something the evidence itself asserts -- never state or imply
+    it more strongly than mapping_reason itself supports, and never invent
+    a different or additional connection of your own. When this task's own
+    literal request also has a paired no-info entry (same
+    `generation_content.resolved_request`), open with that limitation
+    first, then bridge into the adjacent_scope information in one coherent
+    reply -- e.g. "I don't have information on auto financing, but since
+    you might be saving for a car's downpayment, here's some information
+    about our Savings Account that may help:" -- rather than presenting the
+    two as unrelated, separate statements. Sharing a subquery with an
+    "in_scope" entry is otherwise only permitted when both are cited
+    together AND the adjacent_scope framing above is preserved in the text
+    itself. When an adjacent_scope entry's own status is instead
+    SUFFICIENT, the sufficiency auditor has judged this different
+    product/intent to genuinely be the right match for what the customer
+    needs -- most often because the original in_scope mapping turned out to
+    be wrong. Present its evidence as a real, direct answer, not a hedged
+    suggestion -- but still name the product/intent it actually concerns,
+    so the customer understands why the answer is framed that way (e.g.
+    "this falls under our Instant Loan product, which covers..." rather
+    than silently answering as if it matched their literal wording). A
+    "Verified customer-specific facts" entry may be stated directly and
+    confidently, exactly like approved retrieval evidence -- it is already
+    verified for this specific customer. State only what its
+    `generation_content.fact` text says; do not extrapolate beyond it."""
+
+_CONVERSATIONAL_RULES_TEXT = """CONVERSATIONAL RULES: never invent or imply a banking fact, product,
+    policy, commitment, or next action for a Conversational Input, and
+    never treat it as a question to answer -- compose one brief, natural,
+    tone-appropriate reply from its own `generation_content.customer_component`
+    alone. When it shares a turn with a real evidence-based answer, you may
+    connect it naturally into the same element as that answer, exactly like
+    a Clarification Input."""
+
+_CLARIFICATION_RULES_TEXT = """CLARIFICATION RULES (every clarification obligation's own
+    generation_guidance names this section -- its full rules live here
+    once, not repeated per entry): never for you to judge WHETHER to ask
+    (that decision is already made); your only job is composing the actual
+    question. `generation_content.scope` tells you WHERE in the pipeline the
+    ambiguity is blocking progress (e.g. identifying the right product/intent
+    before any retrieval, versus reviewing whether retrieved evidence answers
+    the request) -- context only, never to be quoted.
+    `generation_content.unresolved_request` is the specific thing that's
+    unclear -- compose a natural clarifying question asking specifically
+    about it, in the customer's own language/tone/style, considering the
+    Customer request and conversation context above for what topic this
+    continues. There is no fixed sentence to relay here -- write your own.
+    `generation_content.clarification_guesses` holds 0-3 tappable guesses at
+    the likely customer intent -- these are PREDICTIONS offered to unblock
+    the task if correct, never a report of anything the customer actually
+    said. A Clarification Input's own subquery commonly also has real
+    Approved Evidence for the same underlying request -- a RELEVANT task
+    with genuine partial evidence, not a full answer, is exactly what
+    leaves a detail unresolved in the first place. That evidence being
+    present, and being worth sharing, is never a substitute for composing
+    the clarifying question -- do not let a real, useful partial answer
+    silently absorb or replace the question you are required to ask. Both
+    belong in the response together: share what the evidence does show
+    (hedged, since it does not resolve which specific case applies), AND
+    separately ask the clarifying question, in the same or an adjoining
+    statement. An answer that reads as complete on its own, with no
+    question anywhere in it, for a subquery that has a Clarification Input,
+    is always missing something required. Stay within its own
+    `generation_content.scope` when composing -- never overstepping into a
+    different job's judgment, and never answering the request in its place
+    -- and never assert a new product, policy, or fact, or offer an option
+    beyond its own `generation_content.clarification_guesses`. When a
+    Clarification Input's own `generation_content.clarification_guesses`
+    is non-empty, don't leave your restatement of it as a bare question --
+    naturally work a brief mention of what those options actually are
+    into the same sentence or the one right after it (e.g. "...are you
+    asking about applying, checking eligibility, or the fees involved?"),
+    using each guess's own `label`/`message` (inside
+    `generation_content.clarification_guesses`) as the TOPIC to mention,
+    never inventing an option not listed there. A guess's `message` is
+    written in the CUSTOMER's own voice (what they would send if they
+    tapped it) -- never copy or closely paraphrase its sentence
+    structure into your own question, which is YOUR voice speaking to
+    the customer ("I"/"you" reversed from the guess's own phrasing).
+    For example, a guess message "Can you list the other banking
+    services you can help me with?" becomes, in your voice, "...are you
+    looking for other banking services I can help you with...", never
+    reused with its own "you"/"me" left as-is. Tappable chips for these
+    same options render automatically right after your text -- without
+    this, they appear with nothing in the message explaining what
+    they're for. When `clarification_guesses` is empty, ask a plain
+    open question as before; there is nothing to mention. This is the end
+    of CLARIFICATION RULES."""
+
+_DECLINE_NO_INFO_RULES_TEXT = """DECLINE/NO-INFO RULES: each Decline Input carries its own
+    `generation_content.decline_evidence`, and each No-info Input carries
+    its own `generation_content.no_info_evidence`. Unlike Approved evidence
+    (raw material you compose an answer FROM), each of these two fields is
+    already the complete, final statement for that entry -- your job for it
+    is only to relay or lightly connect it, never to compose, research, or
+    reason from it as if it were a fact to build an answer on top of.
+    Rephrase it naturally in the customer's own language/tone/style from
+    the STYLE & PERSONALIZATION INSTRUCTIONS above, the same as every
+    other element in this response -- a bare copy-paste of the evidence
+    field's exact wording is a last resort only, never the default, and
+    never acceptable merely because the rest of the response happens to
+    need more effort to personalize than this entry does. However you
+    phrase it, faithfully convey only what its own evidence field says --
+    never add a product, policy, fact, or suggestion beyond it, and never
+    answer the request in its place."""
+
+_SHORTCUT_RULES_TEXT = """SHORTCUT RULES: each shortcut is attached automatically and
+    unconditionally; you do not control whether it appears, only whether
+    your text acknowledges it, and your wording must match which one it is
+    (see the CRITICAL rule below). First give the complete, faithful
+    answer from approved evidence, written as a confident response on its
+    own terms -- never open with an apology or decline-style framing
+    merely because a shortcut is also available. When approved evidence
+    fully explains how to do something manually (for example, in-app
+    navigation steps), state those steps in full; a shortcut existing does
+    not make the manual explanation incomplete or something to abbreviate.
+    A shortcut's `generation_content.for_request` names, in
+    the customer's own words, exactly which request it was registered to
+    address. When a subquery has no approved evidence to answer it at all,
+    check whether any shortcut's `generation_content.for_request` matches
+    that same subquery (the Customer request and that subquery's own
+    wording, not a loose topic guess). If one does, do not write "I don't
+    have information," an apology, or any decline-style framing for that
+    subquery -- present the shortcut(s) themselves, confidently, as the
+    direct answer.
+    * CRITICAL, for every shortcut you mention anywhere in the response:
+      quote its `generation_content.label` field verbatim, character for
+      character, inside the sentence -- never paraphrase, summarize,
+      rename, or describe it in different words -- AND phrase the action
+      to match its `kind`, never generic "click"/"use the option below"
+      language for both: a "navigation" shortcut is an actual clickable
+      button, so "click"/"use"/"tap the ___ button below" is correct for
+      it; a "form" shortcut renders as an embedded, fillable form card
+      directly in the chat, not a button -- the customer fills it in and
+      submits it right there, so the only correct phrasing is "fill in and
+      submit the ___ form below" (or equivalent), never "click"/"tap"/
+      "use the option below," which describes a button that isn't there.
+      If your sentence uses the wrong label or the wrong action for the
+      kind, the customer cannot tell what you mean or what to actually do.
+      Wrong: a shortcut labeled "Update Profile" described as "visit the
+      Profile section in your account settings" (wrong label); a "form"
+      shortcut labeled "Change Address" described as "click the option
+      below" (wrong action -- there is no button to click). Right: "using
+      the Update Profile button below" (navigation) / "fill in and submit
+      the Change Address form below" (form).
+    * Exactly one matching shortcut: name what it lets the customer do,
+      quoting its exact `label` and phrasing the action for its `kind`
+      (for example, a "navigation" shortcut labeled "Update Profile":
+      "You can update your residential address directly using the
+      Update Profile button below." A "form" shortcut labeled "Change
+      Address": "You can fill in and submit the Change Address form
+      below.").
+    * More than one matching shortcut (this happens often: a "form" and
+      a "navigation" shortcut both registered for the same request):
+      distinguish them explicitly by `kind`, in one coherent sentence,
+      rather than presenting them as an undifferentiated pair. A
+      "navigation" shortcut is a button that takes the customer to a
+      screen where they manage it themselves; a "form" shortcut is an
+      embedded card in the chat that they fill in and submit right
+      there. For example, if a "navigation" shortcut labeled "Update
+      Profile" and a "form" shortcut labeled "Change Address" both
+      matched: "You can use the Update Profile button below to go
+      directly to your profile and update it yourself, or fill in and
+      submit the Change Address form below instead if you'd rather have
+      it updated for you." Never invent a mechanism or distinction
+      beyond kind, label, and topic -- and never substitute either exact
+      label with a paraphrase, or a form's "fill in and submit" action
+      with button language.
+    This is that subquery's complete answer -- do not also add a separate
+    acknowledgment sentence for these same shortcuts elsewhere; the
+    per-shortcut placement rule below is for shortcuts offered
+    *alongside* a real evidence-based answer, not ones already presented
+    as the answer here. Reserve apology/decline framing only for a
+    subquery that neither approved evidence nor any shortcut's
+    `for_request` addresses.
+    Every "Available shortcuts this turn" entry not already covered by
+    the rule above still needs its own one-sentence acknowledgment, placed
+    immediately after the answer content it relates to (or as its own
+    element when it answers a subquery by itself) -- never combined with a
+    different shortcut into one shared sentence, and never held back to
+    the end. Treat this the same as answering every task: covering
+    multiple topics, fixing a flagged issue on a retry, running out of
+    room, or the response already feeling complete is never a reason to
+    drop one -- it is required whenever such a shortcut exists, not an
+    optional addition. Use only each shortcut's supplied `label`/`topic`,
+    phrased for its `kind` (see the CRITICAL rule above: "click"/"use the
+    ___ button below" for "navigation," "fill in and submit the ___ form
+    below" for "form" -- never the reverse). Good style, "navigation":
+    "If you'd rather skip these steps, you can also do this directly
+    using the ___ button below." Good style, "form": "If you'd rather
+    skip these steps, you can also fill in and submit the ___ form
+    below." Each such sentence must:
+    * Make clear the approved-evidence method you just described still
+      works -- each shortcut is an alternative or faster path, never a
+      replacement or a claim that the manual method no longer applies.
+    * Quote a shortcut's `label` verbatim, character for character --
+      never paraphrase, rename, or describe it in different words (see
+      the CRITICAL rule above; it applies here too). Never invent a
+      step, field, screen layout, count, url, or any detail beyond what
+      was supplied.
+    * Never claim you are attaching, opening, sending, starting, or
+      completing anything yourself -- a "navigation" button or a "form"
+      card is attached separately and automatically regardless of this
+      sentence; you are only introducing that it exists.
+    * Never fabricate a shortcut that is not in the list, and never
+      mention one when the list is empty.
+    Do not let a shortcut's acknowledgment sentence replace the
+    substantive answer for a task with no shortcut. Every task in
+    "Approved evidence by retrieval task" still needs its own real answer
+    regardless of whether any shortcut exists for it."""
+
+_UNAVAILABLE_SERVICE_REQUEST_RULES_TEXT = """UNAVAILABLE SERVICE REQUEST RULES: for each entry, include one brief,
+    honest sentence telling the customer that part of their request could
+    not be started right now, using only the supplied
+    `generation_content.reason`. Never invent a different explanation, and
+    never silently drop that part of the request from the response merely
+    because no form could be attached to it -- an unavailable capability
+    still deserves an acknowledgment, the same as a decline or a terminal
+    unresolved topic does elsewhere in this response."""
+
+_PERSONAL_DATA_RULES_TEXT = """PERSONAL DATA RULES: a "Personal data references" entry's
+    `generation_content.for_request` names, in the customer's own words,
+    exactly which request its data was fetched for. When a subquery
+    matches, weave that entry's `generation_content.insert_token` verbatim
+    into one natural sentence (for example: "Your address on file is
+    {{data-a1b2c3d4}}."). Never alter, abbreviate, translate, or omit any
+    character of the token. Never guess, paraphrase, or state the real
+    value yourself -- you are never shown it. Never claim this information
+    is unavailable, inaccessible, or something the customer must look up
+    elsewhere when a matching entry exists. Never fabricate a token not
+    present in the list."""
+
 
 def _build_response_obligations(
     evidence_by_task: list,
@@ -1260,6 +1543,7 @@ def _build_response_obligations(
                 "auditor_note": entry.get("generation_guidance", ""),
             },
             "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["compose"],
+            "generation_rule": _GENERATION_RULE_BY_TYPE["evidence"],
         })
 
     for entry in verified_api_context:
@@ -1267,6 +1551,7 @@ def _build_response_obligations(
             "id": entry.get("handle"),
             "generation_content": {"for_request": entry.get("for_request", ""), "fact": entry.get("fact", "")},
             "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["compose"],
+            "generation_rule": _GENERATION_RULE_BY_TYPE["verified_fact"],
         })
 
     for entry in conversational_context:
@@ -1274,6 +1559,7 @@ def _build_response_obligations(
             "id": entry.get("subquery_id"),
             "generation_content": {"customer_component": entry.get("customer_component", "")},
             "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["compose"],
+            "generation_rule": _GENERATION_RULE_BY_TYPE["conversational"],
         })
 
     for entry in decline_context:
@@ -1284,6 +1570,7 @@ def _build_response_obligations(
                 "decline_evidence": entry.get("decline_evidence", ""),
             },
             "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["relay"],
+            "generation_rule": _GENERATION_RULE_BY_TYPE["decline"],
         })
 
     for entry in no_info_context:
@@ -1294,6 +1581,7 @@ def _build_response_obligations(
                 "no_info_evidence": entry.get("no_info_evidence", ""),
             },
             "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["relay"],
+            "generation_rule": _GENERATION_RULE_BY_TYPE["no_info"],
         })
 
     for entry in _clarification_prompt_view(intent_clarifications):
@@ -1305,6 +1593,7 @@ def _build_response_obligations(
                 "clarification_guesses": entry.get("clarification_guesses", []),
             },
             "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["ask"],
+            "generation_rule": _GENERATION_RULE_BY_TYPE["clarification"],
         })
 
     for entry in available_shortcuts:
@@ -1312,6 +1601,7 @@ def _build_response_obligations(
             "id": entry.get("handle"),
             "generation_content": {k: v for k, v in entry.items() if k != "handle"},
             "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["state"],
+            "generation_rule": _GENERATION_RULE_BY_TYPE["shortcut"],
         })
 
     for entry in unavailable_service_requests:
@@ -1319,6 +1609,7 @@ def _build_response_obligations(
             "id": entry.get("handle"),
             "generation_content": {"reason": entry.get("reason", "")},
             "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["state"],
+            "generation_rule": _GENERATION_RULE_BY_TYPE["unavailable_service_request"],
         })
 
     for entry in personal_data_placeholders:
@@ -1330,6 +1621,7 @@ def _build_response_obligations(
                 "insert_token": entry.get("insert_token", ""),
             },
             "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["state"],
+            "generation_rule": _GENERATION_RULE_BY_TYPE["personal_data"],
         })
 
     return obligations
@@ -6101,6 +6393,88 @@ def _generate_response_blocks(state: AgentState) -> dict:
     unavailable_obligations = [obligations_by_id[e["handle"]] for e in unavailable_service_requests if e.get("handle") in obligations_by_id]
     personal_data_obligations = [obligations_by_id[e["handle"]] for e in personal_data_placeholders if e.get("handle") in obligations_by_id]
 
+    obligation_sections = []
+    if conversational_obligations:
+        obligation_sections.append(
+            "Conversational inputs (governed by CONVERSATIONAL RULES below):\n"
+            + json.dumps(conversational_obligations, ensure_ascii=False)
+        )
+    if evidence_obligations:
+        obligation_sections.append(
+            "Approved evidence by retrieval task (governed by EVIDENCE RULES below):\n"
+            + json.dumps(evidence_obligations, ensure_ascii=False)
+        )
+    if clarification_obligations:
+        obligation_sections.append(
+            "Clarification inputs (governed by CLARIFICATION RULES below):\n"
+            + json.dumps(clarification_obligations, ensure_ascii=False)
+        )
+    if no_info_obligations:
+        obligation_sections.append(
+            "No-info inputs (governed by DECLINE/NO-INFO RULES below):\n"
+            + json.dumps(no_info_obligations, ensure_ascii=False)
+        )
+    if terminal_markers:
+        obligation_sections.append(
+            "Terminal unresolved task markers (topic/status only; never "
+            "evidence, not an obligation itself -- see the `clarification` "
+            "output-field rule in GENERAL DESIGN PRINCIPLES below):\n"
+            + json.dumps(terminal_markers, ensure_ascii=False)
+        )
+    if decline_obligations:
+        obligation_sections.append(
+            "Decline inputs (governed by DECLINE/NO-INFO RULES below):\n"
+            + json.dumps(decline_obligations, ensure_ascii=False)
+        )
+    if shortcut_obligations:
+        obligation_sections.append(
+            "Available shortcuts this turn (governed by SHORTCUT RULES below):\n"
+            + json.dumps(shortcut_obligations, ensure_ascii=False)
+        )
+    if unavailable_obligations:
+        obligation_sections.append(
+            "Unavailable service requests (governed by UNAVAILABLE SERVICE "
+            "REQUEST RULES below):\n" + json.dumps(unavailable_obligations, ensure_ascii=False)
+        )
+    if verified_fact_obligations:
+        obligation_sections.append(
+            "Verified customer-specific facts (governed by EVIDENCE RULES "
+            "below, same footing as approved evidence):\n"
+            + json.dumps(verified_fact_obligations, ensure_ascii=False)
+        )
+    if personal_data_obligations:
+        obligation_sections.append(
+            "Personal data references (governed by PERSONAL DATA RULES below):\n"
+            + json.dumps(personal_data_obligations, ensure_ascii=False)
+        )
+    obligations_block = "\n".join(obligation_sections) if obligation_sections else "None this turn."
+
+    # Every named rule section is included only when this turn actually has
+    # an obligation it governs -- CLARIFICATION RULES never appears on a
+    # turn with no clarification, and so on for every other type. Content
+    # is never trimmed; whole sections are only present or absent.
+    rule_sections = []
+    if evidence_obligations or verified_fact_obligations:
+        rule_sections.append(_EVIDENCE_RULES_TEXT)
+    if conversational_obligations:
+        rule_sections.append(_CONVERSATIONAL_RULES_TEXT)
+    if clarification_obligations:
+        rule_sections.append(_CLARIFICATION_RULES_TEXT)
+    if decline_obligations or no_info_obligations:
+        rule_sections.append(_DECLINE_NO_INFO_RULES_TEXT)
+    if shortcut_obligations:
+        rule_sections.append(_SHORTCUT_RULES_TEXT)
+    if unavailable_obligations:
+        rule_sections.append(_UNAVAILABLE_SERVICE_REQUEST_RULES_TEXT)
+    if personal_data_obligations:
+        rule_sections.append(_PERSONAL_DATA_RULES_TEXT)
+    rules_block = (
+        "\n\n".join(rule_sections) if rule_sections
+        else "No type-specific rule section applies this turn (no shortcut, "
+             "clarification, decline, no-info, unavailable-request, or "
+             "personal-data obligation exists)."
+    )
+
     prompt = f"""
     FLEXIBLE RESPONSE GENERATION
     You are Horizon, a helpful, natural, read-only Horizon Bank customer
@@ -6122,147 +6496,21 @@ def _generate_response_blocks(state: AgentState) -> dict:
     User baseline (advisory communication context only; use only when clearly
     relevant to the current request and never as factual banking evidence):
     {user_baseline}
-    Conversational inputs -- each is a non-financial part of this turn (a
-    greeting, thanks, feeling, or an off-topic remark), already identified
-    as needing no banking fact. Compose one brief, natural, tone-appropriate
-    reply per entry from its own `generation_content.customer_component` --
-    never invent or imply a banking fact, product, policy, commitment, or
-    next action for it, and never treat it as a question to answer. When it
-    shares a turn with a real evidence-based answer, you may connect it
-    naturally into the same element as that answer, exactly like a
-    Clarification Input:
-    {json.dumps(conversational_obligations, ensure_ascii=False)}
     Global resolution context (internal coverage and unresolved-topic anchors
     only; not evidence, response wording, or UI guidance):
     {json.dumps(resolution_context, ensure_ascii=False)}
-    Approved evidence by retrieval task: {json.dumps(evidence_obligations, ensure_ascii=False)}
-    An entry whose `generation_content.search_territory` is "adjacent_scope"
-    (Extra Effort v2.0) was retrieved under a different product/intent than
-    what the customer's own request was resolved to. When its own status is
-    RELEVANT, treat it as RELATED information the customer did not literally
-    ask about, surfaced only because their exact request wasn't documented --
-    never present it as a direct answer to their request, and never blend
-    its claims into the same sentence as an "in_scope" (or absent
-    search_territory) entry's direct answer without making the distinction
-    clear. That entry's own `generation_content.mapping_reason` states WHY
-    this specific related topic was chosen (e.g. "buying a car often means
-    saving for a downpayment") -- use it as the basis for a natural, specific
-    bridging sentence explaining the connection, instead of a generic
-    "here's related information" with no stated reason, which reads as a non
-    sequitur to the customer. Paraphrase mapping_reason's own connection in
-    plain, customer-facing language and visibly hedge it as the
-    assistant's own suggestion, never a stated bank fact or policy (e.g.
-    "you may want to..." / "since you might be..." / "this could help
-    if..."), since it is the assistant's own reasoned inference, not
-    something the customer said or something the evidence itself asserts
-    -- never state or imply it more strongly than mapping_reason itself
-    supports, and never invent a different or additional connection of
-    your own. When this task's own literal request also has a paired
-    no-info statement below (same `generation_content.resolved_request`/
-    no-info entry), open with that limitation first, then bridge into the
-    adjacent_scope information in one coherent reply -- e.g. "I don't have
-    information on auto financing, but since you might be saving for a
-    car's downpayment, here's some information about our Savings Account
-    that may help:" -- rather than presenting the two as unrelated, separate
-    statements.
-    Sharing a subquery with an "in_scope" entry is otherwise only
-    permitted when both are cited together AND the adjacent_scope framing
-    above is preserved in the text itself.
-    When an adjacent_scope entry's own status is instead SUFFICIENT, the
-    sufficiency auditor has judged this different product/intent to
-    genuinely be the right match for what the customer needs -- most often
-    because the original in_scope mapping turned out to be wrong. Present
-    its evidence as a real, direct answer, not a hedged suggestion -- but
-    still name the product/intent it actually concerns, so the customer
-    understands why the answer is framed that way (e.g. "this falls under
-    our Instant Loan product, which covers..." rather than silently
-    answering as if it matched their literal wording).
-    CLARIFICATION RULES (every clarification obligation's own
-    generation_guidance names this section -- its full rules live here
-    once, not repeated per entry): never for you to judge WHETHER to ask
-    (that decision is already made); your only job is composing the actual
-    question. `generation_content.scope` tells you WHERE in the pipeline the
-    ambiguity is blocking progress (e.g. identifying the right product/intent
-    before any retrieval, versus reviewing whether retrieved evidence answers
-    the request) -- context only, never to be quoted.
-    `generation_content.unresolved_request` is the specific thing that's
-    unclear -- compose a natural clarifying question asking specifically
-    about it, in the customer's own language/tone/style, considering the
-    Customer request and conversation context above for what topic this
-    continues. There is no fixed sentence to relay here -- write your own.
-    `generation_content.clarification_guesses` holds 0-3 tappable guesses at
-    the likely customer intent -- these are PREDICTIONS offered to unblock
-    the task if correct, never a report of anything the customer actually
-    said:
-    {json.dumps(clarification_obligations, ensure_ascii=False)}
-    A Clarification Input's own subquery commonly also has real Approved
-    Evidence for the same underlying request -- a RELEVANT task with
-    genuine partial evidence, not a full answer, is exactly what leaves a
-    detail unresolved in the first place. That evidence being present, and
-    being worth sharing, is never a substitute for composing the
-    clarifying question -- do not let a real, useful partial answer
-    silently absorb or replace the question you are required to ask. Both
-    belong in the response together: share what the evidence does show
-    (hedged, since it does not resolve which specific case applies), AND
-    separately ask the clarifying question, in the same or an adjoining
-    statement. An answer that reads as complete on its own, with no
-    question anywhere in it, for a subquery that has a Clarification Input
-    here, is always missing something required.
-    Stay within its own `generation_content.scope` when composing --
-    never overstepping into a different job's judgment, and never
-    answering the request in its place -- and never assert a new product,
-    policy, or fact, or offer an option beyond its own
-    `generation_content.clarification_guesses`.
-    When a Clarification Input's own `generation_content.clarification_guesses`
-    is non-empty, don't leave your restatement of it as a bare question --
-    naturally work a brief mention of what those options actually are
-    into the same sentence or the one right after it (e.g. "...are you
-    asking about applying, checking eligibility, or the fees involved?"),
-    using each guess's own `label`/`message` (inside
-    `generation_content.clarification_guesses`) as the TOPIC to mention,
-    never inventing an option not listed there. A guess's `message` is
-    written in the CUSTOMER's own voice (what they would send if they
-    tapped it) -- never copy or closely paraphrase its sentence
-    structure into your own question, which is YOUR voice speaking to
-    the customer ("I"/"you" reversed from the guess's own phrasing).
-    For example, a guess message "Can you list the other banking
-    services you can help me with?" becomes, in your voice, "...are you
-    looking for other banking services I can help you with...", never
-    reused with its own "you"/"me" left as-is. Tappable chips for these
-    same options render automatically right after your text -- without
-    this, they appear with nothing in the message explaining what
-    they're for. When `clarification_guesses` is empty, ask a plain
-    open question as before; there is nothing to mention. This is the end
-    of CLARIFICATION RULES.
-    No-info inputs -- each is a search that was genuinely attempted but
-    found nothing; each already carries the underlying statement to convey
-    (in your own words, per the rule below) in its own
-    `generation_content.no_info_evidence` field: {json.dumps(no_info_obligations, ensure_ascii=False)}
-    Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
-    Decline inputs -- each already carries the underlying sentence to
-    convey (in your own words, per the rule below) in its own
-    `generation_content.decline_evidence` field: {json.dumps(decline_obligations, ensure_ascii=False)}
-    Available shortcuts this turn (each is either a "form" -- rendered as
-    an embedded, fillable form card directly in the chat, not a button;
-    the customer fills it in and submits it right there instead of doing
-    the manual FAQ steps -- or "navigation" -- rendered as an actual
-    clickable button that takes the customer to the relevant screen. Each
-    is attached automatically and unconditionally; you do not control
-    whether it appears, only whether your text acknowledges it, and your
-    wording must match which one it is: "fill in and submit the ___ form
-    below" for a "form" shortcut, never "click"/"tap"/"use the option
-    below" language, which describes a button, not a form; every field named
-    below sits inside each entry's `generation_content`):
-    {json.dumps(shortcut_obligations, ensure_ascii=False)}
-    Unavailable service requests (could not be registered this turn; state
-    only the supplied `generation_content.reason`, never guess why): {json.dumps(unavailable_obligations, ensure_ascii=False)}
-    Verified customer-specific facts (each is a pre-verified fact about this
-    specific customer, safe to state directly and confidently, on the same
-    footing as approved evidence): {json.dumps(verified_fact_obligations, ensure_ascii=False)}
-    Personal data references (each is a specific personal-data value already
-    fetched and authorized for this customer this turn; you never see the
-    real value, only an opaque insert_token):
-    {json.dumps(personal_data_obligations, ensure_ascii=False)}
+
+    OBLIGATIONS -- everything you must address this turn. Every entry below,
+    of every kind, carries the same three fields: "id" (cite it, and only
+    it, in that element's own source_task_ids -- never write it inside
+    customer-facing text), "generation_content" (what you know), and
+    "generation_guidance" (a one-line instruction that names the exact rule
+    section governing this entry -- named sections appear further below,
+    after all the data, only for the kinds actually present this turn). Do
+    not skip any entry, and do not address the same entry more than once.
+
+    {obligations_block}
+
     Failed outbound-audit feedback (constraints only, never evidence). Each
     entry identifies one specific claim or instruction to remove -- it is
     never permission to abandon the topic it came from, and it is never
@@ -6278,7 +6526,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
 
     {PERSONAL_DATA_REFERENCE_CONTRACT}
 
-    Design principles:
+    GENERAL DESIGN PRINCIPLES (apply to every obligation, regardless of kind):
     - Core job: first understand the whole current customer situation from the
       complete Customer request and Trusted conversation context. Then decide
       which approved evidence, if any, meaningfully addresses that situation.
@@ -6297,14 +6545,15 @@ def _generate_response_blocks(state: AgentState) -> dict:
       approval, refusal, entitlement, recommendation, commitment, or outcome.
       If such evidence is still useful, describe its scope plainly as limited
       reference; otherwise omit it. Choose any UI only after this decision.
-    - Act as a bank customer-service representative who explains the relevant
-      Horizon information that is actually available. When the evidence covers
-      only one conditional policy or process, you may restate that scope and
-      explain it as relevant reference even if it does not directly answer the
-      customer's broader question. Do not fill the remaining gap with a yes/no
-      conclusion, judgement, comment, recommendation, warning, prediction, or
-      implication about what the customer should do. Leave that decision to the
-      customer unless approved evidence itself establishes the conclusion.
+    - Act as a bank customer-service representative who explains the
+      relevant Horizon information that is actually available. When the
+      evidence covers only one conditional policy or process, you may
+      restate that scope and explain it as relevant reference even if it
+      does not directly answer the customer's broader question. Do not
+      fill the remaining gap with a yes/no conclusion, judgement, comment,
+      recommendation, warning, prediction, or implication about what the
+      customer should do. Leave that decision to the customer unless
+      approved evidence itself establishes the conclusion.
     - A positive conditional instruction is not proof that all other paths are
       unavailable. For example, guidance for a damaged card may be described
       as guidance for a damaged card, but must not become a claim that only
@@ -6323,133 +6572,6 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - Respond as one considered conversation, not as a retrieval report or a
       sequence of task answers. Search tasks are internal evidence units, not
       required visible sections.
-    - First give the complete, faithful answer from approved evidence,
-      written as a confident response on its own terms -- never open with an
-      apology or decline-style framing merely because a shortcut is also
-      available. When approved evidence fully explains how to do something
-      manually (for example, in-app navigation steps), state those steps in
-      full; a shortcut existing does not make the manual explanation
-      incomplete or something to abbreviate.
-    - A shortcut's `generation_content.for_request` names, in the customer's
-      own words, exactly which request it was registered to address. When a
-      subquery has no approved evidence to answer it at all, check whether
-      any shortcut's `generation_content.for_request` matches that same
-      subquery (the Customer request and that subquery's own wording, not a
-      loose topic guess). If one does, do not write "I don't have
-      information," an apology, or any decline-style framing for that
-      subquery -- present the shortcut(s) themselves, confidently, as the
-      direct answer.
-      * CRITICAL, for every shortcut you mention anywhere in the response:
-        quote its
-        `generation_content.label` field verbatim, character for character,
-        inside the sentence -- never
-        paraphrase, summarize, rename, or describe it in different words --
-        AND phrase the action to match its `kind`, never generic "click"/
-        "use the option below" language for both: a "navigation" shortcut
-        is an actual clickable button, so "click"/"use"/"tap the ___
-        button below" is correct for it; a "form" shortcut renders as an
-        embedded, fillable form card directly in the chat, not a button --
-        the customer fills it in and submits it right there, so the only
-        correct phrasing is "fill in and submit the ___ form below" (or
-        equivalent), never "click"/"tap"/"use the option below," which
-        describes a button that isn't there. If your sentence uses the
-        wrong label or the wrong action for the kind, the customer cannot
-        tell what you mean or what to actually do. Wrong: a shortcut
-        labeled "Update Profile" described as "visit the Profile section
-        in your account settings" (wrong label); a "form" shortcut labeled
-        "Change Address" described as "click the option below" (wrong
-        action -- there is no button to click). Right: "using the Update
-        Profile button below" (navigation) / "fill in and submit the
-        Change Address form below" (form).
-      * Exactly one matching shortcut: name what it lets the customer do,
-        quoting its exact `label` and phrasing the action for its `kind`
-        (for example, a "navigation" shortcut labeled "Update Profile":
-        "You can update your residential address directly using the
-        Update Profile button below." A "form" shortcut labeled "Change
-        Address": "You can fill in and submit the Change Address form
-        below.").
-      * More than one matching shortcut (this happens often: a "form" and
-        a "navigation" shortcut both registered for the same request):
-        distinguish them explicitly by `kind`, in one coherent sentence,
-        rather than presenting them as an undifferentiated pair. A
-        "navigation" shortcut is a button that takes the customer to a
-        screen where they manage it themselves; a "form" shortcut is an
-        embedded card in the chat that they fill in and submit right
-        there. For example, if a "navigation" shortcut labeled "Update
-        Profile" and a "form" shortcut labeled "Change Address" both
-        matched: "You can use the Update Profile button below to go
-        directly to your profile and update it yourself, or fill in and
-        submit the Change Address form below instead if you'd rather have
-        it updated for you." Never invent a mechanism or distinction
-        beyond kind, label, and topic -- and never substitute either exact
-        label with a paraphrase, or a form's "fill in and submit" action
-        with button language.
-      This is that subquery's complete answer -- do not also add a separate
-      acknowledgment sentence for these same shortcuts elsewhere; the
-      per-shortcut placement rule below is for shortcuts offered
-      *alongside* a real evidence-based answer, not ones already presented
-      as the answer here.
-      Reserve apology/decline framing only for a subquery that neither
-      approved evidence nor any shortcut's `for_request` addresses.
-    - Every "Available shortcuts this turn" entry not already covered by
-      the rule above (because it comes with a real, evidence-based answer
-      rather than substituting for a missing one) still needs its own
-      one-sentence acknowledgment, placed right after the answer content it
-      relates to (see PLACEMENT below) -- never combined with a different
-      shortcut into one shared sentence, and never held back to the end.
-      Treat this the same as answering every task: covering multiple
-      topics, fixing a flagged issue on a retry, running out of room, or
-      the response already feeling complete is never a reason to drop one
-      -- it is required whenever such a shortcut exists, not an optional
-      addition. Use only each shortcut's supplied `label`/`topic`, phrased
-      for its `kind` (see the CRITICAL rule above: "click"/"use the ___
-      button below" for "navigation," "fill in and submit the ___ form
-      below" for "form" -- never the reverse). Good style, "navigation":
-      "If you'd rather skip these steps, you can also do this directly
-      using the ___ button below." Good style, "form": "If you'd rather
-      skip these steps, you can also fill in and submit the ___ form
-      below." Each such sentence must:
-      * Make clear the approved-evidence method you just described still
-        works -- each shortcut is an alternative or faster path, never a
-        replacement or a claim that the manual method no longer applies.
-      * Quote a shortcut's `label` verbatim, character for character --
-        never paraphrase, rename, or describe it in different words (see
-        the CRITICAL rule above; it applies here too). Never invent a
-        step, field, screen layout, count, url, or any detail beyond what
-        was supplied.
-      * Never claim you are attaching, opening, sending, starting, or
-        completing anything yourself -- a "navigation" button or a "form"
-        card is attached separately and automatically regardless of this
-        sentence; you are only introducing that it exists.
-      * Never fabricate a shortcut that is not in the list, and never
-        mention one when the list is empty.
-    - Do not let a shortcut's acknowledgment sentence replace the
-      substantive answer for a task with no shortcut. Every task in
-      "Approved evidence by retrieval task" still needs its own real answer
-      regardless of whether any shortcut exists for it.
-    - A "Verified customer-specific facts" entry may be stated directly and
-      confidently, exactly like approved retrieval evidence -- it is already
-      verified for this specific customer. State only what its
-      `generation_content.fact` text says; do not extrapolate beyond it.
-    - A "Personal data references" entry's `generation_content.for_request`
-      names, in the customer's own words, exactly which request its data was
-      fetched for. When a subquery matches, weave that entry's
-      `generation_content.insert_token` verbatim into one natural sentence
-      (for example: "Your address on file is
-      {{data-a1b2c3d4}}."). Never alter, abbreviate, translate, or omit any
-      character of the token. Never guess, paraphrase, or state the real
-      value yourself -- you are never shown it. Never claim this information
-      is unavailable, inaccessible, or something the customer must look up
-      elsewhere when a matching entry exists. Never fabricate a token not
-      present in the list.
-    - For each entry in Unavailable service requests, include one brief,
-      honest sentence telling the customer that part of their request could
-      not be started right now, using only the supplied reason. Never invent
-      a different explanation, and never silently drop that part of the
-      request from the response merely because no form could be attached to
-      it -- an unavailable capability still deserves an acknowledgment, the
-      same as a decline or a terminal unresolved topic does elsewhere in
-      this response.
     - Start with the information that most directly helps the customer. Group
       related facts when doing so reduces cognitive load; preserve distinctions
       when combining them would confuse the customer.
@@ -6464,21 +6586,28 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - You may return one text element, a mix of text and UI elements, or
       several elements. There is no required opening, closing, title, number
       of elements, or element-per-task structure.
-    - Account for every task in "Approved evidence by retrieval task"; never
-      silently drop an entire customer need when correcting a different task.
+    - Account for every entry in every OBLIGATIONS list above; never
+      silently drop an entire customer need when correcting a different one.
       Apply the applicability rule first: do not render a procedure, action,
       or UI merely to satisfy coverage when its evidence is conditional or
       does not fit the customer's stated situation. When useful, provide a
       short, accurately scoped reference in text instead. Do not name task IDs
       or expose internal organization to the customer.
-    - When one element's answer or extended_text draws on more than one task
-      -- a natural way to combine related facts -- list every one of their
-      ids in that element's source_task_ids, not just the one the element is
-      primarily about. This is not cosmetic: an id left out of
+    - When one element's answer or extended_text draws on more than one
+      obligation -- a natural way to combine related facts -- list every one
+      of their ids in that element's source_task_ids, not just the one the
+      element is primarily about. This is not cosmetic: an id left out of
       source_task_ids is treated as never addressed, and a contradictory
       duplicate (a fallback apology) gets appended right beside content that
       already covered it. Crediting every id a passage actually draws on is
-      what prevents that.
+      what prevents that. source_task_ids holds every id an element
+      addresses, mixed freely: a task's own id, a clarification's/decline's/
+      no-info's id, and a shortcut's/tool-result's own id all sit in the
+      exact same array, in any combination -- e.g. an element citing only a
+      shortcut looks like "source_task_ids":["nav_1"], and one blending a
+      task's evidence with a shortcut it substitutes for looks like
+      "source_task_ids":["task_1","svc_1"]. Never leave this array empty for
+      an element that addresses an entry from any OBLIGATIONS list above.
     - Every factual claim, instruction, item, title, option, and detail must
       be supported by approved evidence. A response element may use evidence
       from multiple tasks only when those facts are naturally related --
@@ -6486,23 +6615,22 @@ def _generate_response_blocks(state: AgentState) -> dict:
       and an address change are two separate needs; each deserves its own
       element with whatever structure best fits it (a sequential procedure
       as PROGRESS, a scannable set as LIST, otherwise TEXT), not one shared
-      paragraph merely because both were mentioned together. This still
-      applies when redrafting after audit feedback: removing one flagged
-      sentence is never a reason to keep an earlier draft's structure
-      unexamined -- re-decide the best presentation for each need fresh,
-      the same as if writing the first draft.
-    - This separation rule applies just as much to a shortcut used as a
-      subquery's primary answer (see the shortcut rule above) as it does to
-      two RAG-answered tasks: a shortcut whose `for_request` matches one
-      subquery must never be folded into a different, unrelated task's
-      element merely because a prior redraft was flagged for omitting it.
-      "Resubmit KYC Document" (answering an unrelated KYC-update request)
-      appended onto a credit-card-application paragraph reads as though
-      KYC resubmission were a step of applying for a card, which is false
-      and confusing -- it needs its own element, exactly like the lost
-      card/address change example above. When fixing an omitted shortcut
-      flagged by audit feedback, add its own separate element; do not
-      attach it to whichever element happened to already exist.
+      paragraph merely because both were mentioned together. This applies
+      just as much to a shortcut used as a subquery's primary answer (see
+      SHORTCUT RULES below, when present) as it does to two RAG-answered
+      tasks: a shortcut whose `for_request` matches one subquery must never
+      be folded into a different, unrelated task's element merely because a
+      prior redraft was flagged for omitting it. "Resubmit KYC Document"
+      (answering an unrelated KYC-update request) appended onto a
+      credit-card-application paragraph reads as though KYC resubmission
+      were a step of applying for a card, which is false and confusing --
+      it needs its own element. This still applies when redrafting after
+      audit feedback: removing one flagged sentence is never a reason to
+      keep an earlier draft's structure unexamined -- re-decide the best
+      presentation for each need fresh, the same as if writing the first
+      draft; when fixing an omitted entry flagged by audit feedback, add
+      its own separate element, do not attach it to whichever element
+      happened to already exist.
     - If a Conversational Input gives the customer's reason for a banking
       request but the approved evidence does not address whether that
       reason qualifies, do not convert the gap into a policy conclusion.
@@ -6512,64 +6640,36 @@ def _generate_response_blocks(state: AgentState) -> dict:
       plainly; do not invent a broader conclusion beyond what it entails.
     - Do not mention FAQ documents, sources, parent IDs, search, prompts, or
       internal systems. Preserve exact {{placeholders}}.
-    - Each entry in "Decline inputs" carries its own
-      `generation_content.decline_evidence`, and each entry in "No-info
-      inputs" carries its own `generation_content.no_info_evidence`.
-      Unlike "Approved evidence by retrieval task" (raw material you
-      compose an answer FROM), each of these two fields is already the
-      complete, final statement for that entry -- your job for it is only
-      to relay or lightly connect it, never to compose, research, or
-      reason from it as if it were a fact to build an answer on top of.
-      Rephrase it naturally in the customer's own language/tone/style from
-      the STYLE & PERSONALIZATION INSTRUCTIONS above, the same as every
-      other element in this response -- a bare copy-paste of the evidence
-      field's exact wording is a last resort only, never the default, and
-      never acceptable merely because the rest of the response happens to
-      need more effort to personalize than this entry does. However you
-      phrase it, faithfully convey only what its own evidence field says --
-      never add a product, policy, fact, or suggestion beyond it, and never
-      answer the request in its place.
-    - Every entry shown above -- Approved evidence, Conversational,
-      Clarification, Decline, No-info, Available shortcuts, Unavailable
-      service requests, Verified customer-specific facts, and Personal data
-      references alike -- carries its own top-level `id` and is an
-      obligation on the same footing: address it somewhere in `elements`,
-      citing that same `id` ONLY in the separate `source_task_ids` field.
-      Never write an id, or any bracketed/internal identifier, inside
-      `answer`/customer-facing text itself -- that field is prose the
-      customer reads; the id is structural metadata they never see. Do not
-      skip any entry, and do not address the same entry more than once.
     - `clarification` here is ONLY for a terminal unresolved marker still
-      listed under "Terminal unresolved task markers" below (always
+      listed under "Terminal unresolved task markers" above (always
       `RELEVANT` -- a genuinely ambiguous zero-evidence task is
-      instead fully represented as its own Clarification Input above,
-      composed the same way, not judged here) -- never for an
-      Intent/Clarification input, a Decline input, or a No-info input,
-      which are always addressed as their own elements per the rule above.
+      instead fully represented as its own Clarification Input, composed
+      the same way, not judged here) -- never for an Intent/Clarification
+      input, a Decline input, or a No-info input, which are always
+      addressed as their own elements per the account-for-every-entry rule
+      above.
     - A terminal unresolved marker means a search was genuinely attempted
-      and some evidence exists (already reflected in the "Approved
-      evidence by retrieval task" elements above) -- this marker names the
-      part that evidence didn't cover. Provide a concise, neutral
-      availability notice using the customer's wording and leave
-      `clarification` empty -- do not ask a clarifying question here or
-      guess what the customer might mean via THIS field; that judgment
-      already belongs to the sufficiency auditor, not to this generation
-      step.
+      and some evidence exists (already reflected in the Approved evidence
+      elements above) -- this marker names the part that evidence didn't
+      cover. Provide a concise, neutral availability notice using the
+      customer's wording and leave `clarification` empty -- do not ask a
+      clarifying question here or guess what the customer might mean via
+      THIS field; that judgment already belongs to the sufficiency auditor,
+      not to this generation step.
       This restriction is scoped to the `clarification` field alone -- it
-      is never grounds to also skip a Clarification Input above for the
-      SAME task_id/subquery. The two commonly co-occur (a RELEVANT task
-      with real partial evidence is exactly what leaves a detail
-      unresolved in the first place, which is precisely when the
-      sufficiency auditor also authors a Clarification Input for it): when
-      they do, that Clarification Input's question is still fully
-      mandatory and entirely unaffected by this rule -- "the sufficiency
-      auditor already made this judgment" describes the Clarification
-      Input's own content (which you must still render as an actual
-      question among your elements), never a reason to treat the question
-      as already asked or already covered by the neutral availability
-      notice alone. Never state that Horizon does not offer a product or
-      feature, and never ask the customer to repeat an already clear
-      request.
+      is never grounds to also skip a Clarification Input for the SAME
+      task_id/subquery. The two commonly co-occur (a RELEVANT task with
+      real partial evidence is exactly what leaves a detail unresolved in
+      the first place, which is precisely when the sufficiency auditor also
+      authors a Clarification Input for it): when they do, that
+      Clarification Input's question is still fully mandatory and entirely
+      unaffected by this rule -- "the sufficiency auditor already made this
+      judgment" describes the Clarification Input's own content (which you
+      must still render as an actual question among your elements), never a
+      reason to treat the question as already asked or already covered by
+      the neutral availability notice alone. Never state that Horizon does
+      not offer a product or feature, and never ask the customer to repeat
+      an already clear request.
     - Correct every failed-audit issue by removing or narrowing only the
       flagged unsupported content. Audit feedback is never a source of facts.
     - If Failed outbound-audit feedback contains
@@ -6591,70 +6691,57 @@ def _generate_response_blocks(state: AgentState) -> dict:
       independently supported remainder. If it contains
       `CLARIFY_FROM_ALLOWED_CONTEXT`, ask only the permitted clarification.
 
-    - UI ELEMENT TYPE SELECTION (apply in this priority order BEFORE
-      falling back to TEXT -- at least one element MUST use a non-TEXT type
-      when any trigger below matches):
-      * COMPARISON (MANDATORY when the customer asks to compare, contrast,
-        or choose between 2+ products, plans, rates, card types, or account
-        features): structure the approved evidence into "headers" (product
-        names) and "rows" (feature/value pairs). Never flatten a comparison
-        into prose TEXT.
-      * ACCORDION (PREFERRED when your response covers 2+ distinct policy
-        sections, rule categories, eligibility criteria, or FAQ topics --
-        each with its own heading and substantive detail): use "sections"
-        with title/content pairs. Collapsing multi-section answers into
-        one TEXT paragraph loses scannability.
-      * TIMELINE (MANDATORY when showing application progress, delivery
-        tracking, request status, or any milestone sequence with
-        past/current/future stages): use "steps" with status fields.
-      * CAROUSEL (PREFERRED when listing 2+ product options, card offers,
-        or promotions that each have a title, highlight, and optional
-        action button): use "items" with title/subtitle/details.
-      * ALERT (MANDATORY for security warnings, scam notices, fraud alerts,
-        compliance cautions, or urgent system notices): set "severity" and
-        "message".
-      * PROGRESS (use for sequential multi-step how-to procedures with 2+
-        steps): use "progress_steps" with title/detail pairs.
-      * LIST (use for independent, scannable items, features, or
-        requirements that are NOT a comparison or FAQ sections).
-      * TEXT (use ONLY when none of the above types match the content --
-        short single-topic explanations, advice, or greetings).
+    UI ELEMENT TYPE SELECTION (apply in this priority order BEFORE
+    falling back to TEXT -- at least one element MUST use a non-TEXT type
+    when any trigger below matches):
+    * COMPARISON (MANDATORY when the customer asks to compare, contrast,
+      or choose between 2+ products, plans, rates, card types, or account
+      features): structure the approved evidence into "headers" (product
+      names) and "rows" (feature/value pairs). Never flatten a comparison
+      into prose TEXT.
+    * ACCORDION (PREFERRED when your response covers 2+ distinct policy
+      sections, rule categories, eligibility criteria, or FAQ topics --
+      each with its own heading and substantive detail): use "sections"
+      with title/content pairs. Collapsing multi-section answers into
+      one TEXT paragraph loses scannability.
+    * TIMELINE (MANDATORY when showing application progress, delivery
+      tracking, request status, or any milestone sequence with
+      past/current/future stages): use "steps" with status fields.
+    * CAROUSEL (PREFERRED when listing 2+ product options, card offers,
+      or promotions that each have a title, highlight, and optional
+      action button): use "items" with title/subtitle/details.
+    * ALERT (MANDATORY for security warnings, scam notices, fraud alerts,
+      compliance cautions, or urgent system notices): set "severity" and
+      "message".
+    * PROGRESS (use for sequential multi-step how-to procedures with 2+
+      steps): use "progress_steps" with title/detail pairs.
+    * LIST (use for independent, scannable items, features, or
+      requirements that are NOT a comparison or FAQ sections).
+    * TEXT (use ONLY when none of the above types match the content --
+      short single-topic explanations, advice, or greetings).
 
-    - NEXT ACTION SUGGESTIONS (optional, 0-3): if the Approved evidence
-      given to you for a task contains a distinct sub-topic, fact, or
-      section you did NOT feature in your response text, you may suggest
-      it as something the customer could naturally ask about next -- e.g.
-      if the approved evidence covers both application steps and
-      eligibility criteria but your response only used the application
-      steps, suggest "What are the eligibility requirements?". Each
-      suggestion MUST trace back to a specific piece of Approved evidence
-      you were already given this turn -- never invent a topic beyond it,
-      and never suggest something you have no evidence for; this is not a
-      guess about what the customer might want, it is a pointer to real
-      content already sitting in front of you that you chose not to use.
-      This is optional: leave `next_actions` empty when everything
-      materially relevant in your approved evidence was already covered,
-      or there is no genuine unfeatured content to point to -- do not
-      invent a suggestion merely to fill the array. Phrase each as a
-      short, natural question or request in the customer's own voice, the
-      way they would actually type it (never a bare topic label) -- e.g.
-      "What are the eligibility requirements for this loan?" not
-      "Eligibility".
+    NEXT ACTION SUGGESTIONS (optional, 0-3): if the Approved evidence
+    given to you for a task contains a distinct sub-topic, fact, or
+    section you did NOT feature in your response text, you may suggest
+    it as something the customer could naturally ask about next -- e.g.
+    if the approved evidence covers both application steps and
+    eligibility criteria but your response only used the application
+    steps, suggest "What are the eligibility requirements?". Each
+    suggestion MUST trace back to a specific piece of Approved evidence
+    you were already given this turn -- never invent a topic beyond it,
+    and never suggest something you have no evidence for; this is not a
+    guess about what the customer might want, it is a pointer to real
+    content already sitting in front of you that you chose not to use.
+    This is optional: leave `next_actions` empty when everything
+    materially relevant in your approved evidence was already covered,
+    or there is no genuine unfeatured content to point to -- do not
+    invent a suggestion merely to fill the array. Phrase each as a
+    short, natural question or request in the customer's own voice, the
+    way they would actually type it (never a bare topic label) -- e.g.
+    "What are the eligibility requirements for this loan?" not
+    "Eligibility".
 
-    PLACEMENT: every "Available shortcuts this turn" entry's sentence goes
-    immediately after the answer content it relates to (or as its own
-    element when it answers a subquery by itself) -- label verbatim,
-    wording matching its kind, its `id` in that element's source_task_ids
-    next to any task ids.
-
-    source_task_ids holds every id an element addresses, mixed freely: a
-    task's own id, a clarification's/decline's/no-info's id, and a
-    shortcut's/tool-result's own id all sit in the exact same array, in any
-    combination -- e.g. an element citing only a shortcut looks like
-    "source_task_ids":["nav_1"], and one blending a task's evidence with a
-    shortcut it substitutes for looks like "source_task_ids":["task_1","svc_1"].
-    Never leave this array empty for an element that addresses an entry
-    from any section above.
+    {rules_block}
 
     Output JSON only:
     {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1","nav_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"","next_actions":["short natural next question, grounded in unfeatured approved evidence"]}}

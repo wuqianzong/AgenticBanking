@@ -1218,6 +1218,7 @@ def _build_response_obligations(
     available_shortcuts: list,
     unavailable_service_requests: list,
     personal_data_placeholders: list,
+    task_metadata: dict | None = None,
 ) -> list[dict]:
     """Fold every already-computed, already-typed obligation list into one
     `{id, generation_content, generation_guidance}` entry per item -- the
@@ -1244,11 +1245,13 @@ def _build_response_obligations(
     instruction string above.
     """
     obligations = []
+    task_metadata = task_metadata or {}
 
     for entry in evidence_by_task:
         obligations.append({
             "id": entry.get("task_id"),
             "generation_content": {
+                "resolved_request": task_metadata.get(entry.get("task_id"), ""),
                 "search_territory": entry.get("search_territory", "in_scope"),
                 "mapping_reason": entry.get("mapping_reason", ""),
                 "approved_parents": entry.get("approved_parents", []),
@@ -5991,17 +5994,6 @@ def _generate_response_blocks(state: AgentState) -> dict:
         for task in state.get("search_tasks", [])
         if task.get("task_id")
     }
-    evidence_inputs = [
-        {
-            "task_id": entry.get("task_id"),
-            "resolved_request": task_metadata.get(entry.get("task_id"), ""),
-            "approved_parents": entry.get("approved_parents", []),
-            "search_territory": entry.get("search_territory", "in_scope"),
-            "mapping_reason": entry.get("mapping_reason", ""),
-            "generation_guidance": entry.get("generation_guidance", ""),
-        }
-        for entry in evidence_by_task
-    ]
     # Despite the variable name (kept for minimal diff churn across this
     # function), this now includes every clarification regardless of which
     # node raised it -- one standard contract keyed by subquery_id, see
@@ -6015,9 +6007,9 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # treatment as decline/clarification -- there is nothing left to
     # synthesize, only a fixed "not found" statement to relay. A task with
     # SOME retained partial evidence (RELEVANT) is different: it
-    # already flows through evidence_inputs as real content, so it stays on
-    # the looser, narrower `clarification` field's terminal-marker path
-    # below rather than being duplicated here.
+    # already flows through evidence_by_task/evidence_obligations as real
+    # content, so it stays on the looser, narrower `clarification` field's
+    # terminal-marker path below rather than being duplicated here.
     no_info_context, terminal_markers = _split_terminal_markers(
         state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
     )
@@ -6076,6 +6068,29 @@ def _generate_response_blocks(state: AgentState) -> dict:
     audit_feedback = state.get("draft_feedback_history", [])[-4:]
     user_profile = state.get("user_profile", {})
 
+    # Unified Response Obligation Contract (docs/RESPONSE_OBLIGATION_CONTRACT_
+    # DESIGN.md, Stage 1): one builder call, one shared id/mode/guidance
+    # source of truth. Each named section below still shows its own filtered
+    # subset -- by looking up each already-computed typed entry's own id in
+    # the single result -- so the prompt's per-type behavioral rules
+    # (unchanged, deferred to a later stage) still sit next to the data they
+    # describe; only the wrapping shape and field paths change.
+    obligations = _build_response_obligations(
+        evidence_by_task, verified_api_context, decline_context, no_info_context,
+        conversational_context, intent_clarifications, available_shortcuts,
+        unavailable_service_requests, personal_data_placeholders, task_metadata,
+    )
+    obligations_by_id = {o["id"]: o for o in obligations if o.get("id")}
+    evidence_obligations = [obligations_by_id[e["task_id"]] for e in evidence_by_task if e.get("task_id") in obligations_by_id]
+    verified_fact_obligations = [obligations_by_id[e["handle"]] for e in verified_api_context if e.get("handle") in obligations_by_id]
+    conversational_obligations = [obligations_by_id[e["subquery_id"]] for e in conversational_context if e.get("subquery_id") in obligations_by_id]
+    decline_obligations = [obligations_by_id[e["task_id"]] for e in decline_context if e.get("task_id") in obligations_by_id]
+    no_info_obligations = [obligations_by_id[e["task_id"]] for e in no_info_context if e.get("task_id") in obligations_by_id]
+    clarification_obligations = [obligations_by_id[c["subquery_id"]] for c in intent_clarifications if c.get("subquery_id") in obligations_by_id]
+    shortcut_obligations = [obligations_by_id[e["handle"]] for e in available_shortcuts if e.get("handle") in obligations_by_id]
+    unavailable_obligations = [obligations_by_id[e["handle"]] for e in unavailable_service_requests if e.get("handle") in obligations_by_id]
+    personal_data_obligations = [obligations_by_id[e["handle"]] for e in personal_data_placeholders if e.get("handle") in obligations_by_id]
+
     prompt = f"""
     FLEXIBLE RESPONSE GENERATION
     You are Horizon, a helpful, natural, read-only Horizon Bank customer
@@ -6100,29 +6115,30 @@ def _generate_response_blocks(state: AgentState) -> dict:
     Conversational inputs -- each is a non-financial part of this turn (a
     greeting, thanks, feeling, or an off-topic remark), already identified
     as needing no banking fact. Compose one brief, natural, tone-appropriate
-    reply per entry from its own "customer_component" -- never invent or
-    imply a banking fact, product, policy, commitment, or next action for
-    it, and never treat it as a question to answer. When it shares a turn
-    with a real evidence-based answer, you may connect it naturally into
-    the same element as that answer, exactly like a Clarification Input:
-    {json.dumps(conversational_context, ensure_ascii=False)}
+    reply per entry from its own `generation_content.customer_component` --
+    never invent or imply a banking fact, product, policy, commitment, or
+    next action for it, and never treat it as a question to answer. When it
+    shares a turn with a real evidence-based answer, you may connect it
+    naturally into the same element as that answer, exactly like a
+    Clarification Input:
+    {json.dumps(conversational_obligations, ensure_ascii=False)}
     Global resolution context (internal coverage and unresolved-topic anchors
     only; not evidence, response wording, or UI guidance):
     {json.dumps(resolution_context, ensure_ascii=False)}
-    Approved evidence by retrieval task: {json.dumps(evidence_inputs, ensure_ascii=False)}
-    An entry whose "search_territory" is "adjacent_scope" (Extra Effort
-    v2.0) was retrieved under a different product/intent than what the
-    customer's own request was resolved to. When its own status is RELEVANT,
-    treat it as RELATED information the customer did not literally ask
-    about, surfaced only because their exact request wasn't documented --
+    Approved evidence by retrieval task: {json.dumps(evidence_obligations, ensure_ascii=False)}
+    An entry whose `generation_content.search_territory` is "adjacent_scope"
+    (Extra Effort v2.0) was retrieved under a different product/intent than
+    what the customer's own request was resolved to. When its own status is
+    RELEVANT, treat it as RELATED information the customer did not literally
+    ask about, surfaced only because their exact request wasn't documented --
     never present it as a direct answer to their request, and never blend
     its claims into the same sentence as an "in_scope" (or absent
     search_territory) entry's direct answer without making the distinction
-    clear. That entry's own "mapping_reason" states WHY this specific
-    related topic was chosen (e.g. "buying a car often means saving for a
-    downpayment") -- use it as the basis for a natural, specific bridging
-    sentence explaining the connection, instead of a generic "here's
-    related information" with no stated reason, which reads as a non
+    clear. That entry's own `generation_content.mapping_reason` states WHY
+    this specific related topic was chosen (e.g. "buying a car often means
+    saving for a downpayment") -- use it as the basis for a natural, specific
+    bridging sentence explaining the connection, instead of a generic
+    "here's related information" with no stated reason, which reads as a non
     sequitur to the customer. Paraphrase mapping_reason's own connection in
     plain, customer-facing language and visibly hedge it as the
     assistant's own suggestion, never a stated bank fact or policy (e.g.
@@ -6132,12 +6148,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
     -- never state or imply it more strongly than mapping_reason itself
     supports, and never invent a different or additional connection of
     your own. When this task's own literal request also has a paired
-    no-info statement below (same resolved_request/no-info entry), open
-    with that limitation first, then bridge into the adjacent_scope
-    information in one coherent reply -- e.g. "I don't have information on
-    auto financing, but since you might be saving for a car's downpayment,
-    here's some information about our Savings Account that may help:" --
-    rather than presenting the two as unrelated, separate statements.
+    no-info statement below (same `generation_content.resolved_request`/
+    no-info entry), open with that limitation first, then bridge into the
+    adjacent_scope information in one coherent reply -- e.g. "I don't have
+    information on auto financing, but since you might be saving for a
+    car's downpayment, here's some information about our Savings Account
+    that may help:" -- rather than presenting the two as unrelated, separate
+    statements.
     Sharing a subquery with an "in_scope" entry is otherwise only
     permitted when both are cited together AND the adjacent_scope framing
     above is preserved in the text itself.
@@ -6152,19 +6169,20 @@ def _generate_response_blocks(state: AgentState) -> dict:
     answering as if it matched their literal wording).
     Clarification inputs -- never for you to judge WHETHER to ask (that
     decision is already made); your only job is composing the actual
-    question. "scope" tells you WHERE in the pipeline the ambiguity is
-    blocking progress (e.g. identifying the right product/intent before
-    any retrieval, versus reviewing whether retrieved evidence answers the
-    request) -- context only, never to be quoted. "unresolved_request" is
-    the specific thing that's unclear -- compose a natural clarifying
-    question asking specifically about it, in the customer's own language/
-    tone/style, considering the Customer request and conversation context
-    above for what topic this continues. There is no fixed sentence to
-    relay here -- write your own. "clarification_guesses" holds 0-3
-    tappable guesses at the likely customer intent -- these are
-    PREDICTIONS offered to unblock the task if correct, never a report of
-    anything the customer actually said:
-    {json.dumps(_clarification_prompt_view(intent_clarifications), ensure_ascii=False)}
+    question. `generation_content.scope` tells you WHERE in the pipeline the
+    ambiguity is blocking progress (e.g. identifying the right product/intent
+    before any retrieval, versus reviewing whether retrieved evidence answers
+    the request) -- context only, never to be quoted.
+    `generation_content.unresolved_request` is the specific thing that's
+    unclear -- compose a natural clarifying question asking specifically
+    about it, in the customer's own language/tone/style, considering the
+    Customer request and conversation context above for what topic this
+    continues. There is no fixed sentence to relay here -- write your own.
+    `generation_content.clarification_guesses` holds 0-3 tappable guesses at
+    the likely customer intent -- these are PREDICTIONS offered to unblock
+    the task if correct, never a report of anything the customer actually
+    said:
+    {json.dumps(clarification_obligations, ensure_ascii=False)}
     A Clarification Input's own subquery commonly also has real Approved
     Evidence for the same underlying request -- a RELEVANT task with
     genuine partial evidence, not a full answer, is exactly what leaves a
@@ -6180,12 +6198,12 @@ def _generate_response_blocks(state: AgentState) -> dict:
     here, is always missing something required.
     No-info inputs -- each is a search that was genuinely attempted but
     found nothing; each already carries the underlying statement to convey
-    (in your own words, per the rule below) in its own "no_info_evidence"
-    field: {json.dumps(no_info_context, ensure_ascii=False)}
+    (in your own words, per the rule below) in its own
+    `generation_content.no_info_evidence` field: {json.dumps(no_info_obligations, ensure_ascii=False)}
     Terminal unresolved task markers (topic/status only; never evidence): {json.dumps(terminal_markers, ensure_ascii=False)}
     Decline inputs -- each already carries the underlying sentence to
     convey (in your own words, per the rule below) in its own
-    "decline_evidence" field: {json.dumps(decline_context, ensure_ascii=False)}
+    `generation_content.decline_evidence` field: {json.dumps(decline_obligations, ensure_ascii=False)}
     Available shortcuts this turn (each is either a "form" -- rendered as
     an embedded, fillable form card directly in the chat, not a button;
     the customer fills it in and submits it right there instead of doing
@@ -6195,26 +6213,27 @@ def _generate_response_blocks(state: AgentState) -> dict:
     whether it appears, only whether your text acknowledges it, and your
     wording must match which one it is: "fill in and submit the ___ form
     below" for a "form" shortcut, never "click"/"tap"/"use the option
-    below" language, which describes a button, not a form):
-    {json.dumps(available_shortcuts, ensure_ascii=False)}
+    below" language, which describes a button, not a form; every field named
+    below sits inside each entry's `generation_content`):
+    {json.dumps(shortcut_obligations, ensure_ascii=False)}
     Unavailable service requests (could not be registered this turn; state
-    only the supplied reason, never guess why): {json.dumps(unavailable_service_requests, ensure_ascii=False)}
+    only the supplied `generation_content.reason`, never guess why): {json.dumps(unavailable_obligations, ensure_ascii=False)}
     Verified customer-specific facts (each is a pre-verified fact about this
     specific customer, safe to state directly and confidently, on the same
-    footing as approved evidence): {json.dumps(verified_api_context, ensure_ascii=False)}
+    footing as approved evidence): {json.dumps(verified_fact_obligations, ensure_ascii=False)}
     Personal data references (each is a specific personal-data value already
     fetched and authorized for this customer this turn; you never see the
     real value, only an opaque insert_token):
-    {json.dumps(personal_data_placeholders, ensure_ascii=False)}
+    {json.dumps(personal_data_obligations, ensure_ascii=False)}
     Failed outbound-audit feedback (constraints only, never evidence). Each
     entry identifies one specific claim or instruction to remove -- it is
     never permission to abandon the topic it came from, and it is never
     permission to narrow your job to only the answer. Remove exactly what
     is flagged, then follow every rule below exactly as you would on a
-    first attempt, in full -- every Clarification/Decline/No-info entry
-    still needs its own element citing its own id, evidence still gets
-    composed the same way, and nothing here is more important than
-    anything else you were already asked to do:
+    first attempt, in full -- every entry above still needs its own element
+    citing its own top-level `id`, evidence still gets composed the same
+    way, and nothing here is more important than anything else you were
+    already asked to do:
     {json.dumps(audit_feedback, ensure_ascii=False)}
 
     {PRECISION_REFERENCE_CONTRACT}
@@ -6273,17 +6292,19 @@ def _generate_response_blocks(state: AgentState) -> dict:
       manually (for example, in-app navigation steps), state those steps in
       full; a shortcut existing does not make the manual explanation
       incomplete or something to abbreviate.
-    - A shortcut's `for_request` names, in the customer's own words, exactly
-      which request it was registered to address. When a subquery has no
-      approved evidence to answer it at all, check whether any shortcut's
-      `for_request` matches that same subquery (the Customer request and
-      that subquery's own wording, not a loose topic guess). If one does,
-      do not write "I don't have information," an apology, or any
-      decline-style framing for that subquery -- present the shortcut(s)
-      themselves, confidently, as the direct answer.
+    - A shortcut's `generation_content.for_request` names, in the customer's
+      own words, exactly which request it was registered to address. When a
+      subquery has no approved evidence to answer it at all, check whether
+      any shortcut's `generation_content.for_request` matches that same
+      subquery (the Customer request and that subquery's own wording, not a
+      loose topic guess). If one does, do not write "I don't have
+      information," an apology, or any decline-style framing for that
+      subquery -- present the shortcut(s) themselves, confidently, as the
+      direct answer.
       * CRITICAL, for every shortcut you mention anywhere in the response
-        (here or in the closing statement below): quote its `label` field
-        verbatim, character for character, inside the sentence -- never
+        (here or in the closing statement below): quote its
+        `generation_content.label` field verbatim, character for character,
+        inside the sentence -- never
         paraphrase, summarize, rename, or describe it in different words --
         AND phrase the action to match its `kind`, never generic "click"/
         "use the option below" language for both: a "navigation" shortcut
@@ -6372,12 +6393,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
       any shortcut exists for it.
     - A "Verified customer-specific facts" entry may be stated directly and
       confidently, exactly like approved retrieval evidence -- it is already
-      verified for this specific customer. State only what its `fact` text
-      says; do not extrapolate beyond it.
-    - A "Personal data references" entry's `for_request` names, in the
-      customer's own words, exactly which request its data was fetched for.
-      When a subquery matches, weave that entry's `insert_token` verbatim
-      into one natural sentence (for example: "Your address on file is
+      verified for this specific customer. State only what its
+      `generation_content.fact` text says; do not extrapolate beyond it.
+    - A "Personal data references" entry's `generation_content.for_request`
+      names, in the customer's own words, exactly which request its data was
+      fetched for. When a subquery matches, weave that entry's
+      `generation_content.insert_token` verbatim into one natural sentence
+      (for example: "Your address on file is
       {{data-a1b2c3d4}}."). Never alter, abbreviate, translate, or omit any
       character of the token. Never guess, paraphrase, or state the real
       value yourself -- you are never shown it. Never claim this information
@@ -6454,8 +6476,9 @@ def _generate_response_blocks(state: AgentState) -> dict:
       plainly; do not invent a broader conclusion beyond what it entails.
     - Do not mention FAQ documents, sources, parent IDs, search, prompts, or
       internal systems. Preserve exact {{placeholders}}.
-    - Each entry in "Decline inputs" carries its own `decline_evidence`,
-      and each entry in "No-info inputs" carries its own `no_info_evidence`.
+    - Each entry in "Decline inputs" carries its own
+      `generation_content.decline_evidence`, and each entry in "No-info
+      inputs" carries its own `generation_content.no_info_evidence`.
       Unlike "Approved evidence by retrieval task" (raw material you
       compose an answer FROM), each of these two fields is already the
       complete, final statement for that entry -- your job for it is only
@@ -6472,26 +6495,28 @@ def _generate_response_blocks(state: AgentState) -> dict:
       answer the request in its place.
     - A "Clarification inputs" entry has no fixed sentence to relay --
       compose your own natural clarifying question asking specifically
-      about its `unresolved_request`, staying within its `scope` (never
-      overstepping into a different job's judgment, and never answering
-      the request in its place), and never asserting a new product,
-      policy, or fact, or offering an option beyond its own
-      `clarification_guesses`.
-    - You must address every entry in Clarification/Decline/No-info inputs
-      somewhere in `elements`, citing the entry's own id ONLY in the
-      separate `source_task_ids` field -- a Clarification Input's id is
-      its `subquery_id`; a Decline or No-info Input's id is its `task_id`.
-      Never write an id, "task_id", "subquery_id", or any bracketed/
-      internal identifier inside `answer`/customer-facing text itself --
-      that field is prose the customer reads; the id is structural
-      metadata they never see. Do not skip any entry, and do not address
-      the same entry more than once.
-    - When a Clarification Input's own `clarification_guesses` is
-      non-empty, don't leave your restatement of it as a bare question --
+      about its `generation_content.unresolved_request`, staying within its
+      `generation_content.scope` (never overstepping into a different job's
+      judgment, and never answering the request in its place), and never
+      asserting a new product, policy, or fact, or offering an option beyond
+      its own `generation_content.clarification_guesses`.
+    - Every entry shown above -- Approved evidence, Conversational,
+      Clarification, Decline, No-info, Available shortcuts, Unavailable
+      service requests, Verified customer-specific facts, and Personal data
+      references alike -- carries its own top-level `id` and is an
+      obligation on the same footing: address it somewhere in `elements`,
+      citing that same `id` ONLY in the separate `source_task_ids` field.
+      Never write an id, or any bracketed/internal identifier, inside
+      `answer`/customer-facing text itself -- that field is prose the
+      customer reads; the id is structural metadata they never see. Do not
+      skip any entry, and do not address the same entry more than once.
+    - When a Clarification Input's own `generation_content.clarification_guesses`
+      is non-empty, don't leave your restatement of it as a bare question --
       naturally work a brief mention of what those options actually are
       into the same sentence or the one right after it (e.g. "...are you
       asking about applying, checking eligibility, or the fees involved?"),
-      using each guess's own `label`/`message` as the TOPIC to mention,
+      using each guess's own `label`/`message` (inside
+      `generation_content.clarification_guesses`) as the TOPIC to mention,
       never inventing an option not listed there. A guess's `message` is
       written in the CUSTOMER's own voice (what they would send if they
       tapped it) -- never copy or closely paraphrase its sentence
@@ -6607,22 +6632,13 @@ def _generate_response_blocks(state: AgentState) -> dict:
       "What are the eligibility requirements for this loan?" not
       "Eligibility".
 
-    SHORTCUT COVERAGE (supersedes any earlier instruction about a single
-    closing statement): every entry in "Available shortcuts this turn"
-    carries a "handle" and is an obligation, exactly like an approved-
-    evidence task. Cover EVERY one with one short sentence -- label
-    verbatim, wording matching its kind -- placed immediately after the
-    answer content it relates to (or as its own element when it answers a
-    subquery by itself), and put its handle in that element's
-    source_task_ids next to any task ids. Never skip one.
-
-    TOOL RESULT COVERAGE: every entry in "Unavailable service requests",
-    "Verified customer-specific facts" and "Personal data references" also
-    carries a "handle" and is an obligation on the same footing. Address
-    each one in the element that answers its subquery (state the supplied
-    reason / fact; for a personal data reference put its insert_token
-    verbatim in the sentence) and put its handle in that element's
-    source_task_ids. Never skip one.
+    PLACEMENT (supersedes any earlier instruction about a single closing
+    statement): every "Available shortcuts this turn" entry's sentence goes
+    immediately after the answer content it relates to (or as its own
+    element when it answers a subquery by itself) -- label verbatim,
+    wording matching its kind, its `id` in that element's source_task_ids
+    next to any task ids -- not bundled into one closing statement at the
+    end.
 
     Output JSON only:
     {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"","next_actions":["short natural next question, grounded in unfeatured approved evidence"]}}

@@ -823,9 +823,11 @@ the 5-token phone number ~1% (3/263). All 6 leaked ids were from parents in
 that turn's own approved evidence.
 
 **Fix implemented (evidence-scoped repair), design decided by the user:**
-node_07 now restores the `{{ }}` wrapper on a malformed (bare or
-single-braced) precision placeholder, but only when its **exact** id
-appears, well-formed, in this turn's approved evidence (the same hydrated
+node_07 now normalizes *any* wrapping of a precision placeholder to exactly
+`{{faq_..._NNN}}` -- zero, one, three, four braces, uneven (`{{x}`), or
+whitespace inside the braces (`{{ x }}`); the brace count never matters --
+but only when its **exact** id appears, well-formed, in this turn's approved
+evidence (the same hydrated
 parents the generator read; `_evidence_precision_placeholders` /
 `_repair_precision_placeholders`). Nothing is guessed -- a truncated or
 altered id is left untouched -- and an id outside the evidence is left
@@ -840,7 +842,9 @@ LLM):** both real leaks rebuilt from the corpus now render correctly
 (`r1_0432` -> "6-7 business days"; `r3_0181` -> "+65 313-HORIZ (+65 3138
 7878)"); single-braced in-evidence id repaired; out-of-evidence bare id and
 an altered id both left untouched; the well-formed path and a no-evidence
-state are unchanged.
+state are unchanged. A second pass (19 shape checks) covers 0-4 braces, uneven
+wrapping, inner whitespace, idempotence, and that a well-formed one is not
+logged as a repair.
 
 **Open gap found while fixing this -- unauthorized placeholders are not
 rejected by any deterministic check today.** Probed node_05's actual

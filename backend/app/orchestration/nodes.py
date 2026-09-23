@@ -956,14 +956,16 @@ def _append_decline_suffix(response: str, decline_tasks: list) -> str:
     return f"{response}\n\n{suffix}" if response else suffix
 
 
-# BUG-014. A well-formed precision placeholder, and the malformed shapes the
-# generator occasionally writes instead: bare ("within faq_5ad80c63_001-
-# faq_5ad80c63_002 days") or single-braced ({faq_5ad80c63_001}). The
-# malformed pattern's lookarounds never match inside a well-formed
-# {{faq_..._001}} (every possible start is preceded by "{"), never match a
-# longer token (faq_..._0012), and never match an id embedded in a word.
+# BUG-014. A well-formed precision placeholder, and any wrapping of the same
+# id at all: bare ("within faq_5ad80c63_001-faq_5ad80c63_002 days"), one,
+# three, four... braces on either side, uneven ({{faq_..._001}), or
+# whitespace inside the braces ({{ faq_..._001 }}). Whitespace is only
+# consumed when it touches a brace, so a bare id in a sentence keeps the
+# spaces around it. The lookarounds make every match start at the first
+# leading brace and end at the last trailing one (never mid-run), and never
+# match a longer token (faq_..._0012) or an id embedded in a word.
 _WELL_FORMED_PRECISION_PLACEHOLDER = re.compile(r"\{\{(faq_[0-9a-f]{8}_\d{3})\}\}")
-_MALFORMED_PRECISION_PLACEHOLDER = re.compile(r"(?<![{\w])\{?(faq_[0-9a-f]{8}_\d{3})\}?(?![}\w])")
+_ANY_WRAPPED_PRECISION_PLACEHOLDER = re.compile(r"(?<![{\w])(?:\{+\s*)?(faq_[0-9a-f]{8}_\d{3})(?:\s*\}+)?(?![}\w])")
 
 
 def _evidence_precision_placeholders(state: AgentState) -> set:
@@ -982,23 +984,28 @@ def _evidence_precision_placeholders(state: AgentState) -> set:
 
 
 def _repair_precision_placeholders(value, evidence_ids: set, repaired: set):
-    """Restore the {{ }} wrapper on a malformed precision placeholder whose
-    exact id appears in this turn's approved evidence (BUG-014), recursively
-    through str/list/dict.
+    """Normalize any wrapping of a precision placeholder to exactly
+    {{faq_..._NNN}} when its exact id appears in this turn's approved
+    evidence (BUG-014), recursively through str/list/dict.
 
     Repair only: an exact id match against evidence_ids is the sole
-    condition, nothing is guessed (a truncated or altered id is left as
-    is), and an id not in the evidence is left untouched -- that is an
-    unauthorized placeholder, not a malformed one, and is a separate check's
-    job. `repaired` collects each id actually repaired, for logging."""
+    condition -- the brace count around it (zero, one, three, uneven, with
+    inner whitespace) never matters. Nothing is guessed (a truncated or
+    altered id is left as is), and an id not in the evidence is left
+    untouched -- that is an unauthorized placeholder, not a malformed one,
+    and is a separate check's job. `repaired` collects each id whose shape
+    actually changed (an already well-formed one is not counted), for
+    logging."""
     if isinstance(value, str):
         def _fix(match):
             placeholder_id = match.group(1)
             if placeholder_id not in evidence_ids:
                 return match.group(0)
-            repaired.add(placeholder_id)
-            return "{{" + placeholder_id + "}}"
-        return _MALFORMED_PRECISION_PLACEHOLDER.sub(_fix, value)
+            well_formed = "{{" + placeholder_id + "}}"
+            if match.group(0) != well_formed:
+                repaired.add(placeholder_id)
+            return well_formed
+        return _ANY_WRAPPED_PRECISION_PLACEHOLDER.sub(_fix, value)
     if isinstance(value, list):
         return [_repair_precision_placeholders(item, evidence_ids, repaired) for item in value]
     if isinstance(value, dict):

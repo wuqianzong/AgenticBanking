@@ -6094,6 +6094,27 @@ _GENERATION_GUIDANCE_SHAPE_RULE = """
       instruct the specific correct neutral phrasing or required content
       directly -- there is nothing to partition in these cases.
 
+    The "confirmed" case above is bounded by the exact same rule the
+    generator's own composition is held to for this same evidence --
+    borrowed here deliberately, not restated in different words, so the
+    instruction you write and the response it produces are judged by one
+    aligned standard rather than two that merely resemble each other: "Never
+    add a fact, procedure, or product not present in it." The response
+    generator trusts this instruction completely and composes from it
+    without re-deriving or re-checking it against the evidence itself --
+    that trust is the design, not a gap to defend against downstream, which
+    is exactly why it must already hold here, at the one place this
+    instruction is written. Confirming that SOME part of the evidence
+    answers the question is never license to instruct a further specific
+    fact, condition, or requirement that is not itself stated in that
+    evidence's own text, even when it sounds like standard, plausible
+    banking practice, and even when other, genuinely confirmed content from
+    the same parent sits right next to it. Before instructing any such
+    detail, point to the specific approved parent (or, for a violation's
+    own guidance, the specific evidence entry) whose own text actually
+    states it; if none does, leave that detail out of the instruction
+    rather than include it.
+
     This is bounded by the Bank Conduct Rules and Regulatory Context
     already established elsewhere in this prompt -- an instruction that
     would itself cause a violation of those rules is invalid regardless of

@@ -42,13 +42,14 @@ second time).
 | BUG-021 | Inconsistent handling of "how long will the transfer take" -- sometimes answered correctly, sometimes a generic non-answer | Low-Medium | Confirmed (3/70 sample) | Not yet root-caused | Open |
 | BUG-022 | A balance follow-up ("what about my savings account?") answered with a generic product-info dump instead of the number | Medium | Confirmed (1/70 sample) | Not yet root-caused | Open |
 | BUG-023 | Outcome depends on surface phrasing, not underlying intent -- 24/77 BANKING77 categories show a genuinely split outcome across their 40 phrasings of the same nominal question | Medium | Confirmed (full-corpus, `declined_card_payment` spot-checked) | Not yet root-caused | **Open, partial mitigation shipped** (see below) |
-| BUG-024 | Bot never discloses it is an AI to the customer, in any supported language or anywhere in the UI | Medium | Confirmed (full-corpus, all 3 languages + UI checked) | **Deterministic code (missing content, not a defect in logic)** | Open |
+| BUG-024 | Bot never discloses it is an AI to the customer, in any supported language or anywhere in the UI | Medium | ~~Confirmed~~ **Retracted** -- original check missed an existing persistent footer disclosure | n/a | **Retracted (not a defect)** |
 | BUG-025 | The exact same customer question, asked more than once, does not reliably get the same retrieval outcome -- no wording ambiguity involved | High | Confirmed (31/88 informative exact-duplicate-text groups, full-corpus) | Root-caused: two independent mechanisms found (retrieval-pool variance + auditor-judgment non-determinism) | **Retrieval-pool half: mitigated and live-validated. Auditor-judgment half: accepted permanent limitation, model-tuning scoped out** (see below) |
 | BUG-026 | The response generator rarely writes the required closing sentence pointing to an attached shortcut button/form -- 20 of 236 logged shortcut turns (8.5%) despite a MUST rule in its prompt | Low-Medium | Confirmed (236 logged generator calls with a shortcut supplied) | LLM instruction-following, **now structurally guaranteed regardless of it** | **Fixed, live-verified** |
 | BUG-027 | The deterministic fallback for a missing shortcut sentence is skipped whenever the shortcut's label already appears anywhere in the response text (e.g. inside FAQ step wording), so no pointing sentence appears at all | Medium | Confirmed (live case + 58/236 logged calls had the label only inside steps) | **Deterministic code** (plain substring test) | **Fixed, fixture-verified** |
 | BUG-028 | A wholly-omitted clarification (or decline/no-info/conversational) obligation had no repair mechanism at all, unlike a dropped RAG task -- could exhaust every retry and reach the terminal fallback with the customer's question never asked | High | Confirmed (live trace + reproduced in the BANKING77 historical corpus) | **Deterministic code** (completeness net had detection but no repair for these obligation types) | **Fixed, live-verified** |
 | BUG-029 | Internal tool-routing/reasoning text leaked verbatim into a customer-facing clarification question | Medium | Confirmed (1 historical case, root cause shared with BUG-028) | **Deterministic code** (same net gap as BUG-028 -- the leaked text was the omitted obligation's own internal routing note, never meant to reach the customer) | **Fixed, live-verified** |
 | BUG-030 | No coherent handling for sustained upstream model unavailability -- triage silently discards the customer's message as generic small talk, and a single turn's latency can compound into minutes | Medium–High | Confirmed (2 independent symptoms, live-traced; historical latency trend across 12 greeting turns) | **Deterministic code** (no turn/node-level policy for sustained, as opposed to transient, model unavailability) | **Open, explicitly not being treated now** |
+| BUG-031 | Spanish `chat.footer` (the persistent AI-disclosure footer) is an untranslated copy of the English string | Low | Confirmed (static check of `frontend/src/translations.js`) | **Deterministic code (missing translation)** | **Fixed** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -1461,29 +1462,52 @@ fixes retrieval-pool variance but not auditor-judgment non-determinism.
 
 ## BUG-024 — No AI-disclosure anywhere in the product
 
-**Severity:** Medium **Confidence:** Confirmed (all 3 supported languages + frontend UI checked directly) **Status: Open**
+**Severity:** Medium **Confidence:** Confirmed (all 3 supported languages + frontend UI checked directly) **Status: RETRACTED (2026-09-24) -- not a real defect, see correction below**
 **Found in:** Direct source check of `backend/app/core/translations.py`
 and `frontend/src/App.jsx` (2026-09-13), prompted by the MAS FEAT
 Transparency principle (`AGENTIC_EVALUATION_PLAN_v1.md` Pillar E) and the
 EU AI Act's August 2026 chatbot-disclosure requirement.
 
-**What happens:** none of the four greeting templates
-(`greeting_new`, `greeting_new_named`, `greeting_returning`,
-`greeting_returning_named`), in any of the three supported languages
-(English, Chinese, Spanish), contain any AI-disclosure language (no
-"AI", "assistant", "automated", "chatbot", or equivalent). The frontend
-UI (`App.jsx`) likewise carries no persistent label identifying the
-interface as AI-driven anywhere a customer would see it. A customer who
-never scrolls to a terms-of-service page has no way to learn, from the
-product itself, that they are talking to an AI system rather than a
-human agent.
+**What was originally reported (wrong -- see correction):** none of the
+four greeting templates (`greeting_new`, `greeting_new_named`,
+`greeting_returning`, `greeting_returning_named`), in any of the three
+supported languages (English, Chinese, Spanish), contain any AI-disclosure
+language (no "AI", "assistant", "automated", "chatbot", or equivalent).
+The frontend UI (`App.jsx`) likewise carries no persistent label
+identifying the interface as AI-driven anywhere a customer would see it.
 
-**Full-corpus scope check:** not applicable — this is a static-content
+**Correction (2026-09-24):** the greeting-template observation is
+accurate, but the frontend-UI claim was wrong -- the original 2026-09-13
+check evidently missed a persistent disclosure that already exists.
+`App.jsx` (~L3642-3644) renders a permanent footer directly under the
+chat input, on every screen, in every session, alongside a lock icon:
+`{t(preferences.language, "chat.footer")}`, which resolves (
+`frontend/src/translations.js`) to *"AI-generated responses may not be
+fully accurate."* in English and *"AI助理的回复可能不完全准确。"* in
+Chinese -- both explicitly containing "AI" and framing the assistant as
+AI-generated, satisfying the disclosure concern this bug was raised
+for. Flagged directly by the user (2026-09-24) before any fix was
+implemented, which is what caught this. This bug is retracted rather
+than marked fixed, since no code change was needed or made -- the
+disclosure was already there the whole time, in a persistent, always-
+visible location.
+
+**One genuine, much smaller gap found while correcting this** -- see
+BUG-031 below: the Spanish `chat.footer` string is an exact,
+un-translated copy of the English text, rather than a Spanish
+translation.
+
+*(The two paragraphs below are the original 2026-09-13 text, kept for
+the record. Both are superseded by the correction above -- the claim that
+"the disclosure text simply does not exist anywhere in either file" is
+false; `App.jsx` renders it via the `chat.footer` translation key.)*
+
+**Full-corpus scope check (original, superseded):** not applicable — this is a static-content
 gap (the templates and UI markup were read in full, not sampled), so the
 finding is complete by construction: the disclosure text simply does not
 exist anywhere in either file, in any language.
 
-**Not yet investigated:** the specific wording/placement Horizon would
+**Not yet investigated (original, superseded):** the specific wording/placement Horizon would
 want for a disclosure (a greeting-line addition vs. a persistent UI
 badge vs. both); whether this is legally required today for Horizon's
 jurisdiction or only anticipated (the EU AI Act provision cited is
@@ -1491,6 +1515,14 @@ forward-looking); this is a content/feature gap, not a logic defect, so
 "root cause" is simply "never built," and the fix is additive (write and
 insert disclosure copy) rather than corrective. Left for future work per
 explicit instruction.
+
+**Lesson worth keeping from this retraction:** a "does X exist anywhere"
+check against a UI must search the rendered translation keys too, not
+just literal strings in the component file -- `App.jsx` never contains
+the word "AI" as a literal at the footer site, only
+`t(preferences.language, "chat.footer")`, so a plain grep of `App.jsx`
+for "AI" alone would miss it, which is the most likely way the original
+check went wrong.
 
 ## BUG-026 — The response generator rarely writes the required closing sentence for an attached shortcut
 
@@ -1713,3 +1745,25 @@ returning zero matches.
 **Root cause:** both symptoms trace back to the same gap -- every existing resilience mechanism (`_is_transient_llm_error`'s retry-once from BUG-003, `call_llm_router`'s key-rotation/timeout loop) operates purely *per call*, with no policy at the *node* or *turn* level for what should happen when the model is broadly, persistently unavailable rather than transiently blipping once. Nothing distinguishes "the call never got a chance to run" from "the model gave a genuinely ambiguous or malformed answer" at the point triage decides how to fail safely, and nothing caps a single turn's *total* wait budget across however many sequential calls and models a node happens to make, independent of the customer-facing cost of that wait.
 
 **Explicitly not being treated now, per instruction.** Documented here so it isn't rediscovered as a mystery later, and so this exact pair of symptoms is recognized immediately if it recurs. Candidate directions for whenever this is picked up (not evaluated or committed to): distinguish a transient-error exception from a malformed-response exception in `node_02d`'s own handler, so only the latter falls back to the generic-conversational safety net (the former should presumably retry the whole triage call once more, or surface a distinct "temporarily unable to process your request" state rather than silently reinterpreting it as small talk); and/or a turn-level or node-level wall-clock budget, independent of the existing per-call retry budget, so a customer-facing node fails fast and honestly past some ceiling instead of silently compounding several calls' worth of 45-second timeouts.
+
+## BUG-031 — Spanish AI-disclosure footer is an untranslated copy of the English string
+
+**Severity:** Low **Confidence:** Confirmed (static check) **Status: Fixed (2026-09-24)**
+**Found in:** while correcting BUG-024 (2026-09-24) -- static read of `frontend/src/translations.js`
+
+**What happens:** the persistent chat footer (`App.jsx` ~L3644,
+`t(preferences.language, "chat.footer")` -- the product's actual AI
+disclosure, see BUG-024's correction) is translated for English and
+Chinese, but the Spanish entry (`translations.js` ~L265) is a verbatim
+copy of the English text: *"AI-generated responses may not be fully
+accurate."* A Spanish-preference customer still sees the disclosure (and
+"AI" is recognizable across both languages), so the disclosure itself is
+not missing -- only its localization is. Low severity for that reason.
+
+**Fix applied (2026-09-24):** replaced the Spanish value with a
+proper translation, e.g. *"Las respuestas generadas por IA pueden no ser
+completamente precisas."* -- a one-line content change with no logic
+impact. Swept every Spanish key against its English counterpart: the only
+other identical values are `prefs.emoji` ("Emojis") and `chat.botName`
+("Horizon"), both legitimately the same in both languages -- no other
+untranslated strings, and no English keys missing from Spanish.

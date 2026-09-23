@@ -262,7 +262,7 @@ export const TRANSLATIONS = {
     "chat.botName": "Horizon",
     "chat.retry": "Reintentar este mensaje",
     "chat.suggestedFollowUps": "Preguntas sugeridas",
-    "chat.footer": "AI-generated responses may not be fully accurate.",
+    "chat.footer": "Las respuestas generadas por IA pueden no ser completamente precisas.",
     "chat.mvpTip": "<b>Modo MVP:</b> Sin menús estáticos. Use lenguaje natural para navegar. Pruebe preguntar <i>\"¿Cómo abro una cuenta?\"</i>",
     "caption.memory_compaction": "Preparando el contexto de su conversación...",
     "caption.memory_validation": "Comprobando el contexto de la conversación guardada...",

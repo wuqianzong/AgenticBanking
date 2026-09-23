@@ -44,8 +44,10 @@ second time).
 | BUG-023 | Outcome depends on surface phrasing, not underlying intent -- 24/77 BANKING77 categories show a genuinely split outcome across their 40 phrasings of the same nominal question | Medium | Confirmed (full-corpus, `declined_card_payment` spot-checked) | Not yet root-caused | **Open, partial mitigation shipped** (see below) |
 | BUG-024 | Bot never discloses it is an AI to the customer, in any supported language or anywhere in the UI | Medium | Confirmed (full-corpus, all 3 languages + UI checked) | **Deterministic code (missing content, not a defect in logic)** | Open |
 | BUG-025 | The exact same customer question, asked more than once, does not reliably get the same retrieval outcome -- no wording ambiguity involved | High | Confirmed (31/88 informative exact-duplicate-text groups, full-corpus) | Root-caused: two independent mechanisms found (retrieval-pool variance + auditor-judgment non-determinism) | **Retrieval-pool half: mitigated and live-validated. Auditor-judgment half: accepted permanent limitation, model-tuning scoped out** (see below) |
-| BUG-026 | The response generator rarely writes the required closing sentence pointing to an attached shortcut button/form -- 20 of 236 logged shortcut turns (8.5%) despite a MUST rule in its prompt | Low-Medium | Confirmed (236 logged generator calls with a shortcut supplied) | Not yet root-caused (LLM instruction-following; no dedicated output slot for the sentence) | Open |
-| BUG-027 | The deterministic fallback for a missing shortcut sentence is skipped whenever the shortcut's label already appears anywhere in the response text (e.g. inside FAQ step wording), so no pointing sentence appears at all | Medium | Confirmed (live case + 58/236 logged calls had the label only inside steps) | **Deterministic code** (plain substring test) | Open |
+| BUG-026 | The response generator rarely writes the required closing sentence pointing to an attached shortcut button/form -- 20 of 236 logged shortcut turns (8.5%) despite a MUST rule in its prompt | Low-Medium | Confirmed (236 logged generator calls with a shortcut supplied) | LLM instruction-following, **now structurally guaranteed regardless of it** | **Fixed, live-verified** |
+| BUG-027 | The deterministic fallback for a missing shortcut sentence is skipped whenever the shortcut's label already appears anywhere in the response text (e.g. inside FAQ step wording), so no pointing sentence appears at all | Medium | Confirmed (live case + 58/236 logged calls had the label only inside steps) | **Deterministic code** (plain substring test) | **Fixed, fixture-verified** |
+| BUG-028 | A wholly-omitted clarification (or decline/no-info/conversational) obligation had no repair mechanism at all, unlike a dropped RAG task -- could exhaust every retry and reach the terminal fallback with the customer's question never asked | High | Confirmed (live trace + reproduced in the BANKING77 historical corpus) | **Deterministic code** (completeness net had detection but no repair for these obligation types) | **Fixed, live-verified** |
+| BUG-029 | Internal tool-routing/reasoning text leaked verbatim into a customer-facing clarification question | Medium | Confirmed (1 historical case, root cause shared with BUG-028) | **Deterministic code** (same net gap as BUG-028 -- the leaked text was the omitted obligation's own internal routing note, never meant to reach the customer) | **Fixed, live-verified** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -1512,3 +1514,114 @@ deterministic fallback sentence BUG-026's fix installs. Verified via
 fixture tests during the Stage 1/2 rollout (a label-only-in-steps case no
 longer suppresses the fallback) and confirmed no regression on a normal
 turn where the model does correctly cite and mention a shortcut.
+
+## BUG-028 — A wholly-omitted clarification (or decline/no-info/conversational) obligation had no repair mechanism at all
+
+**Severity:** High **Confidence:** Confirmed **Status: Fixed, live-verified**
+**Found in:** live trace during the Response Obligation Contract investigation, 2026-09-22 (a 3-part turn: "can i buy a car using the personal loan, or the credit card, also my credit card is ugly, can i replace it?"); independently reproduced in the historical BANKING77 corpus (`banking77_r1_0237`, `research/2026-09-05_banking77_full_coverage`)
+
+**What happens:** the response generator's own completeness net
+(`_apply_response_completeness_nets`, pre-redesign) only had a real,
+inserting repair for a dropped RAG task or a dropped shortcut/tool-result.
+For every other obligation type — clarification, decline, no-info,
+conversational — the net could *detect* an omission (log it) but never
+*fix* it: no block existed for the reviser to find or edit either, since
+the reviser is explicitly scoped to editing existing blocks' text, never
+adding one. A turn whose only real omission was a wholly-dropped
+clarification therefore had no path to recovery at all: it burned every
+one of its 3 audit retries re-generating the same incomplete response,
+then fell through to node_11's terminal deterministic fallback — the
+customer's actual question (in the traced case, which product the
+customer meant) was never asked, in any of the 3 attempts or the final
+fallback. `banking77_r1_0237` shows the identical shape independently: two
+tasks and their associated clarifications were dropped in round 1, the net
+of that era logged the omission but inserted nothing, two reviser rounds
+made no difference (nothing existed for them to edit), and the turn ended
+on a bare, unhelpful apology for both tasks.
+
+**Root cause:** deterministic code — the coverage net was built
+type-by-type, and only two of the (eventually) nine obligation types ever
+received a real repair; the other seven were detection-only by omission of
+implementation, not a deliberate design choice. This is the same
+underlying gap `BUG-009`'s fix addressed for a *different* failure shape
+(zero response_blocks entirely) — an omission this fundamental
+structurally cannot be caught downstream of generation, and needs a
+generation-time (or generation-adjacent) fix.
+
+**Fix implemented:** `docs/RESPONSE_OBLIGATION_CONTRACT_DESIGN.md`'s
+unified Response Obligation Contract gives every obligation type — RAG
+evidence, verified facts, clarification, decline, no-info, conversational,
+shortcuts, unavailable service requests, personal data — the same
+`{id, generation_content, generation_guidance, generation_rule}` shape and
+the same completeness net, rewritten (Stage 2) as one loop dispatched by
+`generation_rule` that gives every type a real, mode-appropriate
+deterministic repair when the model drops it: a clarification obligation
+that's uncovered gets a real `type: "clarification"` block inserted
+(`_clarification_fallback_text`, with its `options` populated from
+`clarification_guesses`), not just a log line. This is what `node_11`'s
+terminal fallback path already calls, so the exhausted-retry case inherits
+the same guarantee.
+
+**Verified live:** the exact 3-part turn that originally exposed this
+(address + balance + apply-for-account + lost card, from the design doc's
+own validation) now resolves all 4 obligations in one generation call, no
+reviser round, no omission events at all. Separately, this session's
+regression check replayed `banking77_r1_0237` itself end to end: the first
+generation pass again omitted both clarifications (same as the historical
+failure), but this time the net's `response.flexible.entry_omitted` event
+carried `"fallback_inserted": true` for both, one reviser round refined
+the wording, and the final response asked both clarifying questions
+correctly instead of falling back to a double apology.
+
+---
+
+## BUG-029 — Internal tool-routing/reasoning text leaked verbatim into a customer-facing clarification question
+
+**Severity:** Medium **Confidence:** Confirmed (1 historical case; root
+cause shared with BUG-028, not independently measured at corpus scale)
+**Status: Fixed, live-verified**
+**Found in:** this session's live regression check, 2026-09-23, comparing
+a fresh replay of `banking77_r1_0237` against its own historically-logged
+`final_response` (`research/2026-09-05_banking77_full_coverage`)
+
+**What happens:** the old system's logged response for this case reads:
+*"Could you clarify what you mean by 'The customer is reporting an ATM
+discrepancy, but no registered tool covers dispute resolution or ATM
+error reporting.'?"* — the text inside the quotes is not a paraphrase of
+anything the customer said or a natural clarifying question; it reads as
+an internal routing/capability note (something closer to a task
+dispatcher's own reasoning about why no tool could handle the request)
+surfaced directly as if it were the thing being asked about. A second,
+near-identical instance appears in the same response for the turn's other
+dropped task. This is a distinct, more severe symptom than BUG-028's bare
+omission — the customer isn't just missing an answer, they're shown raw
+internal system language.
+
+**Root cause:** shares its origin with BUG-028 — this turn is the same
+historical double-clarification-drop case, and the leaked text is
+consistent with the pre-redesign clarification-recovery path reading an
+internal reasoning-style field directly into the "Could you clarify what
+you mean by X?" template rather than composing a natural question from
+`unresolved_request`/`scope` under one consistent, audited rule. Not
+independently deep-traced against the old code (which this session's
+redesign has substantially replaced), so this is inferred from the
+before/after behavior change rather than a line-level trace of the exact
+prior mechanism.
+
+**Fix implemented:** the same Stage 2 net fix as BUG-028 — a dropped
+clarification is now always repaired via `_clarification_fallback_text`,
+a deterministic, non-LLM template keyed only on `unresolved_request` and
+`originator`, never on any internal reasoning/routing field — plus the
+unified contract's own consolidated CLARIFICATION RULES section, which
+governs every clarification obligation (whether model-composed or
+net-repaired) with one explicit rule against asserting, assuming, or
+echoing anything beyond `unresolved_request`/`scope`/`clarification_guesses`.
+
+**Verified live:** the fresh replay of the identical query
+(`refactor_check_banking77_r1_0237`, this session) produced two properly
+phrased clarifying questions — *"are you looking for the policy on how to
+report an ATM discrepancy, or do you need to navigate to a specific
+transaction management screen?"* and *"are you asking for the bank's
+refund policy, or are you looking for a way to initiate a dispute through
+the app?"* — with a full-text grep of the output for "no registered tool"
+returning zero matches.

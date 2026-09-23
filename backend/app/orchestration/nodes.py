@@ -6928,7 +6928,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - If evidence gives a useful policy boundary or limit, state that fact
       plainly; do not invent a broader conclusion beyond what it entails.
     - Do not mention FAQ documents, sources, parent IDs, search, prompts, or
-      internal systems. Preserve exact {{placeholders}}.
+      internal systems. Preserve every `{{{{faq_*}}}}` and `{{{{data-*}}}}` token
+      exactly as supplied, with both braces on each side.
     - `clarification` here is ONLY for a terminal unresolved marker still
       listed under "Terminal unresolved task markers" above, if any (that
       section, like every OBLIGATIONS entry, appears only when this turn
@@ -8987,10 +8988,10 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           extrapolation beyond it.
         """
 
-        # Plain string, not an f-string -- {data-*} below needs no brace
-        # escaping (unlike its pre-Stage-3 home inside evidence_route_
-        # specific_rules's own f-string, which needed {{data-*}} to render
-        # this same single-brace literal).
+        # Plain string, not an f-string, so {{data-*}} renders as written --
+        # the real token shape, consistent with PERSONAL_DATA_REFERENCE_
+        # CONTRACT. (Before Stage 3 this text lived inside an f-string that
+        # halved it to a misleading single-brace {data-*}.)
         _personal_data_source_rule = """
         - "personal_data_placeholders" entries permit a customer-facing
           sentence to include an entry's `insert_token` verbatim when the
@@ -8998,7 +8999,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           must never state, paraphrase, or guess the real value the token
           represents (it is never disclosed to the assistant, so it can
           never legitimately appear as prose) and must never use a
-          `{data-*}` token that is not present in this list.
+          `{{data-*}}` token that is not present in this list.
         """
 
         rule_sections = [_core_grounding_rules, _courtesy_context_rule]

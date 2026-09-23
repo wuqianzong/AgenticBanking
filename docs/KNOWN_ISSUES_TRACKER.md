@@ -32,7 +32,7 @@ second time).
 | BUG-011 | A vague reply gets attributed to a stale dormant topic instead of the assistant's own most recent turn | Medium–High | Confirmed | LLM judgment (prompt gap) | **Fixed, live-verified** |
 | BUG-012 | Response blocks with a bare-string list field crash on `_llm_text() missing 1 required positional argument: 'key'` | Medium | Confirmed | **Deterministic code** | **Fixed** |
 | BUG-013 | A structured-output response occasionally wrapped in a single-element list crashes with `'list' object has no attribute 'get'` | Low-Medium | Confirmed | **Deterministic code** | **Fixed** |
-| BUG-014 | Precision Substitution occasionally leaves raw internal template fragments (`faq_xxxxxxxx_NNN`) in customer-facing text | Medium | Confirmed | **Deterministic code** (no check handles an unbraced placeholder the generator occasionally writes) | **Repair fixed (fixture-verified); unauthorized-placeholder rejection open** |
+| BUG-014 | Precision Substitution occasionally leaves raw internal template fragments (`faq_xxxxxxxx_NNN`) in customer-facing text | Medium | Confirmed | **Deterministic code** (no check handles an unbraced placeholder the generator occasionally writes) | **Fixed (repair fixture-verified); unauthorized placeholders left to the auditor by decision** |
 | BUG-015 | A small number of turns return a generic failure fallback ("please rephrase") instead of a real answer, on questions near-identical ones answer correctly -- and 22/24 of these were silently mislabeled "resolved" in every automated metric until corrected 2026-09-13 | Low-Medium | Confirmed (24 unique cases, full-corpus) | Not yet root-caused | Open |
 | BUG-016 | Sufficiency auditor doesn't recognize an explicit negative/declarative fact as a complete answer | Medium | Confirmed (13/88 sample) | LLM judgment | Open |
 | BUG-017 | A successfully fetched account balance is silently dropped when the turn also carries conversational framing | Medium | Confirmed (61/619 turns; 23/70-sample conversations at least once) | Not yet root-caused | Open |
@@ -770,7 +770,7 @@ behave exactly as before, unaffected).
 
 ## BUG-014 — Precision Substitution occasionally leaves raw internal template fragments in customer-facing text
 
-**Severity:** Medium **Confidence:** Confirmed **Status: Root-caused; malformed-placeholder repair fixed (fixture-verified); unauthorized-placeholder rejection still open**
+**Severity:** Medium **Confidence:** Confirmed **Status: Fixed -- malformed-placeholder repair fixture-verified; unauthorized placeholders left to the auditor by decision; prompt shape made consistent**
 **Found in:** BANKING77 semantic Q&A sampling review (2026-09-09), 385-case stratified sample
 
 **What happens:** `banking77_r3_0181` ("I did not make this card payment.")
@@ -853,14 +853,29 @@ evidence passes node_05 and would reach the customer raw; (b) a well-formed
 `{{faq_...}}` that exists in `Precision_Reference_Table` but is *not* in the
 turn's approved evidence also passes -- node_05 only asks "does this exist
 anywhere in the table", never "was this approved this turn", leaving it to
-the (LLM) groundedness audit. A separate unauthorized-placeholder check is
-needed; not yet designed or implemented, pending the user's decision.
+the (LLM) groundedness audit.
 
-**Also noted, not yet changed:** the generator prompt gives a mixed brace
-signal -- PRECISION REFERENCE CONTRACT shows `{{faq_*}}`, but a GENERAL
-DESIGN PRINCIPLES bullet (`nodes.py`, "Preserve exact {{placeholders}}."
-inside an f-string) renders to the model as single-braced
-`{placeholders}`.
+**Decision (user, 2026-09-24): leave unauthorized placeholders to the
+auditor -- no new deterministic check.** An FAQ placeholder may only come
+from a SUFFICIENT/RELEVANT parent of that same subquery; anything else is
+unauthorized. But it is not worth triggering a dedicated regeneration for
+it -- better to let the audit catch it alongside every other problem in
+the same pass and regenerate once. Verified the audit already enforces
+this: its Direct Factual Grounding rule lists "placeholder" among what
+must be directly supported by Task-Level Approved Evidence, scopes a
+mapped element to "the union of approved evidence for those tasks", and
+receives each approved parent's content with its well-formed placeholders
+to compare against. Residual risk accepted with this choice: detection is
+LLM judgment, not guaranteed.
+
+**Prompt made consistent on placeholder shape (2026-09-24, per user):**
+the generator prompt gave a mixed brace signal -- PRECISION REFERENCE
+CONTRACT shows `{{faq_*}}`, but a GENERAL DESIGN PRINCIPLES bullet
+("Preserve exact {{placeholders}}." inside an f-string) reached the model
+as single-braced `{placeholders}`. The audit prompt had the same defect for
+personal data (`{data-*}`). Both now render the real shapes,
+`{{faq_*}}` and `{{data-*}}`; verified by rendering both live prompts --
+12 well-formed token mentions, zero single-brace ones.
 
 ## BUG-015 — A small number of turns return a generic failure fallback instead of a real answer
 

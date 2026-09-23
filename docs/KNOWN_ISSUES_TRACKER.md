@@ -36,7 +36,7 @@ second time).
 | BUG-015 | A small number of turns return a generic failure fallback ("please rephrase") instead of a real answer, on questions near-identical ones answer correctly -- and 22/24 of these were silently mislabeled "resolved" in every automated metric until corrected 2026-09-13 | Low-Medium | Confirmed (24 unique cases, full-corpus) | Not yet root-caused | Open |
 | BUG-016 | Sufficiency auditor doesn't recognize an explicit negative/declarative fact as a complete answer | Medium | Confirmed (13/88 sample) | LLM judgment | Open |
 | BUG-017 | A successfully fetched account balance is silently dropped when the turn also carries conversational framing | Medium | Confirmed (61/619 turns; 23/70-sample conversations at least once) | Not yet root-caused | Open |
-| BUG-018 | Response generation falsely denies having a balance it just successfully fetched | High | Confirmed (13/619) | Not yet root-caused | Open |
+| BUG-018 | Response generation falsely denies having a balance it just successfully fetched | High | Confirmed (13/619) | **Deterministic code** (a RELEVANT RAG hedge left in generation data, contradicting a same-subquery tool's ground truth) | **Root-caused and fixed, fixture-verified** |
 | BUG-019 | A short account-type follow-up gets reattached to an already-resolved transfer instead of the actual current balance question | Medium | Confirmed (3/70 sample) | LLM judgment | Open |
 | BUG-020 | Bot fabricates a second "other" savings account rather than correcting a customer's false premise | Medium | Confirmed (2/70 sample) | LLM judgment | Open |
 | BUG-021 | Inconsistent handling of "how long will the transfer take" -- sometimes answered correctly, sometimes a generic non-answer | Low-Medium | Confirmed (3/70 sample) | Not yet root-caused | Open |
@@ -1007,7 +1007,7 @@ explicit instruction.
 
 ## BUG-018 — Response generation falsely denies having a balance it just successfully fetched
 
-**Severity:** High **Confidence:** Confirmed (13/619 measured across a full 249-conversation campaign, not a sample) **Status: Open, not yet root-caused**
+**Severity:** High **Confidence:** Confirmed (13/619 measured across a full 249-conversation campaign, not a sample) **Status: Root-caused and fixed, fixture-verified (2026-09-23) -- not yet re-measured at this bug's original full-campaign scale**
 **Found in:** Multi-turn SGD Banks_1/Banks_2 depth test (2026-09-10/11), full 249-conversation run
 
 **What happens:** In 13 of 619 (2.1%) successful `account-balance` fetches,
@@ -1032,7 +1032,7 @@ claim"), not just a missing answer.
 **Full-corpus scope check:** this campaign's own full run, not a sample --
 13/619 (2.1%) of every successful `account-balance` fetch in the study.
 
-**Not yet investigated:** why response generation, given a populated
+**Not yet investigated (at the time):** why response generation, given a populated
 `personal_data_placeholders` entry for this exact field, sometimes
 constructs a sentence actively denying that capability rather than either
 using the value or (per BUG-017) merely omitting it; whether this
@@ -1041,6 +1041,79 @@ examples found combine the balance ask with an unrelated secondary clause
 or context); and whether the outbound compliance/groundedness audit should
 already be catching an unsupported capability-denial claim like this
 (`node_06`) but isn't. Left for future work per explicit instruction.
+
+**Root cause found (2026-09-23), traced end to end from the original
+capture log (`research/2026-09-10_multiturn_banking_extension/data/
+capture_log.jsonl`, case `mtsgd_32_00089`, turn 1):**
+1. Round 1's generator answered the balance question using an
+   adjacent-scope RAG task (`task_1_scope`, RELEVANT, "how to find monthly
+   statements") presented as a direct answer -- a real Scope-Expansion
+   Honesty Rule violation, since the turn's own `personal_data_placeholders`
+   already had the real, fetched balance token ready.
+2. The outbound audit correctly caught the framing violation, but its own
+   `groundedness` reasoning made a separate, uncaught mistake: *"The
+   permitted evidence contains no direct live balance checking capability
+   or data for account balances"* -- false. The audit's own evidence
+   bundle already included the personal-data placeholder for the exact
+   same balance; its reasoning checked only Task-Level Approved Evidence
+   and never cross-referenced the placeholder before concluding no balance
+   data existed at all.
+3. That wrong conclusion became an authoritative instruction: the
+   violation's own `NARROW_TO_EVIDENCE_SCOPE` `generation_guidance` read
+   *"Admit that live account balances cannot be checked directly..."* --
+   and the reviser, correctly and as designed, trusted it completely and
+   wrote exactly that denial, with the real balance token still sitting
+   unused in the very same prompt.
+
+This is the mirror image of the `generation_guidance` fabrication issue
+found and fixed the same day (see `_GENERATION_GUIDANCE_SHAPE_RULE`'s
+alignment with the generator's own evidence boundary): there, a
+`generation_guidance` author asserted an unsupported *positive* claim;
+here, one asserted an incorrect *negative* claim by reasoning from only
+one evidence source (Task-Level Approved Evidence) while a different,
+already-available source (`personal_data_placeholders`) directly
+contradicted it. `mtsgd_32_00014` (this bug's second example) shows a
+related but distinct shape: its round-1 draft also denied the capability
+(and separately mis-disclosed the value in prose), the audit correctly
+flagged both, but the actual fix over-corrected into a silent omission
+(BUG-017's shape) rather than a persisted denial -- consistent with the
+two bugs sharing a common upstream trigger (the generator struggling when
+a personal-data placeholder coexists with other content in the same
+compound turn), with the audit/reviser interaction determining whether
+the customer sees a gap or a false claim.
+
+**Fix implemented, upstream of both the audit and the generator:**
+`_response_evidence_manifest` (`nodes.py`, the single shared evidence
+contract for response generation and normal-response groundedness) now
+excludes a RAG task's evidence entirely when its own status is RELEVANT
+(not SUFFICIENT) *and* its owning subquery already has a completed
+non-RAG tool attempt (`api`/`deeplink`/`service_request` -- ground truth,
+not a judgment call) -- computed via each `search_task`'s own
+`subquery_id`, joined against `financial_subqueries`' own `tool_attempts`.
+A SUFFICIENT verdict is exempt and still shown as genuinely additive
+information, since it's a complete, standalone answer rather than a hedge
+that only made sense when nothing else had already answered the
+subquery. This is a proactive fix at the data-flattening layer, not a
+new rule for the audit or generator to follow: the contradictory RELEVANT
+evidence is never present in `generation_content` for either of them to
+reason about in the first place, closing this specific class of
+audit-reasoning gap without asking the audit to somehow check every
+evidence source exhaustively every time.
+
+**Verified (fixture-level, no LLM call needed since this is a pure
+deterministic function):** replayed the exact `mtsgd_32_00089` shape
+(RELEVANT adjacent-scope task + a completed `api` attempt on the same
+subquery) and confirmed the evidence entry is now excluded from the
+manifest entirely. Regression-checked: a SUFFICIENT task in the identical
+shape is kept; a RELEVANT task with no other tool involved is kept
+(BUG-018's fix must not suppress a normal honest-admission case); a
+RELEVANT task whose other-tool success belongs to a *different* subquery
+is kept; a RELEVANT task whose same-subquery tool attempt exists but
+never completed (`unavailable`) is kept, since only ground truth should
+suppress a hedge, not merely an attempt; and a state missing the
+`financial_subqueries` key entirely (older-shape state) does not crash
+and suppresses nothing. Not yet re-measured live against a fresh run of
+this bug's original 249-conversation campaign.
 
 ## BUG-019 — A short account-type follow-up gets reattached to an already-resolved transfer instead of the actual current question
 

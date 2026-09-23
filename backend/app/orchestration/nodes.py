@@ -1124,9 +1124,36 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
     # identical to a direct answer to whichever node reads it next.
     tasks_by_id = {task.get("task_id"): task for task in state.get("search_tasks", []) if isinstance(task, dict)}
     approved_by_task = {
-        result.get("task_id"): (set(result.get("approved_parent_ids", [])), str(result.get("generation_guidance", "")).strip())
+        result.get("task_id"): (
+            set(result.get("approved_parent_ids", [])),
+            str(result.get("generation_guidance", "")).strip(),
+            result.get("status"),
+        )
         for result in state.get("task_results", [])
         if result.get("status") in ANSWERABLE_TASK_STATUSES
+    }
+    # Cross-tool contradiction guard: a subquery a non-RAG tool has already
+    # completed (api, deeplink, service_request -- ground truth, not a
+    # judgment call) makes a same-subquery RAG task's own RELEVANT verdict
+    # (real but incomplete evidence, never a full answer) actively
+    # dangerous rather than merely superfluous. Confirmed live (BUG-018):
+    # a RELEVANT adjacent_scope task's own required framing ("no direct
+    # evidence for this, but here's related information") sat in the same
+    # generation_content as a real, already-fetched personal_data_
+    # placeholder for the exact same request; the outbound audit's own
+    # NARROW_TO_EVIDENCE_SCOPE recovery reasoned from the RAG side alone
+    # ("no data for account balances") without checking the tool side,
+    # and its resulting generation_guidance instructed denying a capability
+    # the turn had already successfully used. A SUFFICIENT verdict is
+    # exempt -- it is a real, complete, standalone answer to (a different
+    # angle of) the same subquery, genuinely additive rather than a hedge
+    # that only makes sense when nothing else answered the subquery at all.
+    subqueries_with_other_tool_success = {
+        subquery.get("subquery_id")
+        for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(subquery, dict)
+        for attempt in subquery.get("tool_attempts", [])
+        if isinstance(attempt, dict) and attempt.get("tool_name") != "rag" and attempt.get("status") == "completed"
     }
     # Presentation is intentionally decoupled from retrieval-task boundaries.
     # The response and outbound groundedness audit therefore share the full
@@ -1161,12 +1188,19 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
             # customer actually described. Empty in the common case.
             "generation_guidance": guidance,
         }
-        for task_id, (parent_ids, guidance) in approved_by_task.items()
+        for task_id, (parent_ids, guidance, status) in approved_by_task.items()
         # RELEVANT REQUIRES A REAL PARENT: approved_parent_ids is never
         # empty for a task included here anymore (enforced in
         # node_03c_sufficiency_auditor) -- guidance is always a caveat on a
         # real parent, never a standalone basis for a manifest entry.
         if task_id and parent_ids
+        # Cross-tool contradiction guard (see above): drop a RELEVANT-only
+        # task whose own subquery a non-RAG tool already completed --
+        # Territory B's companion shares its source task's subquery_id
+        # (see the "Territory B" comment in node_02e's scope-expansion
+        # handling), so this also correctly suppresses a companion task
+        # built for a subquery a tool has already resolved.
+        if not (status != "SUFFICIENT" and tasks_by_id.get(task_id, {}).get("subquery_id") in subqueries_with_other_tool_success)
     ]
 
 

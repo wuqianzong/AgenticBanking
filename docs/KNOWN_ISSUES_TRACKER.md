@@ -870,6 +870,23 @@ cases or several coincidentally similar failures, and whether it
 correlates with any particular category, round, or key/model in use at
 the time. Left for future work per explicit instruction.
 
+**Likely (not confirmed) partial improvement from the Response Obligation
+Contract redesign, 2026-09-22/23 -- not re-measured at this bug's original
+full-corpus scale.** This bug's leading hypothesis was "repeated outbound
+compliance/groundedness audit exhaustion" replacing an already-resolved
+turn's text with a generic fallback. The Stage 2 completeness net,
+node_04c's migration to the same unified contract, node_06's own
+conditional-rules restructuring, and the `generation_guidance` evidence-
+boundary alignment are all direct interventions in exactly that
+retry-exhaustion pathway. A live regression check this session replayed
+two real historical BANKING77 drop cases and a case that had separately
+exhausted all 3 retries down to a bare apology fallback; all three now
+produce a complete, correctly-grounded answer on the first or second
+attempt instead of falling through. This is suggestive, not conclusive --
+it was 3 hand-picked cases, not a re-run of this bug's original
+3,080-case corpus, so the 24-case/0.88% rate has not been re-measured and
+this entry's status is left as-is pending that.
+
 ## BUG-016 — Sufficiency auditor doesn't recognize an explicit negative/declarative fact as a complete answer
 
 **Severity:** Medium **Confidence:** Confirmed (13/88 stratified sample, 95% CI 7.7%–21.8%) **Status: Open, not yet root-caused**
@@ -1401,7 +1418,7 @@ explicit instruction.
 
 ## BUG-026 — The response generator rarely writes the required closing sentence for an attached shortcut
 
-**Severity:** Low–Medium **Confidence:** Confirmed (236 logged generator calls with a shortcut supplied) **Status: Open, not yet root-caused**
+**Severity:** Low–Medium **Confidence:** Confirmed (236 logged generator calls with a shortcut supplied) **Status: Fixed, structurally (Response Obligation Contract redesign, 2026-09-22/23)**
 **Found in:** live turn review, 2026-09-21 (session `sess_dc50c73d…`, "i lost my card in this raining weather"), then measured across the logged BANKING77 corpus.
 
 **What happens:** when a turn resolves with a real evidence-based answer
@@ -1432,9 +1449,29 @@ sentence in code and drop the rule from the prompt (also shortens the
 prompt), or give the sentence its own output slot. Left for later per
 explicit instruction.
 
+**Fix implemented (docs/RESPONSE_OBLIGATION_CONTRACT_DESIGN.md, Stages
+1-2), closing exactly the candidate direction above of giving the sentence
+its own tracked slot rather than relying on freeform prose compliance.**
+Every shortcut is now a first-class obligation with its own short handle
+(`nav_N`/`svc_N`) that the model cites in `sourceShortcutHandles`, the
+same citation mechanism a RAG task already used -- "did the model
+acknowledge this" became a structural, checkable fact instead of a hope
+that a ~48k-character prompt's one rule among dozens gets followed. The
+Stage 2 completeness net (`_apply_response_completeness_nets`) checks
+every shortcut obligation for coverage and, when the model doesn't cite
+it, deterministically inserts the exact pointing sentence itself ("You can
+also use/fill in and submit the '\<label\>' button/form below.") -- so the
+customer-facing outcome (a shortcut is always introduced by a sentence) no
+longer depends on the generator's own compliance rate at all, regardless
+of what that rate happens to be. **Verified live** in this session's
+regression check: replaying real historical BANKING77 turns that
+previously produced this omission now produces a complete response with
+the shortcut correctly introduced, with no change needed to the
+generator's own prompt discipline.
+
 ## BUG-027 — The shortcut-omission fallback is skipped when the label appears anywhere in the response
 
-**Severity:** Medium **Confidence:** Confirmed (one live turn traced end to end; 58 of 236 logged calls had the label only inside progress steps) **Status: Open**
+**Severity:** Medium **Confidence:** Confirmed (one live turn traced end to end; 58 of 236 logged calls had the label only inside progress steps) **Status: Fixed (Response Obligation Contract redesign, 2026-09-22/23)**
 **Found in:** same 2026-09-21 live turn as BUG-026.
 
 **What happens:** `nodes.py` (~5700, "Shortcut-omission fallback") appends
@@ -1461,3 +1498,17 @@ mentioned only when the label appears in a pointing phrase ("button",
 deterministic sentence and only suppress it when the model wrote its own,
 or (c) resolve via BUG-026's "insert in code" direction. Left for later
 per explicit instruction.
+
+**Fix implemented, option (c)+.** `_is_covered`'s check for a shortcut
+obligation (`nodes.py`) now requires the SAME block to both cite the
+shortcut's own handle in `sourceShortcutHandles` AND contain its label
+text -- a bare substring match anywhere in the response (e.g. a coincidental
+"Manage Card" inside an unrelated FAQ step like "choose View & Manage
+Card") no longer satisfies coverage on its own, since that step's own
+block never cites the shortcut's handle. This closes exactly the loophole
+this bug describes: only a block that genuinely, citably references the
+shortcut counts as covering it; anything else falls through to the same
+deterministic fallback sentence BUG-026's fix installs. Verified via
+fixture tests during the Stage 1/2 rollout (a label-only-in-steps case no
+longer suppresses the fallback) and confirmed no regression on a normal
+turn where the model does correctly cite and mention a shortcut.

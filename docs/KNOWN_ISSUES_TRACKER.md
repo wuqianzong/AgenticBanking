@@ -32,7 +32,7 @@ second time).
 | BUG-011 | A vague reply gets attributed to a stale dormant topic instead of the assistant's own most recent turn | Medium–High | Confirmed | LLM judgment (prompt gap) | **Fixed, live-verified** |
 | BUG-012 | Response blocks with a bare-string list field crash on `_llm_text() missing 1 required positional argument: 'key'` | Medium | Confirmed | **Deterministic code** | **Fixed** |
 | BUG-013 | A structured-output response occasionally wrapped in a single-element list crashes with `'list' object has no attribute 'get'` | Low-Medium | Confirmed | **Deterministic code** | **Fixed** |
-| BUG-014 | Precision Substitution occasionally leaves raw internal template fragments (`faq_xxxxxxxx_NNN`) in customer-facing text | Medium | Confirmed | Not yet root-caused | Open |
+| BUG-014 | Precision Substitution occasionally leaves raw internal template fragments (`faq_xxxxxxxx_NNN`) in customer-facing text | Medium | Confirmed | **Deterministic code** (no check handles an unbraced placeholder the generator occasionally writes) | **Repair fixed (fixture-verified); unauthorized-placeholder rejection open** |
 | BUG-015 | A small number of turns return a generic failure fallback ("please rephrase") instead of a real answer, on questions near-identical ones answer correctly -- and 22/24 of these were silently mislabeled "resolved" in every automated metric until corrected 2026-09-13 | Low-Medium | Confirmed (24 unique cases, full-corpus) | Not yet root-caused | Open |
 | BUG-016 | Sufficiency auditor doesn't recognize an explicit negative/declarative fact as a complete answer | Medium | Confirmed (13/88 sample) | LLM judgment | Open |
 | BUG-017 | A successfully fetched account balance is silently dropped when the turn also carries conversational framing | Medium | Confirmed (61/619 turns; 23/70-sample conversations at least once) | Not yet root-caused | Open |
@@ -770,7 +770,7 @@ behave exactly as before, unaffected).
 
 ## BUG-014 — Precision Substitution occasionally leaves raw internal template fragments in customer-facing text
 
-**Severity:** Medium **Confidence:** Confirmed **Status: Open, not yet root-caused**
+**Severity:** Medium **Confidence:** Confirmed **Status: Root-caused; malformed-placeholder repair fixed (fixture-verified); unauthorized-placeholder rejection still open**
 **Found in:** BANKING77 semantic Q&A sampling review (2026-09-09), 385-case stratified sample
 
 **What happens:** `banking77_r3_0181` ("I did not make this card payment.")
@@ -803,6 +803,60 @@ one-off.
 either fully resolving or leaving the recognizable `{{faq_...}}` form,
 and the other 5 occurrences beyond this one sampled instance. Left for
 future work per explicit instruction.
+
+**Root cause found (2026-09-24).** All 6 corpus occurrences share one
+mechanism: the text reaching node_07 held the placeholder id *without* its
+`{{ }}` wrapper (e.g. `faq_5ad80c63_001-faq_5ad80c63_002`), and every
+downstream check only recognizes the braced form -- node_07's substitution
+(nothing to substitute; `precision_substituted: False` in all 6), and
+node_05's gate, whose braced-placeholder check can't see it and whose
+exposed-parent-id regex `(?![_}])` deliberately skips an `_NNN` suffix.
+Ruled out: the DB values are correct (`faq_5ad80c63_001` -> 6), and no code
+anywhere strips braces. So the braces were most likely dropped by the
+generator itself -- inferred, not directly observed, since those runs
+(2026-09-05..08) didn't capture raw generator output and the logs have
+rotated. The *shape* is not generally unstable: the model kept `{{ }}`
+intact in ~99.4% of placeholder-bearing turns (930 substituted vs 6
+leaked). Failures concentrate on values stitched from several adjacent
+tokens: the `001-002` card-arrival range leaked ~7% of the time (4/59),
+the 5-token phone number ~1% (3/263). All 6 leaked ids were from parents in
+that turn's own approved evidence.
+
+**Fix implemented (evidence-scoped repair), design decided by the user:**
+node_07 now restores the `{{ }}` wrapper on a malformed (bare or
+single-braced) precision placeholder, but only when its **exact** id
+appears, well-formed, in this turn's approved evidence (the same hydrated
+parents the generator read; `_evidence_precision_placeholders` /
+`_repair_precision_placeholders`). Nothing is guessed -- a truncated or
+altered id is left untouched -- and an id outside the evidence is left
+untouched too: that is an *unauthorized* placeholder, not a malformed one,
+and deliberately not this function's job. Placed in node_07 rather than
+node_05 because node_11's exhausted-retry fallback reaches node_07 without
+passing node_05. Each repair emits `precision.placeholder.repaired`, so
+the real-world rate is measurable from logs.
+
+**Verified (fixture, real hydrated parents from `knowledge_base.db`, no
+LLM):** both real leaks rebuilt from the corpus now render correctly
+(`r1_0432` -> "6-7 business days"; `r3_0181` -> "+65 313-HORIZ (+65 3138
+7878)"); single-braced in-evidence id repaired; out-of-evidence bare id and
+an altered id both left untouched; the well-formed path and a no-evidence
+state are unchanged.
+
+**Open gap found while fixing this -- unauthorized placeholders are not
+rejected by any deterministic check today.** Probed node_05's actual
+checks: (a) a bare/single-braced placeholder id *not* in the turn's
+evidence passes node_05 and would reach the customer raw; (b) a well-formed
+`{{faq_...}}` that exists in `Precision_Reference_Table` but is *not* in the
+turn's approved evidence also passes -- node_05 only asks "does this exist
+anywhere in the table", never "was this approved this turn", leaving it to
+the (LLM) groundedness audit. A separate unauthorized-placeholder check is
+needed; not yet designed or implemented, pending the user's decision.
+
+**Also noted, not yet changed:** the generator prompt gives a mixed brace
+signal -- PRECISION REFERENCE CONTRACT shows `{{faq_*}}`, but a GENERAL
+DESIGN PRINCIPLES bullet (`nodes.py`, "Preserve exact {{placeholders}}."
+inside an f-string) renders to the model as single-braced
+`{placeholders}`.
 
 ## BUG-015 — A small number of turns return a generic failure fallback instead of a real answer
 

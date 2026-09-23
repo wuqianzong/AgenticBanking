@@ -956,6 +956,56 @@ def _append_decline_suffix(response: str, decline_tasks: list) -> str:
     return f"{response}\n\n{suffix}" if response else suffix
 
 
+# BUG-014. A well-formed precision placeholder, and the malformed shapes the
+# generator occasionally writes instead: bare ("within faq_5ad80c63_001-
+# faq_5ad80c63_002 days") or single-braced ({faq_5ad80c63_001}). The
+# malformed pattern's lookarounds never match inside a well-formed
+# {{faq_..._001}} (every possible start is preceded by "{"), never match a
+# longer token (faq_..._0012), and never match an id embedded in a word.
+_WELL_FORMED_PRECISION_PLACEHOLDER = re.compile(r"\{\{(faq_[0-9a-f]{8}_\d{3})\}\}")
+_MALFORMED_PRECISION_PLACEHOLDER = re.compile(r"(?<![{\w])\{?(faq_[0-9a-f]{8}_\d{3})\}?(?![}\w])")
+
+
+def _evidence_precision_placeholders(state: AgentState) -> set:
+    """Every precision placeholder id present, well-formed, in this turn's
+    approved evidence -- the exact set the generator was given to copy.
+    Read from the same hydrated evidence the generator itself read
+    (_hydrate_response_evidence), so an id is repairable only if the model
+    actually had it in front of it this turn."""
+    return {
+        placeholder_id
+        for entry in _hydrate_response_evidence(state)
+        for parent in entry.get("approved_parents", [])
+        if isinstance(parent, dict)
+        for placeholder_id in _WELL_FORMED_PRECISION_PLACEHOLDER.findall(str(parent.get("content", "")))
+    }
+
+
+def _repair_precision_placeholders(value, evidence_ids: set, repaired: set):
+    """Restore the {{ }} wrapper on a malformed precision placeholder whose
+    exact id appears in this turn's approved evidence (BUG-014), recursively
+    through str/list/dict.
+
+    Repair only: an exact id match against evidence_ids is the sole
+    condition, nothing is guessed (a truncated or altered id is left as
+    is), and an id not in the evidence is left untouched -- that is an
+    unauthorized placeholder, not a malformed one, and is a separate check's
+    job. `repaired` collects each id actually repaired, for logging."""
+    if isinstance(value, str):
+        def _fix(match):
+            placeholder_id = match.group(1)
+            if placeholder_id not in evidence_ids:
+                return match.group(0)
+            repaired.add(placeholder_id)
+            return "{{" + placeholder_id + "}}"
+        return _MALFORMED_PRECISION_PLACEHOLDER.sub(_fix, value)
+    if isinstance(value, list):
+        return [_repair_precision_placeholders(item, evidence_ids, repaired) for item in value]
+    if isinstance(value, dict):
+        return {key: _repair_precision_placeholders(item, evidence_ids, repaired) for key, item in value.items()}
+    return value
+
+
 def fetch_placeholders_from_db(placeholders: list) -> dict:
     """Fetches exact values for a list of placeholders from the SQLite Precision_Reference_Table."""
     if not placeholders:
@@ -9320,7 +9370,30 @@ def node_07_precision_substitution(state: AgentState):
     extended_text = payload.get("extendedText", "")
     list_clarification = payload.get("listClarificationText", "")
     response_blocks = payload.get("responseBlocks", [])
-    
+
+    # BUG-014: restore the {{ }} wrapper on any malformed precision
+    # placeholder whose exact id is in this turn's approved evidence, before
+    # anything below looks for placeholders -- so it gets substituted like
+    # one the generator wrapped correctly. Here rather than in node_05
+    # because node_11's exhausted-retry fallback reaches this node without
+    # passing through node_05. Repair only; an id outside the evidence is
+    # left for the unauthorized-placeholder check.
+    evidence_placeholder_ids = _evidence_precision_placeholders(state)
+    if evidence_placeholder_ids:
+        repaired_ids: set = set()
+        draft = _repair_precision_placeholders(draft, evidence_placeholder_ids, repaired_ids)
+        options = _repair_precision_placeholders(options, evidence_placeholder_ids, repaired_ids)
+        step_details = _repair_precision_placeholders(step_details, evidence_placeholder_ids, repaired_ids)
+        list_items = _repair_precision_placeholders(list_items, evidence_placeholder_ids, repaired_ids)
+        list_title = _repair_precision_placeholders(list_title, evidence_placeholder_ids, repaired_ids)
+        list_intro = _repair_precision_placeholders(list_intro, evidence_placeholder_ids, repaired_ids)
+        extended_text = _repair_precision_placeholders(extended_text, evidence_placeholder_ids, repaired_ids)
+        list_clarification = _repair_precision_placeholders(list_clarification, evidence_placeholder_ids, repaired_ids)
+        response_blocks = _repair_precision_placeholders(response_blocks, evidence_placeholder_ids, repaired_ids)
+        if repaired_ids:
+            print(f"   🩹 [PLACEHOLDER REPAIRED]: restored {{{{ }}}} on {sorted(repaired_ids)}")
+            log_event("precision.placeholder.repaired", level="WARNING", placeholder_ids=sorted(repaired_ids))
+
     # Extract unique placeholders globally
     combined_text = " ".join([draft, *_ui_option_texts(options), *step_details, *list_items, list_title, list_intro, extended_text, list_clarification, json.dumps(response_blocks, ensure_ascii=False)])
     placeholders_in_draft = list(set(re.findall(r"\{\{(.*?)\}\}", combined_text)))

@@ -8475,6 +8475,71 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         audit_scope = "non_financial_response"
     else:
         grounding_context = _normal_outbound_grounding_context(state)
+        approved_by_task = grounding_context["approved_by_task"]
+        clarification_inputs = grounding_context["clarification_inputs"]
+        terminal_clarifications = grounding_context["terminal_clarifications"]
+        decline_inputs = grounding_context["decline_inputs"]
+        no_info_inputs = grounding_context["no_info_inputs"]
+        conversational_inputs = grounding_context["conversational_inputs"]
+        available_shortcuts = grounding_context["available_shortcuts"]
+        unavailable_service_requests = grounding_context["unavailable_service_requests"]
+        verified_api_context = grounding_context["verified_api_context"]
+        personal_data_placeholders = grounding_context["personal_data_placeholders"]
+        has_adjacent_scope_evidence = any(e.get("search_territory") == "adjacent_scope" for e in approved_by_task)
+        has_clarification_family = bool(clarification_inputs or terminal_clarifications or decline_inputs or no_info_inputs)
+
+        # Response Obligation Contract Design, Stage 3: data sections and
+        # their governing rule paragraphs are shown only when this turn
+        # actually has an entry of that kind -- the same discipline
+        # _generate_response_blocks' Stage 1/2 restructuring already
+        # established on the generation side, applied here with NO change
+        # to any verdict criteria, evidence source, or independence
+        # guarantee: an absent section never changes what would have been
+        # checked, it only stops an entirely-unused rule from padding every
+        # audit call regardless of what the turn actually contains. This is
+        # a pure prose-organization change -- deliberately does NOT adopt
+        # the design doc's original Stage 3 sketch (checking consistency
+        # against an entry's own generation_guidance), which would have
+        # reopened the audit-independence gap _normal_outbound_grounding_
+        # context's own comment above already explains and rejects.
+        content_sections = []
+        if clarification_inputs:
+            content_sections.append(
+                "Clarification Inputs (the only source for what a clarifying "
+                "question may be about -- exactly what the generator itself "
+                "was given, nothing more: \"scope\" names where in the "
+                "pipeline the ambiguity blocks progress, \"unresolved_request\" "
+                "is the specific thing that's unclear -- the generator "
+                "composed its own question from this, there is no fixed "
+                "sentence to compare against -- and 0-3 \"clarification_guesses\" "
+                "are PREDICTIONS of likely customer intent, never reports of "
+                "anything actually said):\n" + json.dumps(clarification_inputs, ensure_ascii=False)
+            )
+        if terminal_clarifications:
+            content_sections.append(
+                "Terminal Unresolved Task Markers (topic/status only; never "
+                "evidence):\n" + json.dumps(terminal_clarifications, ensure_ascii=False)
+            )
+        if decline_inputs:
+            content_sections.append(
+                "Decline Inputs (the only source for a declined-topic "
+                "explanation):\n" + json.dumps(decline_inputs, ensure_ascii=False)
+            )
+        if no_info_inputs:
+            content_sections.append(
+                "No-Info Inputs (the only source for an unavailable-"
+                "information statement):\n" + json.dumps(no_info_inputs, ensure_ascii=False)
+            )
+        if conversational_inputs:
+            content_sections.append(
+                "Conversational Inputs (each is a non-financial part of this "
+                "turn -- a greeting, thanks, feeling, or off-topic remark -- "
+                "the generator composed its own brief reply from its "
+                "\"customer_component\", there is no fixed sentence to "
+                "compare against):\n" + json.dumps(conversational_inputs, ensure_ascii=False)
+            )
+        content_sections_block = "\n\n".join(content_sections) if content_sections else "None this turn."
+
         content_block = f"""
         Original Customer Message (courtesy-context only; never a source for a
         banking fact, instruction, product capability, policy, or outcome):
@@ -8483,30 +8548,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         Optional Internal Response-Element Provenance (not customer-facing):
         {json.dumps(grounding_context["response_block_map"], ensure_ascii=False)}
 
-        Clarification Inputs (the only source for what a clarifying
-        question may be about -- exactly what the generator itself was
-        given, nothing more: "scope" names where in the pipeline the
-        ambiguity blocks progress, "unresolved_request" is the specific
-        thing that's unclear -- the generator composed its own question
-        from this, there is no fixed sentence to compare against -- and
-        0-3 "clarification_guesses" are PREDICTIONS of likely customer
-        intent, never reports of anything actually said):
-        {json.dumps(grounding_context["clarification_inputs"], ensure_ascii=False)}
-
-        Terminal Unresolved Task Markers (topic/status only; never evidence):
-        {json.dumps(grounding_context["terminal_clarifications"], ensure_ascii=False)}
-
-        Decline Inputs (the only source for a declined-topic explanation):
-        {json.dumps(grounding_context["decline_inputs"], ensure_ascii=False)}
-
-        No-Info Inputs (the only source for an unavailable-information statement):
-        {json.dumps(grounding_context["no_info_inputs"], ensure_ascii=False)}
-
-        Conversational Inputs (each is a non-financial part of this turn --
-        a greeting, thanks, feeling, or off-topic remark -- the generator
-        composed its own brief reply from its "customer_component", there
-        is no fixed sentence to compare against):
-        {json.dumps(grounding_context["conversational_inputs"], ensure_ascii=False)}
+        {content_sections_block}
 
         Customer-Facing Answer:
         "{answer}"
@@ -8517,7 +8559,8 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         Complete Customer-Facing UI Payload:
         "{rendered_payload}"
         """
-        evidence_route_specific_rules = f"""
+
+        _core_grounding_rules = """
         ANSWER AUDIT: assess the customer's natural answer as one coherent
         response. Do NOT require it to be written in separate factual and
         inferential sections. Instead, distinguish the following two internal
@@ -8555,7 +8598,9 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           above that cap. It does NOT support attributing control of the cap
           to a particular bank, regulator, or process unless that attribution
           is explicit in the evidence.
+        """
 
+        _courtesy_context_rule = """
         Courtesy Context Rule (applies to the answer, clarification, and UI):
         - First isolate any brief conversational courtesy acknowledgement,
           greeting, thanks, apology, or response to the customer's stated
@@ -8568,7 +8613,9 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         - Assess every remaining financial statement and UI field only against
           Task-Level Approved Evidence. The Original Customer Message can
           never support, soften, or justify a financial claim.
+        """
 
+        _scope_expansion_honesty_rule = """
         Scope-Expansion Honesty Rule (Extra Effort v2.0):
         - A Task-Level Approved Evidence entry whose "search_territory" is
           "adjacent_scope" was retrieved from a deliberately different
@@ -8615,7 +8662,9 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         - An entry with "search_territory" absent or "in_scope" is graded
           exactly as before this rule; this rule only ever narrows how an
           "adjacent_scope" entry may be used, never how the others are.
+        """
 
+        _evidence_applicability_rule = """
         Evidence Applicability Rule (judge this yourself, directly from
         approved_parents' own text and resolved_subquery above -- never
         from any writer-side note, since nothing upstream of you here has
@@ -8657,13 +8706,15 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           to, the customer's own stated situation -- only an actual,
           evidenced mismatch triggers it.
         - When this rule fires, set the violation's generation_guidance per
-          the Generation Guidance Shape Rule above: since the mismatch means
+          the Generation Guidance Shape Rule below: since the mismatch means
           nothing here confirms the procedure applies to the customer's
           actual stated reason, the instruction is the "nothing confirmed"
           case -- admit that plainly, phrased around the customer's own
           stated reason, then instruct offering the procedure only as an
           unclaimed courtesy, never as a resolution.
+        """
 
+        _clarification_family_rules = """
         Clarification Rules:
         - Each Decline Input and No-Info Input carries its own
           `decline_evidence`/`no_info_evidence` field -- the sole permitted
@@ -8720,12 +8771,9 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           as if the guess itself were ungrounded, and so is the guess's
           label/message if it introduces a new product, policy, fact, or
           answer beyond what its reason actually supports.
-        - Every entry in Decline Inputs, Clarification Inputs, No-Info
-          Inputs, and Conversational Inputs must be explicitly, faithfully
-          represented somewhere in the response, not silently omitted —
-          treat a missing entry the same as an unsupported claim for
-          grounding purposes.
+        """
 
+        _conversational_rules = """
         Conversational Rules:
         - A Conversational Input has no evidence-backed content -- it is
           grounded when it faithfully and naturally responds to its own
@@ -8738,8 +8786,21 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         - A Conversational Input's statement must not answer, or appear to
           answer, a banking question -- if it does, treat it as an
           unsupported claim, the same as any other invented fact.
+        """
 
-        {audit_feedback_rules}
+        # Not folded into either family-specific block above because it
+        # spans both -- worded so it stays correct regardless of which of
+        # the two (or neither, or both) actually rendered this turn.
+        _cross_type_coverage_rule = """
+        Coverage Rule: every entry among this turn's Decline Inputs,
+        Clarification Inputs, No-Info Inputs, and Conversational Inputs
+        (whichever are present above) must be explicitly, faithfully
+        represented somewhere in the response, not silently omitted --
+        treat a missing entry the same as an unsupported claim for
+        grounding purposes.
+        """
+
+        _audit_feedback_reporting_mechanics = """
         - For every material failure, identify the exact visible phrase in
           unsupported_content and set audit_layer to evidence or bridge.
         - For evidence failures, explain which direct factual support is
@@ -8751,7 +8812,9 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         - If the approved evidence does not answer a task, record a
           task_not_answered violation. Do not suggest how Horizon should handle
           the task or where the customer should go next.
+        """
 
+        _source_boundary_core_rules = """
         Source-Boundary Rules:
         - Session memory, user baseline memory, chat history, and rolling
           summaries are intentionally absent and are not grounding sources.
@@ -8770,6 +8833,9 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           about whether the underlying content exists -- so it is not held
           to the same standard as an assertion of fact, only to "is this
           genuinely something the approved evidence could answer."
+        """
+
+        _shortcut_source_rule = """
         - "available_shortcuts" entries are a permitted source for a
           statement, in either of two roles, that: names a shortcut solely
           by its supplied `label`/`topic`; and never claims the assistant is
@@ -8793,22 +8859,60 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           claims execution/completion. Do not reject a compliant statement
           merely for existing, and do not require decline/apology framing
           for a subquery whose only coverage is a matching shortcut.
+        """
+
+        _unavailable_source_rule = """
         - "unavailable_service_requests" entries are a permitted source only
           for a brief sentence stating that part of the request could not be
           started, using only the supplied reason. Any different explanation
           is unsupported.
+        """
+
+        _verified_api_source_rule = """
         - "verified_api_context" entries are a permitted factual source, on
           the same footing as Task-Level Approved Evidence, but each entry
           supports only the exact statement in its own `fact` text -- no
           extrapolation beyond it.
+        """
+
+        # Plain string, not an f-string -- {data-*} below needs no brace
+        # escaping (unlike its pre-Stage-3 home inside evidence_route_
+        # specific_rules's own f-string, which needed {{data-*}} to render
+        # this same single-brace literal).
+        _personal_data_source_rule = """
         - "personal_data_placeholders" entries permit a customer-facing
           sentence to include an entry's `insert_token` verbatim when the
           sentence addresses that same entry's `for_request`. The sentence
           must never state, paraphrase, or guess the real value the token
           represents (it is never disclosed to the assistant, so it can
           never legitimately appear as prose) and must never use a
-          `{{data-*}}` token that is not present in this list.
+          `{data-*}` token that is not present in this list.
         """
+
+        rule_sections = [_core_grounding_rules, _courtesy_context_rule]
+        if has_adjacent_scope_evidence:
+            rule_sections.append(_scope_expansion_honesty_rule)
+        if approved_by_task:
+            rule_sections.append(_evidence_applicability_rule)
+        if has_clarification_family:
+            rule_sections.append(_clarification_family_rules)
+        if conversational_inputs:
+            rule_sections.append(_conversational_rules)
+        if has_clarification_family or conversational_inputs:
+            rule_sections.append(_cross_type_coverage_rule)
+        rule_sections.append(audit_feedback_rules)
+        rule_sections.append(_audit_feedback_reporting_mechanics)
+        source_boundary_sections = [_source_boundary_core_rules]
+        if available_shortcuts:
+            source_boundary_sections.append(_shortcut_source_rule)
+        if unavailable_service_requests:
+            source_boundary_sections.append(_unavailable_source_rule)
+        if verified_api_context:
+            source_boundary_sections.append(_verified_api_source_rule)
+        if personal_data_placeholders:
+            source_boundary_sections.append(_personal_data_source_rule)
+        rule_sections.append("\n".join(source_boundary_sections))
+        evidence_route_specific_rules = "\n\n".join(rule_sections)
         # Per-Task Outbound Response Revision Loop: a noise-reduction hint
         # only, never a constraint. These task_ids already passed a full
         # audit round earlier this turn; naming them here should stop the

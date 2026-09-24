@@ -23,7 +23,6 @@ const NODE_CAPTIONS = {
   "n18": "caption.n18",
   "n19": "caption.n19",
   "n8": "caption.n8",
-  "n20": "caption.n20",
   "n21_audit": "caption.n21_audit",
   "n21": "caption.n21",
   "n22": "caption.n22",
@@ -2767,7 +2766,7 @@ export default function BankingBotUI() {
       { id: 'intent', labelKey: 'stage.safety', nodes: ['n00', 'n3', 'n16', 'n2d', 'n2e', 'memory_compaction', 'memory_validation'] },
       { id: 'retrieval', labelKey: 'stage.retrieval', nodes: ['n14', 'n17_rag', 'n18'] },
       { id: 'synthesis', labelKey: 'stage.synthesis', nodes: ['n19', 'n8'] },
-      { id: 'audit', labelKey: 'stage.audit', nodes: ['n20', 'n21_audit', 'n21', 'n22', 'n24'] }
+      { id: 'audit', labelKey: 'stage.audit', nodes: ['n21_audit', 'n21', 'n22', 'n24'] }
     ];
 
     let currentStageIndex = 0;

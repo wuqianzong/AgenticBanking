@@ -57,6 +57,7 @@ second time).
 | BUG-036 | `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none | Low | Confirmed | **Deterministic code** (logging only) | **Fixed** |
 | BUG-037 | A completed redirect (deeplink/service_request) suppressed RAG evidence, leading the generator to fabricate a fact (card delivery "7 to 10" vs the real 6-7 days) | High | Confirmed (live) | **Deterministic code** (regression from BUG-018's fix: guard counted any completed tool, not only a data fetch) | **Fixed, fixture-verified** |
 | BUG-038 | An audit violation on a task no block carries approves the block holding the flagged sentence; the reviser gets nothing and the flagged text ships | High | Confirmed (live) | **Deterministic code** (partition attribution) | Open |
+| BUG-039 | No turn-level consistency check: results collected for one turn could contradict each other in the response (e.g. "no information on your balance" next to the fetched balance) whenever the same-subquery BUG-018 guard could not see the conflict | High | Confirmed (live, triage merged the two components the guard relies on) | **Missing capability** (semantic, turn-wide conflict judgment) | **Fixed, fixture- and live-judgment-verified** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -2195,3 +2196,57 @@ lets its flagged content ship while looking approved. Candidate directions
 (not decided): treat such a violation as response-wide (every block
 pending), and/or locate the flagged block by matching the violation's
 `unsupported_content` against block text.
+
+## BUG-039 — No turn-level consistency check between a turn's collected results
+
+**Severity:** High (a self-contradicting response reaches the customer) **Confidence:** Confirmed (live) **Status: Fixed (2026-09-24), fixture-verified (9/9 decision-validation cases) and live-judgment-verified (3/3)**
+**Found in:** live trace during the BUG-033 decomposition work
+
+**What happens:** each result of a turn (FAQ evidence, the customer's own
+data, verified facts, no-info statements) is produced by its own task, and
+nothing checked them against each other before generation. BUG-018's guard
+only suppresses a RELEVANT RAG task when an `api` fetch completed on the
+*same* subquery; when triage merged the need differently, or the
+contradiction ran across subqueries, both results reached the generator
+-- e.g. "I don't have information available on the current balance of your
+savings account" alongside the fetched balance.
+
+**Design (decided with the user):**
+- Runs inside node_04a (resolution planner), only after tool calling has
+  settled (no more retry), and only when the turn has at least two
+  asserting results -- a single result cannot contradict itself, so most
+  turns make no call (`turn.consistency.skipped`).
+- Redirects (deeplink/service_request), clarifications and declines are
+  not included: a redirect stays RESOLVED in turn resolution but, by its
+  redirect nature, is never a factual claim and never suppresses anything.
+- **The LLM decides.** It names each conflict and marks which side to
+  `drop` (reasoning first, then `conflicts_with`, then `decision`). A first
+  version resolved conflicts by a fixed authority order; per the user this
+  was replaced, since a deterministic priority would make the semantic
+  call nearly pointless. Code only validates the decision: a drop counts
+  only for an item named in a conflict, the customer's own data is never
+  dropped, and if both sides of one conflict are dropped both are kept.
+  Rejections are logged (`rejected_decisions`).
+- Dropped items are removed from what generation reads
+  (`consistency_suppressed_ids` honored by `_response_evidence_manifest`;
+  no-info entries removed from `task_resolution_instructions` /
+  `unresolvable_search_tasks`). A failed call drops nothing.
+- **Placeholders:** the checker sees FAQ precision placeholders resolved to
+  their real values -- a live false positive flagged two card-arrival FAQs
+  (both 6-7 days) as conflicting because they cited different placeholder
+  ids. These are public FAQ figures; the resolved text exists only in the
+  checker's view, and generation still receives the `{{faq_*}}`
+  placeholders, substituted only at node_07. The customer's own data stays
+  a `{{data-*}}` token (its value is never shown to any LLM); a
+  "PLACEHOLDERS ARE VALUES" prompt rule tells the checker to treat each
+  token as the value it stands for. Real FAQ values were deliberately
+  *not* extended to the sufficiency auditor or the outbound audit: those
+  compare a draft to its own evidence by token identity, which real values
+  would weaken.
+
+**Verification:** decision-validation fixtures 9/9; live judgment 3/3 --
+no-info vs. fetched balance (checker dropped the no-info item itself),
+complementary FAQ + balance (nothing dropped), two agreeing card-arrival
+FAQs (no conflict, previously a false positive). A natural live turn that
+reaches the drop path is rare now that need-based triage (BUG-033) sends a
+plain balance request only to the data fetch.

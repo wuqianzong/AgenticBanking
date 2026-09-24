@@ -346,6 +346,21 @@ class TriageEvaluation(BaseModel):
     components: List[TriageComponent] = Field(default_factory=list, description="For DECOMPOSED only: one standalone component per distinct customer NEED in the resolved TRUE REQUEST (not per sentence -- sentences serving the same need share one component; components never overlap), together covering everything the customer asked, each tagged with its own resolution. Empty for NON_COMPLIANT/ESCALATION.")
     repetitive_issue_detected: bool = Field(default=False, description="True only when the Trusted Conversation Context shows the customer repeatedly raising substantially the same underlying banking need or issue across multiple recent turns, especially if it still appears unresolved. Judge by meaning, not wording. Independent of triage_status.")
 
+# TURN CONSISTENCY CHECK (Node 04a) -- semantic conflicts between one
+# turn's collected results, judged once, after tool calling has finished and
+# before response generation. The model names each conflict and decides
+# which side to drop; code only validates the decision (node_04a).
+class TurnConsistencyItem(BaseModel):
+    item_id: str = Field(description="The exact id of one item from the Items list.")
+    # Reasoning before verdict, as elsewhere in this module.
+    reason: str = Field(description="Which other items, if any, concern the same customer need, and whether anything they say contradicts or undercuts this item. Written before conflicts_with.")
+    conflicts_with: List[str] = Field(default_factory=list, description="Ids of the other items this item conflicts with -- presenting both in one response would contradict or undercut each other. Empty when it conflicts with nothing.")
+    # Decided last, after the conflict itself is established.
+    decision: str = Field(default="keep", description="Exactly 'keep' or 'drop'. 'drop' only for an item that conflicts with another and is the one the customer should not be shown -- the less accurate, less direct, or less certain side of that conflict. An item that conflicts with nothing is always 'keep'.")
+
+class TurnConsistencyEvaluation(BaseModel):
+    items: List[TurnConsistencyItem] = Field(default_factory=list, description="One entry per item in the Items list.")
+
 # 4. 2D MATRIX QUERY FORMULATOR (Node 02e) -> NESTED SCHEMA
 class SearchTask(BaseModel):
     task_id: str = Field(description="Stable task identifier, e.g. task_1. Preserve it during retries.")

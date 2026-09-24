@@ -18,6 +18,7 @@ from backend.app.core.llm_service import (
     parse_json_robustly as _parse_json_robustly,
     ClarificationGuess,
     TerritoryBPlan,
+    TurnConsistencyEvaluation,
     MODEL_B_AUDITOR,
     MODEL_C_PLANNER,
     MODEL_D_PROMPT_GUARD,
@@ -45,6 +46,7 @@ VOLATILE_STATE_RESET = {
     "safety_retry_count": 0,
     "search_feedback_history": [],
     "draft_feedback_history": [],
+    "consistency_suppressed_ids": [],
     "triaged_subqueries": [],
     "financial_subqueries": [],
     "conversational_tasks": [],
@@ -1250,6 +1252,7 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
     # the correct "6-7 business days" evidence from "When will my physical
     # card arrive?" because a Manage Card shortcut had completed, and the
     # generator, left with no evidence, invented "7 to 10 business days".
+    consistency_suppressed = set(state.get("consistency_suppressed_ids", []))
     subqueries_answered_by_data_fetch = {
         subquery.get("subquery_id")
         for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
@@ -1303,6 +1306,9 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
         # handling), so this also correctly suppresses a companion task
         # built for a subquery a tool has already resolved.
         if not (status != "SUFFICIENT" and tasks_by_id.get(task_id, {}).get("subquery_id") in subqueries_answered_by_data_fetch)
+        # node_04a's turn consistency check: evidence it found in semantic
+        # conflict with a higher-authority result this turn.
+        if task_id not in consistency_suppressed
     ]
 
 
@@ -5945,6 +5951,216 @@ def node_03c_sufficiency_auditor(state: AgentState):
 
 # --- PHASE 3: RESOLUTION BLUEPRINT & STEP-BY-STEP RESPONSE ---
 
+# --- Turn consistency check (node_04a, after tool calling has settled) ---
+# The checker decides semantically which side of a conflict to drop (per the
+# user: a fixed priority order would make the LLM call nearly pointless --
+# close to a purely mechanical rule). Code only validates its decision; the
+# one hard rule is that the customer's own data is never dropped, since the
+# checker is never shown its value and so has no basis to judge it wrong.
+
+
+def _turn_consistency_items(state: AgentState) -> list[dict]:
+    """Every result this turn that asserts something the response may say.
+
+    Included: approved FAQ evidence (after the evidence guards), the
+    customer's own data (personal-data tokens, verified facts), and no-info
+    statements. Excluded: redirects (deeplink/service_request -- a path to
+    act, never an answer, so there is nothing to contradict), and
+    clarifications/declines (a question or a refusal, not a factual claim).
+    Precision placeholders in FAQ evidence are resolved to their real
+    values here: the checker compares facts, and two different placeholder
+    ids can hide the same number (seen live -- two card-arrival FAQs, both
+    6-7 days, were judged in conflict because they cited different ids).
+    These are public FAQ figures, not personal data, and the resolved text
+    exists only in this checker's view -- the evidence generation reads
+    keeps its placeholders, so exact numbers still come only from node_07.
+    The customer's own data stays a `{{data-*}}` token (its real value is
+    never shown to any LLM); the prompt tells the checker to treat each
+    token as the value it stands for. `_customer_data` marks items never
+    dropped.
+    """
+    tasks_by_id = {t.get("task_id"): t for t in state.get("search_tasks", []) if isinstance(t, dict)}
+    status_by_task = {r.get("task_id"): r.get("status") for r in state.get("task_results", []) if isinstance(r, dict)}
+    need_by_subquery = {
+        sq.get("subquery_id"): str(sq.get("need", "")).strip()
+        for sq in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(sq, dict)
+    }
+    evidence = _hydrate_response_evidence(state)
+    placeholder_ids = sorted({
+        pid for entry in evidence for p in entry.get("approved_parents", []) if isinstance(p, dict)
+        for pid in re.findall(r"\{\{(faq_[0-9a-f]{8}_\d{3})\}\}", str(p.get("content", "")))
+    })
+    values = fetch_placeholders_from_db(placeholder_ids) if placeholder_ids else {}
+
+    def _resolved(text: str) -> str:
+        return re.sub(r"\{\{(faq_[0-9a-f]{8}_\d{3})\}\}", lambda m: values.get(m.group(1), m.group(0)), text)
+
+    items = []
+    for entry in evidence:
+        task = tasks_by_id.get(entry["task_id"], {})
+        items.append({
+            "item_id": entry["task_id"],
+            "kind": "bank FAQ evidence"
+                    + (" (related topic, not a direct match)" if entry.get("search_territory") == "adjacent_scope" else "")
+                    + (" -- partial answer" if status_by_task.get(entry["task_id"]) == "RELEVANT" else ""),
+            "need": need_by_subquery.get(task.get("subquery_id"), "") or task.get("customer_component", ""),
+            "content": [_resolved(str(p.get("content", ""))) for p in entry.get("approved_parents", []) if isinstance(p, dict)],
+        })
+    for entry in _personal_data_placeholders(state):
+        items.append({
+            "item_id": entry["handle"],
+            "kind": "the customer's own data",
+            "need": entry.get("for_request", ""),
+            "content": [f"{str(entry.get('field_description', '')).rstrip('. ')}: {entry.get('insert_token', '')}"],
+            "_customer_data": True,
+        })
+    for entry in _verified_api_context(state):
+        items.append({
+            "item_id": entry["handle"],
+            "kind": "the customer's own verified data",
+            "need": entry.get("for_request", ""),
+            "content": [entry.get("fact", "")],
+            "_customer_data": True,
+        })
+    task_metadata = {t: task.get("customer_component", "") for t, task in tasks_by_id.items()}
+    no_info_context, _ = _split_terminal_markers(
+        state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
+    )
+    for entry in no_info_context:
+        items.append({
+            "item_id": entry.get("task_id"),
+            "kind": "a statement that no information is available",
+            "need": entry.get("need", "") or entry.get("resolved_subquery", ""),
+            "content": [entry.get("no_info_evidence", "")],
+        })
+    return [item for item in items if item.get("item_id")]
+
+
+def _run_turn_consistency_check(state: AgentState) -> dict:
+    """Judge semantic conflicts between this turn's results and let the
+    checker decide which side of each conflict to drop; code validates the
+    decision and removes dropped items from the data response generation
+    reads. Returns node_04a state updates (empty when nothing changes).
+
+    Only runs when the turn has at least two asserting results -- a single
+    result cannot contradict itself, so most turns cost nothing. A failed
+    call suppresses nothing (the BUG-018 evidence guard remains the
+    backstop).
+    """
+    items = _turn_consistency_items(state)
+    if len(items) < 2:
+        log_event("turn.consistency.skipped", reason="fewer than two asserting results", item_count=len(items))
+        return {}
+    by_id = {item["item_id"]: item for item in items}
+    view = [{k: v for k, v in item.items() if not k.startswith("_")} for item in items]
+    prompt = f"""
+    TURN CONSISTENCY CHECK
+    One customer turn has produced the results below, and a single response
+    will be written from all of them together. Your job: find results that
+    would conflict if presented in that one response, and for each conflict
+    decide which side the customer should be shown.
+
+    Two items CONFLICT when presenting both would contradict or undercut each
+    other: one states, implies, or assumes something the other denies --
+    including one saying information is unavailable, unknown, or cannot be
+    provided while another item provides it, or two items giving different
+    values, conditions, or procedures for the same thing.
+    Items do NOT conflict when they concern different needs, or when they
+    complement each other for the same need -- the customer's own data next
+    to a general explanation, a procedure next to a related policy, general
+    guidance next to a specific fact. Different is not conflicting.
+
+    Two items that state the same fact in different words, or that give the
+    same values, agree -- they do not conflict.
+
+    PLACEHOLDERS ARE VALUES: a `{{{{data-*}}}}` token (or any `{{{{faq_*}}}}`
+    token left in the text) stands for one real value you are never shown.
+    Treat each token as that value: the information is present and known,
+    and it is exactly what its item says it is (for example
+    "Account balance: {{{{data-a1b2c3d4}}}}" is the customer's actual
+    balance). Never read a token's name as its value, never treat two
+    different tokens as different values, and never judge whether the
+    hidden value is correct.
+
+    For every item, first write `reason`: which other items (if any) concern
+    the same need, and whether anything they say contradicts or undercuts
+    this item. Then list `conflicts_with`: the ids of the items it conflicts
+    with, or an empty list. Then set `decision`:
+    - "keep" for every item that conflicts with nothing.
+    - For each conflict, decide which side the customer should be shown and
+      mark the other "drop": keep the item that answers the customer's need
+      most accurately, directly, and certainly; drop the one that is less
+      accurate, less direct, less certain, or that the other contradicts.
+      Drop only what the conflict requires -- never both sides of one
+      conflict, and never an item that conflicts with nothing.
+
+    Customer message: {json.dumps(state.get("user_input", ""), ensure_ascii=False)}
+    Items: {json.dumps(view, ensure_ascii=False)}
+
+    Output JSON only: {{"items":[{{"item_id":"...","reason":"...","conflicts_with":["..."],"decision":"keep" | "drop"}}]}}
+    """
+    try:
+        result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER, response_schema_override=TurnConsistencyEvaluation))
+    except Exception as error:
+        print(f"   ⚠️ [TURN CONSISTENCY]: check failed, suppressing nothing: {error}")
+        log_event("turn.consistency.failed", level="WARNING", error=str(error), item_count=len(items))
+        return {}
+
+    pairs, reasons, dropped_by_model = set(), {}, set()
+    for entry in (result.get("items", []) if isinstance(result, dict) else []):
+        if not isinstance(entry, dict) or entry.get("item_id") not in by_id:
+            continue
+        reasons[entry["item_id"]] = str(entry.get("reason", ""))
+        for other in entry.get("conflicts_with", []) or []:
+            if other in by_id and other != entry["item_id"]:
+                pairs.add(frozenset((entry["item_id"], other)))
+        if str(entry.get("decision", "keep")).strip().lower() == "drop":
+            dropped_by_model.add(entry["item_id"])
+
+    # Validate the checker's decisions -- never override its semantic choice:
+    # a drop counts only for an item it named in a conflict, never the
+    # customer's own data, and never both sides of the same conflict.
+    in_conflict = {i for p in pairs for i in p}
+    rejected = []
+    suppressed = set()
+    for item_id in sorted(dropped_by_model):
+        if item_id not in in_conflict:
+            rejected.append([item_id, "drop without a named conflict"])
+        elif by_id[item_id].get("_customer_data"):
+            rejected.append([item_id, "customer's own data is never dropped"])
+        else:
+            suppressed.add(item_id)
+    for pair in pairs:
+        if pair <= suppressed:  # both sides dropped -- keep both rather than lose the need
+            suppressed -= pair
+            rejected.append([sorted(pair), "both sides of one conflict dropped"])
+    ties = [sorted(p) for p in pairs if not (p & suppressed)]  # conflicts left with both sides kept
+
+    print(f"   🔎 [TURN CONSISTENCY]: {len(items)} item(s), {len(pairs)} conflict(s), suppressed={sorted(suppressed)}, unresolved={ties}, rejected={rejected}")
+    log_event(
+        "turn.consistency.checked",
+        item_ids=sorted(by_id), conflicts=[sorted(p) for p in pairs], suppressed=sorted(suppressed),
+        unresolved_conflicts=ties, rejected_decisions=rejected,
+        reasons={k: v for k, v in reasons.items() if k in in_conflict},
+    )
+    if not suppressed:
+        return {}
+    return {
+        "consistency_suppressed_ids": sorted(suppressed),
+        # No-info statements are dropped from the lists generation reads
+        # directly (and node_11's fallback too), so every consumer agrees.
+        "task_resolution_instructions": [
+            m for m in state.get("task_resolution_instructions", [])
+            if not (isinstance(m, dict) and m.get("task_id") in suppressed)
+        ],
+        "unresolvable_search_tasks": [
+            e for e in state.get("unresolvable_search_tasks", [])
+            if not (isinstance(e, dict) and e.get("task_id") in suppressed)
+        ],
+    }
+
+
 def node_04a_resolution_planner(state: AgentState):
     """Assess global resolution after validated tool work, without planning UI.
 
@@ -6027,7 +6243,16 @@ def node_04a_resolution_planner(state: AgentState):
         planner_found_nothing_new=planner_found_nothing_new,
         planning_round=planning_round,
     )
+    # Turn consistency check: only once tool calling has settled (no further
+    # retry -- a needs_tools pass loops back to node_03a and will come
+    # through here again), so it judges the turn's final results exactly
+    # once, right before response generation.
+    consistency_updates = (
+        _run_turn_consistency_check({**state, "financial_subqueries": financial_subqueries})
+        if preflight_status == "presentation_ready" else {}
+    )
     return {
+        **consistency_updates,
         "preflight_status": preflight_status,
         "financial_subqueries": financial_subqueries,
         "tool_plan_status": "continue" if needs_tools else ("exhausted" if open_subquery_ids else "resolved"),

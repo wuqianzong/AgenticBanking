@@ -138,6 +138,7 @@ class AgentState(TypedDict):
     # evidence-only turn never sets this (stays [] and keeps using the whole-response
     # retry path).
     pending_task_ids: List[str]
+    consistency_suppressed_ids: List[str]  # Task ids (FAQ evidence or no-info entries) node_04a's turn consistency check dropped from this turn's response data -- the checker judged the other side of a conflict is the one to show; honored by _response_evidence_manifest. Reset every turn.
     # True when the latest audit round produced at least one conduct/grounding violation
     # whose own task_id is "" (unattributable to a single block, e.g. overall tone).
     # When true, nothing is approved this round and node_04c is given every block.

@@ -50,6 +50,7 @@ second time).
 | BUG-029 | Internal tool-routing/reasoning text leaked verbatim into a customer-facing clarification question | Medium | Confirmed (1 historical case, root cause shared with BUG-028) | **Deterministic code** (same net gap as BUG-028 -- the leaked text was the omitted obligation's own internal routing note, never meant to reach the customer) | **Fixed, live-verified** |
 | BUG-030 | No coherent handling for sustained upstream model unavailability -- triage silently discards the customer's message as generic small talk, and a single turn's latency can compound into minutes | Medium–High | Confirmed (2 independent symptoms, live-traced; historical latency trend across 12 greeting turns) | **Deterministic code** (no turn/node-level policy for sustained, as opposed to transient, model unavailability) | **Open, explicitly not being treated now** |
 | BUG-031 | Spanish `chat.footer` (the persistent AI-disclosure footer) is an untranslated copy of the English string | Low | Confirmed (static check of `frontend/src/translations.js`) | **Deterministic code (missing translation)** | **Fixed** |
+| BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | Open |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -1840,3 +1841,43 @@ impact. Swept every Spanish key against its English counterpart: the only
 other identical values are `prefs.emoji` ("Emojis") and `chat.botName`
 ("Horizon"), both legitimately the same in both languages -- no other
 untranslated strings, and no English keys missing from Spanish.
+
+## BUG-032 — One node_05 veto permanently pollutes every later turn's audit feedback, process-wide
+
+**Severity:** High **Confidence:** Confirmed (reproduced in-process; 171 sessions affected in the multi-turn corpus) **Status: Open -- documented, fix not yet decided**
+**Found in:** 2026-09-24, while measuring node_05's veto rate for the gate-relocation design
+
+**What happens:** `node_05_outbound_deterministic_gate`, on a veto, does
+`history = state.get("draft_feedback_history", [])` then
+`history.append(...)` -- mutating the list in place. At the start of every
+turn that key is reset from the module-level `VOLATILE_STATE_RESET` dict
+via `**VOLATILE_STATE_RESET`, which copies the *reference* to one shared
+`[]`, not a fresh list. So the first veto in a server process appends its
+feedback to that shared list itself, and every subsequent turn -- in every
+session, for every customer, until the process restarts -- begins with the
+stale veto text already in `draft_feedback_history`, which the generator
+prompt renders under "Failed outbound-audit feedback" as if this turn had
+failed. Later vetoes accumulate on top (the prompt shows the last 4).
+
+**Evidence:** reproduced directly in-process: before any veto the shared
+default is `[]`; after one veto on a draft containing `{{faq_*}}` it holds
+the feedback string, and a freshly reset turn starts with it. In the
+2026-09-10 multi-turn study, one genuine veto (the generator wrote a
+literal `{{faq_*}}` as a stand-in for "860 bucks", session
+`..._78_7f38814f`) was followed by 171 later sessions whose *first*
+generation prompt already carried that same feedback -- every one of them
+for a problem that never occurred in that session (including BUG-018's
+`mtsgd_32_00089`). This also inflates any "veto rate" computed from prompt
+text: an earlier estimate of ~7% of sessions vetoed was almost entirely this
+leak, not real vetoes.
+
+**Scope sweep:** a pattern search for `x = state.get("<list-valued reset
+key>", [])` followed by in-place mutation found only this site
+(`nodes.py` ~L8043). That sweep only covers this exact pattern; the
+contrasting safe idiom already exists elsewhere (node_07 uses
+`list(state.get(...))`).
+
+**Fix direction (not applied, pending discussion):** copy before mutating
+at this site, and/or make the per-turn reset construct fresh lists instead
+of sharing one module-level object, so no future call site can reintroduce
+it.

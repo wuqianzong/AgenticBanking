@@ -9337,7 +9337,10 @@ def node_06_outbound_audit_join(state: AgentState):
                     plan["current_step_index"] = idx + 1
                     print(f"   ⏩ [ATOMIC LEDGER UPDATE]: Safely advanced to step index {plan['current_step_index']}")
             verified_task_history = _append_verified_task_history(state)
-            if verified_task_history:
+            # BUG-036: log only a record THIS turn appended -- otherwise the
+            # previous turn's record would be re-logged as if this turn had
+            # recorded it.
+            if len(verified_task_history) > len(state.get("verified_task_history", [])):
                 latest_record = verified_task_history[-1]
                 log_event(
                     "verified_session_evidence.recorded",
@@ -9480,7 +9483,9 @@ def node_06_outbound_audit_join(state: AgentState):
             print(f"   ⏩ [ATOMIC LEDGER UPDATE]: Safely advanced to step index {plan['current_step_index']}")
 
     verified_task_history = _append_verified_task_history(state)
-    if verified_task_history:
+    # BUG-036: log only a record this turn appended (see the normal_response
+    # branch above).
+    if len(verified_task_history) > len(state.get("verified_task_history", [])):
         latest_record = verified_task_history[-1]
         log_event(
             "verified_session_evidence.recorded",

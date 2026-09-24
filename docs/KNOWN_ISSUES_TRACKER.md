@@ -54,7 +54,7 @@ second time).
 | BUG-033 | Triage decomposed by sentence, not by need, splitting one request into overlapping subqueries (a topic lead-in became its own subquery) | Medium–High | Confirmed (opposite decompositions of the same message across runs) | LLM judgment (prompt defined components by text, not need) | **Fixed, live-verified (triage node)** |
 | BUG-034 | Two outbound-audit rules conflict on whether a personal-data token is permitted evidence (a correct balance sentence rejected 3x) | Medium | Confirmed (1 live trace; intermittent) | LLM judgment (conflicting prompt rules) | Open |
 | BUG-035 | The deterministic no-info statement repeats the customer's entire request back verbatim | Low–Medium | Confirmed (live) | **Deterministic code** (template) | Open |
-| BUG-036 | `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none | Low | Confirmed | **Deterministic code** (logging only) | Open |
+| BUG-036 | `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none | Low | Confirmed | **Deterministic code** (logging only) | **Fixed** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -2062,7 +2062,7 @@ quoting the request, and the trailing-period handling.
 
 ## BUG-036 — `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none
 
-**Severity:** Low (observability only; no customer-facing effect) **Confidence:** Confirmed **Status: Open -- documented**
+**Severity:** Low (observability only; no customer-facing effect) **Confidence:** Confirmed **Status: Fixed (2026-09-24), fixture-verified**
 **Found in:** live session `sess_ca094793-...`, 2026-09-24 (turn 2, a balance-only turn with no RAG lookup)
 
 **What happens:** turn 2 of that session ran no retrieval at all, yet the
@@ -2075,5 +2075,8 @@ when the turn verified nothing, and node_06_outbound_audit_join then logs
 previous turn's record, presented as if this turn had recorded it. It
 misled this session's own debugging.
 
-**Fix direction (not applied):** log only when the current turn actually
-appended a record.
+**Fixed (2026-09-24):** both logging sites in node_06_outbound_audit_join
+now log only when the returned history is longer than the turn's incoming
+history, i.e. this turn actually appended a record. Fixture-verified: a
+turn that verified nothing emits no event (it previously re-logged turn 1);
+a turn that verified something logs once, with its own parents.

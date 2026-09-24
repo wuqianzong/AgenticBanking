@@ -922,28 +922,30 @@ def _is_pure_conversational_turn(state: AgentState) -> bool:
     )
 
 
-def _split_terminal_markers(
+def _no_info_entries(
     task_resolution_instructions: list, task_metadata: dict, unresolvable_search_tasks: list | None = None
-) -> tuple[list[dict], list[dict]]:
-    """Split task_resolution_instructions into (no_info_context, terminal_context),
-    shared by the response generator and node_06's audit context so both
-    always compute the exact same no_info_evidence text for the same task --
-    previously the generator lacked the audit's task_metadata fallback for a
-    missing resolved_subquery, so the two could disagree on wording for the
-    same entry and the audit could reject a response that correctly matched
+) -> list[dict]:
+    """The no-info entries of this turn, shared by the response generator,
+    the reviser, and node_06's audit context so all of them compute the
+    exact same no_info_evidence text for the same task -- previously the
+    generator lacked the audit's task_metadata fallback for a missing
+    resolved_subquery, so the two could disagree on wording for the same
+    entry and the audit could reject a response that correctly matched
     what the generator actually saw.
 
     A task whose retries exhausted with zero usable evidence
     (CLARIFICATION_REQUIRED) gets the deterministic no_info_evidence
-    treatment; a task with some retained partial evidence (any other
-    status) stays on the looser terminal-marker path, since its real
-    evidence is already covered elsewhere as normal approved evidence.
+    treatment. A RELEVANT task is not an entry here: it is evidence, and
+    its evidence entry carries `resolution_status` itself (see
+    _response_evidence_manifest). It used to also get a separate
+    "terminal unresolved task marker" from this function -- a second
+    pointer to the same task that outlived its evidence whenever a guard
+    removed the evidence, telling the generator evidence existed when it
+    didn't (BUG-038).
 
     A CLARIFICATION_REQUIRED task the sufficiency auditor judged genuinely
     ambiguous never reaches this function at all -- node_03c routes it into
-    its own clarification_tasks entry instead (see node_03c's docstring),
-    fully representing it there rather than as either a no_info statement
-    or a terminal marker here.
+    its own clarification_tasks entry instead (see node_03c's docstring).
 
     unresolvable_search_tasks (node_02e's own scope-rejected fresh SEARCH
     resolutions, see the scope-rejection handling there) are already in
@@ -953,28 +955,21 @@ def _split_terminal_markers(
     merge step for callers to forget.
     """
     no_info_context = list(unresolvable_search_tasks or [])
-    terminal_context = []
     for instruction in task_resolution_instructions:
         if not isinstance(instruction, dict):
+            continue
+        if instruction.get("resolution_status", "CLARIFICATION_REQUIRED") != "CLARIFICATION_REQUIRED":
             continue
         task_id = instruction.get("task_id")
         resolved_subquery = instruction.get("resolved_subquery", "") or task_metadata.get(task_id, "")
         need = instruction.get("need", "")
-        resolution_status = instruction.get("resolution_status", "CLARIFICATION_REQUIRED")
-        if resolution_status == "CLARIFICATION_REQUIRED":
-            no_info_context.append({
-                "task_id": task_id,
-                "resolved_subquery": resolved_subquery,
-                "need": need,
-                "no_info_evidence": _no_info_evidence_text(resolved_subquery, need),
-            })
-        else:
-            terminal_context.append({
-                "task_id": task_id,
-                "resolved_subquery": resolved_subquery,
-                "resolution_status": resolution_status,
-            })
-    return no_info_context, terminal_context
+        no_info_context.append({
+            "task_id": task_id,
+            "resolved_subquery": resolved_subquery,
+            "need": need,
+            "no_info_evidence": _no_info_evidence_text(resolved_subquery, need),
+        })
+    return no_info_context
 
 
 def _append_decline_suffix(response: str, decline_tasks: list) -> str:
@@ -1292,6 +1287,14 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
             # stated premise or circumstance may not match what the
             # customer actually described. Empty in the common case.
             "generation_guidance": guidance,
+            # SUFFICIENT or RELEVANT, carried on the entry itself so every
+            # reader (generator, reviser, audit) sees how completely this
+            # evidence answers its request from the entry alone. This
+            # replaces the separate "terminal unresolved task marker" a
+            # RELEVANT task used to get -- a second pointer to the same task
+            # that outlived its evidence when a guard removed the evidence,
+            # and led the generator to invent the missing fact (BUG-038).
+            "resolution_status": status,
         }
         for task_id, (parent_ids, guidance, status) in approved_by_task.items()
         # RELEVANT REQUIRES A REAL PARENT: approved_parent_ids is never
@@ -1306,8 +1309,8 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
         # handling), so this also correctly suppresses a companion task
         # built for a subquery a tool has already resolved.
         if not (status != "SUFFICIENT" and tasks_by_id.get(task_id, {}).get("subquery_id") in subqueries_answered_by_data_fetch)
-        # node_04a's turn consistency check: evidence it found in semantic
-        # conflict with a higher-authority result this turn.
+        # node_04a's turn consistency check: evidence the checker chose to
+        # drop from a semantic conflict with another result this turn.
         if task_id not in consistency_suppressed
     ]
 
@@ -1324,7 +1327,7 @@ def _hydrate_response_evidence(state: AgentState) -> list[dict]:
 # DESIGN.md). `content_mode` is a purely internal, deterministic classification
 # -- never shown to any LLM -- fixed by which existing state field an entry
 # came from, not by any per-entry judgment. It is used for exactly two things:
-# picking which one of these four fixed strings to attach as an entry's
+# picking which one of these fixed strings to attach as an entry's
 # `generation_guidance`, and (a later stage) the completeness net's per-mode
 # coverage/fallback dispatch. Once attached, `generation_guidance` already
 # fully expresses the instruction in the only form the model reads it in, so
@@ -1334,6 +1337,17 @@ _GENERATION_GUIDANCE_BY_MODE = {
     "compose": (
         "Compose a natural answer from this. Never add a fact, procedure, "
         "or product not present in it."
+    ),
+    # RELEVANT evidence: real parents that connect to the request without
+    # fully resolving it. What it covers is answered like any evidence; the
+    # rest gets a neutral availability notice (formerly carried by a
+    # separate terminal marker -- see _response_evidence_manifest).
+    "compose_partial": (
+        "Compose a natural answer from what this covers, then give a "
+        "concise, neutral notice, in the customer's own wording, that the "
+        "available information does not cover the rest of their request. "
+        "Never add a fact, procedure, or product not present in it, and "
+        "never fill the uncovered part yourself."
     ),
     "relay": (
         "This is already the final statement. Rephrase it naturally; never "
@@ -1352,7 +1366,7 @@ _GENERATION_GUIDANCE_BY_MODE = {
 }
 
 # A second, independent lookup, deliberately NOT keyed by content_mode.
-# content_mode groups by "how much creative freedom" (4 buckets) and
+# content_mode groups by "how much creative freedom" (a few buckets) and
 # several genuinely different subtask types share one bucket (a shortcut,
 # a personal-data token, an unavailable-request reason, and a verified fact
 # are all "state" mode) -- but they need different, specific rule sections,
@@ -1395,10 +1409,23 @@ _EVIDENCE_ONLY_GENERATION_RULES = {
 # kind(s) it governs exists this turn -- an unused section (e.g.
 # CLARIFICATION RULES on a turn with no clarification) is omitted entirely,
 # not merely irrelevant filler the model has to read past.
-_EVIDENCE_RULES_TEXT = """EVIDENCE RULES: an entry whose `generation_content.search_territory` is
+_EVIDENCE_RULES_TEXT = """EVIDENCE RULES: every evidence entry's `generation_content.resolution_status`
+    says how completely its approved parents answer its request.
+    SUFFICIENT: they answer it. RELEVANT: they connect to the request
+    without fully resolving it -- state what they do support, then give a
+    concise, neutral availability notice, in the customer's own wording,
+    for the part they don't cover. Do not ask a clarifying question about
+    that part or guess what the customer might mean; that judgment belongs
+    to the sufficiency auditor. When it judged a question worthwhile, it
+    is a separate Clarification Input for the same subquery, which you
+    must still render as its own question -- the availability notice
+    never replaces it. Never state that Horizon does not offer a product
+    or feature, and never ask the customer to repeat an already clear
+    request.
+    An entry whose `generation_content.search_territory` is
     "adjacent_scope" (Extra Effort v2.0) was retrieved under a different
     product/intent than what the customer's own request was resolved to.
-    When its own status is RELEVANT, treat it as RELATED information the
+    When its resolution_status is RELEVANT, treat it as RELATED information the
     customer did not literally ask about, surfaced only because their exact
     request wasn't documented -- never present it as a direct answer to
     their request, and never blend its claims into the same sentence as an
@@ -1426,7 +1453,7 @@ _EVIDENCE_RULES_TEXT = """EVIDENCE RULES: an entry whose `generation_content.sea
     two as unrelated, separate statements. Sharing a subquery with an
     "in_scope" entry is otherwise only permitted when both are cited
     together AND the adjacent_scope framing above is preserved in the text
-    itself. When an adjacent_scope entry's own status is instead
+    itself. When an adjacent_scope entry's resolution_status is instead
     SUFFICIENT, the sufficiency auditor has judged this different
     product/intent to genuinely be the right match for what the customer
     needs -- most often because the original in_scope mapping turned out to
@@ -1695,8 +1722,11 @@ def _build_response_obligations(
                 "mapping_reason": entry.get("mapping_reason", ""),
                 "approved_parents": entry.get("approved_parents", []),
                 "auditor_note": entry.get("generation_guidance", ""),
+                "resolution_status": entry.get("resolution_status", "SUFFICIENT"),
             },
-            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE["compose"],
+            "generation_guidance": _GENERATION_GUIDANCE_BY_MODE[
+                "compose_partial" if entry.get("resolution_status") == "RELEVANT" else "compose"
+            ],
             "generation_rule": _GENERATION_RULE_BY_TYPE["evidence"],
         })
 
@@ -5817,9 +5847,12 @@ def node_03c_sufficiency_auditor(state: AgentState):
     # A CLARIFICATION_REQUIRED task now fully represented by its own
     # evidence-authored clarification above needs no separate no_info
     # statement -- there's no partial answer to caveat and nothing else to
-    # say about it, unlike RELEVANT (which keeps its terminal
-    # marker regardless, for the neutral availability notice covering
-    # whatever the clarifying question doesn't).
+    # say about it, unlike RELEVANT (whose evidence entry carries
+    # resolution_status RELEVANT regardless, for the neutral availability
+    # notice covering whatever the clarifying question doesn't; its entry
+    # here only feeds turn-level bookkeeping such as node_11's fallback --
+    # generation, revision and audit read no-info entries only, via
+    # _no_info_entries).
     clarified_task_ids = {
         result.get("task_id") for result in current_results.values()
         if result.get("status") == "CLARIFICATION_REQUIRED" and result.get("unresolved_term")
@@ -6024,7 +6057,7 @@ def _turn_consistency_items(state: AgentState) -> list[dict]:
             "_customer_data": True,
         })
     task_metadata = {t: task.get("customer_component", "") for t, task in tasks_by_id.items()}
-    no_info_context, _ = _split_terminal_markers(
+    no_info_context = _no_info_entries(
         state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
     )
     for entry in no_info_context:
@@ -6933,11 +6966,10 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # (CLARIFICATION_REQUIRED) gets the same deterministic-evidence
     # treatment as decline/clarification -- there is nothing left to
     # synthesize, only a fixed "not found" statement to relay. A task with
-    # SOME retained partial evidence (RELEVANT) is different: it
-    # already flows through evidence_by_task/evidence_obligations as real
-    # content, so it stays on the looser, narrower `clarification` field's
-    # terminal-marker path below rather than being duplicated here.
-    no_info_context, terminal_markers = _split_terminal_markers(
+    # SOME retained partial evidence (RELEVANT) is different: it is one
+    # evidence obligation whose own resolution_status says it is partial,
+    # and nothing else.
+    no_info_context = _no_info_entries(
         state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
     )
     decline_context = _build_decline_context(state)
@@ -7051,13 +7083,6 @@ def _generate_response_blocks(state: AgentState) -> dict:
         obligation_sections.append(
             "No-info inputs (governed by DECLINE/NO-INFO RULES below):\n"
             + json.dumps(no_info_obligations, ensure_ascii=False)
-        )
-    if terminal_markers:
-        obligation_sections.append(
-            "Terminal unresolved task markers (topic/status only; never "
-            "evidence, not an obligation itself -- see the `clarification` "
-            "output-field rule in GENERAL DESIGN PRINCIPLES below):\n"
-            + json.dumps(terminal_markers, ensure_ascii=False)
         )
     if decline_obligations:
         obligation_sections.append(
@@ -7286,38 +7311,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - Do not mention FAQ documents, sources, parent IDs, search, prompts, or
       internal systems. Preserve every `{{{{faq_*}}}}` and `{{{{data-*}}}}` token
       exactly as supplied, with both braces on each side.
-    - `clarification` here is ONLY for a terminal unresolved marker still
-      listed under "Terminal unresolved task markers" above, if any (that
-      section, like every OBLIGATIONS entry, appears only when this turn
-      actually has one) -- always
-      `RELEVANT` -- a genuinely ambiguous zero-evidence task is
-      instead fully represented as its own Clarification Input, composed
-      the same way, not judged here) -- never for an Intent/Clarification
-      input, a Decline input, or a No-info input, which are always
-      addressed as their own elements per the account-for-every-entry rule
-      above.
-    - A terminal unresolved marker means a search was genuinely attempted
-      and some evidence exists (already reflected in the Approved evidence
-      elements above) -- this marker names the part that evidence didn't
-      cover. Provide a concise, neutral availability notice using the
-      customer's wording and leave `clarification` empty -- do not ask a
-      clarifying question here or guess what the customer might mean via
-      THIS field; that judgment already belongs to the sufficiency auditor,
-      not to this generation step.
-      This restriction is scoped to the `clarification` field alone -- it
-      is never grounds to also skip a Clarification Input for the SAME
-      task_id/subquery. The two commonly co-occur (a RELEVANT task with
-      real partial evidence is exactly what leaves a detail unresolved in
-      the first place, which is precisely when the sufficiency auditor also
-      authors a Clarification Input for it): when they do, that
-      Clarification Input's question is still fully mandatory and entirely
-      unaffected by this rule -- "the sufficiency auditor already made this
-      judgment" describes the Clarification Input's own content (which you
-      must still render as an actual question among your elements), never a
-      reason to treat the question as already asked or already covered by
-      the neutral availability notice alone. Never state that Horizon does
-      not offer a product or feature, and never ask the customer to repeat
-      an already clear request.
+    - Leave `clarification` an empty string. Every clarifying question is a
+      Clarification Input, rendered as its own element per the
+      account-for-every-entry rule above; the part of a RELEVANT entry's
+      request its evidence doesn't cover gets a neutral availability notice
+      per EVIDENCE RULES, never a question.
     - Correct every failed-audit issue by removing or narrowing only the
       flagged unsupported content. Audit feedback is never a source of facts.
     - If Failed outbound-audit feedback contains
@@ -7630,23 +7628,20 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # service requests at all, since every prior attempt at it (citing a
     # special_id for detection) became its own source of bugs.
 
-    # `clarification` here covers only a terminal unresolved marker -- a
-    # plain neutral availability notice, per the prompt rule above, never a
-    # question or a guess: the sufficiency auditor already made that
-    # judgment call and pre-authored the question+guesses itself for any
-    # task worth asking about (see node_03c's own clarification_tasks
-    # entries), which flows through the SAME Clarification Inputs /
-    # clarification_guesses mechanism as an intent-clarification, rendered
-    # by the same generic builder node_11 uses -- same audited, chip-
-    # capable blocks regardless of which node authored the clarification or
-    # which route a turn takes.
+    # `clarification` existed only for the old terminal unresolved markers,
+    # which are now part of their RELEVANT evidence entry (see
+    # _response_evidence_manifest); the prompt asks for it empty. Every
+    # real clarifying question is a Clarification Input, rendered by the
+    # same generic builder node_11 uses. Still read here so text the model
+    # puts in it anyway is kept and audited rather than silently lost; such
+    # a block has no source obligation.
     terminal_clarification = _llm_text(generated, "clarification")
     if terminal_clarification:
         response_blocks.append({
             "blockId": "clarification", "sourceTaskIds": [], "type": "clarification",
             "text": terminal_clarification, "options": [],
         })
-    # Any "clarification"-typed block -- this terminal-marker one, or one
+    # Any "clarification"-typed block -- this one, or one
     # the completeness net above already inserted for a Clarification Input
     # the model dropped entirely -- feeds final_clarification/final_draft
     # the same way node_04c_response_reviser already aggregates them
@@ -8084,7 +8079,7 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     intent_clarifications = _build_clarification_context(state)
     decline_context = _build_decline_context(state)
     conversational_context = _build_conversational_context(state)
-    no_info_context, terminal_markers = _split_terminal_markers(
+    no_info_context = _no_info_entries(
         state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
     )
     available_shortcuts = _available_response_shortcuts(state)
@@ -8119,7 +8114,6 @@ def node_04c_response_reviser(state: AgentState) -> dict:
             oid: o for oid, o in obligations_by_id.items()
             if oid in handle_ids or oid in pending_task_ids
         }
-        terminal_markers = [t for t in terminal_markers if t.get("task_id") in pending_task_ids]
     evidence_obligations = [obligations_by_id[e["task_id"]] for e in evidence_by_task if e.get("task_id") in obligations_by_id]
     verified_fact_obligations = [obligations_by_id[e["handle"]] for e in verified_api_context if e.get("handle") in obligations_by_id]
     conversational_obligations = [obligations_by_id[e["subquery_id"]] for e in conversational_context if e.get("subquery_id") in obligations_by_id]
@@ -8145,11 +8139,6 @@ def node_04c_response_reviser(state: AgentState) -> dict:
         obligation_sections.append(
             "Clarification inputs for these blocks only (governed by "
             "CLARIFICATION RULES below):\n" + json.dumps(clarification_obligations, ensure_ascii=False)
-        )
-    if terminal_markers:
-        obligation_sections.append(
-            "Terminal unresolved task markers (topic/status only; never "
-            "evidence, not an obligation itself):\n" + json.dumps(terminal_markers, ensure_ascii=False)
         )
     if decline_obligations:
         obligation_sections.append(
@@ -8333,7 +8322,7 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     spliced = _apply_response_completeness_nets(
         spliced, state, evidence_by_task=_hydrate_response_evidence(state), task_metadata=task_metadata,
         intent_clarifications=_build_clarification_context(state), decline_context=_build_decline_context(state),
-        no_info_context=_split_terminal_markers(state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", []))[0],
+        no_info_context=_no_info_entries(state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])),
         conversational_context=_build_conversational_context(state), available_shortcuts=available_shortcuts,
     )
 
@@ -8512,6 +8501,9 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
             "approved_parents": evidence.get("approved_parents", []),
             "search_territory": evidence.get("search_territory", "in_scope"),
             "mapping_reason": evidence.get("mapping_reason", ""),
+            # SUFFICIENT or RELEVANT -- a fact about the evidence (the
+            # audit's own rules branch on it), not generation guidance.
+            "resolution_status": evidence.get("resolution_status", "SUFFICIENT"),
             # Deliberately NOT "generation_guidance": that field is a
             # generation-side writing aid only (node_04b/node_04c), never
             # audit-visible. node_03c's own free text is unaudited -- if the
@@ -8538,13 +8530,13 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
                 "source_task_ids": list(dict.fromkeys(source_task_ids)),
             })
 
-    # Same split _generate_response_blocks uses (_split_terminal_markers),
-    # a task with zero usable evidence gets the deterministic
-    # no_info_evidence treatment; a task with some retained partial
-    # evidence stays on the looser terminal-marker path, since its real
-    # evidence is already audited normally via approved_by_task.
+    # Same no-info entries _generate_response_blocks uses
+    # (_no_info_entries): a task with zero usable evidence gets the
+    # deterministic no_info_evidence treatment; a RELEVANT task is audited
+    # as evidence via approved_by_task, whose entry carries its
+    # resolution_status.
     task_metadata = {task_id: task.get("customer_component", "") for task_id, task in tasks_by_id.items()}
-    no_info_context, terminal_context = _split_terminal_markers(
+    no_info_context = _no_info_entries(
         state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", [])
     )
     # _clarification_prompt_view, the exact same projection the generator's
@@ -8556,7 +8548,6 @@ def _normal_outbound_grounding_context(state: AgentState) -> dict:
     return {
         "approved_by_task": approved_by_task,
         "response_block_map": response_block_map,
-        "terminal_clarifications": terminal_context,
         "clarification_inputs": intent_context,
         "decline_inputs": decline_context,
         "no_info_inputs": no_info_context,
@@ -8989,7 +8980,6 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         grounding_context = _normal_outbound_grounding_context(state)
         approved_by_task = grounding_context["approved_by_task"]
         clarification_inputs = grounding_context["clarification_inputs"]
-        terminal_clarifications = grounding_context["terminal_clarifications"]
         decline_inputs = grounding_context["decline_inputs"]
         no_info_inputs = grounding_context["no_info_inputs"]
         conversational_inputs = grounding_context["conversational_inputs"]
@@ -8998,7 +8988,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         verified_api_context = grounding_context["verified_api_context"]
         personal_data_placeholders = grounding_context["personal_data_placeholders"]
         has_adjacent_scope_evidence = any(e.get("search_territory") == "adjacent_scope" for e in approved_by_task)
-        has_clarification_family = bool(clarification_inputs or terminal_clarifications or decline_inputs or no_info_inputs)
+        has_clarification_family = bool(clarification_inputs or decline_inputs or no_info_inputs)
 
         # Response Obligation Contract Design, Stage 3: data sections and
         # their governing rule paragraphs are shown only when this turn
@@ -9026,11 +9016,6 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
                 "sentence to compare against -- and 0-3 \"clarification_guesses\" "
                 "are PREDICTIONS of likely customer intent, never reports of "
                 "anything actually said):\n" + json.dumps(clarification_inputs, ensure_ascii=False)
-            )
-        if terminal_clarifications:
-            content_sections.append(
-                "Terminal Unresolved Task Markers (topic/status only; never "
-                "evidence):\n" + json.dumps(terminal_clarifications, ensure_ascii=False)
             )
         if decline_inputs:
             content_sections.append(
@@ -9105,6 +9090,14 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           never appears in this bundle at all) -- so an entry's mere
           presence here is a genuine signal that real evidence exists for
           it, not something to independently doubt.
+        - Each entry's "resolution_status" says how completely its approved
+          parents answer its request: SUFFICIENT (they answer it) or
+          RELEVANT (they connect to it without fully resolving it). For a
+          RELEVANT entry, a neutral statement that the available
+          information does not fully resolve its named request is
+          grounded; it must not state, suggest, or imply a banking fact,
+          procedure, product alternative, policy, or next action unless
+          supported by Task-Level Approved Evidence.
         2. Inferential Grounding (Bridge Check)
         - Natural conclusions that connect approved facts to the resolved
           sub-query are allowed when they are a reasonable, bounded logical
@@ -9140,15 +9133,15 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         Scope-Expansion Honesty Rule (Extra Effort v2.0):
         - A Task-Level Approved Evidence entry whose "search_territory" is
           "adjacent_scope" was retrieved from a deliberately different
-          product/topic than the customer's own task. When its own status
-          is RELEVANT, by construction it is related information, not a
+          product/topic than the customer's own task. When its
+          "resolution_status" is RELEVANT, by construction it is related information, not a
           literal answer to that task's `customer_component`. Its facts are
           a permitted source, but only for content that is visibly
           introduced as related or additional information (e.g. "I don't
           have that exact detail, but here's related information about X
           that may help:") -- never phrased as if it directly answers the
           customer's stated request.
-        - When an "adjacent_scope" entry's own status is instead SUFFICIENT,
+        - When an "adjacent_scope" entry's "resolution_status" is instead SUFFICIENT,
           the sufficiency auditor has judged this different product/intent
           to genuinely be the right match for the customer's need (typically
           because the original in_scope mapping was wrong) -- its facts may
@@ -9263,14 +9256,6 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           No-Info Input's statement must not imply a banking fact,
           procedure, product alternative, policy, or next action beyond
           what its own `no_info_evidence` says.
-        - A Terminal Unresolved Task Marker is always `RELEVANT`
-          here (a `CLARIFICATION_REQUIRED` task the sufficiency auditor
-          judged ambiguous is instead fully represented as its own
-          Clarification Input above, never as a marker here): a neutral
-          statement that available information does not fully resolve its
-          named request is grounded; it must not state, suggest, or imply
-          a banking fact, procedure, product alternative, policy, or next
-          action unless supported by Task-Level Approved Evidence.
         - A generic apology and a general request for clarification are grounded.
         - A clarification following an answer must identify its unresolved term
           instead of using an ambiguous reference such as "that" or "it".

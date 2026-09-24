@@ -56,7 +56,7 @@ second time).
 | BUG-035 | The deterministic no-info statement repeats the customer's entire request back verbatim | Low–Medium | Confirmed (live) | **Deterministic code** (template) | **Fixed** |
 | BUG-036 | `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none | Low | Confirmed | **Deterministic code** (logging only) | **Fixed** |
 | BUG-037 | A completed redirect (deeplink/service_request) suppressed RAG evidence, leading the generator to fabricate a fact (card delivery "7 to 10" vs the real 6-7 days) | High | Confirmed (live) | **Deterministic code** (regression from BUG-018's fix: guard counted any completed tool, not only a data fetch) | **Fixed, fixture-verified** |
-| BUG-038 | An audit violation on a task no block carries approves the block holding the flagged sentence; the reviser gets nothing and the flagged text ships | High | Confirmed (live) | **Deterministic code** (partition attribution) | Open |
+| BUG-038 | An audit violation on a task no block carries approves the block holding the flagged sentence; the reviser gets nothing and the flagged text ships | High | Confirmed (live) | **Deterministic code** (a RELEVANT task's separate "terminal marker" outlived its removed evidence; partition attribution) | **Step 1 of 3 fixed (root cause), fixture-verified; steps 2-3 open** |
 | BUG-039 | No turn-level consistency check: results collected for one turn could contradict each other in the response (e.g. "no information on your balance" next to the fetched balance) whenever the same-subquery BUG-018 guard could not see the conflict | High | Confirmed (live, triage merged the two components the guard relies on) | **Missing capability** (semantic, turn-wide conflict judgment) | **Fixed, fixture- and live-judgment-verified** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
@@ -2177,7 +2177,7 @@ deeplink-only and service_request-only subqueries still RESOLVED.
 
 ## BUG-038 — An audit violation on a task no block carries approves the block holding the flagged sentence
 
-**Severity:** High (a flagged, unsupported claim can ship) **Confidence:** Confirmed (live, same trace as BUG-037) **Status: Open -- documented, fix not yet decided**
+**Severity:** High (a flagged, unsupported claim can ship) **Confidence:** Confirmed (live, same trace as BUG-037) **Status: Step 1 of 3 fixed (2026-09-25) -- root cause removed, fixture-verified; steps 2-3 decided, not yet implemented**
 
 **What happens:** the generator cited `['task_1', 'task_1_scope',
 'nav_1']` for one element; task_1 was not in `valid_task_ids` (its evidence
@@ -2196,6 +2196,65 @@ lets its flagged content ship while looking approved. Candidate directions
 (not decided): treat such a violation as response-wide (every block
 pending), and/or locate the flagged block by matching the violation's
 `unsupported_content` against block text.
+
+**Why the block had no task id -- root cause (traced 2026-09-25):** the
+generator was not shown any evidence for `task_1` (the BUG-037 guard had
+removed it), but it was still shown a "Terminal unresolved task marker"
+for `task_1` and `task_1_scope` (status RELEVANT). A marker was a second,
+separate pointer to a RELEVANT task, outside the obligations, and its rule
+told the generator "some evidence exists (already reflected in the
+Approved evidence elements above)". The evidence was gone; the marker
+stayed. The generator wrote the answer the missing evidence would have
+given ("7 to 10 business days"), cited `task_1`/`task_1_scope` from the
+markers, and code dropped those ids as non-obligations -- leaving a block
+whose only source was the `nav_1` shortcut. The same gap also meant the
+evidence entry never stated its own status, although EVIDENCE RULES and
+the audit's Scope-Expansion rule both branch on it.
+
+**Design principles (decided with the user):**
+- A RELEVANT entry always has at least one approved parent (already
+  enforced: "RELEVANT REQUIRES A REAL PARENT" in node_03c's prompt and
+  code); with none it is IRRELEVANT and becomes a no-info entry.
+- Every block must be linked to the obligation data the generator received
+  (`id`, `generation_content`, `generation_guidance`, `generation_rule`) --
+  a block based on nothing is a generation error.
+- The reviser sees what the generator saw when it generated the block.
+- The block is the unit of revision; a block may cite one or several
+  obligations.
+
+**Step 1 -- markers merged into the evidence entry (fixed 2026-09-25):**
+- `_response_evidence_manifest` carries `resolution_status` (SUFFICIENT /
+  RELEVANT) on each entry; the evidence obligation's `generation_content`
+  includes it, and a RELEVANT entry's `generation_guidance` is a new
+  `compose_partial` mode (answer what the parents cover, then a neutral
+  availability notice for the rest, never filling it in). EVIDENCE RULES
+  now open with the SUFFICIENT/RELEVANT definitions and carry the marker's
+  former rule (no clarifying question for the uncovered part; a
+  Clarification Input for the same subquery is still rendered).
+- The markers section is removed from the generator, reviser and audit
+  prompts; `_split_terminal_markers` became `_no_info_entries` (no-info
+  entries only). The audit's `approved_by_task` entries carry
+  `resolution_status` (a fact about the evidence, not generation guidance,
+  so audit independence holds), and its RELEVANT availability rule moved
+  into the core grounding rules.
+- The generator's `clarification` output field existed only for markers;
+  the prompt now asks for it empty (text put there anyway is still kept
+  and audited).
+- Effect: a task's evidence and its status are one entry, so any guard or
+  the consistency check that removes the entry removes everything about
+  that task -- nothing can point at removed evidence.
+- Fixture-verified (15/15, LLM mocked): RELEVANT and SUFFICIENT entries
+  render with status and the right guidance in generator, reviser and
+  audit; a guard-removed RELEVANT task leaves no trace in the generator's
+  data; CLARIFICATION_REQUIRED still renders its no-info entry.
+
+**Step 2 (decided, not yet implemented):** record on each block the
+obligation entries it cited, hand exactly those to the reviser, and raise a
+deterministic finding for a block citing a non-obligation id or none.
+
+**Step 3 (decided, not yet implemented):** a violation whose task id no
+block carries is matched through the blocks' recorded citations instead of
+approving every block.
 
 ## BUG-039 — No turn-level consistency check between a turn's collected results
 

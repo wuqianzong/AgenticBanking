@@ -48,7 +48,7 @@ second time).
 | BUG-027 | The deterministic fallback for a missing shortcut sentence is skipped whenever the shortcut's label already appears anywhere in the response text (e.g. inside FAQ step wording), so no pointing sentence appears at all | Medium | Confirmed (live case + 58/236 logged calls had the label only inside steps) | **Deterministic code** (plain substring test) | **Fixed, fixture-verified** |
 | BUG-028 | A wholly-omitted clarification (or decline/no-info/conversational) obligation had no repair mechanism at all, unlike a dropped RAG task -- could exhaust every retry and reach the terminal fallback with the customer's question never asked | High | Confirmed (live trace + reproduced in the BANKING77 historical corpus) | **Deterministic code** (completeness net had detection but no repair for these obligation types) | **Fixed, live-verified** |
 | BUG-029 | Internal tool-routing/reasoning text leaked verbatim into a customer-facing clarification question | Medium | Confirmed (1 historical case, root cause shared with BUG-028) | **Deterministic code** (same net gap as BUG-028 -- the leaked text was the omitted obligation's own internal routing note, never meant to reach the customer) | **Fixed, live-verified** |
-| BUG-030 | No coherent handling for sustained upstream model unavailability -- triage silently discards the customer's message as generic small talk, and a single turn's latency can compound into minutes | Medium–High | Confirmed (2 independent symptoms, live-traced; historical latency trend across 12 greeting turns) | **Deterministic code** (no turn/node-level policy for sustained, as opposed to transient, model unavailability) | **Open, explicitly not being treated now** |
+| BUG-030 | No coherent handling for sustained upstream model unavailability -- triage silently discards the customer's message as generic small talk, and a single turn's latency can compound into minutes | Medium–High | Confirmed (2 independent symptoms, live-traced; historical latency trend across 12 greeting turns) | **Deterministic code** (no turn/node-level policy for sustained, as opposed to transient, model unavailability) | **Symptom 1 fixed (2026-09-25): overload/quota now ends the turn with a "model unavailable" message; symptom 2 (timeouts) pending decision** |
 | BUG-031 | Spanish `chat.footer` (the persistent AI-disclosure footer) is an untranslated copy of the English string | Low | Confirmed (static check of `frontend/src/translations.js`) | **Deterministic code (missing translation)** | **Fixed** |
 | BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | **Fixed** |
 | BUG-033 | Triage decomposed by sentence, not by need, splitting one request into overlapping subqueries (a topic lead-in became its own subquery) | Medium–High | Confirmed (opposite decompositions of the same message across runs) | LLM judgment (prompt defined components by text, not need) | **Fixed, live-verified (triage node)** |
@@ -1871,7 +1871,7 @@ returning zero matches.
 
 ## BUG-030 — No coherent handling for sustained upstream model unavailability: silent turn-content loss and multi-minute latency spikes
 
-**Severity:** Medium–High **Confidence:** Confirmed (2 independent symptoms, both directly traced from live `backend/logs/system.jsonl`) **Status: Open, explicitly not being treated now, per instruction -- tracked for awareness only**
+**Severity:** Medium–High **Confidence:** Confirmed (2 independent symptoms, both directly traced from live `backend/logs/system.jsonl`) **Status: Symptom 1 fixed (2026-09-25), fixture- and gateway-verified; symptom 2 (timeout latency) under discussion**
 **Found in:** live production log tracing, 2026-09-23, during an ongoing Gemini high-demand period; historical trend confirmed across all rotated log files back to 2026-09-21
 
 **What happens — two distinct symptoms of the same underlying gap:**
@@ -1882,6 +1882,37 @@ returning zero matches.
 **Root cause:** both symptoms trace back to the same gap -- every existing resilience mechanism (`_is_transient_llm_error`'s retry-once from BUG-003, `call_llm_router`'s key-rotation/timeout loop) operates purely *per call*, with no policy at the *node* or *turn* level for what should happen when the model is broadly, persistently unavailable rather than transiently blipping once. Nothing distinguishes "the call never got a chance to run" from "the model gave a genuinely ambiguous or malformed answer" at the point triage decides how to fail safely, and nothing caps a single turn's *total* wait budget across however many sequential calls and models a node happens to make, independent of the customer-facing cost of that wait.
 
 **Explicitly not being treated now, per instruction.** Documented here so it isn't rediscovered as a mystery later, and so this exact pair of symptoms is recognized immediately if it recurs. Candidate directions for whenever this is picked up (not evaluated or committed to): distinguish a transient-error exception from a malformed-response exception in `node_02d`'s own handler, so only the latter falls back to the generic-conversational safety net (the former should presumably retry the whole triage call once more, or surface a distinct "temporarily unable to process your request" state rather than silently reinterpreting it as small talk); and/or a turn-level or node-level wall-clock budget, independent of the existing per-call retry budget, so a customer-facing node fails fast and honestly past some ceiling instead of silently compounding several calls' worth of 45-second timeouts.
+
+**Fix (2026-09-25, design decided by the user):** a model that is
+overloaded (503 UNAVAILABLE / "high demand") or has used up the daily
+quota on every key is *unavailable* -- neither a retry nor another key can
+restore it, so the turn stops and the customer retries later.
+- `llm_service.ModelUnavailableError` is raised for: a 503 UNAVAILABLE /
+  "high demand" on the first occurrence (no internal retry, no key or
+  model switch -- the old one-retry from BUG-003 only met the same
+  overloaded model), and a 429 once every key has been tried for both
+  Gemini models. Other failures (a 500, a 400, a local config error) are
+  unchanged: one retry for a transient 5xx, then the node's own fallback.
+- It is deliberately a `BaseException`, so no node's `except Exception`
+  fallback can swallow it and turn an outage into a misleading answer
+  (symptom 1: triage reading the message as small talk). It stops the
+  graph and reaches `api_gateway.chat_stream`, which returns "The model
+  is currently unavailable. Please try again later." -- followed by the
+  provider's exact error when the developer reasoning display
+  (`debug_reasoning`) is on -- and logs `chat.model_unavailable`.
+- Memory validation's prompt guard keeps failing closed on it (not a
+  customer answer); the research harness catches it explicitly so an
+  unattended run still waits out an outage exactly as before.
+- Verified: service-level fixtures 6/6 (503 -> one call, no retry;
+  quota on all 10 keys x 2 models -> unavailable after 20 calls; 500/400
+  unchanged); in-process `/api/chat` with the provider mocked to 503 on
+  USR_999 3/3 (turn stops at triage's first call; exact message; exact
+  error appended in developer mode).
+
+**Symptom 2 (timeouts) -- open:** a call that never replies is still
+retried up to once per key for both models at 45s each. The user proposed
+a 15s timeout with one retry; pending a check of how many successful calls
+take longer than 15s.
 
 ## BUG-031 — Spanish AI-disclosure footer is an untranslated copy of the English string
 

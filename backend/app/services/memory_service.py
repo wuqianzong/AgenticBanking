@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from typing import List, Dict, Any
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from backend.app.core.llm_service import call_groq_lpu, MODEL_D_PROMPT_GUARD
+from backend.app.core.llm_service import call_groq_lpu, MODEL_D_PROMPT_GUARD, ModelUnavailableError
 from backend.app.core.groundedness import check_evidence_groundedness, check_conduct_compliance
 from backend.app.core.system_logger import log_event
 
@@ -271,7 +271,10 @@ class LongTermMemoryManager:
                 reason = f"Prompt Guard attack probability {attack_probability:.3f} is too high."
                 log_event("memory.validation.failed", level="WARNING", memory_type=memory_type, stage="prompt_guard", reason=reason)
                 return False, reason
-        except Exception as error:
+        # ModelUnavailableError (BUG-030) is a BaseException so turn nodes
+        # can't swallow it; memory validation is not a customer answer and
+        # keeps failing closed on it, as on any other error.
+        except (Exception, ModelUnavailableError) as error:
             reason = f"Prompt Guard failed closed: {error}"
             log_event("memory.validation.failed", level="WARNING", memory_type=memory_type, stage="prompt_guard", reason=reason)
             return False, reason

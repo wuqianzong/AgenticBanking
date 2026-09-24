@@ -159,11 +159,16 @@ class ApiKeyPool:
                 self._progress.write(f"{utc_now()} {message}\n")
                 self._progress.flush()
 
+        from backend.app.core.llm_service import ModelUnavailableError
+
         def wrapped(*args: Any, **kwargs: Any) -> Any:
             while True:
                 try:
                     return original(*args, **kwargs)
-                except Exception as error:
+                # ModelUnavailableError (production BUG-030) is a
+                # BaseException, so it is named here to keep an unattended
+                # run waiting out an outage exactly as before.
+                except (Exception, ModelUnavailableError) as error:
                     if rate_limit_info(error).get("rate_limited") or _is_persistent_transient_error(error):
                         _log(
                             f"production's own internal retry/rotation was exhausted; "
@@ -635,6 +640,7 @@ async def run_graph_study(
     capture_offset = capture_log_path.stat().st_size if capture_log_path and capture_log_path.exists() else 0
     from backend.app.core.system_logger import reset_request_context, set_request_context
     from backend.app.orchestration.graph import app_graph
+    from backend.app.core.llm_service import ModelUnavailableError
 
     output_dir.mkdir(parents=True, exist_ok=True)
     run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
@@ -699,7 +705,9 @@ async def run_graph_study(
                                 "assertions": evaluate_assertions(summary, expected),
                             })
                             break
-                        except Exception as error:
+                        # ModelUnavailableError is a BaseException (production
+                        # BUG-030); named so it is recorded like any error.
+                        except (Exception, ModelUnavailableError) as error:
                             info = rate_limit_info(error)
                             if not info.get("rate_limited"):
                                 case_status = "ERROR"

@@ -547,6 +547,38 @@ class EscalationCaseSummary(BaseModel):
 
 # =====================================================================
 
+class ModelUnavailableError(BaseException):
+    """The model cannot serve this call and neither another retry nor
+    another key would change that (BUG-030, per the user): the provider
+    reports it overloaded (503 UNAVAILABLE / "high demand"), or every key's
+    daily quota is used up for both Gemini models. The turn is abandoned
+    and the customer is told the model is unavailable and to try again
+    later (see api_gateway.chat_stream) -- retrying is left to them.
+
+    Deliberately a BaseException, not an Exception: every node wraps its
+    LLM calls in `except Exception` and degrades to a fallback (triage
+    reading the message as small talk, a check suppressing nothing, ...),
+    which is exactly how an outage used to turn into a misleading answer
+    instead of an honest one. This way no node can swallow it; it stops
+    the graph and reaches the gateway. `detail` is the provider's exact
+    error message, shown only with the developer reasoning display on.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(detail)
+        self.detail = detail
+
+
+def _is_model_unavailable_error(error: Exception) -> bool:
+    """503 UNAVAILABLE / "high demand" -- the provider saying the model is
+    overloaded right now. Not retried: an immediate retry or another key
+    meets the same overloaded model (BUG-030)."""
+    if getattr(error, "code", None) == 503 or getattr(error, "status", None) == "UNAVAILABLE":
+        return True
+    message = str(error)
+    return any(marker in message for marker in ("UNAVAILABLE", "high demand", " 503", "Service Unavailable"))
+
+
 def _is_transient_llm_error(error: Exception) -> bool:
     """True for an upstream availability hiccup (a 5xx, or a message
     unmistakably describing one) -- never for a 4xx (bad request, invalid
@@ -585,6 +617,10 @@ def _call_llm_router_impl(prompt: str, model_id: str = MODEL_A_GENERATOR, respon
     dispatch entirely rather than trying again). Never retried for a 4xx
     (rate limit, bad schema) or a local config error -- see
     _is_transient_llm_error.
+
+    BUG-030: a 503 UNAVAILABLE / "high demand" is no longer retried here --
+    it raises ModelUnavailableError at once (the retry only ever met the
+    same overloaded model). Other transient 5xx errors keep the one retry.
     """
     started_at = time.perf_counter()
     log_event("llm.request", model_id=model_id, raw_prompt=prompt)
@@ -671,6 +707,16 @@ def _call_llm_router_impl(prompt: str, model_id: str = MODEL_A_GENERATOR, respon
         return result
 
       except Exception as e:
+        if _is_model_unavailable_error(e):
+            print(f"🚨 [LLM Service]: model unavailable, abandoning the turn: {e}")
+            log_event(
+                "llm.unavailable",
+                level="ERROR",
+                model_id=model_id,
+                error=str(e),
+                elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+            )
+            raise ModelUnavailableError(str(e)) from e
         transient = _is_transient_llm_error(e)
         if transient and attempt < _max_attempts:
             print(f"⏳ [LLM Service Transient Error, retrying]: {e}")
@@ -707,9 +753,9 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_sch
       retries immediately with the next key -- no waiting, since a live
       request can't be kept waiting the way an unattended batch job can.
       Bounded at len(_google_key_pool) total attempts; once every key has
-      been tried, this re-raises so the caller's own existing fallback
-      behavior (every node that calls this already handles an LLM failure
-      gracefully today) runs exactly as it did with a single key.
+      been tried for both models (see Cross-model fallback below), this
+      raises ModelUnavailableError (BUG-030) -- no node fallback runs; the
+      turn ends with the "model unavailable" message.
     - Hang guard: the underlying client library sets no read timeout, so a
       dropped/half-closed connection can block _call_llm_router_impl
       forever with no exception ever raised to retry from (confirmed live
@@ -776,6 +822,11 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_sch
                         continue
                     break
                 raise
+    # Every key's quota is used up for both models: unavailable until the
+    # quota resets, which no retry inside this turn can change (BUG-030).
+    if last_error is not None and _is_rate_limited_error(last_error):
+        log_event("llm.unavailable", level="ERROR", model_id=model_id, error=str(last_error), reason="quota_exhausted_all_keys")
+        raise ModelUnavailableError(str(last_error)) from last_error
     raise last_error
 
 

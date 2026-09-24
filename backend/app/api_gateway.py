@@ -13,6 +13,7 @@ import os
 from backend.app.orchestration.graph import app_graph
 from backend.app.services.memory_service import LongTermMemoryManager, ShortTermMemoryManager
 from backend.app.core.system_logger import log_event, reset_request_context, set_request_context
+from backend.app.core.llm_service import ModelUnavailableError
 from backend.app.services import service_request_service
 from backend.app.services import deeplink_service
 from backend.app.services.service_request_mock_api import run_mock_credential_check
@@ -466,6 +467,9 @@ async def get_prior_session_history(
     )
     return {"user_id": user_id, "session_id": current_session_id, **page}
 
+MODEL_UNAVAILABLE_MESSAGE = "The model is currently unavailable. Please try again later."
+
+
 def _extract_reasoning_snippets(node_name: str, state_update: dict) -> list[str]:
     """Dev-only debug aid: surface a node's own already-computed reasoning
     text to the frontend, for the Development-settings "show reasoning"
@@ -708,6 +712,22 @@ async def process_chat(payload: ChatPayload):
             yield json.dumps(final_payload) + "\n"
             log_event("chat.response", ui_type=final_payload["uiType"], response_length=len(final_payload["text"]))
 
+        except ModelUnavailableError as unavailable:
+            # BUG-030 (per the user): the model is overloaded or every key's
+            # quota is used up -- no retry or key switch inside this turn can
+            # fix that, so the turn stops and the customer retries later.
+            # With the developer reasoning display on, the provider's exact
+            # error follows the message.
+            text = MODEL_UNAVAILABLE_MESSAGE
+            if payload.debug_reasoning:
+                text = f"{text}\n\n{unavailable.detail}"
+            yield json.dumps({
+                "type": "complete",
+                "text": text,
+                "uiType": "text",
+                "options": [],
+            }) + "\n"
+            log_event("chat.model_unavailable", level="ERROR", error=unavailable.detail)
         except Exception as e:
             # Safe fallback if the graph crashes during execution
             yield json.dumps({

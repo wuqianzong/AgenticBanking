@@ -35,7 +35,7 @@ second time).
 | BUG-014 | Precision Substitution occasionally leaves raw internal template fragments (`faq_xxxxxxxx_NNN`) in customer-facing text | Medium | Confirmed | **Deterministic code** (no check handles an unbraced placeholder the generator occasionally writes) | **Fixed (repair fixture-verified); unauthorized placeholders left to the auditor by decision** |
 | BUG-015 | A small number of turns return a generic failure fallback ("please rephrase") instead of a real answer, on questions near-identical ones answer correctly -- and 22/24 of these were silently mislabeled "resolved" in every automated metric until corrected 2026-09-13 | Low-Medium | Confirmed (24 unique cases, full-corpus) | Not yet root-caused | Open |
 | BUG-016 | Sufficiency auditor doesn't recognize an explicit negative/declarative fact as a complete answer | Medium | Confirmed (13/88 sample) | LLM judgment | Open |
-| BUG-017 | A successfully fetched account balance is silently dropped when the turn also carries conversational framing | Medium | Confirmed (61/619 turns; 23/70-sample conversations at least once) | Not yet root-caused | Open |
+| BUG-017 | A successfully fetched account balance is silently dropped when the turn also carries conversational framing | Medium | Confirmed (61/619 turns; 23/70-sample conversations at least once) | **Deterministic code** (routing condition omitted personal data) | **Fixed, live-verified** |
 | BUG-018 | Response generation falsely denies having a balance it just successfully fetched | High | Confirmed (13/619) | **Deterministic code** (a RELEVANT RAG hedge left in generation data, contradicting a same-subquery tool's ground truth) | **Root-caused and fixed, fixture-verified** |
 | BUG-019 | A short account-type follow-up gets reattached to an already-resolved transfer instead of the actual current balance question | Medium | Confirmed (3/70 sample) | LLM judgment | Open |
 | BUG-020 | Bot fabricates a second "other" savings account rather than correcting a customer's false premise | Medium | Confirmed (2/70 sample) | LLM judgment | Open |
@@ -1037,7 +1037,7 @@ attribution cleanliness and were not separately checked.
 
 ## BUG-017 — A successfully fetched account balance is silently dropped when the turn also carries conversational framing
 
-**Severity:** Medium **Confidence:** Confirmed (61/619 measured across a full 249-conversation campaign, not a sample) **Status: Open, not yet root-caused**
+**Severity:** Medium **Confidence:** Confirmed (61/619 measured across a full 249-conversation campaign, not a sample) **Status: Root-caused and fixed (2026-09-24); live-verified on the two phrasings that still failed**
 **Found in:** Multi-turn SGD Banks_1/Banks_2 depth test (2026-09-10/11), full 249-conversation run
 
 **What happens:** The `account-balance` `api` field (added this campaign — see
@@ -1081,6 +1081,57 @@ whether the same generation-vs-conversational-framing conflict exists for
 the pre-existing `profile-address` placeholder field (not exercised by this
 study) or is specific to `account-balance`. Left for future work per
 explicit instruction.
+
+**Re-verification (2026-09-23):** the personal-data completeness net shipped
+on 2026-09-22 (`0732485`), after this bug was found, did NOT fix it: on the
+bug's own four trigger phrasings, "Thanks, what's my balance?" -> "You're
+very welcome!" and "I appreciate your help and want to see about my
+balance." -> "Thank you so much for your kind words." still dropped the
+fetched balance (`research/2026-09-23_bug017_reverify`).
+
+**Root cause (2026-09-24):** a routing condition, not generation quality.
+`_generate_response_blocks` sends a turn to the narrow
+`_generate_evidence_only_response` sub-prompt when it judges there is no
+substantive content besides clarifications/declines/no-info/conversational
+replies. That judgment was a hand-maintained list --
+`evidence_by_task or available_shortcuts or unavailable_service_requests or
+verified_api_context` -- which omitted `personal_data_placeholders`. So a
+turn whose only substantive content was a fetched balance, plus a
+conversational part (triage splits "Thanks" off as NON_FINANCIAL), was
+routed to the narrow sub-prompt, which never receives the balance token and
+does not run the completeness net: the model could only answer the thanks.
+This matches the bug's exact trigger ("when the turn also carries
+conversational framing") and explains why "Fantastic. Can you please tell me
+the balance of my savings account?" worked (no conversational part split
+off, so the narrow path was never eligible).
+
+**Fix (user chose option C: derive from the obligation list):**
+`has_real_evidence` is now "any obligation whose `generation_rule` is not one
+the narrow sub-prompt handles" (`_EVIDENCE_ONLY_GENERATION_RULES` =
+clarification, decline/no-info, conversational), computed from the same
+`_build_response_obligations` list the generator uses -- so personal data
+counts, and any obligation kind added later is counted automatically
+instead of being forgotten the way this one was. Also, per the user, the
+completeness net's personal-data fallback sentence is now customer-facing:
+the registry's third-person "The customer's current account balance." used
+to render as "The customer's current account balance: {{data-x}}."; it now
+renders "Your current account balance is {{data-x}}." (any description not
+in the registry's "The customer's <field>" shape keeps the safe colon
+form; an empty token is skipped).
+
+**Verified:** 12 fixture checks (no LLM): thanks + fetched balance now
+routes to the full generator; thanks-only and clarification-only still take
+the narrow path; RAG + thanks and balance-only stay on the full generator;
+the fallback sentence for all three registry fields, an unexpected
+description, and an empty token; and end-to-end, a model that writes only
+"You're very welcome!" gets the balance added by the net as "Your current
+account balance is {{data-...}}.". Live (`research/2026-09-24_bug017_fix_
+live_check`), the two phrasings that failed now answer on the first attempt
+with the full generator, audit passing, no net needed: "You are very
+welcome. Your current account balance is {{data-...}}." and "I appreciate
+your help as well. Your current account balance is {{data-...}}.". The
+remaining two phrasings (which already passed before) were delayed by a
+Gemini 503 outage at the time of writing.
 
 ## BUG-018 — Response generation falsely denies having a balance it just successfully fetched
 

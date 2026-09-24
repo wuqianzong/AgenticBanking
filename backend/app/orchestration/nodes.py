@@ -1324,6 +1324,18 @@ _GENERATION_RULE_BY_TYPE = {
     "personal_data": "PERSONAL DATA RULES",
 }
 
+# The only obligation kinds _generate_evidence_only_response's narrow
+# sub-prompt handles. A turn whose obligations all fall in these routes
+# there; any other obligation (evidence, verified fact, shortcut,
+# unavailable request, personal data -- or a kind added later) makes the
+# turn substantive and keeps it on the full generator (BUG-017).
+_EVIDENCE_ONLY_GENERATION_RULES = {
+    _GENERATION_RULE_BY_TYPE["clarification"],
+    _GENERATION_RULE_BY_TYPE["decline"],
+    _GENERATION_RULE_BY_TYPE["no_info"],
+    _GENERATION_RULE_BY_TYPE["conversational"],
+}
+
 # The seven named sections an entry's own generation_rule field points to.
 # Each is fully static -- no per-turn interpolation -- so these are computed
 # once, not rebuilt on every call. Every one of them is rendered, when
@@ -6326,6 +6338,31 @@ def _simplify_block_for_revision(block: dict) -> dict:
     }
 
 
+def _personal_data_fallback_sentence(field_description: str, insert_token: str) -> str:
+    """Customer-facing sentence for the completeness net's personal-data
+    fallback. field_description (API_FIELD_REGISTRY) is written for the
+    model, in the third person ("The customer's current account balance.")
+    -- shown verbatim it read "The customer's current account balance:
+    {{data-x}}." to the customer (confirmed live, BUG-017 follow-up). The
+    registry's own "The customer's <field>" shape becomes "Your <field> is
+    <token>."; any description not in that shape keeps the old colon form,
+    which is grammatical whatever the description says (embedding an
+    arbitrary sentence after "Your" once produced "Your The customer's...").
+    """
+    token = str(insert_token or "")
+    if not token:
+        return ""  # nothing to show; the caller skips an empty fallback
+    description = str(field_description or "").strip().rstrip(".").strip()
+    if not description:
+        return token
+    prefix = "the customer's "
+    if description.lower().startswith(prefix):
+        field = description[len(prefix):].strip()
+        if field:
+            return f"Your {field} is {token}."
+    return f"{description}: {token}."
+
+
 def _net_block_shell(obligation_id: str, in_handle_namespace: bool, block_type: str = "text") -> dict:
     """The common frame every net-inserted fallback block shares -- only
     the id goes in the citation field matching its own namespace
@@ -6574,14 +6611,7 @@ def _apply_response_completeness_nets(
             insert_token = content.get("insert_token", "")
             if _is_covered(oid, in_handle_namespace=True, required_text=insert_token):
                 continue
-            # field_description (API_FIELD_REGISTRY) is always a complete,
-            # third-person sentence, never a short noun phrase -- embedding
-            # it after "Your" produced a malformed "Your The customer's
-            # current account balance.: {{data-x}}" (confirmed live). A
-            # colon-separated label is safe regardless of the
-            # description's own grammar.
-            description = str(content.get("field_description", "")).strip().rstrip(".")
-            fallback_text = f"{description}: {insert_token}." if description else str(insert_token)
+            fallback_text = _personal_data_fallback_sentence(content.get("field_description", ""), insert_token)
             if not fallback_text:
                 continue
             print(f"   ⚠️ [TOOL RESULT OMITTED IN DRAFT]: {oid} (personal_data) not covered by a citing block — inserting deterministic fallback")
@@ -6665,22 +6695,6 @@ def _generate_response_blocks(state: AgentState) -> dict:
             *personal_data_placeholders, *verified_api_context,
         )
     }
-    # A turn with no substantive content beyond a pending clarification/
-    # decline gets a narrower, more constrained sub-prompt instead of this
-    # open-ended one (see _generate_evidence_only_response) -- the same
-    # reliability reasoning as everywhere else in this module: an LLM given
-    # full discretion over what to write, with nothing else pulling it
-    # toward the harder correct answer, doesn't reliably choose it.
-    has_real_evidence = bool(
-        evidence_by_task or available_shortcuts or unavailable_service_requests or verified_api_context
-    )
-    if not has_real_evidence and (intent_clarifications or decline_context or no_info_context or conversational_context):
-        return _generate_evidence_only_response(intent_clarifications, decline_context, no_info_context, conversational_context, state)
-    conversation_context = _build_conversation_context(state)
-    user_baseline = _build_user_baseline_context(state)
-    audit_feedback = state.get("draft_feedback_history", [])[-4:]
-    user_profile = state.get("user_profile", {})
-
     # Unified Response Obligation Contract (docs/RESPONSE_OBLIGATION_CONTRACT_
     # DESIGN.md, Stage 1): one builder call, one shared id/mode/guidance
     # source of truth. Each named section below still shows its own filtered
@@ -6693,6 +6707,35 @@ def _generate_response_blocks(state: AgentState) -> dict:
         conversational_context, intent_clarifications, available_shortcuts,
         unavailable_service_requests, personal_data_placeholders, task_metadata,
     )
+
+    # A turn with no substantive content beyond a pending clarification/
+    # decline/no-info/conversational reply gets a narrower, more constrained
+    # sub-prompt instead of this open-ended one (see
+    # _generate_evidence_only_response) -- the same reliability reasoning as
+    # everywhere else in this module: an LLM given full discretion over what
+    # to write, with nothing else pulling it toward the harder correct
+    # answer, doesn't reliably choose it.
+    #
+    # BUG-017: "substantive content" is derived from the obligation list
+    # itself -- any obligation whose rule is not one the narrow sub-prompt
+    # handles -- rather than from a hand-maintained list of typed inputs.
+    # That hand list had omitted personal_data_placeholders, so "Thanks,
+    # what's my balance?" (a fetched balance plus a conversational part) was
+    # judged to have nothing substantive and sent to the narrow sub-prompt,
+    # which never receives the balance token -- the reply was just "You're
+    # very welcome!". Deriving it here means a future obligation type is
+    # counted automatically instead of silently forgotten the same way.
+    has_real_evidence = any(
+        obligation.get("generation_rule") not in _EVIDENCE_ONLY_GENERATION_RULES
+        for obligation in obligations
+    )
+    if not has_real_evidence and (intent_clarifications or decline_context or no_info_context or conversational_context):
+        return _generate_evidence_only_response(intent_clarifications, decline_context, no_info_context, conversational_context, state)
+    conversation_context = _build_conversation_context(state)
+    user_baseline = _build_user_baseline_context(state)
+    audit_feedback = state.get("draft_feedback_history", [])[-4:]
+    user_profile = state.get("user_profile", {})
+
     obligations_by_id = {o["id"]: o for o in obligations if o.get("id")}
     evidence_obligations = [obligations_by_id[e["task_id"]] for e in evidence_by_task if e.get("task_id") in obligations_by_id]
     verified_fact_obligations = [obligations_by_id[e["handle"]] for e in verified_api_context if e.get("handle") in obligations_by_id]

@@ -8813,14 +8813,22 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           product capability, policy condition, limit, date, amount,
           placeholder, instruction, option, progress step, list item,
           extended-text statement, and answer response-block field must be
-          directly supported by the Permitted Evidence (Task-Level Approved
-          Evidence) above.
+          directly supported by the Permitted Evidence above: Task-Level
+          Approved Evidence, or one of the tool-derived entries listed with
+          it (available shortcuts, unavailable service requests, verified
+          customer-specific facts, personal data references), within exactly
+          what the Source-Boundary Rules below allow that entry to support.
+          A statement a tool-derived entry supports on those terms is
+          grounded even though no Task-Level Approved Evidence mentions it.
         - Assess the answer and answer UI as one coherent customer response
           against the aggregate Task-Level Approved Evidence. The response does
           not need a visible section, element, or title for each task.
         - When an optional response element is mapped to source_task_ids, its
           factual content may use the union of approved evidence for those
-          tasks. An unmapped element may use any Task-Level Approved Evidence.
+          tasks. An unmapped element -- including one that cites only a
+          tool-derived entry (e.g. a personal data reference), which never
+          appears in the task mapping -- may use any Permitted Evidence, on
+          the same Source-Boundary terms.
         - Every Task-Level Approved Evidence entry has a non-empty
           "approved_parents" (RELEVANT and SUFFICIENT both require at least
           one real approved parent; a task with none is IRRELEVANT and
@@ -8853,8 +8861,9 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           Do not fail such a courtesy sentence merely because it is absent from
           Task-Level Approved Evidence.
         - Assess every remaining financial statement and UI field only against
-          Task-Level Approved Evidence. The Original Customer Message can
-          never support, soften, or justify a financial claim.
+          the Permitted Evidence, exactly as Direct Factual Grounding defines
+          it. The Original Customer Message can never support, soften, or
+          justify a financial claim.
         """
 
         _scope_expansion_honesty_rule = """

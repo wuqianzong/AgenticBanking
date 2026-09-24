@@ -52,7 +52,7 @@ second time).
 | BUG-031 | Spanish `chat.footer` (the persistent AI-disclosure footer) is an untranslated copy of the English string | Low | Confirmed (static check of `frontend/src/translations.js`) | **Deterministic code (missing translation)** | **Fixed** |
 | BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | **Fixed** |
 | BUG-033 | Triage decomposed by sentence, not by need, splitting one request into overlapping subqueries (a topic lead-in became its own subquery) | Medium–High | Confirmed (opposite decompositions of the same message across runs) | LLM judgment (prompt defined components by text, not need) | **Fixed, live-verified (triage node)** |
-| BUG-034 | Two outbound-audit rules conflict on whether a personal-data token is permitted evidence (a correct balance sentence rejected 3x) | Medium | Confirmed (1 live trace; intermittent) | LLM judgment (conflicting prompt rules) | Open |
+| BUG-034 | Two outbound-audit rules conflict on whether a personal-data token is permitted evidence (a correct balance sentence rejected 3x) | Medium | Confirmed (1 live trace; intermittent) | LLM judgment (conflicting prompt rules) | **Fixed, live-verified (audit node)** |
 | BUG-035 | The deterministic no-info statement repeats the customer's entire request back verbatim | Low–Medium | Confirmed (live) | **Deterministic code** (template) | Open |
 | BUG-036 | `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none | Low | Confirmed | **Deterministic code** (logging only) | **Fixed** |
 
@@ -2022,7 +2022,7 @@ prompt rule reduces but cannot guarantee correct decomposition.
 
 ## BUG-034 — Two outbound-audit rules conflict on whether a personal-data token is permitted evidence
 
-**Severity:** Medium **Confidence:** Confirmed (1 live trace; behavior intermittent) **Status: Open -- documented, fix not yet decided**
+**Severity:** Medium **Confidence:** Confirmed (1 live trace; behavior intermittent) **Status: Fixed (2026-09-24), live-verified on the audit node**
 **Found in:** 2026-09-24 audit-merge live validation, case `merge_check_bug018_balance` (`research/2026-09-24_audit_merge_live_validation`)
 
 **What happens:** the audit rejected a correct balance sentence ("Your
@@ -2044,10 +2044,32 @@ instructions the verdict is unstable: the same kind of sentence passed on
 the first attempt in other runs (e.g. all four BUG-017 re-verification
 phrasings).
 
-**Not yet investigated:** whether aligning Direct Factual Grounding's
-wording with the full Permitted Evidence (task evidence plus the tool-
-derived sources the same prompt already lists) resolves it, and whether
-`verified_api_context` facts are affected the same way.
+**Fix (2026-09-24):** the narrowing appeared in three places, not one, all
+now aligned with the full Permitted Evidence the prompt already lists:
+(a) Direct Factual Grounding now says every assertion/placeholder must be
+supported by "Task-Level Approved Evidence, or one of the tool-derived
+entries listed with it (available shortcuts, unavailable service requests,
+verified customer-specific facts, personal data references), within
+exactly what the Source-Boundary Rules below allow that entry to support";
+(b) "An unmapped element may use any Task-Level Approved Evidence" now says
+any Permitted Evidence on the same Source-Boundary terms, and names the
+case that triggered this -- a block citing only a tool-derived entry such
+as `data_1` never appears in the task mapping, so it was always "unmapped"
+and judged against RAG evidence alone; (c) the Courtesy Context Rule's
+"assess every remaining financial statement... only against Task-Level
+Approved Evidence" now points to the same definition. Nothing loosened: the
+Source-Boundary Rules still bound exactly what each tool entry supports.
+Covers `verified_api_context` facts the same way.
+
+**Verified live (audit node called directly, 2026-09-24):** the failing
+shape rebuilt -- a RAG block (account-number steps, `faq_24638b08`) plus a
+block citing only `data_1`, "Your current balance for your savings account
+is {{data-719ca175}}." -- passed 3/3 (it failed 3/3 rounds in the original
+trace), each reason explicitly citing the personal-data authorization.
+Negative control: the same block with a fabricated figure ("... is
+S$5,240.18.") was correctly rejected as an unsupported factual claim. n=3
+is consistent with the fix, not a measured rate; the original trace also
+had a RAG-side denial the rebuilt case omits.
 
 ## BUG-035 — The deterministic no-info statement repeats the customer's entire request back verbatim
 

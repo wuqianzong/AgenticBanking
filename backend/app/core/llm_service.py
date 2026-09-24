@@ -706,6 +706,23 @@ def _deepseek_user_id() -> str | None:
     return hashlib.sha256(str(session_id).encode()).hexdigest()[:32]
 
 
+def _log_deepseek_usage(model_id: str, completion: Any) -> None:
+    """Exact token counts DeepSeek returns with every reply, including its
+    prefix-cache hits (billed at about 1/50 of a miss) -- the basis for
+    real per-turn cost and for checking that prompt caching works."""
+    usage = getattr(completion, "usage", None)
+    if usage is None:
+        return
+    log_event(
+        "llm.usage",
+        model_id=model_id,
+        prompt_tokens=getattr(usage, "prompt_tokens", None),
+        prompt_cache_hit_tokens=getattr(usage, "prompt_cache_hit_tokens", None),
+        prompt_cache_miss_tokens=getattr(usage, "prompt_cache_miss_tokens", None),
+        completion_tokens=getattr(usage, "completion_tokens", None),
+    )
+
+
 def _call_deepseek(prompt: str, model_id: str, active_schema: Any) -> str:
     """One DeepSeek chat completion. Thinking mode is explicitly disabled
     (it is on by default, and while on it ignores temperature -- every call
@@ -748,6 +765,7 @@ def _call_deepseek(prompt: str, model_id: str, active_schema: Any) -> str:
                 tools=tools,
                 tool_choice={"type": "function", "function": {"name": "respond"}},
             )
+            _log_deepseek_usage(model_id, completion)
             message = completion.choices[0].message
             result = message.tool_calls[0].function.arguments if message.tool_calls else ""
             if not result.strip():
@@ -782,6 +800,7 @@ def _call_deepseek(prompt: str, model_id: str, active_schema: Any) -> str:
     else:
         client = OpenAI(api_key=deepseek_api_key, base_url=_DEEPSEEK_BASE_URL, timeout=_LLM_CALL_TIMEOUT_SECONDS, max_retries=0)
         completion = client.chat.completions.create(**common, response_format={"type": "json_object"})
+        _log_deepseek_usage(model_id, completion)
         result = completion.choices[0].message.content or ""
     if not result.strip():
         raise EmptyModelOutputError(f"{model_id} returned empty content (finish_reason={completion.choices[0].finish_reason}).")

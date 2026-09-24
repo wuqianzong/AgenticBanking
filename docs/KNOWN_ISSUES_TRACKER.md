@@ -56,7 +56,7 @@ second time).
 | BUG-035 | The deterministic no-info statement repeats the customer's entire request back verbatim | Low–Medium | Confirmed (live) | **Deterministic code** (template) | **Fixed** |
 | BUG-036 | `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none | Low | Confirmed | **Deterministic code** (logging only) | **Fixed** |
 | BUG-037 | A completed redirect (deeplink/service_request) suppressed RAG evidence, leading the generator to fabricate a fact (card delivery "7 to 10" vs the real 6-7 days) | High | Confirmed (live) | **Deterministic code** (regression from BUG-018's fix: guard counted any completed tool, not only a data fetch) | **Fixed, fixture-verified** |
-| BUG-038 | An audit violation on a task no block carries approves the block holding the flagged sentence; the reviser gets nothing and the flagged text ships | High | Confirmed (live) | **Deterministic code** (a RELEVANT task's separate "terminal marker" outlived its removed evidence; partition attribution) | **Step 1 of 3 fixed (root cause), fixture-verified; steps 2-3 open** |
+| BUG-038 | An audit violation on a task no block carries approves the block holding the flagged sentence; the reviser gets nothing and the flagged text ships | High | Confirmed (live) | **Deterministic code** (a RELEVANT task's separate "terminal marker" outlived its removed evidence; partition attribution) | **Fixed (all 3 steps), fixture-verified; live check pending (model spike)** |
 | BUG-039 | No turn-level consistency check: results collected for one turn could contradict each other in the response (e.g. "no information on your balance" next to the fetched balance) whenever the same-subquery BUG-018 guard could not see the conflict | High | Confirmed (live, triage merged the two components the guard relies on) | **Missing capability** (semantic, turn-wide conflict judgment) | **Fixed, fixture- and live-judgment-verified** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
@@ -2177,7 +2177,7 @@ deeplink-only and service_request-only subqueries still RESOLVED.
 
 ## BUG-038 — An audit violation on a task no block carries approves the block holding the flagged sentence
 
-**Severity:** High (a flagged, unsupported claim can ship) **Confidence:** Confirmed (live, same trace as BUG-037) **Status: Step 1 of 3 fixed (2026-09-25) -- root cause removed, fixture-verified; steps 2-3 decided, not yet implemented**
+**Severity:** High (a flagged, unsupported claim can ship) **Confidence:** Confirmed (live, same trace as BUG-037) **Status: Fixed (2026-09-25), all three steps fixture-verified; live check pending (Gemini high-demand spike)**
 
 **What happens:** the generator cited `['task_1', 'task_1_scope',
 'nav_1']` for one element; task_1 was not in `valid_task_ids` (its evidence
@@ -2248,13 +2248,45 @@ the audit's Scope-Expansion rule both branch on it.
   audit; a guard-removed RELEVANT task leaves no trace in the generator's
   data; CLARIFICATION_REQUIRED still renders its no-info entry.
 
-**Step 2 (decided, not yet implemented):** record on each block the
-obligation entries it cited, hand exactly those to the reviser, and raise a
-deterministic finding for a block citing a non-obligation id or none.
+**Step 2 -- the reviser sees what the generator saw (fixed 2026-09-25):**
+- The generator records every obligation entry it received
+  (`generation_obligations`, keyed by id). Each generated block keeps any
+  id it cited that was not an obligation (`sourceUnmatchedIds`) instead of
+  that id being silently dropped.
+- node_04c gives the reviser exactly the obligation entries the pending
+  blocks cited, from that recorded copy -- no longer rebuilt from the
+  flagged task ids, and shortcuts/customer-data entries no longer attached
+  to every revision regardless of citation. A response-wide round gets
+  every recorded entry (the generator saw all of them). Without a recorded
+  copy (e.g. the evidence-only path) the old rebuild is the fallback.
+- New deterministic findings on normal_response turns
+  (`_deterministic_outbound_findings(check_citations=True)`):
+  `non_obligation_citation` (a generated block cites an id that was not an
+  obligation; the finding names the ids) and `no_obligation` (it cites
+  none -- e.g. text in the generator's `clarification` field). Keyed by
+  the block's own blockId. Raised only on a block as generated: a block the
+  reviser rewrote is marked `revised` and not re-checked, since the reviser
+  cannot change citations and a repeated check could never pass. For a
+  `no_obligation` block the reviser, which then has no entries for it, is
+  told to remove every banking fact and keep at most a courtesy sentence
+  (the reviser cannot delete blocks).
 
-**Step 3 (decided, not yet implemented):** a violation whose task id no
-block carries is matched through the blocks' recorded citations instead of
-approving every block.
+**Step 3 -- no flag can approve the text it flags (fixed 2026-09-25):**
+`_partition_audited_response` matches a block by every id it is known by:
+blockId, sourceTaskIds, sourceShortcutHandles and sourceUnmatchedIds. A
+violation that still matches no block makes the round response-wide
+(nothing approved, every block to the reviser) instead of approving every
+block. In the BUG-038 trace the flag on `task_1` now finds the block
+through its recorded citation of `task_1`.
+
+**Verification:** fixture-verified with the LLM mocked -- step 1 15/15;
+steps 2-3 21/21 (partition matching incl. the BUG-038 block shape, a
+handle, a blockId finding, unmatched -> response-wide, BUG-009 empty
+blocks; citation findings, not repeated after revision, off for other
+scopes; generator records obligations and non-obligation citations;
+reviser gets only the pending block's cited entries, all of them when
+response-wide); turn-consistency fixtures 9/9 unaffected. A live check was
+blocked by a Gemini high-demand spike (503 on every key).
 
 ## BUG-039 — No turn-level consistency check between a turn's collected results
 

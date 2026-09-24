@@ -47,6 +47,7 @@ VOLATILE_STATE_RESET = {
     "search_feedback_history": [],
     "draft_feedback_history": [],
     "consistency_suppressed_ids": [],
+    "generation_obligations": {},
     "triaged_subqueries": [],
     "financial_subqueries": [],
     "conversational_tasks": [],
@@ -7401,6 +7402,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
     response_blocks = []
     answer_parts = []
     element_sources = []
+    unmatched_by_block = {}
     for index, element in enumerate(generated.get("elements", []), start=1):
         if not isinstance(element, dict):
             continue
@@ -7409,6 +7411,15 @@ def _generate_response_blocks(state: AgentState) -> dict:
         source_ids = [task_id for task_id in cited_ids if task_id in valid_task_ids]
         source_ids = list(dict.fromkeys(source_ids))
         source_handles = list(dict.fromkeys(h for h in cited_ids if h in shortcut_handles))
+        # Cited ids that were not obligations the generator received (e.g.
+        # an id it picked up from elsewhere in the prompt). Kept on the
+        # block, never silently dropped: the deterministic checks flag the
+        # block, and a violation naming one of them still finds this block
+        # (BUG-038 -- the dropped id is what let a flagged block be
+        # approved).
+        unmatched_by_block[f"element_{index}"] = list(dict.fromkeys(
+            i for i in cited_ids if i and i not in valid_task_ids and i not in shortcut_handles
+        ))
         context_text = _llm_text(element, "context_text")
         answer = _llm_text(element, "answer")
         extended_text = _llm_text(element, "extended_text")
@@ -7601,6 +7612,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
         response_blocks.append(block)
         answer_parts.append(rendered_text)
         element_sources.append(source_ids)
+    for block in response_blocks:
+        block["sourceUnmatchedIds"] = unmatched_by_block.get(block.get("blockId"), [])
 
     # The model can regenerate one flagged task's element during a redraft and
     # simply forget to re-emit an already-correct task's element alongside it.
@@ -7714,6 +7727,9 @@ def _generate_response_blocks(state: AgentState) -> dict:
         "completed_steps": [],
         "ui_action_payload": {"uiType": "blocks", "responseBlocks": response_blocks, "options": [], "nextActions": next_actions},
         "pending_advance": False,
+        # What the generator received, keyed by id -- node_04c revises each
+        # block from exactly the entries that block cited (BUG-038).
+        "generation_obligations": {o["id"]: o for o in obligations if o.get("id")},
     }
 
 
@@ -8067,9 +8083,10 @@ def node_04c_response_reviser(state: AgentState) -> dict:
              + violation_history.get("", [])
     )
 
-    # Scoped-to-pending context only -- shortcuts/verified-API/personal-data
-    # stay unfiltered below (they key by free-text for_request, not
-    # task_id, and are small/turn-wide/unconditionally-attached).
+    # Typed contexts, rebuilt from state: they order the prompt sections
+    # below and feed the completeness net; which entries the reviser sees
+    # is decided by the pending blocks' own citations (see
+    # recorded_obligations below).
     evidence_by_task = _hydrate_response_evidence(state)
     task_metadata = {
         task.get("task_id"): task.get("customer_component", "")
@@ -8089,13 +8106,10 @@ def node_04c_response_reviser(state: AgentState) -> dict:
 
     # Unified Response Obligation Contract (docs/RESPONSE_OBLIGATION_CONTRACT_
     # DESIGN.md, Stage 2): the same builder _generate_response_blocks uses,
-    # with `pending_task_ids` filtering applied to the RESULTING obligations
-    # (below) instead of this node's previous five separate typed-list
-    # filters. Handle-keyed obligations (shortcuts, unavailable-requests,
-    # verified-facts, personal-data) are deliberately exempt from the
-    # pending filter, same as before this change -- they key by free-text
-    # for_request, not task_id, and are turn-wide/unconditionally attached
-    # by node_07 regardless of which blocks are pending this round.
+    # used below only as the fallback when the generator's recorded copy
+    # (generation_obligations) is absent; that fallback keeps the old
+    # `pending_task_ids` filter, with handle-keyed obligations (shortcuts,
+    # unavailable-requests, verified-facts, personal-data) exempt from it.
     obligations = _build_response_obligations(
         evidence_by_task, verified_api_context, decline_context, no_info_context,
         conversational_context, intent_clarifications, available_shortcuts,
@@ -8109,7 +8123,24 @@ def node_04c_response_reviser(state: AgentState) -> dict:
             *personal_data_placeholders, *verified_api_context,
         )
     }
-    if not response_wide:
+    # BUG-038: the reviser sees what the generator saw when it wrote each
+    # block -- the obligation entries that block cited, taken from the copy
+    # the generator recorded (generation_obligations), not rebuilt from the
+    # flagged task ids. A response-wide round covers every block, so every
+    # entry the generator received. The rebuilt list above is kept only as
+    # the fallback for a state without the recorded copy.
+    recorded_obligations = state.get("generation_obligations") or {}
+    if recorded_obligations:
+        if response_wide:
+            allowed_ids = set(recorded_obligations)
+        else:
+            allowed_ids = {
+                oid
+                for block in pending_blocks
+                for oid in (*(block.get("sourceTaskIds") or []), *(block.get("sourceShortcutHandles") or []))
+            }
+        obligations_by_id = {oid: recorded_obligations[oid] for oid in allowed_ids if oid in recorded_obligations}
+    elif not response_wide:
         obligations_by_id = {
             oid: o for oid, o in obligations_by_id.items()
             if oid in handle_ids or oid in pending_task_ids
@@ -8366,11 +8397,23 @@ _DETERMINISTIC_FINDING_TEXT = {
         "A blocked internal term appears in customer-facing text.",
         "Rewrite this content in plain customer-facing language.",
     ),
+    # BUG-038: every block must be based on the obligations the generator
+    # received. These two are raised once, on a block as generated (see
+    # `revised` in _reassemble_response_blocks); the evidence gap names the
+    # ids so the reviser knows which citation was not an obligation.
+    "non_obligation_citation": (
+        "This block cites {ids}, which are not obligations given for this response, so any content based on them has no permitted source.",
+        "Rewrite this block using only the obligations listed for it; remove any content they do not support.",
+    ),
+    "no_obligation": (
+        "This block is not based on any obligation given for this response.",
+        "Remove every banking fact, procedure, product, policy, or next step from it; keep at most a brief courtesy or connecting sentence.",
+    ),
 }
-_BLOCK_METADATA_KEYS = {"blockId", "taskId", "sourceTaskIds", "sourceShortcutHandles"}
+_BLOCK_METADATA_KEYS = {"blockId", "taskId", "sourceTaskIds", "sourceShortcutHandles", "sourceUnmatchedIds", "revised"}
 
 
-def _deterministic_outbound_findings(state: AgentState) -> list[dict]:
+def _deterministic_outbound_findings(state: AgentState, check_citations: bool = False) -> list[dict]:
     """The former node_05 checks, unchanged in what they detect: an invalid
     `{{faq_*}}` placeholder (no row in Precision_Reference_Table), an
     exposed FAQ parent id, and the ILLEGAL_WORD sentinel.
@@ -8383,6 +8426,13 @@ def _deterministic_outbound_findings(state: AgentState) -> list[dict]:
     that block (and every id it names) pending; a block with no task id,
     or a hit found only outside the blocks, is task_id "" -- response-wide,
     the same convention the audit's own violations use.
+
+    With `check_citations` (normal_response turns, which have the per-block
+    revision loop), also the BUG-038 citation check: a generated block that
+    cites an id that was not one of the generator's obligations, or cites
+    no obligation at all, is flagged. Such a finding's task_id is the
+    block's own blockId -- the block is known exactly, and
+    _partition_audited_response matches a block by its blockId too.
     """
     payload = state.get("ui_action_payload", {})
     blocks = [block for block in payload.get("responseBlocks", []) if isinstance(block, dict)]
@@ -8420,8 +8470,9 @@ def _deterministic_outbound_findings(state: AgentState) -> list[dict]:
             "illegal_word": ["ILLEGAL_WORD"] if "ILLEGAL_WORD" in text else [],
         }
 
-    def _finding(task_id: str, kind: str, content: list) -> dict:
+    def _finding(task_id: str, kind: str, content: list, ids: str = "") -> dict:
         evidence_gap, guidance = _DETERMINISTIC_FINDING_TEXT[kind]
+        evidence_gap = evidence_gap.replace("{ids}", ids)
         return {
             "task_id": task_id,
             "scope": "answer",
@@ -8439,6 +8490,21 @@ def _deterministic_outbound_findings(state: AgentState) -> list[dict]:
             if content:
                 findings.append(_finding(task_ids[0] if task_ids else "", kind, content))
                 attributed.update(content)
+    if check_citations:
+        for block in blocks:
+            block_id = str(block.get("blockId") or "")
+            # Only blocks the generator wrote (element_N, and the free-text
+            # `clarification` field's block) -- net-inserted and fallback
+            # blocks are built by code from one obligation each -- and only
+            # before their first revision.
+            if not (block_id.startswith("element_") or block_id == "clarification") or block.get("revised"):
+                continue
+            text = _flatten_response_block_text(block)
+            unmatched = [i for i in (block.get("sourceUnmatchedIds") or []) if i]
+            if unmatched:
+                findings.append(_finding(block_id, "non_obligation_citation", [text], ", ".join(unmatched)))
+            elif not (block.get("sourceTaskIds") or block.get("sourceShortcutHandles")):
+                findings.append(_finding(block_id, "no_obligation", [text]))
     # final_draft is flattened from the blocks, so most hits here are the
     # same ones already attributed above; only a genuinely new one (from a
     # non-block field) becomes a response-wide finding.
@@ -8459,7 +8525,7 @@ def _outbound_response_content(state: AgentState) -> tuple[str, str, str]:
         {
             key: value
             for key, value in block.items()
-            if key not in {"blockId", "taskId", "sourceTaskIds", "sourceShortcutHandles"}
+            if key not in _BLOCK_METADATA_KEYS
         }
         for block in payload.get("responseBlocks", [])
         if isinstance(block, dict)
@@ -8667,22 +8733,43 @@ def _partition_audited_response(
     as a full PASS despite the audit explicitly having found a problem --
     confirmed live during a Gemini high-demand spike that made generation
     return an empty response.
+
+    BUG-038: a block is matched by every id it is known by -- its own
+    blockId (deterministic per-block findings use it), its sourceTaskIds,
+    its sourceShortcutHandles, and any id it cited that was not an
+    obligation (sourceUnmatchedIds). A violation that still matches no
+    block used to approve every block, including the one holding the
+    flagged text, while the reviser was handed nothing; it is now treated
+    as response-wide, so a flag can never approve the text it flags.
+    (With no blocks at all -- BUG-009 -- that is the same outcome as
+    before: nothing approved, the flagged ids pending.)
     """
+    def _block_ids(block: dict) -> set:
+        return {
+            i for i in (
+                block.get("blockId"),
+                *(block.get("sourceTaskIds") or []),
+                *(block.get("sourceShortcutHandles") or []),
+                *(block.get("sourceUnmatchedIds") or []),
+            ) if i
+        }
+
     all_violations = [*conduct_violations, *grounding_violations]
+    every_block_id = {i for block in response_blocks for i in _block_ids(block)}
     if any(not str(v.get("task_id", "")).strip() for v in all_violations):
-        pending = {task_id for block in response_blocks for task_id in block.get("sourceTaskIds", [])}
-        return [], pending, True
+        return [], every_block_id, True
 
     flagged = {v["task_id"] for v in all_violations if str(v.get("task_id", "")).strip()}
-    approved, pending = [], set()
+    approved, pending, matched = [], set(), set()
     for block in response_blocks:
-        ids = set(block.get("sourceTaskIds", []) or [])
+        ids = _block_ids(block)
         if ids & flagged:
             pending.update(ids)
+            matched.update(ids & flagged)
         else:
             approved.append(block)
-    covered_ids = {task_id for block in response_blocks for task_id in (block.get("sourceTaskIds", []) or [])}
-    pending.update(flagged - covered_ids)
+    if flagged - matched:
+        return [], every_block_id | flagged, True
     return approved, pending, False
 
 
@@ -8717,10 +8804,15 @@ def _reassemble_response_blocks(
     rather than vanishing, exactly the omission failure mode this whole
     redesign exists to prevent. `blockId`/`type`/`sourceTaskIds` are
     identity/type-locked and are never taken from the reviser's output even
-    if present.
+    if present (nor are the other citation fields). A block the reviser
+    returned content for is marked `revised`: its citations were already
+    checked when it was generated, and it has since been rewritten from
+    exactly its own obligations, so the citation check is not repeated on
+    it -- the reviser cannot change citations, so a repeated check could
+    never pass and would only exhaust the retries.
     """
     approved_ids = {block.get("blockId") for block in approved_response_blocks}
-    locked_fields = {"blockId", "type", "sourceTaskIds", "sourceShortcutHandles"}
+    locked_fields = {"blockId", "type", "sourceTaskIds", "sourceShortcutHandles", "sourceUnmatchedIds", "revised"}
     result = []
     for block in original_response_blocks:
         block_id = block.get("blockId")
@@ -8736,6 +8828,7 @@ def _reassemble_response_blocks(
             if key in locked_fields or value in (None, "", [], {}):
                 continue
             merged[key] = value
+        merged["revised"] = True
         result.append(merged)
     return result
 
@@ -9579,7 +9672,7 @@ def node_06_outbound_audit_join(state: AgentState):
     # gate) run here, after the audit, so every problem in this draft --
     # probabilistic or deterministic -- is collected before deciding what
     # needs revising, and the reviser fixes all of it in one call.
-    deterministic_findings = _deterministic_outbound_findings(state)
+    deterministic_findings = _deterministic_outbound_findings(state, check_citations=audit_scope == "normal_response")
     log_event(
         "outbound.deterministic.completed",
         passed=not deterministic_findings,

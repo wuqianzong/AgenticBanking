@@ -624,7 +624,7 @@ class SchemaValidationError(Exception):
     the caller's own fallback runs, as for any other failed call."""
 
 
-def _deepseek_strict_schema(schema_model: Any) -> dict:
+def _deepseek_strict_schema(schema_model: Any, mark_omittable: bool = False) -> dict:
     """Convert a Pydantic model into the JSON Schema DeepSeek's strict tool
     calling accepts (beta), per live probes (2026-09-25): every object lists
     all its properties as required with additionalProperties false; every
@@ -638,6 +638,11 @@ def _deepseek_strict_schema(schema_model: Any) -> dict:
     output (an out-of-enum value and an extra property both came back), so
     it only shapes the reply -- _call_deepseek validates every reply
     against the Pydantic model itself.
+
+    With `mark_omittable`, each object also lists (as "x-omittable") the
+    properties whose Pydantic default is "" or None -- a "not applicable"
+    sentinel, so leaving one out means the same as sending the default.
+    Only _missing_schema_fields reads it; it is never sent to DeepSeek.
     """
     schema = copy.deepcopy(schema_model.model_json_schema())
     definitions = schema.pop("$defs", {})
@@ -651,7 +656,13 @@ def _deepseek_strict_schema(schema_model: Any) -> dict:
             target = definitions[node["$ref"].split("/")[-1]]
             extra = {k: v for k, v in node.items() if k != "$ref"}
             return _walk({**copy.deepcopy(target), **extra})
+        omittable = sorted(
+            key for key, sub in (node.get("properties") or {}).items()
+            if isinstance(sub, dict) and "default" in sub and sub["default"] in ("", None)
+        )
         node = {k: _walk(v) for k, v in node.items() if k not in {"title", "default"}}
+        if mark_omittable and omittable:
+            node["x-omittable"] = omittable
         if "const" in node:
             node["enum"] = [node.pop("const")]
         if node.get("type") == "object" or "properties" in node:
@@ -682,10 +693,13 @@ def _missing_schema_fields(value: Any, schema: dict, path: str = "$") -> list[st
         missing = []
         for key, sub in schema.get("properties", {}).items():
             if key not in value:
-                # A nullable field left out means the same as null (seen
-                # live: the tool planner omits the id fields that don't
-                # apply to a task's tool); only a non-nullable one is a gap.
-                if not any(branch.get("type") == "null" for branch in sub.get("anyOf", [])):
+                # A nullable field, or one whose default is "" or None (a
+                # "not applicable" sentinel), left out means the same as its
+                # default (seen live: the tool planner omits the input fields
+                # that don't apply to a task's tool); only other fields are a
+                # gap -- e.g. a dropped reasoning list.
+                nullable = any(branch.get("type") == "null" for branch in sub.get("anyOf", []))
+                if not nullable and key not in schema.get("x-omittable", []):
                     missing.append(f"{path}.{key}")
             else:
                 missing.extend(_missing_schema_fields(value[key], sub, f"{path}.{key}"))
@@ -770,7 +784,7 @@ def _call_deepseek(prompt: str, model_id: str, active_schema: Any) -> str:
             # is left to the caller's own fallback.
             try:
                 active_schema.model_validate_json(result)
-                missing = _missing_schema_fields(json.loads(result), strict_schema)
+                missing = _missing_schema_fields(json.loads(result), _deepseek_strict_schema(active_schema, mark_omittable=True))
                 problem = f"Required fields missing: {', '.join(missing)}" if missing else ""
                 logged = problem
             except ValidationError as error:

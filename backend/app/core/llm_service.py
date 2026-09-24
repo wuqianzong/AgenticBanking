@@ -18,9 +18,10 @@ from backend.app.core.system_logger import log_event, request_context
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 #model_A="openai/gpt-oss-120b"  # For response generation
-model_A="gemini-3.5-flash-lite"  # For response generation
-model_B="gemini-3.5-flash-lite"  # For sufficiency, gourndedness, and compliance audits
-model_C="gemini-3.5-flash-lite"  # For triage, decomposition, and journey planning
+model_A="deepseek-flash"  # For response generation
+model_B="deepseek-flash"  # For sufficiency, gourndedness, and compliance audits
+model_C="deepseek-flash"  # For triage, decomposition, and journey planning
+# Previous (free-tier Gemini): "gemini-3.5-flash-lite" for all three.
 MODEL_A_GENERATOR = model_A       # Groq: Conversational Engine
 MODEL_B_AUDITOR = model_B            # Google: Safety & Sufficiency Judge
 MODEL_C_PLANNER = model_C            # Google: Resolution Planner & Tool Calling Generator

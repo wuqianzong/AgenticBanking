@@ -50,7 +50,7 @@ second time).
 | BUG-029 | Internal tool-routing/reasoning text leaked verbatim into a customer-facing clarification question | Medium | Confirmed (1 historical case, root cause shared with BUG-028) | **Deterministic code** (same net gap as BUG-028 -- the leaked text was the omitted obligation's own internal routing note, never meant to reach the customer) | **Fixed, live-verified** |
 | BUG-030 | No coherent handling for sustained upstream model unavailability -- triage silently discards the customer's message as generic small talk, and a single turn's latency can compound into minutes | Medium–High | Confirmed (2 independent symptoms, live-traced; historical latency trend across 12 greeting turns) | **Deterministic code** (no turn/node-level policy for sustained, as opposed to transient, model unavailability) | **Open, explicitly not being treated now** |
 | BUG-031 | Spanish `chat.footer` (the persistent AI-disclosure footer) is an untranslated copy of the English string | Low | Confirmed (static check of `frontend/src/translations.js`) | **Deterministic code (missing translation)** | **Fixed** |
-| BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | **Known leak site removed; reset hardening open** |
+| BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | **Fixed** |
 | BUG-033 | Triage decomposed by sentence, not by need, splitting one request into overlapping subqueries (a topic lead-in became its own subquery) | Medium–High | Confirmed (opposite decompositions of the same message across runs) | LLM judgment (prompt defined components by text, not need) | **Fixed, live-verified (triage node)** |
 | BUG-034 | Two outbound-audit rules conflict on whether a personal-data token is permitted evidence (a correct balance sentence rejected 3x) | Medium | Confirmed (1 live trace; intermittent) | LLM judgment (conflicting prompt rules) | Open |
 | BUG-035 | The deterministic no-info statement repeats the customer's entire request back verbatim | Low–Medium | Confirmed (live) | **Deterministic code** (template) | Open |
@@ -1904,7 +1904,7 @@ untranslated strings, and no English keys missing from Spanish.
 
 ## BUG-032 — One node_05 veto permanently pollutes every later turn's audit feedback, process-wide
 
-**Severity:** High **Confidence:** Confirmed (reproduced in-process; 171 sessions affected in the multi-turn corpus) **Status: Known leak site removed (2026-09-24); structural hardening of the reset still open**
+**Severity:** High **Confidence:** Confirmed (reproduced in-process; 171 sessions affected in the multi-turn corpus) **Status: Fixed (2026-09-24) -- leak site removed and the reset itself hardened**
 **Found in:** 2026-09-24, while measuring node_05's veto rate for the gate-relocation design
 
 **What happens:** `node_05_outbound_deterministic_gate`, on a veto, does
@@ -1954,6 +1954,15 @@ failing join leaves `VOLATILE_STATE_RESET["draft_feedback_history"]`
 untouched. Still open: the reset itself shares one list object per key, so
 any future in-place mutation elsewhere would reintroduce this; building
 fresh lists in the reset would remove the trap for good.
+
+**Reset hardened (2026-09-24):** all six per-turn reset sites now spread
+`_fresh_volatile_state_reset()` -- a deep copy of `VOLATILE_STATE_RESET` --
+instead of the module-level dict itself, so every turn gets its own
+list/dict objects and no future in-place mutation anywhere can leak across
+turns again. Fixture-verified: same values as before; all 29 list/dict
+values are distinct objects per turn; mutating one turn's reset leaves the
+next turn and the module dict untouched, including through a real reset
+site (node_01).
 
 ## BUG-033 — Triage decomposed by sentence, not by need, splitting one request into overlapping subqueries
 

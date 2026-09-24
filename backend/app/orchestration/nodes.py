@@ -1,3 +1,4 @@
+import copy
 import json
 import re
 import secrets
@@ -83,6 +84,19 @@ VOLATILE_STATE_RESET = {
     "low_confidence_mode": False,
     "live_task_confidence": None,
 }
+
+
+def _fresh_volatile_state_reset() -> dict:
+    """A per-turn copy of VOLATILE_STATE_RESET with its own list/dict objects.
+
+    Spreading the module-level dict directly (`**VOLATILE_STATE_RESET`)
+    copies only references, so every turn's reset shared the same `[]`/`{}`
+    objects -- one in-place `.append` anywhere then leaked into every later
+    turn in the process (BUG-032: a gate veto's feedback reached 171 later
+    sessions). A deep copy per turn means no code path can reintroduce that,
+    whatever it does to the lists it is handed.
+    """
+    return copy.deepcopy(VOLATILE_STATE_RESET)
 
 MAX_VERIFIED_TASK_HISTORY_TURNS = 10
 # Soft escalation (node_08): rolling window for the confidence and
@@ -1926,7 +1940,7 @@ def node_00_context_hydrator_and_greeting(state: AgentState):
         # frontend's post-INIT history sync then overwrites the just-shown
         # greeting with an empty page -- the login looks like it shows
         # nothing.
-        **VOLATILE_STATE_RESET,
+        **_fresh_volatile_state_reset(),
         "user_profile": user_profile,
         "chat_history": [AIMessage(content=greeting)],
         "history_sequence_offset": 0,
@@ -2077,7 +2091,7 @@ def node_01_deterministic_ingest_gate(state: AgentState):
         print("   🤝 [ESCALATION]: Human-transfer confirmation accepted.")
         log_event("escalation.transfer.confirmed", confirmation_source="ui")
         return {
-            **VOLATILE_STATE_RESET,
+            **_fresh_volatile_state_reset(),
             "preflight_status": "escalation_confirmation_accepted",
             "chat_history": history,
         }
@@ -2086,7 +2100,7 @@ def node_01_deterministic_ingest_gate(state: AgentState):
     if "<script>" in user_msg.lower() or "DROP TABLE" in user_msg.upper():
         print("   🚫 [INGEST VETO]: Malicious string detected.")
         return {
-            **VOLATILE_STATE_RESET, # 🧹 Wipe state
+            **_fresh_volatile_state_reset(), # 🧹 Wipe state
             "preflight_status": "error_inbound_violation",
             "chat_history": history,
         }
@@ -2095,7 +2109,7 @@ def node_01_deterministic_ingest_gate(state: AgentState):
     if "{{" in user_msg or "}}" in user_msg:
         print("   🚫 [INGEST VETO]: Placeholder injection detected.")
         return {
-            **VOLATILE_STATE_RESET, # 🧹 Wipe state
+            **_fresh_volatile_state_reset(), # 🧹 Wipe state
             "preflight_status": "error_inbound_violation",
             "chat_history": history,
         }
@@ -2112,14 +2126,14 @@ def node_01_deterministic_ingest_gate(state: AgentState):
             match_count=len(sensitive_rule_ids),
         )
         return {
-            **VOLATILE_STATE_RESET,
+            **_fresh_volatile_state_reset(),
             "preflight_status": "error_sensitive_word",
             "chat_history": history,
         }
 
     # Pass the gate and cleanly initialize the turn
     return {
-        **VOLATILE_STATE_RESET, # 🧹 Wipe state for the new turn
+        **_fresh_volatile_state_reset(), # 🧹 Wipe state for the new turn
         "preflight_status": "pass",
         "chat_history": history,
     }

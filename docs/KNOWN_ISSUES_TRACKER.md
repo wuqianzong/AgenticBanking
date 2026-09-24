@@ -51,6 +51,7 @@ second time).
 | BUG-030 | No coherent handling for sustained upstream model unavailability -- triage silently discards the customer's message as generic small talk, and a single turn's latency can compound into minutes | Medium–High | Confirmed (2 independent symptoms, live-traced; historical latency trend across 12 greeting turns) | **Deterministic code** (no turn/node-level policy for sustained, as opposed to transient, model unavailability) | **Open, explicitly not being treated now** |
 | BUG-031 | Spanish `chat.footer` (the persistent AI-disclosure footer) is an untranslated copy of the English string | Low | Confirmed (static check of `frontend/src/translations.js`) | **Deterministic code (missing translation)** | **Fixed** |
 | BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | **Known leak site removed; reset hardening open** |
+| BUG-033 | Triage decomposed by sentence, not by need, splitting one request into overlapping subqueries (a topic lead-in became its own subquery) | Medium–High | Confirmed (opposite decompositions of the same message across runs) | LLM judgment (prompt defined components by text, not need) | **Fixed, live-verified (triage node)** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -1894,3 +1895,59 @@ failing join leaves `VOLATILE_STATE_RESET["draft_feedback_history"]`
 untouched. Still open: the reset itself shares one list object per key, so
 any future in-place mutation elsewhere would reintroduce this; building
 fresh lists in the reset would remove the trap for good.
+
+## BUG-033 — Triage decomposed by sentence, not by need, splitting one request into overlapping subqueries
+
+**Severity:** Medium–High **Confidence:** Confirmed (same message, opposite decompositions across live runs) **Status: Fixed, live-verified (triage node)**
+**Found in:** 2026-09-24 audit-merge live validation (`research/2026-09-24_audit_merge_live_validation`, case `merge_check_bug018_balance`) and a follow-up live turn
+
+**What happens:** "I need to know about my savings account. Would you
+please check my current balance?" was decomposed two different ways on two
+runs: once into two TOOL_ELIGIBLE components ("I need to know about my
+savings account." / "Please check my current balance for my savings
+account."), once into one. Every node downstream assumes each subquery is a
+*different* request, so the split case sent the lead-in sentence to FAQ
+retrieval and the balance ask to the balance API; the FAQ side then wrote
+"I don't have direct access to your current balance details..." next to the
+real balance -- the BUG-018 contradiction by another route, which BUG-018's
+per-subquery suppression cannot see because the same need sits on two
+subquery ids.
+
+**Root cause:** the triage prompt's DECOMPOSED rule defined a component by
+text, not by need ("an exhaustive partition covering every distinct part...
+every part becomes exactly one component... never silently drop a part"),
+and its vague-ask rule ("a vague but real ask is TOOL_ELIGIBLE") then
+licensed a topic-introducing lead-in to stand alone. The only counterweight
+was one short clause ("do not split a coherent topic artificially"), and
+nothing required components not to overlap.
+
+**Fix (design decided by the user: decomposition is of user needs, not
+literal sentences):** section 3 of the `node_02d` prompt now decomposes by
+distinct customer NEED. Sentences serving the same need -- a lead-in that
+introduces or frames the topic, a restatement, or an added reason, detail,
+or constraint -- are combined into that need's one component ("never drop a
+part" still holds: they merge rather than vanish). A new component starts
+only when the customer asks for something additional in its own right
+(e.g. "and also", a second, different question). Components must never
+overlap. A vague sentence stands alone only when nothing else in the turn
+states the same need more specifically. Greetings/thanks stay their own
+NON_FINANCIAL component. Three worked examples (one need across two
+sentences x2, two needs).
+
+**Verified live (triage node called directly, 2026-09-24):** the target
+message produced exactly one component on 4 of 4 valid runs ("Check the
+current balance of my savings account."; one further run hit a Gemini 503
+and fell into BUG-030's fallback -- not a decomposition result, re-run).
+Two phrasings that are not prompt examples also merged correctly ("I have a
+question about my card. Can you tell me how to freeze it?" -> one; "I'm
+travelling to Japan next week. Will my debit card work there?" -> one).
+Regression cases kept their real splits: "Tell me about my savings account,
+and also what's my balance?" -> two; the real 4-part turn (address /
+balance / apply / lost card) -> four; "Thanks, what's my balance?" -> one
+need + one NON_FINANCIAL; "I have a question about my loan." alone -> one.
+Noted, not a defect of this change: the travel case kept "Japan" but dropped
+"next week" from its component text.
+
+**Still recommended as a failsafe (user's stated plan):** a turn-level
+guard against internal contradiction, since triage is LLM judgment and a
+prompt rule reduces but cannot guarantee correct decomposition.

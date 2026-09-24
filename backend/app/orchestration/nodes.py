@@ -2267,10 +2267,13 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
        explicit request or contextual confirmation to transfer to a human
        agent or manager, return ESCALATION with no components.
     3. DECOMPOSED — Only if compliant and not escalation: decompose the
-       resolved TRUE REQUEST into one or more standalone components -- an
-       exhaustive partition covering every distinct part of it. Never
-       silently drop a part; every part of the resolved TRUE REQUEST
-       becomes exactly one component, tagged with its own `resolution`:
+       resolved TRUE REQUEST by the customer's distinct NEEDS, not by its
+       sentences -- one standalone component per distinct need, together
+       covering everything the customer asked. Never silently drop a part:
+       every part of the resolved TRUE REQUEST belongs to exactly one
+       component, but several sentences that serve the same need belong to
+       that one component together (see NEED-BASED DECOMPOSITION below).
+       Each component is tagged with its own `resolution`:
 
        - TOOL_ELIGIBLE: the component names or clearly implies an
          actionable banking need -- including one that is vague,
@@ -2278,7 +2281,11 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
          unspecified earlier question, or a request whose exact target
          isn't yet clear). Any real ask belongs here no matter how unclear
          its specifics are; resolving what it specifically means is a
-         downstream node's job, never yours. A continuation of a preceding
+         downstream node's job, never yours. A vague sentence stands as its
+         own component only when nothing else in this turn states the same
+         need more specifically -- when another sentence does, the vague one
+         is part of that component (see NEED-BASED DECOMPOSITION below),
+         not a component of its own. A continuation of a preceding
          financial request remains TOOL_ELIGIBLE even when the latest
          wording supplies only its reason, preference, or correction.
          IMPORTANT LANGUAGE RULE: translate a TOOL_ELIGIBLE component's
@@ -2314,10 +2321,32 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
 
        For a TOOL_ELIGIBLE component, your job is faithful decomposition and
        noise reduction -- nothing more:
-       - A component is one independently answerable banking topic; do not
-         split a coherent topic artificially and do not impose a numerical
-         cap.
-       - Express it as a self-contained statement of that part of the TRUE
+       - NEED-BASED DECOMPOSITION: a component is one distinct customer
+         NEED -- one thing the customer wants done or answered -- never one
+         sentence. Several sentences often serve the same need: one that
+         introduces or frames the topic ("I have a question about my
+         card.", "I need to know about my savings account."), one that
+         restates it, or one that adds its reason, detail, or constraint.
+         All of these belong to the same component as the sentence that
+         states the need, combined into one self-contained
+         `customer_component`. Start a new component only when the customer
+         asks for something additional in its own right -- often marked by
+         "and also", "another thing", or a second, different question.
+         Components must never overlap: no two components may ask for the
+         same thing, and no component may restate or contain another.
+         Tone-only content (a greeting, thanks) is not part of any need --
+         it stays its own NON_FINANCIAL component, as above. Do not impose
+         a numerical cap. For example:
+         * "I need to know about my savings account. Would you please check
+           my current balance?" is ONE need -> one component: "Check the
+           current balance of my savings account."
+         * "My card was stolen yesterday at the mall. I need to block it
+           right away." is ONE need -> one component: "Block my card, which
+           was stolen yesterday."
+         * "What's my current balance? Also, how do I open a new savings
+           account?" is TWO needs -> two components: "Check my current
+           balance." and "How to open a new savings account."
+       - Express it as a self-contained statement of that need from the TRUE
          REQUEST in `customer_component`. "Resolving" it means exactly two
          things, both mechanical, neither interpretive: (a) replace a
          pronoun, ellipsis, or vague reference with what it actually refers

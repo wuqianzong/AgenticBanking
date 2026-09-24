@@ -50,7 +50,7 @@ second time).
 | BUG-029 | Internal tool-routing/reasoning text leaked verbatim into a customer-facing clarification question | Medium | Confirmed (1 historical case, root cause shared with BUG-028) | **Deterministic code** (same net gap as BUG-028 -- the leaked text was the omitted obligation's own internal routing note, never meant to reach the customer) | **Fixed, live-verified** |
 | BUG-030 | No coherent handling for sustained upstream model unavailability -- triage silently discards the customer's message as generic small talk, and a single turn's latency can compound into minutes | Medium–High | Confirmed (2 independent symptoms, live-traced; historical latency trend across 12 greeting turns) | **Deterministic code** (no turn/node-level policy for sustained, as opposed to transient, model unavailability) | **Open, explicitly not being treated now** |
 | BUG-031 | Spanish `chat.footer` (the persistent AI-disclosure footer) is an untranslated copy of the English string | Low | Confirmed (static check of `frontend/src/translations.js`) | **Deterministic code (missing translation)** | **Fixed** |
-| BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | Open |
+| BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | **Known leak site removed; reset hardening open** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -1844,7 +1844,7 @@ untranslated strings, and no English keys missing from Spanish.
 
 ## BUG-032 — One node_05 veto permanently pollutes every later turn's audit feedback, process-wide
 
-**Severity:** High **Confidence:** Confirmed (reproduced in-process; 171 sessions affected in the multi-turn corpus) **Status: Open -- documented, fix not yet decided**
+**Severity:** High **Confidence:** Confirmed (reproduced in-process; 171 sessions affected in the multi-turn corpus) **Status: Known leak site removed (2026-09-24); structural hardening of the reset still open**
 **Found in:** 2026-09-24, while measuring node_05's veto rate for the gate-relocation design
 
 **What happens:** `node_05_outbound_deterministic_gate`, on a veto, does
@@ -1881,3 +1881,16 @@ contrasting safe idiom already exists elsewhere (node_07 uses
 at this site, and/or make the per-turn reset construct fresh lists instead
 of sharing one module-level object, so no future call site can reintroduce
 it.
+
+**Update (2026-09-24): the only known leak site no longer exists.** The
+deterministic gate was folded into the audit join (user design decision:
+collect every finding -- probabilistic and deterministic -- first, then
+revise once; see "Deterministic output checks" in `nodes.py`), and
+node_05 with its in-place `history.append(...)` was removed. Its checks now
+return violation records into `task_violation_history` instead of writing
+to `draft_feedback_history` at all, and the join's other-scope path already
+copies (`list(state.get(...))`) before extending. Regression-tested: a
+failing join leaves `VOLATILE_STATE_RESET["draft_feedback_history"]`
+untouched. Still open: the reset itself shares one list object per key, so
+any future in-place mutation elsewhere would reintroduce this; building
+fresh lists in the reset would remove the trap for good.

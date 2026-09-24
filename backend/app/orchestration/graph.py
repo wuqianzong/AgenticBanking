@@ -26,7 +26,6 @@ def build_agent_graph():
     workflow.add_node("n19", nodes.node_04a_resolution_planner)
     workflow.add_node("n8", nodes.node_04b_response_generator)
     workflow.add_node("n8b", nodes.node_04c_response_reviser)
-    workflow.add_node("n20", nodes.node_05_outbound_deterministic_gate)
     workflow.add_node("n21_audit", nodes.node_06_outbound_combined_audit_gate)
     workflow.add_node("n21", nodes.node_06_outbound_audit_join)
     workflow.add_node("n22", nodes.node_07_precision_substitution)
@@ -118,15 +117,9 @@ def build_agent_graph():
         # _generate_evidence_only_response in nodes.py), whose schema has no
         # alternative field to substitute a different answer into -- so this
         # case goes through n8 like any other turn, sharing the same node_06
-        # audit. n25 (node_11) is reachable only via route_n20/route_n21's
-        # own three-failed-retries condition now.
+        # audit. n25 (node_11) is reachable only via route_n21's own
+        # three-failed-retries condition now.
         return "n8"
-
-    def route_n20(state: AgentState):
-        count = state.get("safety_retry_count", 0)
-        if state.get("preflight_status") == "pass":
-            return "n21_audit"
-        return "n8" if count < 3 else "n25"
 
     def route_n21(state: AgentState):
         count = state.get("safety_retry_count", 0)
@@ -160,7 +153,7 @@ def build_agent_graph():
     # there is nothing there for it to check. n00b is a separate, optional
     # step that only runs when n00 found a prior transcript or a pending
     # service request worth checking; n00b does its own focused audit calls
-    # inline (see node_00b_followup_check) rather than reusing n20/n21,
+    # inline (see node_00b_followup_check) rather than reusing n21_audit/n21,
     # since those are shaped around a RAG-answered turn, not a login check.
     workflow.add_conditional_edges("n00", route_n00, {"n00b": "n00b", "end": END})
     workflow.add_edge("n00b", END)
@@ -174,22 +167,18 @@ def build_agent_graph():
     workflow.add_edge("n17_rag", "n18")
     workflow.add_conditional_edges("n18", route_n18, {"n2e": "n2e", "n19": "n19"})
     workflow.add_conditional_edges("n19", route_n19, {"n14": "n14", "n8": "n8", "n5": "n5", "n25": "n25"})
-    workflow.add_edge("n8", "n20")
-    workflow.add_conditional_edges(
-        "n20",
-        route_n20,
-        {
-            "n21_audit": "n21_audit",
-            "n8": "n8",
-            "n25": "n25",
-        },
-    )
+    # Generated/revised output goes straight to the audit. The deterministic
+    # output checks (formerly their own "n20" gate BEFORE the audit, which
+    # forced a full regeneration of un-audited text on any hit) now run
+    # inside n21 alongside the audit's findings, so everything wrong with a
+    # draft is revised together in one reviser call.
+    workflow.add_edge("n8", "n21_audit")
     workflow.add_edge("n21_audit", "n21")
     workflow.add_conditional_edges("n21", route_n21, {"n22": "n22", "n8": "n8", "n8b": "n8b", "n25": "n25"})
-    # The reassembled candidate re-enters the same deterministic gate
-    # unchanged -- n20 already re-scans whatever is currently in
-    # ui_action_payload regardless of which node produced it.
-    workflow.add_edge("n8b", "n20")
+    # The reassembled candidate goes back through the same audit + join --
+    # both re-scan whatever is currently in ui_action_payload regardless of
+    # which node produced it.
+    workflow.add_edge("n8b", "n21_audit")
     workflow.add_edge("n22", "n24")
     workflow.add_edge("n24", END)
     workflow.add_edge("n23", END)

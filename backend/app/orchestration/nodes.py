@@ -7999,67 +7999,109 @@ def node_04c_response_reviser(state: AgentState) -> dict:
 
 # --- PHASE 4: OUTPUT GUARDRAILS & ESCALATION HANDLER ---
 
-def node_05_outbound_deterministic_gate(state: AgentState):
-    print("🟢 [NODE 05] Executing Outbound Deterministic Gate")
-    draft = state.get("final_draft", "")
+# Deterministic outbound checks -- formerly node_05_outbound_deterministic_
+# gate, a separate graph node that ran BEFORE the LLM audit and, on any hit,
+# forced a full node_04b regeneration of un-audited text (discarding every
+# already-approved block), after which the audit could still reject the
+# regenerated text and need another round. Now these same checks run inside
+# node_06_outbound_audit_join, alongside the audit's own findings, and are
+# expressed in the reviser's existing violation format: every problem --
+# probabilistic (audit) or deterministic (here) -- is collected first, and
+# the affected subqueries are revised together in one reviser call.
+_DETERMINISTIC_FINDING_TEXT = {
+    "invalid_placeholder": (
+        "This `{{faq_*}}` token is not a valid exact-value reference.",
+        "Write each exact value only with a `{{faq_*}}` token that appears, character for character, in this task's approved evidence; where the evidence gives no token for a value, state only what the evidence says in words.",
+    ),
+    "exposed_internal_id": (
+        "An internal FAQ record identifier appears in customer-facing text.",
+        "State the supported fact directly, with no source document, reference, or internal identifier attached to it.",
+    ),
+    "illegal_word": (
+        "A blocked internal term appears in customer-facing text.",
+        "Rewrite this content in plain customer-facing language.",
+    ),
+}
+_BLOCK_METADATA_KEYS = {"blockId", "taskId", "sourceTaskIds", "sourceShortcutHandles"}
+
+
+def _deterministic_outbound_findings(state: AgentState) -> list[dict]:
+    """The former node_05 checks, unchanged in what they detect: an invalid
+    `{{faq_*}}` placeholder (no row in Precision_Reference_Table), an
+    exposed FAQ parent id, and the ILLEGAL_WORD sentinel.
+
+    Returned as violation records in the reviser's own format (task_id,
+    unsupported_content, evidence_gap, generation_guidance), so
+    _partition_audited_response and node_04c consume them exactly like the
+    audit's. Each response block is scanned separately and a finding is
+    attributed to that block's own first sourceTaskIds entry, making just
+    that block (and every id it names) pending; a block with no task id,
+    or a hit found only outside the blocks, is task_id "" -- response-wide,
+    the same convention the audit's own violations use.
+    """
     payload = state.get("ui_action_payload", {})
-    options = payload.get("options", [])
-    step_details = payload.get("stepDetails", [])
-    list_items = payload.get("items", []) if payload.get("uiType") == "checklist" else []
-    list_title = payload.get("listTitle", "")
-    list_intro = payload.get("listIntro", "")
-    extended_text = payload.get("extendedText", "")
-    list_clarification = payload.get("listClarificationText", "")
-    response_blocks = payload.get("responseBlocks", [])
-    
-    # 1. Combine draft text AND UI options to sweep globally
-    combined_text = " ".join([draft, *_ui_option_texts(options), *step_details, *list_items, list_title, list_intro, extended_text, list_clarification, json.dumps(response_blocks, ensure_ascii=False)])
-    placeholders_in_draft = re.findall(r"\{\{(.*?)\}\}", combined_text)
-    # `{{data-*}}` tokens (WP-1/WP-3) are deliberately never rows in
-    # Precision_Reference_Table -- unlike `{{faq_*}}`, the backend never
-    # resolves them at all; the frontend does, from a per-turn value sent
-    # separately. Checking them against fetch_placeholders_from_db would
-    # always fail them as "invalid", vetoing every draft that correctly
-    # includes one. Legitimacy of a `{{data-*}}` token (does it match an
-    # entry actually offered to the generator this turn) is the
-    # groundedness audit's job, not this deterministic gate's.
-    faq_style_placeholders = [p for p in placeholders_in_draft if not p.startswith("data-")]
-    # Parent IDs identify internal FAQ records. They are allowed inside a
-    # placeholder until Node 07 substitutes its exact value, but must never
-    # appear as customer-facing citations or prose.
-    exposed_parent_ids = re.findall(r"(?<!\{)faq_[0-9a-f]{8}(?![_}])", combined_text, flags=re.IGNORECASE)
+    blocks = [block for block in payload.get("responseBlocks", []) if isinstance(block, dict)]
+    other_text = " ".join([
+        state.get("final_draft", ""),
+        *_ui_option_texts(payload.get("options", [])),
+        *payload.get("stepDetails", []),
+        *(payload.get("items", []) if payload.get("uiType") == "checklist" else []),
+        payload.get("listTitle", ""),
+        payload.get("listIntro", ""),
+        payload.get("extendedText", ""),
+        payload.get("listClarificationText", ""),
+    ])
+    block_texts = [
+        json.dumps({k: v for k, v in block.items() if k not in _BLOCK_METADATA_KEYS}, ensure_ascii=False)
+        for block in blocks
+    ]
 
-    illegal_detected = []
-    if faq_style_placeholders:
-        valid_map = fetch_placeholders_from_db(faq_style_placeholders)
-        for p in faq_style_placeholders:
-            if p not in valid_map:
-                illegal_detected.append(p)
-    
-    # 2. Trigger Safety Loop if any placeholder is invalid
-    if illegal_detected or exposed_parent_ids or "ILLEGAL_WORD" in combined_text:
-        print(f"   🚫 [HARD GATE VETO]: Invalid placeholders: {illegal_detected} | Exposed parent IDs: {exposed_parent_ids}")
-        count = state.get("safety_retry_count", 0) + 1
-        history = state.get("draft_feedback_history", [])
-        
-        history.append(f"Draft or UI payload contained invalid placeholders: {illegal_detected} or exposed internal parent IDs: {exposed_parent_ids}. Never display FAQ parent IDs; use the supported facts without citations.")
+    def _faq_placeholders(text: str) -> list:
+        # `{{data-*}}` tokens are never rows in Precision_Reference_Table --
+        # the frontend resolves them, not the backend -- so checking them
+        # here would reject every correct one. Their legitimacy is the
+        # groundedness audit's job.
+        return [p for p in re.findall(r"\{\{(.*?)\}\}", text) if not p.startswith("data-")]
 
+    candidates = sorted({p for text in [other_text, *block_texts] for p in _faq_placeholders(text)})
+    valid = fetch_placeholders_from_db(candidates) if candidates else {}
+
+    def _scan(text: str) -> dict:
         return {
-            "safety_retry_count": count,
-            "draft_feedback_history": history,
-            "preflight_status": "fail",
-            "pending_advance": False, # Enforce Atomic State
-            # This mechanical leak-veto failure isn't task-attributed, and
-            # always routes to a full node_04b regeneration (never the
-            # per-task reviser) -- reset the revision loop's own
-            # bookkeeping so that regeneration, and whatever partial-retry
-            # round follows it, starts from a clean slate.
-            "approved_response_blocks": [],
-            "pending_task_ids": [],
+            "invalid_placeholder": sorted({"{{" + p + "}}" for p in _faq_placeholders(text) if p not in valid}),
+            # Parent ids identify internal FAQ records: allowed inside a
+            # placeholder until node_07 substitutes it, never as prose.
+            "exposed_internal_id": sorted(set(re.findall(r"(?<!\{)faq_[0-9a-f]{8}(?![_}])", text, flags=re.IGNORECASE))),
+            "illegal_word": ["ILLEGAL_WORD"] if "ILLEGAL_WORD" in text else [],
         }
-        
-    print("   ✅ [HARD GATE PASS]: All placeholders in text and UI validated against DB.")
-    return {"preflight_status": "pass"}
+
+    def _finding(task_id: str, kind: str, content: list) -> dict:
+        evidence_gap, guidance = _DETERMINISTIC_FINDING_TEXT[kind]
+        return {
+            "task_id": task_id,
+            "scope": "answer",
+            "audit_layer": "deterministic",
+            "violation_type": kind,
+            "unsupported_content": content,
+            "evidence_gap": evidence_gap,
+            "generation_guidance": guidance,
+        }
+
+    findings, attributed = [], set()
+    for block, text in zip(blocks, block_texts):
+        task_ids = [t for t in (block.get("sourceTaskIds") or []) if t]
+        for kind, content in _scan(text).items():
+            if content:
+                findings.append(_finding(task_ids[0] if task_ids else "", kind, content))
+                attributed.update(content)
+    # final_draft is flattened from the blocks, so most hits here are the
+    # same ones already attributed above; only a genuinely new one (from a
+    # non-block field) becomes a response-wide finding.
+    for kind, content in _scan(other_text).items():
+        unattributed = [item for item in content if item not in attributed]
+        if unattributed:
+            findings.append(_finding("", kind, unattributed))
+    return findings
 
 
 def _outbound_response_content(state: AgentState) -> tuple[str, str, str]:
@@ -8297,13 +8339,14 @@ def _partition_audited_response(
     return approved, pending, False
 
 
-def _group_violations_by_task_id(conduct_violations: list, grounding_violations: list) -> dict:
-    """Group both audit axes' violations by task_id ("" = response-wide),
-    each tagged with its own axis -- feeds `task_violation_history`, the
-    scoped feedback node_04c_response_reviser's prompt reads instead of
-    draft_feedback_history's raw strings."""
+def _group_violations_by_task_id(conduct_violations: list, grounding_violations: list, deterministic_findings: list | None = None) -> dict:
+    """Group every axis's violations by task_id ("" = response-wide), each
+    tagged with its own axis -- the audit's two probabilistic axes (conduct,
+    grounding) and the deterministic output checks -- and feeds
+    `task_violation_history`, the scoped feedback node_04c_response_reviser's
+    prompt reads instead of draft_feedback_history's raw strings."""
     grouped: dict = {}
-    for axis, violations in (("conduct", conduct_violations), ("grounding", grounding_violations)):
+    for axis, violations in (("conduct", conduct_violations), ("grounding", grounding_violations), ("deterministic", deterministic_findings or [])):
         for violation in violations:
             task_id = str(violation.get("task_id", "")).strip()
             grouped.setdefault(task_id, []).append({**violation, "axis": axis})
@@ -9182,12 +9225,31 @@ def node_06_outbound_audit_join(state: AgentState):
     compliance_passed = bool(compliance.get("passed", False))
     groundedness_passed = bool(groundedness.get("passed", False))
 
+    # The deterministic output checks (formerly node_05's own pre-audit
+    # gate) run here, after the audit, so every problem in this draft --
+    # probabilistic or deterministic -- is collected before deciding what
+    # needs revising, and the reviser fixes all of it in one call.
+    deterministic_findings = _deterministic_outbound_findings(state)
+    log_event(
+        "outbound.deterministic.completed",
+        passed=not deterministic_findings,
+        findings=[
+            {"task_id": f["task_id"], "violation_type": f["violation_type"], "unsupported_content": f["unsupported_content"]}
+            for f in deterministic_findings
+        ],
+    )
+    if deterministic_findings:
+        print(f"   🚫 [DETERMINISTIC CHECK]: {[(f['task_id'] or '<response-wide>', f['violation_type'], f['unsupported_content']) for f in deterministic_findings]}")
+
     if audit_scope == "normal_response":
         response_blocks = state.get("ui_action_payload", {}).get("responseBlocks", [])
         conduct_violations = compliance.get("conduct_violations", [])
         grounding_violations = groundedness.get("grounding_violations", [])
+        # One partition over every finding, whichever method produced it: a
+        # block is approved only if neither the audit nor the deterministic
+        # checks flagged any task id it names.
         approved_blocks, pending_ids, response_wide = _partition_audited_response(
-            response_blocks, conduct_violations, grounding_violations
+            response_blocks, conduct_violations, [*grounding_violations, *deterministic_findings]
         )
 
         if not pending_ids and not response_wide:
@@ -9245,7 +9307,7 @@ def node_06_outbound_audit_join(state: AgentState):
             "approved_response_blocks": approved_blocks,
             "pending_task_ids": sorted(pending_ids),
             "response_wide_violation_this_round": response_wide,
-            "task_violation_history": _group_violations_by_task_id(conduct_violations, grounding_violations),
+            "task_violation_history": _group_violations_by_task_id(conduct_violations, grounding_violations, deterministic_findings),
             "safe_answer_for_fallback": safe_answer,
         }
 
@@ -9258,7 +9320,7 @@ def node_06_outbound_audit_join(state: AgentState):
         or not groundedness.get("clarification_connected", False)
         or not bool(compliance.get("clarification_compliant", False))
     )
-    if not (compliance_passed and groundedness_passed):
+    if not (compliance_passed and groundedness_passed) or deterministic_findings:
         count = state.get("safety_retry_count", 0) + 1
         if _is_pure_conversational_turn(state) and count >= 3:
             fallback = get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_retry")
@@ -9307,6 +9369,11 @@ def node_06_outbound_audit_join(state: AgentState):
                     "Groundedness recovery strategy (internal behavior constraint; never evidence or customer wording): "
                     + recovery_strategy
                 )
+        if deterministic_findings:
+            failed_feedback.append(
+                "Deterministic output check violations (internal constraints only; never evidence): "
+                + json.dumps(deterministic_findings, ensure_ascii=False)
+            )
         history = list(state.get("draft_feedback_history", []))
         history.extend(failed_feedback)
         unresolved_clarification = bool(state.get("task_resolution_instructions") or state.get("clarification_tasks") or state.get("decline_tasks") or state.get("unresolvable_search_tasks"))
@@ -9315,6 +9382,9 @@ def node_06_outbound_audit_join(state: AgentState):
             and clarification_failed
             and answer_compliant
             and answer_grounded
+            # Never keep an answer the deterministic checks just flagged as
+            # the exhaustion fallback -- it would ship that exact problem.
+            and not deterministic_findings
         )
         safe_answer = answer_text if preserve_answer and answer_text.strip() else state.get("safe_answer_for_fallback", "")
         print(f"   🚫 [OUTBOUND AUDIT VETO]: Compliance={compliance_passed} | Groundedness={groundedness_passed}")
@@ -9626,9 +9696,9 @@ def _score_subquery(subquery: dict) -> float:
 
 def _append_failed_turn_escalation_history(state: AgentState) -> list:
     """Used by node_11_deterministic_clarification_fallback ("n25"),
-    route_n20/route_n21's sole exhaustion destination after
-    MAX_SAFETY_RETRIES failed generation/audit attempts, reached directly
-    from "n20"/"n21" -- which SKIPS node_08_soft_escalation_analyzer, the
+    route_n21's sole exhaustion destination after MAX_SAFETY_RETRIES failed
+    generation/audit attempts, reached directly from "n21" -- which SKIPS
+    node_08_soft_escalation_analyzer, the
     only place turn_escalation_history normally gets an entry. Without
     this, a turn the customer experienced as a total failure (whatever
     deterministic content n25 ends up showing -- real clarification/
@@ -10136,7 +10206,7 @@ def node_10_standard_rejection(state: AgentState):
 
 def node_11_deterministic_clarification_fallback(state: AgentState):
     """Terminal safety net after three failed generation/audit retries (see
-    route_n20/route_n21 in graph.py) -- the only trigger for this node,
+    route_n21 in graph.py) -- the only trigger for this node,
     for every exhausted-retry turn, not just clarification-shaped ones:
     hard escalation (node_09/n23) is reserved for a customer's own explicit
     request for a human, never for the bot's own repeated inability to
@@ -10295,7 +10365,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
         "pending_advance": False,
     }
     # This node is now the sole destination for an exhausted-retry turn
-    # (route_n20/route_n21 never send one to n23 anymore) -- see
+    # (route_n21 never sends one to n23 anymore) -- see
     # _append_failed_turn_escalation_history for why every such turn is
     # scored 0 for the rolling confidence signal, regardless of which
     # deterministic content (real evidence or the plain apology) it ends

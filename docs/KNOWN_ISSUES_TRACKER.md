@@ -53,7 +53,7 @@ second time).
 | BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | **Fixed** |
 | BUG-033 | Triage decomposed by sentence, not by need, splitting one request into overlapping subqueries (a topic lead-in became its own subquery) | Medium–High | Confirmed (opposite decompositions of the same message across runs) | LLM judgment (prompt defined components by text, not need) | **Fixed, live-verified (triage node)** |
 | BUG-034 | Two outbound-audit rules conflict on whether a personal-data token is permitted evidence (a correct balance sentence rejected 3x) | Medium | Confirmed (1 live trace; intermittent) | LLM judgment (conflicting prompt rules) | **Fixed, live-verified (audit node)** |
-| BUG-035 | The deterministic no-info statement repeats the customer's entire request back verbatim | Low–Medium | Confirmed (live) | **Deterministic code** (template) | Open |
+| BUG-035 | The deterministic no-info statement repeats the customer's entire request back verbatim | Low–Medium | Confirmed (live) | **Deterministic code** (template) | **Fixed** |
 | BUG-036 | `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none | Low | Confirmed | **Deterministic code** (logging only) | **Fixed** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
@@ -2073,7 +2073,7 @@ had a RAG-side denial the rebuilt case omits.
 
 ## BUG-035 — The deterministic no-info statement repeats the customer's entire request back verbatim
 
-**Severity:** Low–Medium **Confidence:** Confirmed (live) **Status: Open -- documented, fix not yet decided**
+**Severity:** Low–Medium **Confidence:** Confirmed (live) **Status: Fixed (2026-09-24), fixture- and live-verified (triage)**
 **Found in:** same trace as BUG-034 (node_11 fallback)
 
 **What happens:** `_no_info_evidence_text` (`nodes.py` ~L745) builds
@@ -2088,8 +2088,34 @@ node_11's fallback. Since the BUG-033 triage fix this specific trigger
 (an overlapping lead-in subquery) no longer occurs for that message, but
 the template itself still echoes whatever `resolved_subquery` holds.
 
-**Not yet investigated:** a template that names the topic rather than
-quoting the request, and the trailing-period handling.
+**Fix (design decided by the user, 2026-09-24): name the need, and have
+triage produce it.** Triage components now carry a `need` -- a short noun
+phrase for the one distinct customer need, written to the customer, e.g.
+"the current balance of your savings account" -- declared in the
+`TriageComponent` schema *before* `customer_component` (registered in the
+Pydantic class, not only the prompt), and the need-based decomposition rule
+now tells the model to name each component's need first ("if two candidate
+components would get the same need, they are one component"), so the field
+also reinforces BUG-033's rule. The need rides on each financial subquery,
+is attached to every no-info entry where it is created (node_03c's
+`_terminal_retrieval_feedback`, node_02e's unresolvable-task entries), and
+`_no_info_evidence_text(resolved_subquery, need)` now renders "I don't
+have information available on {need}." Without a need (older state, or the
+model omitted it) the old form is kept, minus the doubled end punctuation.
+Trust is unchanged: `resolved_subquery` was already triage's own output.
+The `components` schema description, which still described the old
+"exhaustive partition" rule, was also aligned with need-based
+decomposition.
+
+**Verified:** 11 fixture checks (template with/without need, punctuation,
+marker, split, older markers without need, schema order, triage carry,
+prompt, node_11 fallback). Live, triage called directly on six messages:
+`need` populated every time and reads naturally in the template -- e.g.
+"I don't have information available on the current balance of your savings
+account.", "... on freezing your card.", "... on reporting your lost credit
+card." -- with BUG-033's decomposition intact (target -> 1, the 4-part turn
+-> 4, thanks split off). A Chinese message yields an English need, matching
+the template's (pre-existing) English-only wording.
 
 ## BUG-036 — `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none
 

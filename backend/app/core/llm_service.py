@@ -330,13 +330,20 @@ class IntentClarificationTask(BaseModel):
 
 class TriageComponent(BaseModel):
     subquery_id: str = Field(description="Stable identifier for one distinct component of the resolved TRUE REQUEST, e.g. subquery_1.")
+    # Declared before customer_component on purpose (reasoning-before-output,
+    # as elsewhere in this module): naming the one need first is what the
+    # need-based decomposition rule turns on -- sentences serving the same
+    # need share a component -- and the phrase is also reused verbatim in
+    # the deterministic no-info statement (BUG-035), so it must read
+    # naturally after "I don't have information available on".
+    need: str = Field(default="", description="Short noun phrase naming the one distinct customer need this component serves, written to the customer in the second person, in English, with no leading imperative verb and no trailing punctuation -- e.g. 'the current balance of your savings account', 'freezing your card', 'opening a new savings account', 'your thanks'. No two components may share the same need.")
     customer_component: str = Field(description="Standalone, self-contained restatement of only that component, with pronouns/ellipsis resolved using conversation context -- optimized for retrieval when resolution is TOOL_ELIGIBLE, or for composing a natural reply when resolution is NON_FINANCIAL.")
     resolution: str = Field(description="Must be exactly TOOL_ELIGIBLE (a real banking need proceeding to retrieval/tools), NON_FINANCIAL (tone-only content with no ask that could ever become a banking need -- a greeting, thanks, feeling, or wording clearly and only about something outside what this assistant addresses), or CLARIFICATION (genuinely undecidable between TOOL_ELIGIBLE and NON_FINANCIAL for this specific component -- never used merely because the component's own content is vague or ambiguous in what it's asking, which is a downstream node's job once the component is treated as TOOL_ELIGIBLE).")
     clarification: IntentClarificationTask | None = Field(default=None, description="Present only when resolution is CLARIFICATION; otherwise null.")
 
 class TriageEvaluation(BaseModel):
     triage_status: str = Field(description="Must be NON_COMPLIANT, ESCALATION, or DECOMPOSED.")
-    components: List[TriageComponent] = Field(default_factory=list, description="For DECOMPOSED only: an exhaustive partition of the resolved TRUE REQUEST into one or more standalone components, each tagged with its own resolution. Empty for NON_COMPLIANT/ESCALATION.")
+    components: List[TriageComponent] = Field(default_factory=list, description="For DECOMPOSED only: one standalone component per distinct customer NEED in the resolved TRUE REQUEST (not per sentence -- sentences serving the same need share one component; components never overlap), together covering everything the customer asked, each tagged with its own resolution. Empty for NON_COMPLIANT/ESCALATION.")
     repetitive_issue_detected: bool = Field(default=False, description="True only when the Trusted Conversation Context shows the customer repeatedly raising substantially the same underlying banking need or issue across multiple recent turns, especially if it still appears unresolved. Judge by meaning, not wording. Independent of triage_status.")
 
 # 4. 2D MATRIX QUERY FORMULATOR (Node 02e) -> NESTED SCHEMA

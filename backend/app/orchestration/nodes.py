@@ -756,15 +756,29 @@ _CLARIFICATION_SCOPE_BY_ORIGINATOR = {
 }
 
 
-def _no_info_evidence_text(resolved_subquery: str) -> str:
+def _no_info_evidence_text(resolved_subquery: str, need: str = "") -> str:
     """The deterministic statement for a search that was genuinely
     attempted but found nothing usable (see _terminal_retrieval_feedback,
     resolution_status == CLARIFICATION_REQUIRED). Never LLM-generated --
     same reasoning as decline/clarification evidence above. Phrased as a
     complete, ready-to-relay, first-person assistant statement.
+
+    BUG-035: it names the owning subquery's `need` (triage's short noun
+    phrase, e.g. "the current balance of your savings account") when one
+    exists, instead of quoting `resolved_subquery` -- which can be the
+    customer's whole message and read back as "I don't have information
+    available regarding: I need to know about my savings account. Would you
+    please check my current balance?.". Both inputs are the same triage
+    output, so this is no less deterministic than before. Without a need
+    (older state, or the model omitted it) the old form is kept, minus the
+    doubled end punctuation.
     """
-    if resolved_subquery:
-        return f"I don't have information available regarding: {resolved_subquery}."
+    need = str(need or "").strip().rstrip(" .?!")
+    if need:
+        return f"I don't have information available on {need}."
+    request = str(resolved_subquery or "").strip().rstrip(" .?!")
+    if request:
+        return f"I don't have information available regarding: {request}."
     return "I don't have information available for this specific request."
 
 
@@ -943,12 +957,14 @@ def _split_terminal_markers(
             continue
         task_id = instruction.get("task_id")
         resolved_subquery = instruction.get("resolved_subquery", "") or task_metadata.get(task_id, "")
+        need = instruction.get("need", "")
         resolution_status = instruction.get("resolution_status", "CLARIFICATION_REQUIRED")
         if resolution_status == "CLARIFICATION_REQUIRED":
             no_info_context.append({
                 "task_id": task_id,
                 "resolved_subquery": resolved_subquery,
-                "no_info_evidence": _no_info_evidence_text(resolved_subquery),
+                "need": need,
+                "no_info_evidence": _no_info_evidence_text(resolved_subquery, need),
             })
         else:
             terminal_context.append({
@@ -1152,6 +1168,7 @@ def _terminal_retrieval_feedback(
     task_id: str,
     resolved_subquery: str,
     resolution_status: str = "CLARIFICATION_REQUIRED",
+    need: str = "",
 ) -> dict:
     """Create a non-evidential marker for a terminally unresolved task.
 
@@ -1170,6 +1187,9 @@ def _terminal_retrieval_feedback(
         "type": "TERMINAL_RETRIEVAL_FEEDBACK",
         "resolved_subquery": resolved_subquery,
         "resolution_status": resolution_status,
+        # The owning triage subquery's need (BUG-035), so every consumer of
+        # this marker can name it instead of quoting resolved_subquery.
+        "need": need,
     }
 
 
@@ -2362,7 +2382,13 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
          same thing, and no component may restate or contain another.
          Tone-only content (a greeting, thanks) is not part of any need --
          it stays its own NON_FINANCIAL component, as above. Do not impose
-         a numerical cap. For example:
+         a numerical cap. Name each component's `need` FIRST, before writing
+         its `customer_component`: a short noun phrase for the one thing the
+         customer needs, written to the customer ("the current balance of
+         your savings account", "freezing your card", "opening a new savings
+         account"), in English, with no leading imperative verb and no
+         trailing punctuation. If two candidate components would get the
+         same need, they are one component. For example:
          * "I need to know about my savings account. Would you please check
            my current balance?" is ONE need -> one component: "Check the
            current balance of my savings account."
@@ -2415,7 +2441,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
        Latest User Input, is never enough on its own.
 
     Output JSON only:
-    {{"triage_status":"NON_COMPLIANT" | "ESCALATION" | "DECOMPOSED", "components":[{{"subquery_id":"subquery_1","customer_component":"...","resolution":"TOOL_ELIGIBLE" | "NON_FINANCIAL" | "CLARIFICATION","clarification":null | {{"unresolved_request":"...", "clarification_reason":"...", "clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}}}], "repetitive_issue_detected":true | false}}
+    {{"triage_status":"NON_COMPLIANT" | "ESCALATION" | "DECOMPOSED", "components":[{{"subquery_id":"subquery_1","need":"...","customer_component":"...","resolution":"TOOL_ELIGIBLE" | "NON_FINANCIAL" | "CLARIFICATION","clarification":null | {{"unresolved_request":"...", "clarification_reason":"...", "clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}}}], "repetitive_issue_detected":true | false}}
     """
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
@@ -2451,7 +2477,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
             subquery_id = str(component.get("subquery_id", "")).strip() or f"subquery_{index}"
             resolution = str(component.get("resolution", "")).strip().upper()
             if resolution == "TOOL_ELIGIBLE":
-                financial_subqueries.append({"subquery_id": subquery_id, "customer_component": customer_component})
+                financial_subqueries.append({"subquery_id": subquery_id, "customer_component": customer_component, "need": str(component.get("need", "")).strip()})
             elif resolution == "CLARIFICATION":
                 clarification_data = component.get("clarification") if isinstance(component.get("clarification"), dict) else {}
                 unresolved_request = str(clarification_data.get("unresolved_request", "")).strip()
@@ -2961,10 +2987,12 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
                     any_subquery_resolved_by_other_tool = True
                 else:
                     resolved_subquery = task.get("customer_component", "") or task.get("direct_query", "")
+                    need = str((owning_subquery or {}).get("need", "")).strip()
                     unresolvable_search_tasks.append({
                         "task_id": f"unresolvable_{task_id or 'unknown'}",
                         "resolved_subquery": resolved_subquery,
-                        "no_info_evidence": _no_info_evidence_text(resolved_subquery),
+                        "need": need,
+                        "no_info_evidence": _no_info_evidence_text(resolved_subquery, need),
                     })
     formulated_tasks = validated_tasks
 
@@ -5779,11 +5807,17 @@ def node_03c_sufficiency_auditor(state: AgentState):
         result.get("task_id") for result in current_results.values()
         if result.get("status") == "CLARIFICATION_REQUIRED" and result.get("unresolved_term")
     }
+    need_by_subquery_id = {
+        subquery.get("subquery_id"): str(subquery.get("need", "")).strip()
+        for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(subquery, dict)
+    }
     task_resolution_instructions = [
         _terminal_retrieval_feedback(
             result.get("task_id"),
             tasks_by_id.get(result.get("task_id"), {}).get("customer_component", ""),
             result.get("status", "CLARIFICATION_REQUIRED"),
+            need_by_subquery_id.get(tasks_by_id.get(result.get("task_id"), {}).get("subquery_id"), ""),
         )
         for result in current_results.values()
         if result.get("status") in {"CLARIFICATION_REQUIRED", "RELEVANT"}
@@ -10398,7 +10432,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
     for marker in state.get("task_resolution_instructions", []):
         if not isinstance(marker, dict) or marker.get("resolution_status") != "CLARIFICATION_REQUIRED":
             continue
-        text = _no_info_evidence_text(marker.get("resolved_subquery", ""))
+        text = _no_info_evidence_text(marker.get("resolved_subquery", ""), marker.get("need", ""))
         response_blocks.append({
             "blockId": f"no_info_{marker.get('task_id')}",
             "sourceTaskIds": [], "type": "text", "text": text, "options": [],
@@ -10409,7 +10443,7 @@ def node_11_deterministic_clarification_fallback(state: AgentState):
     for entry in state.get("unresolvable_search_tasks", []):
         if not isinstance(entry, dict):
             continue
-        text = str(entry.get("no_info_evidence", "")).strip() or _no_info_evidence_text(entry.get("resolved_subquery", ""))
+        text = str(entry.get("no_info_evidence", "")).strip() or _no_info_evidence_text(entry.get("resolved_subquery", ""), entry.get("need", ""))
         response_blocks.append({
             "blockId": f"unresolvable_{entry.get('task_id')}",
             "sourceTaskIds": [], "type": "text", "text": text, "options": [],

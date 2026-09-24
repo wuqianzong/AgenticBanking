@@ -55,6 +55,8 @@ second time).
 | BUG-034 | Two outbound-audit rules conflict on whether a personal-data token is permitted evidence (a correct balance sentence rejected 3x) | Medium | Confirmed (1 live trace; intermittent) | LLM judgment (conflicting prompt rules) | **Fixed, live-verified (audit node)** |
 | BUG-035 | The deterministic no-info statement repeats the customer's entire request back verbatim | Low–Medium | Confirmed (live) | **Deterministic code** (template) | **Fixed** |
 | BUG-036 | `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none | Low | Confirmed | **Deterministic code** (logging only) | **Fixed** |
+| BUG-037 | A completed redirect (deeplink/service_request) suppressed RAG evidence, leading the generator to fabricate a fact (card delivery "7 to 10" vs the real 6-7 days) | High | Confirmed (live) | **Deterministic code** (regression from BUG-018's fix: guard counted any completed tool, not only a data fetch) | **Fixed, fixture-verified** |
+| BUG-038 | An audit violation on a task no block carries approves the block holding the flagged sentence; the reviser gets nothing and the flagged text ships | High | Confirmed (live) | **Deterministic code** (partition attribution) | Open |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -2137,3 +2139,59 @@ now log only when the returned history is longer than the turn's incoming
 history, i.e. this turn actually appended a record. Fixture-verified: a
 turn that verified nothing emits no event (it previously re-logged turn 1);
 a turn that verified something logs once, with its own parents.
+
+## BUG-037 — A completed redirect (deeplink/service_request) suppressed RAG evidence, leading to a fabricated fact
+
+**Severity:** High (a materially wrong claim reached the customer) **Confidence:** Confirmed (live) **Status: Fixed (2026-09-24), fixture-verified -- regression introduced by BUG-018's fix**
+**Found in:** combined-fixes regression, case `reg_card_arrival` (`research/2026-09-24_combined_fixes_regression`)
+
+**What happens:** "When will my physical card arrive?" -> subquery_1 got a
+RAG lookup (task_1 RELEVANT, approved parents `faq_5ad80c63` and
+`faq_9d7a4b83`, both "6-7 business days") and a Manage Card deeplink, which
+completed. BUG-018's contradiction guard suppressed a RELEVANT RAG task
+whenever *any* non-RAG tool had completed on the same subquery, so the
+correct evidence was removed; the generator's only obligation was the
+shortcut, and with no evidence it invented "Horizon Bank physical cards
+typically arrive within 7 to 10 business days." The audit caught it in
+round 1 but the flagged sentence still shipped (see BUG-038).
+
+**Root cause:** BUG-018's fix treated every completed non-RAG tool as
+ground truth answering the subquery. True for an `api` data fetch (the
+answer itself); false for a redirect. Per the user: a deeplink or service
+request is resolved at subquery level -- it is what the bot can do, and it
+scores 1 in turn resolution (resolved 1 / partly resolved 0.5 /
+unresolved 0) -- but because of its redirect nature it can never suppress
+other results. Its resolution *status* is not the question; its nature is.
+
+**Fix:** the guard in `_response_evidence_manifest` now counts only a
+completed `api` attempt (`subqueries_answered_by_data_fetch`). Turn
+resolution is untouched: `_fully_covers`, `_compute_subquery_status`, and
+`_score_subquery` still treat a completed redirect as RESOLVED. The other
+consumers of "resolved by another tool" (node_02e/node_03c) only skip a
+decline or no-info statement when a redirect covers the need -- they never
+drop positive evidence, so they already fit this principle. Fixture-
+verified: RELEVANT + completed deeplink or service_request -> evidence
+kept; RELEVANT + completed api -> still suppressed (BUG-018 intact);
+deeplink-only and service_request-only subqueries still RESOLVED.
+
+## BUG-038 — An audit violation on a task no block carries approves the block holding the flagged sentence
+
+**Severity:** High (a flagged, unsupported claim can ship) **Confidence:** Confirmed (live, same trace as BUG-037) **Status: Open -- documented, fix not yet decided**
+
+**What happens:** the generator cited `['task_1', 'task_1_scope',
+'nav_1']` for one element; task_1 was not in `valid_task_ids` (its evidence
+had been suppressed, BUG-037), so the stored block kept only
+`sourceShortcutHandles: ['nav_1']` and `sourceTaskIds: []`. The audit
+flagged "...arrive within 7 to 10 business days." against `task_1`.
+`_partition_audited_response` found no block carrying `task_1`, so it
+approved every block -- including the one holding the flagged sentence --
+and added `task_1` to pending with no block behind it (the BUG-009 path).
+The reviser received `pending_block_ids: []` and had nothing to edit; audit
+round 2 then passed the same text, and it reached the customer.
+
+**Why it matters beyond BUG-037:** any violation whose `task_id` no block
+carries -- a dropped or mis-cited id, a handle cited in the task field --
+lets its flagged content ship while looking approved. Candidate directions
+(not decided): treat such a violation as response-wide (every block
+pending), and/or locate the flagged block by matching the violation's
+`unsupported_content` against block text.

@@ -13,7 +13,7 @@ from openai import OpenAI
 from google import genai
 from google.genai import types
 from google.genai.errors import ServerError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from backend.app.core.system_logger import log_event, request_context
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
@@ -618,22 +618,39 @@ class EmptyModelOutputError(Exception):
     transient failure (see _is_transient_llm_error)."""
 
 
+class SchemaValidationError(Exception):
+    """A DeepSeek reply that does not satisfy its Pydantic schema even
+    after one corrective re-ask (see _call_deepseek). Not retried further:
+    the caller's own fallback runs, as for any other failed call."""
+
+
 def _deepseek_strict_schema(schema_model: Any) -> dict:
     """Convert a Pydantic model into the JSON Schema DeepSeek's strict tool
-    calling accepts (beta): every object lists all its properties as
-    required with additionalProperties false; a single-value `const`
-    becomes a one-value `enum`; `title` and `default` are dropped (not
-    among the supported keywords). Optional fields stay `anyOf` with null,
-    so a field that may be absent is still explicitly null. $defs/$ref are
-    kept as Pydantic emits them.
+    calling accepts (beta), per live probes (2026-09-25): every object lists
+    all its properties as required with additionalProperties false; every
+    `$ref` is expanded in place and `$defs` removed (a `$ref` inside
+    `anyOf` is rejected with "missing field `type`", while the same object
+    written inline is accepted); a single-value `const` becomes a one-value
+    `enum`; `title` and `default` are dropped. Optional fields stay `anyOf`
+    with null.
+
+    The same probes showed strict mode does NOT enforce the schema on the
+    output (an out-of-enum value and an extra property both came back), so
+    it only shapes the reply -- _call_deepseek validates every reply
+    against the Pydantic model itself.
     """
     schema = copy.deepcopy(schema_model.model_json_schema())
+    definitions = schema.pop("$defs", {})
 
     def _walk(node: Any) -> Any:
         if isinstance(node, list):
             return [_walk(item) for item in node]
         if not isinstance(node, dict):
             return node
+        if "$ref" in node:
+            target = definitions[node["$ref"].split("/")[-1]]
+            extra = {k: v for k, v in node.items() if k != "$ref"}
+            return _walk({**copy.deepcopy(target), **extra})
         node = {k: _walk(v) for k, v in node.items() if k not in {"title", "default"}}
         if "const" in node:
             node["enum"] = [node.pop("const")]
@@ -646,6 +663,36 @@ def _deepseek_strict_schema(schema_model: Any) -> dict:
         return node
 
     return _walk(schema)
+
+
+def _missing_schema_fields(value: Any, schema: dict, path: str = "$") -> list[str]:
+    """Paths of fields the strict schema requires but the reply left out.
+    Pydantic validation alone accepts an omitted field that has a default,
+    and strict mode does not enforce `required` -- seen live: the tool
+    planner's reply dropped `subquery_domains`, its reasoning-first field.
+    Gemini's response_schema always returns every field, so this keeps
+    DeepSeek to the same contract -- except for nullable fields, where
+    omission and null are equivalent."""
+    if "anyOf" in schema:
+        if value is None:
+            return []
+        branch = next((b for b in schema["anyOf"] if b.get("type") == "object"), None) if isinstance(value, dict) else None
+        return _missing_schema_fields(value, branch, path) if branch else []
+    if schema.get("type") == "object" and isinstance(value, dict):
+        missing = []
+        for key, sub in schema.get("properties", {}).items():
+            if key not in value:
+                # A nullable field left out means the same as null (seen
+                # live: the tool planner omits the id fields that don't
+                # apply to a task's tool); only a non-nullable one is a gap.
+                if not any(branch.get("type") == "null" for branch in sub.get("anyOf", [])):
+                    missing.append(f"{path}.{key}")
+            else:
+                missing.extend(_missing_schema_fields(value[key], sub, f"{path}.{key}"))
+        return missing
+    if schema.get("type") == "array" and isinstance(value, list) and isinstance(schema.get("items"), dict):
+        return [m for i, item in enumerate(value) for m in _missing_schema_fields(item, schema["items"], f"{path}[{i}]")]
+    return []
 
 
 def _deepseek_user_id() -> str | None:
@@ -683,21 +730,54 @@ def _call_deepseek(prompt: str, model_id: str, active_schema: Any) -> str:
     }
     if active_schema is not None:
         client = OpenAI(api_key=deepseek_api_key, base_url=_DEEPSEEK_BETA_BASE_URL, timeout=_LLM_CALL_TIMEOUT_SECONDS, max_retries=0)
-        completion = client.chat.completions.create(
-            **common,
-            tools=[{
-                "type": "function",
-                "function": {
-                    "name": "respond",
-                    "description": "Return the complete response in exactly this structure.",
-                    "parameters": _deepseek_strict_schema(active_schema),
-                    "strict": True,
-                },
-            }],
-            tool_choice={"type": "function", "function": {"name": "respond"}},
-        )
-        message = completion.choices[0].message
-        result = message.tool_calls[0].function.arguments if message.tool_calls else ""
+        strict_schema = _deepseek_strict_schema(active_schema)
+        tools = [{
+            "type": "function",
+            "function": {
+                "name": "respond",
+                "description": "Return the complete response in exactly this structure.",
+                "parameters": strict_schema,
+                "strict": True,
+            },
+        }]
+        messages = common["messages"]
+        for correction in range(2):
+            completion = client.chat.completions.create(
+                **{**common, "messages": messages},
+                tools=tools,
+                tool_choice={"type": "function", "function": {"name": "respond"}},
+            )
+            message = completion.choices[0].message
+            result = message.tool_calls[0].function.arguments if message.tool_calls else ""
+            if not result.strip():
+                break
+            # Strict mode does not guarantee the schema (see
+            # _deepseek_strict_schema), so the Pydantic model -- the same
+            # contract Gemini's response_schema enforces -- is checked here.
+            # One corrective re-ask with the exact errors; a second failure
+            # is left to the caller's own fallback.
+            try:
+                active_schema.model_validate_json(result)
+                missing = _missing_schema_fields(json.loads(result), strict_schema)
+                problem = f"Required fields missing: {', '.join(missing)}" if missing else ""
+                logged = problem
+            except ValidationError as error:
+                problem = str(error)
+                logged = error.errors(include_url=False, include_input=False)
+            if not problem:
+                break
+            log_event(
+                "llm.schema_invalid", level="WARNING", model_id=model_id,
+                schema=getattr(active_schema, "__name__", ""), attempt=correction + 1, errors=logged,
+            )
+            if correction == 1:
+                raise SchemaValidationError(f"{model_id} reply failed {getattr(active_schema, '__name__', 'schema')} validation twice: {problem}")
+            messages = [{
+                "role": "user",
+                "content": prompt + "\n\nYOUR PREVIOUS REPLY WAS INVALID and has been discarded. "
+                "It failed these schema checks:\n" + problem + "\nReturn a complete, corrected reply "
+                "that includes every field and uses only the allowed values.",
+            }]
     else:
         client = OpenAI(api_key=deepseek_api_key, base_url=_DEEPSEEK_BASE_URL, timeout=_LLM_CALL_TIMEOUT_SECONDS, max_retries=0)
         completion = client.chat.completions.create(**common, response_format={"type": "json_object"})

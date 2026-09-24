@@ -1,5 +1,7 @@
 import concurrent.futures
 import contextvars
+import copy
+import hashlib
 import json
 import os
 import threading
@@ -7,11 +9,12 @@ import time
 from pathlib import Path
 from typing import Any, List
 from groq import Groq
+from openai import OpenAI
 from google import genai
 from google.genai import types
 from google.genai.errors import ServerError
 from pydantic import BaseModel, Field
-from backend.app.core.system_logger import log_event
+from backend.app.core.system_logger import log_event, request_context
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 #model_A="openai/gpt-oss-120b"  # For response generation
@@ -23,10 +26,35 @@ MODEL_B_AUDITOR = model_B            # Google: Safety & Sufficiency Judge
 MODEL_C_PLANNER = model_C            # Google: Resolution Planner & Tool Calling Generator
 MODEL_D_PROMPT_GUARD = "meta-llama/llama-prompt-guard-2-86m"  # Groq: Cyber Security Pre-check
 MODEL_E_TRIAGE = model_C             # Google: Journey Classifier
+# The provider is chosen by the model id alone (see _call_llm_router_impl):
+# "gemini-*" -> Google, "deepseek-*" -> DeepSeek, the prompt guard and any
+# other id -> Groq. Each role above can be pointed at any provider
+# independently, e.g. model_A="deepseek-flash".
 # --------------------------------------------
 
 groq_api_key = os.environ.get("GROQ_API_KEY")
 google_api_key = os.environ.get("GOOGLE_API_KEY")
+
+
+def _load_deepseek_api_key() -> str:
+    """DEEPSEEK_API_KEY from the environment, else the git-ignored
+    `.deepseek_api_key` file at the repo root -- never `.env`, which is
+    tracked in git."""
+    key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    if key:
+        return key
+    key_file = Path(__file__).resolve().parents[3] / ".deepseek_api_key"
+    return key_file.read_text().strip() if key_file.exists() else ""
+
+
+deepseek_api_key = _load_deepseek_api_key()
+# /beta is required for strict tool calling (schema-enforced output); plain
+# JSON-mode calls use the stable endpoint.
+_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+_DEEPSEEK_BETA_BASE_URL = "https://api.deepseek.com/beta"
+# Non-thinking mode defaults to 8K output tokens; the largest structured
+# outputs (e.g. task sufficiency over many tasks) need explicit headroom.
+_DEEPSEEK_MAX_TOKENS = 16384
 
 # --- 🔁 GOOGLE API KEY POOL ---
 # Same rotation pool used by the research test harness (research/.research_api_keys),
@@ -575,8 +603,108 @@ def _is_model_unavailable_error(error: Exception) -> bool:
     meets the same overloaded model (BUG-030)."""
     if getattr(error, "code", None) == 503 or getattr(error, "status", None) == "UNAVAILABLE":
         return True
+    # DeepSeek (OpenAI SDK errors carry status_code): 503 "server busy", and
+    # 402 "Insufficient Balance" -- the paid account's equivalent of a used-up
+    # quota; nothing inside the turn can restore either.
+    if getattr(error, "status_code", None) in {402, 503}:
+        return True
     message = str(error)
-    return any(marker in message for marker in ("UNAVAILABLE", "high demand", " 503", "Service Unavailable"))
+    return any(marker in message for marker in ("UNAVAILABLE", "high demand", " 503", "Service Unavailable", "Insufficient Balance"))
+
+
+class EmptyModelOutputError(Exception):
+    """A provider returned no content -- DeepSeek documents that JSON mode
+    "has a probability of returning empty content". Retried once like any
+    transient failure (see _is_transient_llm_error)."""
+
+
+def _deepseek_strict_schema(schema_model: Any) -> dict:
+    """Convert a Pydantic model into the JSON Schema DeepSeek's strict tool
+    calling accepts (beta): every object lists all its properties as
+    required with additionalProperties false; a single-value `const`
+    becomes a one-value `enum`; `title` and `default` are dropped (not
+    among the supported keywords). Optional fields stay `anyOf` with null,
+    so a field that may be absent is still explicitly null. $defs/$ref are
+    kept as Pydantic emits them.
+    """
+    schema = copy.deepcopy(schema_model.model_json_schema())
+
+    def _walk(node: Any) -> Any:
+        if isinstance(node, list):
+            return [_walk(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        node = {k: _walk(v) for k, v in node.items() if k not in {"title", "default"}}
+        if "const" in node:
+            node["enum"] = [node.pop("const")]
+        if node.get("type") == "object" or "properties" in node:
+            properties = node.get("properties", {})
+            node["type"] = "object"
+            node["properties"] = properties
+            node["required"] = list(properties)
+            node["additionalProperties"] = False
+        return node
+
+    return _walk(schema)
+
+
+def _deepseek_user_id() -> str | None:
+    """DeepSeek's `user_id` isolates KV-cache and content-safety scope per
+    end user. A one-way hash of the session id -- never the customer id or
+    any personal data (DeepSeek's own guidance)."""
+    session_id = (request_context.get() or {}).get("session_id")
+    if not session_id:
+        return None
+    return hashlib.sha256(str(session_id).encode()).hexdigest()[:32]
+
+
+def _call_deepseek(prompt: str, model_id: str, active_schema: Any) -> str:
+    """One DeepSeek chat completion. Thinking mode is explicitly disabled
+    (it is on by default, and while on it ignores temperature -- every call
+    would reason first, slower, billed as output, and non-deterministic).
+    With a schema, output is enforced through strict tool calling: the
+    schema becomes the only function and the model is required to call it,
+    so the returned arguments are the JSON. Without one, JSON mode (every
+    such prompt already says "json", which the mode requires). The SDK's own
+    retries are disabled -- call_llm_router owns retry/timeout policy.
+    """
+    if not deepseek_api_key:
+        raise ValueError("DEEPSEEK_API_KEY is not set.")
+    extra_body = {"thinking": {"type": "disabled"}}
+    user_id = _deepseek_user_id()
+    if user_id:
+        extra_body["user_id"] = user_id
+    common = {
+        "model": model_id,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.0,
+        "max_tokens": _DEEPSEEK_MAX_TOKENS,
+        "extra_body": extra_body,
+    }
+    if active_schema is not None:
+        client = OpenAI(api_key=deepseek_api_key, base_url=_DEEPSEEK_BETA_BASE_URL, timeout=_LLM_CALL_TIMEOUT_SECONDS, max_retries=0)
+        completion = client.chat.completions.create(
+            **common,
+            tools=[{
+                "type": "function",
+                "function": {
+                    "name": "respond",
+                    "description": "Return the complete response in exactly this structure.",
+                    "parameters": _deepseek_strict_schema(active_schema),
+                    "strict": True,
+                },
+            }],
+            tool_choice={"type": "function", "function": {"name": "respond"}},
+        )
+        message = completion.choices[0].message
+        result = message.tool_calls[0].function.arguments if message.tool_calls else ""
+    else:
+        client = OpenAI(api_key=deepseek_api_key, base_url=_DEEPSEEK_BASE_URL, timeout=_LLM_CALL_TIMEOUT_SECONDS, max_retries=0)
+        completion = client.chat.completions.create(**common, response_format={"type": "json_object"})
+        result = completion.choices[0].message.content or ""
+    if not result.strip():
+        raise EmptyModelOutputError(f"{model_id} returned empty content (finish_reason={completion.choices[0].finish_reason}).")
+    return result
 
 
 def _is_transient_llm_error(error: Exception) -> bool:
@@ -590,7 +718,9 @@ def _is_transient_llm_error(error: Exception) -> bool:
     Planner) that only sees an empty result either way has no way to draw
     that distinction on its own.
     """
-    if isinstance(error, ServerError):
+    if isinstance(error, (ServerError, EmptyModelOutputError)):
+        return True
+    if getattr(error, "status_code", None) in {500, 502, 504}:
         return True
     message = str(error)
     return any(marker in message for marker in ("UNAVAILABLE", "high demand", " 503", "Service Unavailable"))
@@ -627,36 +757,38 @@ def _call_llm_router_impl(prompt: str, model_id: str = MODEL_A_GENERATOR, respon
 
     for attempt in range(1, _max_attempts + 1):
       try:
+        # 🔍 DYNAMIC SCHEMA ROUTING: read the prompt to determine which node is
+        # calling -- shared by every provider that enforces a schema (Gemini's
+        # response_schema, DeepSeek's strict tool calling).
+        active_schema = None
+        if "TASK-LEVEL SUFFICIENCY AND EVIDENCE SELECTION" in prompt:
+            active_schema = TaskSufficiencyEvaluation
+        elif "ANSWER GROUNDEDNESS V2 AUDIT" in prompt or "NON-FINANCIAL CONVERSATION GROUNDEDNESS AUDIT" in prompt:
+            active_schema = AnswerGroundednessEvaluation
+        elif "APPROVED-KNOWLEDGE SAFETY:" in prompt:
+            active_schema = SemanticEvaluation
+        elif "TRIAGE A BANKING REQUEST" in prompt or "WHOLE-TURN FINANCIAL TRIAGE" in prompt:
+            active_schema = TriageEvaluation
+        elif "Act as a Decoupled Database Search Architect" in prompt:
+            active_schema = QueryFormulation
+        elif "INCREMENTAL TOOL-CALLING PLANNER" in prompt:
+            active_schema = ToolCallingPlan
+        elif "Determine which retrieval tools are necessary" in prompt:
+            active_schema = SupervisorRouting
+        elif "MEMORY SUMMARY SECURITY VALIDATION" in prompt:
+            active_schema = MemorySummaryEvaluation
+        elif "CURRENT SESSION ESCALATION CASE SUMMARY" in prompt:
+            active_schema = EscalationCaseSummary
+
+        if response_schema_override is not None:
+            active_schema = response_schema_override
+
         # 🟡 BRANCH 1: Google Gemini Models (Bifurcation Judge & Classifiers)
         if "gemini" in model_id.lower():
             if not google_api_key:
                 raise ValueError("GOOGLE_API_KEY is not set.")
-            
-            client = genai.Client(api_key=google_api_key)
-            
-            # 🔍 DYNAMIC SCHEMA ROUTING: Read prompt to determine which Node is calling
-            active_schema = None
-            if "TASK-LEVEL SUFFICIENCY AND EVIDENCE SELECTION" in prompt:
-                active_schema = TaskSufficiencyEvaluation
-            elif "ANSWER GROUNDEDNESS V2 AUDIT" in prompt or "NON-FINANCIAL CONVERSATION GROUNDEDNESS AUDIT" in prompt:
-                active_schema = AnswerGroundednessEvaluation
-            elif "APPROVED-KNOWLEDGE SAFETY:" in prompt:
-                active_schema = SemanticEvaluation
-            elif "TRIAGE A BANKING REQUEST" in prompt or "WHOLE-TURN FINANCIAL TRIAGE" in prompt:
-                active_schema = TriageEvaluation
-            elif "Act as a Decoupled Database Search Architect" in prompt:
-                active_schema = QueryFormulation
-            elif "INCREMENTAL TOOL-CALLING PLANNER" in prompt:
-                active_schema = ToolCallingPlan
-            elif "Determine which retrieval tools are necessary" in prompt:
-                active_schema = SupervisorRouting
-            elif "MEMORY SUMMARY SECURITY VALIDATION" in prompt:
-                active_schema = MemorySummaryEvaluation
-            elif "CURRENT SESSION ESCALATION CASE SUMMARY" in prompt:
-                active_schema = EscalationCaseSummary
 
-            if response_schema_override is not None:
-                active_schema = response_schema_override
+            client = genai.Client(api_key=google_api_key)
 
             config_kwargs = {
                 "response_mime_type": "application/json",
@@ -671,6 +803,10 @@ def _call_llm_router_impl(prompt: str, model_id: str = MODEL_A_GENERATOR, respon
                 config=types.GenerateContentConfig(**config_kwargs),
             )
             result = response.text
+
+        # 🟣 BRANCH 1b: DeepSeek (paid; schema via strict tool calling)
+        elif model_id.lower().startswith("deepseek"):
+            result = _call_deepseek(prompt, model_id, active_schema)
 
         # 🟢 BRANCH 2: Groq Text Classifier Model (Prompt Guard)
         elif model_id == MODEL_D_PROMPT_GUARD:
@@ -717,7 +853,11 @@ def _call_llm_router_impl(prompt: str, model_id: str = MODEL_A_GENERATOR, respon
                 elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
             )
             raise ModelUnavailableError(str(e)) from e
-        transient = _is_transient_llm_error(e)
+        transient = _is_transient_llm_error(e) or (
+            # DeepSeek's 429 is its per-account concurrency cap -- momentary,
+            # unlike a Gemini quota -- so it gets the one retry.
+            model_id.lower().startswith("deepseek") and getattr(e, "status_code", None) == 429
+        )
         if transient and attempt < _max_attempts:
             print(f"⏳ [LLM Service Transient Error, retrying]: {e}")
             log_event(
@@ -815,7 +955,10 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_sch
                 last_error = TimeoutError(f"{current_model_id} call did not respond within {_LLM_CALL_TIMEOUT_SECONDS}s (likely a dead connection).")
                 log_event("llm.call_timeout", level="WARNING", model_id=current_model_id, timeout_seconds=_LLM_CALL_TIMEOUT_SECONDS, attempt=attempt)
             except Exception as error:
-                if _is_rate_limited_error(error) and _google_key_pool:
+                # Key rotation is a Gemini free-tier mechanism; a DeepSeek 429
+                # is its concurrency cap, handled as transient in
+                # _call_llm_router_impl.
+                if _is_rate_limited_error(error) and _google_key_pool and "gemini" in current_model_id.lower():
                     last_error = error
                     if _rotate_google_api_key(observed_index):
                         log_event("llm.key_rotated", level="WARNING", model_id=current_model_id, from_index=observed_index, attempt=attempt)

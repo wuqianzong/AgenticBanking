@@ -1412,6 +1412,14 @@ _EVIDENCE_ONLY_GENERATION_RULES = {
 # kind(s) it governs exists this turn -- an unused section (e.g.
 # CLARIFICATION RULES on a turn with no clarification) is omitted entirely,
 # not merely irrelevant filler the model has to read past.
+# Prompt-caching layout (DeepSeek bills a repeated prompt PREFIX at ~1/50
+# of the normal input price, in 64-token blocks, from the first token up to
+# the first difference). Every LLM prompt therefore puts its fixed rules
+# first and this turn's data last, separated by this one line so the model
+# knows what to expect -- identical wording in every prompt, so it never
+# breaks a cached prefix itself.
+_DATA_FOLLOWS = """THE RULES ABOVE ARE FIXED. EVERYTHING BELOW IS SPECIFIC TO THIS CALL -- its data, and any rules that apply only to this call. Apply all of them together."""
+
 # Shared by the response generator and the reviser. Added with the move to
 # DeepSeek, which -- unlike the terse Gemini flash-lite -- recited every
 # related parent in full (three card procedures and a phone number for "I
@@ -1508,7 +1516,7 @@ _CLARIFICATION_RULES_TEXT = """CLARIFICATION RULES (every clarification obligati
     `generation_content.unresolved_request` is the specific thing that's
     unclear -- compose a natural clarifying question asking specifically
     about it, in the customer's own language/tone/style, considering the
-    Customer request and conversation context above for what topic this
+    Customer request and conversation context for what topic this
     continues. There is no fixed sentence to relay here -- write your own.
     `generation_content.clarification_guesses` holds 0-3 tappable guesses at
     the likely customer intent -- these are PREDICTIONS offered to unblock
@@ -2315,11 +2323,8 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     MAS COMPLIANCE CONTEXT (screening only; never quote it):
     {REGULATORY_LICENSING_CONTEXT}
 
-    Trusted Conversation Context: {history_str}
-    User Baseline (advisory only): {user_baseline}
-    Current Graph Context: active_plan={has_active_plan}, retrieved_knowledge={has_retrieved_knowledge}
-    Recalled Prior-Session Context Is Available: {bool(recalled_context)}
-    Latest User Input: "{user_msg}"
+    The rules come first; the Trusted Conversation Context and Latest User
+    Input they refer to follow at the end.
 
     First, resolve the customer's TRUE REQUEST internally. Interpret the
     Latest User Input together with Trusted Conversation Context. A short
@@ -2511,6 +2516,14 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
 
     Output JSON only:
     {{"triage_status":"NON_COMPLIANT" | "ESCALATION" | "DECOMPOSED", "components":[{{"subquery_id":"subquery_1","need":"...","customer_component":"...","resolution":"TOOL_ELIGIBLE" | "NON_FINANCIAL" | "CLARIFICATION","clarification":null | {{"unresolved_request":"...", "clarification_reason":"...", "clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}}}], "repetitive_issue_detected":true | false}}
+
+    {_DATA_FOLLOWS}
+
+    Trusted Conversation Context: {history_str}
+    User Baseline (advisory only): {user_baseline}
+    Current Graph Context: active_plan={has_active_plan}, retrieved_knowledge={has_retrieved_knowledge}
+    Recalled Prior-Session Context Is Available: {bool(recalled_context)}
+    Latest User Input: "{user_msg}"
     """
     try:
         res = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
@@ -2734,8 +2747,8 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         """
 
     prompt = f"""
-    PRE-DECOMPOSED CUSTOMER COMPONENTS (from Triage; already screened for financial relevance and compliance): {triaged_subqueries}
-    Each has `customer_component`, the retrieval-ready, context-resolved
+    TASK: Act as a Decoupled Database Search Architect.
+    Each PRE-DECOMPOSED CUSTOMER COMPONENT (given at the end, from Triage; already screened for financial relevance and compliance) has `customer_component`, the retrieval-ready, context-resolved
     wording -- use this for SEARCH tasks. For a CLARIFY component, do not
     quote `customer_component` back to the customer (it may already be
     elaborated with retrieval-oriented wording they never actually said) --
@@ -2749,13 +2762,6 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     INTENT DEFINITION GUIDELINE:
     {INTENT_GUIDELINE}
 
-    Active Context Matrix: {active_matrix}
-    Current Graph Context: active_plan={has_active_plan}, retrieved_knowledge={has_retrieved_knowledge}
-    Recalled Prior-Session Context Is Available: {bool(recalled_context)}
-    Recent Conversation: {history_str}
-    User Baseline (advisory only; do not treat it as a current request): {user_baseline}
-    Latest User Input (context only; the components above are authoritative): "{user_msg}"
-    TASK: Act as a Decoupled Database Search Architect.
 
     CRITICAL RULES FOR ANGLE QUERIES:
     - NEVER use conversational filler (e.g., "Provide a guide", "Explain how to", "What is").
@@ -2820,6 +2826,16 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
 
     Output JSON ONLY:
     {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","mapping_reason":"Customer named 'open an account' -- 'account' with no qualifier maps to the base Deposit_Account family, and 'open' is the Application intent verb in the Matrix.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"],"verification_items":[],"alternate_product_reason":"If Deposit_Account documentation doesn't cover this, opening an account is also a core Horizon_APP onboarding flow.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_7","customer_component":"I want to increase my daily transfer limit","resolution":"SEARCH","search_task":{{"task_id":"task_2","mapping_reason":"STEP A (PRODUCT): the request names no product noun at all, only the action 'transfer' and constraint 'limit' -- but daily transfer limits are configured on the customer's own deposit/current account, so PRODUCT is Deposit_Account. STEP B (INTENT): 'limit' maps to Features And Limits, and 'transfer' maps to Payments And Transfers, both valid intents under Deposit_Account.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Features And Limits","Payments And Transfers"],"verification_items":[],"alternate_product_reason":"Since transfer limits are also managed via digital banking, Horizon_APP may contain the same setting.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_8","customer_component":"How do I get a visa card?","resolution":"SEARCH","search_task":{{"task_id":"task_3","mapping_reason":"STEP A (PRODUCT): the request names a 'visa card' -- 'Visa' is a card network/brand name, not a product; the underlying product is Credit_Card. STEP B (INTENT): 'How do I get' maps to Application.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Credit_Card","target_intent":["Application"],"verification_items":["the card network is Visa"],"alternate_product_reason":"","alternate_products":[]}},"clarification":null,"decline":null}},{{"component_id":"component_9","customer_component":"my credit card is ugly, can I replace it?","resolution":"SEARCH","search_task":{{"task_id":"task_4","mapping_reason":"STEP A (PRODUCT): the request concerns the customer's own credit card, so PRODUCT is Credit_Card. STEP B (INTENT): 'replace it' maps to Card Logistics.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Credit_Card","target_intent":["Card Logistics"],"verification_items":["the card replacement procedure covers cosmetic/appearance dissatisfaction, not only damage, loss, or theft"],"alternate_product_reason":"","alternate_products":[]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"the fee","clarification_reason":"No product or service is identified.","clarification_guesses":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"loan","clarification_reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","clarification_guesses":[{{"label":"Personal Loan","message":"I'm asking about a personal loan.","reason":"Personal_Loan is the only loan-type Matrix product."}}]}},"decline":null}},{{"component_id":"component_6","customer_component":"I have a question about my loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"a question about my loan","clarification_reason":"Product (Personal_Loan) is unambiguous, but no verb, action, or outcome is given -- Application, Repayment, and Eligibility are all equally plausible intents with no basis to prefer one.","clarification_guesses":[{{"label":"Applying","message":"I want to know how to apply for a loan.","reason":"Application is a valid Matrix intent for Personal_Loan."}},{{"label":"Repayment","message":"I want to know about repaying my loan.","reason":"Repayment is a valid Matrix intent for Personal_Loan."}},{{"label":"Eligibility","message":"I want to know if I'm eligible for a loan.","reason":"Eligibility is a valid Matrix intent for Personal_Loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
+
+    {_DATA_FOLLOWS}
+
+    PRE-DECOMPOSED CUSTOMER COMPONENTS: {triaged_subqueries}
+    Active Context Matrix: {active_matrix}
+    Current Graph Context: active_plan={has_active_plan}, retrieved_knowledge={has_retrieved_knowledge}
+    Recalled Prior-Session Context Is Available: {bool(recalled_context)}
+    Recent Conversation: {history_str}
+    User Baseline (advisory only; do not treat it as a current request): {user_baseline}
+    Latest User Input (context only; the components above are authoritative): "{user_msg}"
     {retry_context}
     """
 
@@ -3526,11 +3542,6 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
           take several rounds and several model calls to converge -- the
           only tool with real cost.
 
-        Financial subqueries: {json.dumps(financial_subqueries_view, ensure_ascii=False)}
-        Subqueries with a remaining gap this round: {json.dumps(open_subquery_ids, ensure_ascii=False)}
-        Validated terminal tool results: {json.dumps(validated_attempts_view, ensure_ascii=False)}
-        Enabled tool registry: {json.dumps(capabilities, ensure_ascii=False)}
-
         TOOL DOMAINS -- reason about domain BEFORE matching a specific
         registry entry (fill in "subquery_domains" below first). Each tool
         exists for a fundamentally different PURPOSE, not just a different
@@ -3624,12 +3635,12 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
           If the customer's actual situation falls outside every candidate's stated
           scope, do not create a task for it at all.
         - CRITICAL: "customer_component" is the free-text label used only in
-          "Financial subqueries" above and in a "rag" task's own input --
+          "Financial subqueries" below and in a "rag" task's own input --
           it is never a valid input key or value for "service_request",
           "deeplink", or "api". Each of those three requires exactly one
           literal id key (service_request_id, destination_id, field_id
           respectively), and its value must be copied verbatim from that
-          tool's own registry list above -- never the customer's wording,
+          tool's own registry list below -- never the customer's wording,
           never a description, never a restated subquery. If no listed id
           genuinely fits, do not create a task for that tool at all.
         - Concrete example of this exact mistake, for a customer asking
@@ -3674,6 +3685,13 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
 
         Output JSON only:
         {{"subquery_domains":[{{"subquery_id":"...","domain_reasoning":"...","domains":["information"|"high_risk_transaction"|"personal_data_retrieval"|"service_form_submission"]}}], "tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}},"rag_role":"needed"|"complementary"|"redundant"}}], "clarifications":[{{"subquery_id":"...","unresolved_request":"...","clarification_reason":"...","clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}]}}
+
+        {_DATA_FOLLOWS}
+
+        Enabled tool registry: {json.dumps(capabilities, ensure_ascii=False)}
+        Financial subqueries: {json.dumps(financial_subqueries_view, ensure_ascii=False)}
+        Subqueries with a remaining gap this round: {json.dumps(open_subquery_ids, ensure_ascii=False)}
+        Validated terminal tool results: {json.dumps(validated_attempts_view, ensure_ascii=False)}
         """
         try:
             planner_result = _parse_json_robustly(
@@ -4798,12 +4816,9 @@ def node_03c_sufficiency_auditor(state: AgentState):
         Evaluate EACH supplied task independently for whether its supplied
         parents are response-ready: they must contain enough materially
         relevant, grounded information for the assistant to give the customer
-        a useful FAQ response.
-
-        Original User Message (advisory context only; never use it as an
-        individual task's completeness target): {state.get("user_input", "")}
-        Trusted Conversation Context: { _build_conversation_context(state) }
-        Task Inputs: {json.dumps(evaluation_inputs, ensure_ascii=False)}
+        a useful FAQ response. The rules come first; the Original User
+        Message, Trusted Conversation Context and Task Inputs they refer to
+        follow at the end.
 
         Rules:
         - Each Task Input contains `task.customer_component`: the intent
@@ -5280,6 +5295,13 @@ def node_03c_sufficiency_auditor(state: AgentState):
           connection.
 
         Output JSON only: {{"task_results": [{{"task_id": "...", "reason": "...", "status": "SUFFICIENT" | "RELEVANT" | "IRRELEVANT", "approved_parent_ids": ["..."], "generation_guidance": "", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "verification_results": [{{"item": "...", "confirmed": true, "supporting_parent_id": "..."}}], "scope_expansion_lead_reason": "", "scope_expansion_lead_parent_id": "", "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
+
+        {_DATA_FOLLOWS}
+
+        Original User Message (advisory context only; never use it as an
+        individual task's completeness target): {state.get("user_input", "")}
+        Trusted Conversation Context: { _build_conversation_context(state) }
+        Task Inputs: {json.dumps(evaluation_inputs, ensure_ascii=False)}
         """
         try:
             auditor_results.update({
@@ -6150,10 +6172,12 @@ def _run_turn_consistency_check(state: AgentState) -> dict:
       Drop only what the conflict requires -- never both sides of one
       conflict, and never an item that conflicts with nothing.
 
+    Output JSON only: {{"items":[{{"item_id":"...","reason":"...","conflicts_with":["..."],"decision":"keep" | "drop"}}]}}
+
+    {_DATA_FOLLOWS}
+
     Customer message: {json.dumps(state.get("user_input", ""), ensure_ascii=False)}
     Items: {json.dumps(view, ensure_ascii=False)}
-
-    Output JSON only: {{"items":[{{"item_id":"...","reason":"...","conflicts_with":["..."],"decision":"keep" | "drop"}}]}}
     """
     try:
         result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER, response_schema_override=TurnConsistencyEvaluation))
@@ -7180,40 +7204,6 @@ def _generate_response_blocks(state: AgentState) -> dict:
 
     {_GENERATION_BRIDGE_GUARDRAILS_UNIFIED}
 
-    Customer request: {state.get("user_input", "")}
-    Trusted conversation context (use only to understand the customer's current
-    meaning, priority, references, and conversational tone; never as factual
-    banking evidence):
-    {conversation_context}
-    User baseline (advisory communication context only; use only when clearly
-    relevant to the current request and never as factual banking evidence):
-    {user_baseline}
-    Global resolution context (internal coverage and unresolved-topic anchors
-    only; not evidence, response wording, or UI guidance):
-    {json.dumps(resolution_context, ensure_ascii=False)}
-
-    OBLIGATIONS -- everything you must address this turn. Every entry below,
-    of every kind, carries the same three fields: "id" (cite it, and only
-    it, in that element's own source_task_ids -- never write it inside
-    customer-facing text), "generation_content" (what you know), and
-    "generation_guidance" (a one-line instruction that names the exact rule
-    section governing this entry -- named sections appear further below,
-    after all the data, only for the kinds actually present this turn). Do
-    not skip any entry, and do not address the same entry more than once.
-
-    {obligations_block}
-
-    Failed outbound-audit feedback (constraints only, never evidence). Each
-    entry identifies one specific claim or instruction to remove -- it is
-    never permission to abandon the topic it came from, and it is never
-    permission to narrow your job to only the answer. Remove exactly what
-    is flagged, then follow every rule below exactly as you would on a
-    first attempt, in full -- every entry above still needs its own element
-    citing its own top-level `id`, evidence still gets composed the same
-    way, and nothing here is more important than anything else you were
-    already asked to do:
-    {json.dumps(audit_feedback, ensure_ascii=False)}
-
     {PRECISION_REFERENCE_CONTRACT}
 
     {PERSONAL_DATA_REFERENCE_CONTRACT}
@@ -7280,7 +7270,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - You may return one text element, a mix of text and UI elements, or
       several elements. There is no required opening, closing, title, number
       of elements, or element-per-task structure.
-    - Account for every entry in every OBLIGATIONS list above; never
+    - Account for every entry in every OBLIGATIONS list below; never
       silently drop an entire customer need when correcting a different one.
       Apply the applicability rule first: do not render a procedure, action,
       or UI merely to satisfy coverage when its evidence is conditional or
@@ -7301,7 +7291,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
       shortcut looks like "source_task_ids":["nav_1"], and one blending a
       task's evidence with a shortcut it substitutes for looks like
       "source_task_ids":["task_1","svc_1"]. Never leave this array empty for
-      an element that addresses an entry from any OBLIGATIONS list above.
+      an element that addresses an entry from any OBLIGATIONS list below.
     - Every factual claim, instruction, item, title, option, and detail must
       be supported by approved evidence. A response element may use evidence
       from multiple tasks only when those facts are naturally related --
@@ -7411,10 +7401,46 @@ def _generate_response_blocks(state: AgentState) -> dict:
     "What are the eligibility requirements for this loan?" not
     "Eligibility".
 
-    {rules_block}
-
     Output JSON only:
     {{"elements":[{{"type":"TEXT|LIST|PROGRESS|COMPARISON|ACCORDION|TIMELINE|CAROUSEL|ALERT","source_task_ids":["task_1","nav_1"],"context_text":"optional natural connector","answer":"grounded prose","title":"optional component title","list_title":"only for LIST","list_items":["only for LIST"],"progress_title":"only for PROGRESS","progress_steps":[{{"title":"...","detail":"..."}}],"headers":["for COMPARISON"],"rows":[{{"feature":"...","values":["..."]}}],"actions":[{{"label":"...","action":"..."}}],"sections":[{{"title":"...","content":"..."}}],"subtitle":"for TIMELINE","steps":[{{"title":"...","description":"...","status":"completed|active|pending","date":"..."}}],"items":[{{"title":"...","subtitle":"...","badge":"...","highlight":"...","details":["..."],"actionLabel":"...","actionMessage":"..."}}],"severity":"warning|security|info|success","message":"for ALERT","action":{{"label":"...","action":"..."}},"extended_text":"optional additional grounded prose","options":[{{"label":"short action","message":"complete grounded question"}}]}}],"clarification":"","next_actions":["short natural next question, grounded in unfeatured approved evidence"]}}
+
+    {_DATA_FOLLOWS}
+
+    {rules_block}
+
+    Customer request: {state.get("user_input", "")}
+    Trusted conversation context (use only to understand the customer's current
+    meaning, priority, references, and conversational tone; never as factual
+    banking evidence):
+    {conversation_context}
+    User baseline (advisory communication context only; use only when clearly
+    relevant to the current request and never as factual banking evidence):
+    {user_baseline}
+    Global resolution context (internal coverage and unresolved-topic anchors
+    only; not evidence, response wording, or UI guidance):
+    {json.dumps(resolution_context, ensure_ascii=False)}
+
+    OBLIGATIONS -- everything you must address this turn. Every entry below,
+    of every kind, carries the same three fields: "id" (cite it, and only
+    it, in that element's own source_task_ids -- never write it inside
+    customer-facing text), "generation_content" (what you know), and
+    "generation_guidance" (a one-line instruction that names the exact rule
+    section governing this entry -- named sections appear above, just
+    before this data, only for the kinds actually present this turn). Do
+    not skip any entry, and do not address the same entry more than once.
+
+    {obligations_block}
+
+    Failed outbound-audit feedback (constraints only, never evidence). Each
+    entry identifies one specific claim or instruction to remove -- it is
+    never permission to abandon the topic it came from, and it is never
+    permission to narrow your job to only the answer. Remove exactly what
+    is flagged, then follow every rule above exactly as you would on a
+    first attempt, in full -- every entry above still needs its own element
+    citing its own top-level `id`, evidence still gets composed the same
+    way, and nothing here is more important than anything else you were
+    already asked to do:
+    {json.dumps(audit_feedback, ensure_ascii=False)}
     """
     try:
         generated = _parse_json_robustly(call_groq_lpu(prompt))
@@ -8996,23 +9022,15 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         ============================================================
         AXIS 2 — EVIDENCE GROUNDEDNESS (factual axis)
         ============================================================
-        Permitted Evidence ({evidence_description}):
-        {evidence_text}
-
         {PRECISION_REFERENCE_CONTRACT}
 
         Every factual claim, instruction, figure, or suggestion in the
-        Customer-Facing Content below must be directly supported by the
-        Permitted Evidence above; nothing outside it may be used as a
-        factual source. This axis never assesses conduct, tone, or
-        regulatory compliance -- that is Axis 1 above, assessed
-        independently.
-
-        {evidence_route_specific_rules}
-
-        ============================================================
-        Customer-Facing Content (assess against BOTH axes above):
-        {content_block}
+        Customer-Facing Content must be directly supported by the Permitted
+        Evidence; nothing outside it may be used as a factual source. This
+        axis never assesses conduct, tone, or regulatory compliance -- that
+        is Axis 1 above, assessed independently. The Permitted Evidence,
+        the rules that apply to it for this call, and the Customer-Facing
+        Content are given at the end.
 
         Write each axis's own "_reason" field BEFORE its verdict field below,
         and reason it through there first -- a verdict decided first and
@@ -9031,6 +9049,18 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
 
         Output JSON only:
         {{"conduct_reason": "...", "conduct_compliant": true/false, "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "task_id": "task_1" | "", "violation": "...", "unsupported_content": ["verbatim phrase"], "generation_guidance": "..."}}]{conduct_extra_output_fields}, "evidence_reason": "...", "evidence_grounded": true/false, "evidence_violations": [{{"scope": "...", "unsupported_content": ["verbatim phrase"], "evidence_gap": "...", "generation_guidance": "..."}}]{evidence_extra_output_fields}}}
+
+        {_DATA_FOLLOWS}
+
+        Axis 2 rules for this call:
+        {evidence_route_specific_rules}
+
+        Permitted Evidence ({evidence_description}):
+        {evidence_text}
+
+        ============================================================
+        Customer-Facing Content (assess against BOTH axes):
+        {content_block}
         """
         try:
             result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
@@ -9186,7 +9216,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           product capability, policy condition, limit, date, amount,
           placeholder, instruction, option, progress step, list item,
           extended-text statement, and answer response-block field must be
-          directly supported by the Permitted Evidence above: Task-Level
+          directly supported by the Permitted Evidence below: Task-Level
           Approved Evidence, or one of the tool-derived entries listed with
           it (available shortcuts, unavailable service requests, verified
           customer-specific facts, personal data references), within exactly
@@ -9298,7 +9328,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
 
         _evidence_applicability_rule = """
         Evidence Applicability Rule (judge this yourself, directly from
-        approved_parents' own text and resolved_subquery above -- never
+        approved_parents' own text and resolved_subquery below -- never
         from any writer-side note, since nothing upstream of you here has
         itself been audited):
         - An approved parent's own stated premise, question, or
@@ -9338,7 +9368,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
           to, the customer's own stated situation -- only an actual,
           evidenced mismatch triggers it.
         - When this rule fires, set the violation's generation_guidance per
-          the Generation Guidance Shape Rule below: since the mismatch means
+          the Generation Guidance Shape Rule above: since the mismatch means
           nothing here confirms the procedure applies to the customer's
           actual stated reason, the instruction is the "nothing confirmed"
           case -- admit that plainly, phrased around the customer's own
@@ -9418,7 +9448,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         _cross_type_coverage_rule = """
         Coverage Rule: every entry among this turn's Decline Inputs,
         Clarification Inputs, No-Info Inputs, and Conversational Inputs
-        (whichever are present above) must be explicitly, faithfully
+        (whichever are present below) must be explicitly, faithfully
         represented somewhere in the response, not silently omitted --
         treat a missing entry the same as an unsupported claim for
         grounding purposes.

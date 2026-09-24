@@ -3528,160 +3528,127 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
 
         prompt = f"""
         INCREMENTAL TOOL-CALLING PLANNER
-        You must plan tool tasks to address the customer's financial subqueries.
-        For each subquery listed under "Subqueries with a remaining gap this
-        round" below, decide which registered, enabled tool(s) are
-        genuinely RELEVANT -- whose own description actually matches what
-        the customer needs -- and propose a task for each one that applies.
-        Judge relevance only; do not weigh cost yourself.
+        OVERVIEW: you decide which tools to run for the customer's banking
+        needs this turn. This prompt gives, in order: what your plan is for;
+        what each tool is for; the decision procedure; the format rules; the
+        output format. This call's data -- the enabled tool registry, the
+        customer's financial subqueries, which of them still have a gap this
+        round, and the tool results already validated -- comes at the end.
 
-        Tool cost characteristics (for the "rag_role" decision below only):
-        - "api", "deeplink", and "service_request" are each a single,
-          deterministic operation -- effectively free once dispatched.
-        - "rag" requires an internal iterative retrieval process that can
-          take several rounds and several model calls to converge -- the
-          only tool with real cost.
+        WHAT YOUR PLAN IS FOR
+        Each task you plan gathers something the customer's reply needs:
+        evidence to answer from, the customer's own data, an app screen to
+        send them to, or a form for the bank to process. A subquery you plan
+        nothing for gets nothing: the reply can then only tell the customer
+        that no information is available. You never see the FAQ's content --
+        whether the FAQ covers a need is found out by the FAQ search itself
+        and judged later by the sufficiency auditor, never by you.
 
-        TOOL DOMAINS -- reason about domain BEFORE matching a specific
-        registry entry (fill in "subquery_domains" below first). Each tool
-        exists for a fundamentally different PURPOSE, not just a different
-        keyword to pattern-match against:
-        - "information" -> "rag": the subquery's core request is asking a
-          policy, eligibility, "can I...", "is X allowed...", "what are the
-          rules/limits/requirements for...", or "how does X work" question.
-        - "high_risk_transaction" -> "deeplink": the subquery is a direct
-          request to perform, or to navigate to where the customer would
-          themselves perform, a high-risk action (money movement, security
-          changes) through the bank's own native app screens.
-        - "personal_data_retrieval" -> "api": the subquery asks for one
-          specific, verified piece of the customer's own data already on
-          file.
-        - "service_form_submission" -> "service_request": the subquery is a
-          direct request for the bank to process an intermediate- or
-          low-risk service or transaction on the customer's behalf,
-          submitted through a guided form.
-        A subquery is not always exactly one domain. In particular: a
-        stated personal REASON attached to a transaction/service request
-        (e.g. "I want to replace my card because I don't like its
-        appearance") carries an embedded INFORMATION question -- whether
-        that stated reason is actually one this bank recognizes or covers
-        -- distinct from the transaction/service need itself, even though
-        the subquery is phrased as a want rather than a literal question.
-        "Can I replace my card because I don't like its appearance?" is,
-        at its core, an information/eligibility question (note the "Can
-        I..." framing) even though replacing a card is also a real,
-        separate service action -- both domains apply.
+        WHAT EACH TOOL IS FOR (domain -> tool)
+        - "information" -> "rag" (FAQ search): the customer needs to know
+          something -- how the bank works (policies, eligibility, rules,
+          limits, fees, "can I...", "how does X work") or what they can do
+          in their situation -- whether they ask it as a question, report it
+          as a problem ("the ATM gave me the wrong amount"), or phrase it as
+          a request that no other tool below can carry out. FAQ search is
+          the default tool: any banking need that no more specific tool
+          fully covers is an information need.
+        - "personal_data_retrieval" -> "api": the customer asks for one
+          specific, verified value of their own data already on file (e.g.
+          "what's my address on file", "what's my loyalty tier") -- never a
+          general policy, procedure, or "how do I..." question.
+        - "high_risk_transaction" -> "deeplink": the customer wants to
+          perform, or be taken to where they would themselves perform, a
+          high-risk action (money movement, security changes) in the bank's
+          own app screens.
+        - "service_form_submission" -> "service_request": the customer wants
+          the bank to process an approved low- or intermediate-risk service
+          on their behalf through a guided form.
+        A subquery can contain more than one domain. A stated personal
+        REASON attached to a service or transaction ("I want to replace my
+        card because I don't like its appearance") also carries an
+        information need -- whether the bank recognises that reason -- even
+        when phrased as a want: "Can I replace my card because I don't like
+        its appearance?" is an eligibility question AND a service request;
+        both domains apply.
 
-        Rules:
-        - When you exclude a service_request or deeplink candidate
-          specifically because its own description does not cover the
-          customer's stated reason (see the description-scoping rule
-          below), or a stated reason's validity is genuinely unconfirmed by
-          any remaining candidate's description, add a "rag" task for that
-          same subquery in ADDITION to whichever transaction/service tool
-          you do select, tagged "complementary". This is what lets the
-          response honestly address the eligibility question the customer
-          actually raised, instead of silently substituting a tool that
-          never confirms whether their stated reason qualifies.
-        - Create only additive tasks. Never recreate a completed, unavailable,
-          or pending task.
-        - Every task must reference exactly one subquery_id from "Subqueries
-          with a remaining gap this round" -- never any other subquery_id.
+        DECISION PROCEDURE -- for each subquery that still has a gap:
+        1. Domains first: fill in its "subquery_domains" entry, naming every
+           domain above that the subquery contains, with your reasoning.
+        2. Specific tools (api / deeplink / service_request): for each of
+           those domains, choose the registry entry whose WHOLE description
+           covers the customer's actual situation -- match on the whole
+           description, not the nearest keyword. A description can scope out
+           specific reasons or situations: one covering card replacement
+           "for a non-fraud reason (worn or damaged)" does not cover a lost
+           or stolen card, even though both are "card replacement". If no
+           entry covers the situation, plan no task for that tool -- what
+           the customer can do instead is then an information need (step 3).
+        3. FAQ search ("rag"): plan one whenever the subquery has an
+           information need -- including every need step 2 found no tool
+           for, and a stated reason whose validity no selected tool's
+           description confirms -- unless a FAQ search for that subquery has
+           already reached a terminal state (its internal retries are not
+           your tasks). Set "rag_role":
+           * "needed" -- no other tool covers this subquery.
+           * "complementary" -- another tool also covers it, but explaining
+             the underlying policy or procedure has its own value to the
+             customer (the manual method is never made obsolete just because
+             a shortcut exists), or a stated reason's validity is still
+             unconfirmed.
+           * "redundant" -- another tool fully covers it and the FAQ would
+             only restate what that tool provides.
+           Tag honestly. The FAQ search is the only tool with real cost (it
+           can take several rounds); the orchestration, not you, decides
+           afterwards whether a "redundant" task is still worth running --
+           never weigh cost yourself.
+        4. Tie between specific tools: if two or more registered
+           capabilities are each independently plausible for the SAME
+           subquery, their outcomes for the customer are materially
+           different (e.g. self-service in the app vs. a request for staff
+           to action), and nothing in the subquery's wording lets you prefer
+           one, add a "clarifications" entry for that subquery INSTEAD of
+           tool_tasks for it (never both). This is only for a genuine tie
+           between real options -- an imperfect or missing match is handled
+           by steps 2 and 3, never by a clarification.
+           Set "unresolved_request": reasoning directly against the
+           subquery's own wording, the specific choice that is unclear
+           (e.g. "whether you want to update this yourself in the app or
+           have us submit a request for you"). Set "clarification_reason":
+           the capabilities in tension and why neither is clearly
+           preferable. Set "clarification_guesses": one per plausible
+           option, each a complete, natural sentence the customer might
+           send, grounded in that option's own registered description --
+           never inventing an outcome it does not have.
+        A subquery gets no task only when every tool that fits it has
+        already completed or reached a terminal state for it.
+
+        GENERAL RULES
+        - Plan only additive tasks: never recreate a completed, unavailable,
+          or pending task, and never plan a task merely to restate, search
+          again, or rewrite a completed result.
+        - Every task references exactly one subquery_id from "Subqueries
+          with a remaining gap this round" -- never any other.
         - Use only an enabled tool_name and one of its listed operations.
-        - Do not create a task merely to restate, search again, or rewrite a
-          completed result. Do not invent facts, customer data, or capabilities.
-        - RAG's internal retries are not outer tool tasks. Add "rag" only
-          when no RAG task for that subquery has already reached a terminal
-          state.
-        - A capability's own description can scope out specific reasons or
-          situations, not just name a general topic -- match on the whole
-          description, not the nearest keyword. For example, a capability
-          described as covering card replacement "for a non-fraud reason
-          (worn or damaged)" does not cover a lost or stolen card, even
-          though both are "card replacement" in general terms.
-        - Return no task for a subquery if no registered enabled capability
-          genuinely applies to it.
-        - For every "rag" task, include the literal key "rag_role" with
-          exactly one of these values:
-          * "needed" -- no other registered tool covers this subquery at all.
-          * "complementary" -- another tool also covers this subquery, but
-            explaining the underlying policy or procedure has independent
-            value to the customer beyond what that tool does -- the manual
-            method is never made obsolete just because a shortcut exists.
-          * "redundant" -- another tool fully covers this subquery, and
-            RAG's evidence would only restate what that tool already
-            provides, with no independent value.
-          Tag honestly -- do not mark something "needed" just to guarantee
-          it survives; the orchestration decides afterward whether a
-          "redundant" tag is still worth including, using information you
-          don't have.
-        - For tool_name "service_request", input must use the literal key
-          "service_request_id". Choose the best-fitting id from that tool's
-          available_requests in the registry. Never invent an id or include form fields.
-        - For tool_name "deeplink", input must use the literal key
-          "destination_id". Example: {{"destination_id": "card-management"}}.
-          Use deeplinks to navigate the user to specific screens in the app
-          (e.g., manage card, view statements) based on the available_destinations
-          in the registry. A deeplink will be substituted into a button for the
-          user to click.
-        - For tool_name "api", input must use the literal key "field_id".
-          Example: {{"field_id": "profile-address"}}. Choose only from the
-          available_fields listed for "api" in the registry. Use "api" only
-          when the customer is asking for one specific, personal,
-          account-linked data value of their own on file (e.g. "what's my
-          address on file", "what's my loyalty tier") -- never for a general
-          policy, procedure, or "how do I..." question, which is RAG's job.
-        - Read the full description of each registry entry before choosing one.
-          If the customer's actual situation falls outside every candidate's stated
-          scope, do not create a task for it at all.
-        - CRITICAL: "customer_component" is the free-text label used only in
-          "Financial subqueries" below and in a "rag" task's own input --
-          it is never a valid input key or value for "service_request",
-          "deeplink", or "api". Each of those three requires exactly one
-          literal id key (service_request_id, destination_id, field_id
-          respectively), and its value must be copied verbatim from that
-          tool's own registry list below -- never the customer's wording,
-          never a description, never a restated subquery. If no listed id
-          genuinely fits, do not create a task for that tool at all.
-        - Concrete example of this exact mistake, for a customer asking
-          "can I change my address?" when available_requests lists
-          {{"service_request_id": "profile-address-update", ...}}:
+          Never invent facts, customer data, or capabilities.
+
+        FORMAT RULES FOR "input"
+        - "rag": {{"customer_component": <that subquery's customer_component>}}.
+        - "service_request": {{"service_request_id": <an id from that tool's
+          available_requests>}}. Never include form fields.
+        - "deeplink": {{"destination_id": <an id from that tool's
+          available_destinations>}}, e.g. {{"destination_id": "card-management"}}.
+          A deeplink is shown to the customer as a button.
+        - "api": {{"field_id": <an id from that tool's available_fields>}},
+          e.g. {{"field_id": "profile-address"}}.
+        - CRITICAL: "customer_component" is valid only in a "rag" task's
+          input. For "service_request", "deeplink" and "api", the value must
+          be copied character for character from that tool's own registry
+          list -- never the customer's wording, a description, or a restated
+          subquery. If no listed id fits, plan no task for that tool.
           WRONG: {{"tool_name":"service_request","input":{{"customer_component":"How can I change my registered address?"}}}}
-          -- this repeats the free-text subquery instead of naming a
-          registry id, and will be rejected outright.
           RIGHT: {{"tool_name":"service_request","input":{{"service_request_id":"profile-address-update"}}}}
-          -- the value is copied character-for-character from
-          available_requests, never generated or paraphrased.
-          Apply this same right-vs-wrong distinction to "deeplink"
-          (destination_id) and "api" (field_id) tasks.
-        - TOOL-SELECTION CLARIFICATION: this is your own scope, not node_02e's
-          or the sufficiency auditor's -- you decide which registered
-          capability actually addresses each subquery, so ambiguity in THAT
-          choice is yours to raise, never ambiguity about product/intent or
-          evidence sufficiency. Add an entry to `clarifications` for a
-          subquery_id -- instead of a `tool_tasks` entry for it -- only when
-          two or more registered capabilities are each independently
-          plausible for the SAME subquery, their outcomes for the customer
-          are materially different (e.g. one is self-service in the app,
-          the other submits a request for staff to action), and nothing in
-          the subquery's own wording lets you confidently prefer one over
-          the other. Never use this merely because a candidate's fit is
-          imperfect, or because no capability matches at all -- an
-          imperfect or non-existent match still means "return no task,"
-          not a clarification; this is reserved for a genuine tie between
-          two or more real options. Never propose both a `tool_tasks` entry
-          and a `clarifications` entry for the same subquery_id in the same
-          response.
-          Set `unresolved_request`: reasoning directly against this
-          subquery's own wording, name the specific choice that's unclear
-          (e.g. "whether you want to update this yourself in the app or
-          have us submit a request for you").
-          Set `clarification_reason`: name the specific capabilities in
-          tension and why neither is clearly preferable.
-          Set `clarification_guesses`: one guess per plausible option, each
-          a complete, natural sentence the customer might actually send,
-          grounded in that option's own registered description -- never
-          inventing an outcome it doesn't actually have.
+          The same applies to "deeplink" (destination_id) and "api" (field_id).
 
         Output JSON only:
         {{"subquery_domains":[{{"subquery_id":"...","domain_reasoning":"...","domains":["information"|"high_risk_transaction"|"personal_data_retrieval"|"service_form_submission"]}}], "tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}},"rag_role":"needed"|"complementary"|"redundant"}}], "clarifications":[{{"subquery_id":"...","unresolved_request":"...","clarification_reason":"...","clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}]}}

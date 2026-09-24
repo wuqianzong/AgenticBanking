@@ -1037,7 +1037,7 @@ attribution cleanliness and were not separately checked.
 
 ## BUG-017 — A successfully fetched account balance is silently dropped when the turn also carries conversational framing
 
-**Severity:** Medium **Confidence:** Confirmed (61/619 measured across a full 249-conversation campaign, not a sample) **Status: Root-caused and fixed (2026-09-24); live-verified on the two phrasings that still failed**
+**Severity:** Medium **Confidence:** Confirmed (61/619 measured across a full 249-conversation campaign, not a sample) **Status: Fixed (2026-09-24), live-verified 4/4 on the bug's own trigger phrasings**
 **Found in:** Multi-turn SGD Banks_1/Banks_2 depth test (2026-09-10/11), full 249-conversation run
 
 **What happens:** The `account-balance` `api` field (added this campaign — see
@@ -1130,8 +1130,13 @@ live_check`), the two phrasings that failed now answer on the first attempt
 with the full generator, audit passing, no net needed: "You are very
 welcome. Your current account balance is {{data-...}}." and "I appreciate
 your help as well. Your current account balance is {{data-...}}.". The
-remaining two phrasings (which already passed before) were delayed by a
-Gemini 503 outage at the time of writing.
+other two phrasings (re-run after a Gemini 503 outage cleared) also answer
+on the first attempt: "Hello. I need to check my balance." -> "Your current
+account balance is {{data-...}}." (it previously needed the net, in the
+old third-person wording) and "Fantastic. Can you please tell me the
+balance of my savings account?" -> "Your savings account balance is
+{{data-...}}." -- 4/4 on the full generator, no retries, no net repair, no
+fallback.
 
 ## BUG-018 — Response generation falsely denies having a balance it just successfully fetched
 

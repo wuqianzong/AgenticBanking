@@ -1,7 +1,6 @@
 import concurrent.futures
 import contextvars
 import copy
-import hashlib
 import json
 import os
 import threading
@@ -14,7 +13,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import ServerError
 from pydantic import BaseModel, Field, ValidationError
-from backend.app.core.system_logger import log_event, request_context
+from backend.app.core.system_logger import log_event
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 #model_A="openai/gpt-oss-120b"  # For response generation
@@ -696,16 +695,6 @@ def _missing_schema_fields(value: Any, schema: dict, path: str = "$") -> list[st
     return []
 
 
-def _deepseek_user_id() -> str | None:
-    """DeepSeek's `user_id` isolates KV-cache and content-safety scope per
-    end user. A one-way hash of the session id -- never the customer id or
-    any personal data (DeepSeek's own guidance)."""
-    session_id = (request_context.get() or {}).get("session_id")
-    if not session_id:
-        return None
-    return hashlib.sha256(str(session_id).encode()).hexdigest()[:32]
-
-
 def _log_deepseek_usage(model_id: str, completion: Any) -> None:
     """Exact token counts DeepSeek returns with every reply, including its
     prefix-cache hits (billed at about 1/50 of a miss) -- the basis for
@@ -727,6 +716,7 @@ def _call_deepseek(prompt: str, model_id: str, active_schema: Any) -> str:
     """One DeepSeek chat completion. Thinking mode is explicitly disabled
     (it is on by default, and while on it ignores temperature -- every call
     would reason first, slower, billed as output, and non-deterministic).
+    No `user_id` is sent, so the prompt cache is shared across calls.
     With a schema, output is enforced through strict tool calling: the
     schema becomes the only function and the model is required to call it,
     so the returned arguments are the JSON. Without one, JSON mode (every
@@ -735,10 +725,13 @@ def _call_deepseek(prompt: str, model_id: str, active_schema: Any) -> str:
     """
     if not deepseek_api_key:
         raise ValueError("DEEPSEEK_API_KEY is not set.")
+    # No `user_id`: DeepSeek keeps a separate prompt cache per user_id
+    # (confirmed live -- the same prefix sent with a user_id got 0 cache
+    # hits, without one 89%), and a per-session id meant every session
+    # started cold. This is a single-user MVP, so the cache is shared by
+    # design (per the user); personal data values never reach the model
+    # anyway (placeholders).
     extra_body = {"thinking": {"type": "disabled"}}
-    user_id = _deepseek_user_id()
-    if user_id:
-        extra_body["user_id"] = user_id
     common = {
         "model": model_id,
         "messages": [{"role": "user", "content": prompt}],

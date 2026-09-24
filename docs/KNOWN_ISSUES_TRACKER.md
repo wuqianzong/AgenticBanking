@@ -52,6 +52,9 @@ second time).
 | BUG-031 | Spanish `chat.footer` (the persistent AI-disclosure footer) is an untranslated copy of the English string | Low | Confirmed (static check of `frontend/src/translations.js`) | **Deterministic code (missing translation)** | **Fixed** |
 | BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | **Known leak site removed; reset hardening open** |
 | BUG-033 | Triage decomposed by sentence, not by need, splitting one request into overlapping subqueries (a topic lead-in became its own subquery) | Medium–High | Confirmed (opposite decompositions of the same message across runs) | LLM judgment (prompt defined components by text, not need) | **Fixed, live-verified (triage node)** |
+| BUG-034 | Two outbound-audit rules conflict on whether a personal-data token is permitted evidence (a correct balance sentence rejected 3x) | Medium | Confirmed (1 live trace; intermittent) | LLM judgment (conflicting prompt rules) | Open |
+| BUG-035 | The deterministic no-info statement repeats the customer's entire request back verbatim | Low–Medium | Confirmed (live) | **Deterministic code** (template) | Open |
+| BUG-036 | `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none | Low | Confirmed | **Deterministic code** (logging only) | Open |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -2007,3 +2010,70 @@ Noted, not a defect of this change: the travel case kept "Japan" but dropped
 **Still recommended as a failsafe (user's stated plan):** a turn-level
 guard against internal contradiction, since triage is LLM judgment and a
 prompt rule reduces but cannot guarantee correct decomposition.
+
+## BUG-034 — Two outbound-audit rules conflict on whether a personal-data token is permitted evidence
+
+**Severity:** Medium **Confidence:** Confirmed (1 live trace; behavior intermittent) **Status: Open -- documented, fix not yet decided**
+**Found in:** 2026-09-24 audit-merge live validation, case `merge_check_bug018_balance` (`research/2026-09-24_audit_merge_live_validation`)
+
+**What happens:** the audit rejected a correct balance sentence ("Your
+current balance for your savings account is {{data-719ca175}}.") on three
+consecutive rounds -- "the permitted evidence (faq_24638b08)... does not
+contain the customer's current account balance" -- exhausting retries and
+forcing node_11's fallback. The audit prompt for that call did contain both
+the balance entry in `personal_data_placeholders` and the personal-data
+source rule, so this is not missing input (and not from the 2026-09-23
+Stage 3 conditional-rules change).
+
+**Likely root cause:** two rules in the same audit prompt disagree. Direct
+Factual Grounding (`nodes.py` ~L8802) says every "... placeholder ... must
+be directly supported by the Permitted Evidence (Task-Level Approved
+Evidence)" -- the parenthetical narrows permitted evidence to RAG evidence
+only -- while Source-Boundary Rules say `personal_data_placeholders`
+entries *do* permit a sentence containing that token. With conflicting
+instructions the verdict is unstable: the same kind of sentence passed on
+the first attempt in other runs (e.g. all four BUG-017 re-verification
+phrasings).
+
+**Not yet investigated:** whether aligning Direct Factual Grounding's
+wording with the full Permitted Evidence (task evidence plus the tool-
+derived sources the same prompt already lists) resolves it, and whether
+`verified_api_context` facts are affected the same way.
+
+## BUG-035 — The deterministic no-info statement repeats the customer's entire request back verbatim
+
+**Severity:** Low–Medium **Confidence:** Confirmed (live) **Status: Open -- documented, fix not yet decided**
+**Found in:** same trace as BUG-034 (node_11 fallback)
+
+**What happens:** `_no_info_evidence_text` (`nodes.py` ~L745) builds
+`f"I don't have information available regarding: {resolved_subquery}."`,
+and `resolved_subquery` can be the customer's whole message. Live, the
+customer received "I don't have information available regarding: I need to
+know about my savings account. Would you please check my current
+balance?." -- awkward, a doubled period, and (because the same turn had
+already shown the balance) self-contradictory. This text is deterministic
+(never LLM-generated) and is relayed as-is by the no-info path and by
+node_11's fallback. Since the BUG-033 triage fix this specific trigger
+(an overlapping lead-in subquery) no longer occurs for that message, but
+the template itself still echoes whatever `resolved_subquery` holds.
+
+**Not yet investigated:** a template that names the topic rather than
+quoting the request, and the trailing-period handling.
+
+## BUG-036 — `verified_session_evidence.recorded` re-logs the previous turn's record when the current turn adds none
+
+**Severity:** Low (observability only; no customer-facing effect) **Confidence:** Confirmed **Status: Open -- documented**
+**Found in:** live session `sess_ca094793-...`, 2026-09-24 (turn 2, a balance-only turn with no RAG lookup)
+
+**What happens:** turn 2 of that session ran no retrieval at all, yet the
+log showed `verified_session_evidence.recorded` with `task_1` and three FAQ
+parents and `turn_number: 1`. Not stale state: `search_tasks` and
+`task_results` are both in `VOLATILE_STATE_RESET` and reset every turn.
+`_append_verified_task_history` returns the existing history unchanged
+when the turn verified nothing, and node_06_outbound_audit_join then logs
+`verified_task_history[-1]` whenever the history is non-empty -- i.e. the
+previous turn's record, presented as if this turn had recorded it. It
+misled this session's own debugging.
+
+**Fix direction (not applied):** log only when the current turn actually
+appended a record.

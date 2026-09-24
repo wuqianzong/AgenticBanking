@@ -1344,11 +1344,13 @@ _GENERATION_GUIDANCE_BY_MODE = {
     # rest gets a neutral availability notice (formerly carried by a
     # separate terminal marker -- see _response_evidence_manifest).
     "compose_partial": (
-        "Compose a natural answer from what this covers, then give a "
-        "concise, neutral notice, in the customer's own wording, that the "
-        "available information does not cover the rest of their request. "
-        "Never add a fact, procedure, or product not present in it, and "
-        "never fill the uncovered part yourself."
+        "Compose a natural answer from what this covers of the customer's "
+        "request -- anything it offers only as related context gets its most "
+        "useful point in one or two sentences -- then give a concise, "
+        "neutral notice, in the customer's own wording, that the available "
+        "information does not cover the rest of their request. Never add a "
+        "fact, procedure, or product not present in it, and never fill the "
+        "uncovered part yourself."
     ),
     "relay": (
         "This is already the final statement. Rephrase it naturally; never "
@@ -1410,12 +1412,30 @@ _EVIDENCE_ONLY_GENERATION_RULES = {
 # kind(s) it governs exists this turn -- an unused section (e.g.
 # CLARIFICATION RULES on a turn with no clarification) is omitted entirely,
 # not merely irrelevant filler the model has to read past.
+# Shared by the response generator and the reviser. Added with the move to
+# DeepSeek, which -- unlike the terse Gemini flash-lite -- recited every
+# related parent in full (three card procedures and a phone number for "I
+# can't get my card back"): nothing in the prompt said how much of the
+# evidence to use, and several rules only pushed towards including more.
+_RESPONSE_PROPORTIONALITY_RULE = """RESPONSE LENGTH: make the reply proportionate to what the evidence
+      actually answers. Lead with what directly answers the customer, and
+      give that as fully as the customer needs -- a real multi-step
+      procedure keeps all its steps. Everything shared only as related
+      context (content that does not answer the customer's own situation,
+      e.g. from a RELEVANT or adjacent_scope entry) gets its single most
+      useful point in one or two sentences, never its full procedure or
+      every detail -- the customer can ask for more. State each fact, step,
+      contact channel, or caveat once; never repeat what the reply has
+      already said."""
+
 _EVIDENCE_RULES_TEXT = """EVIDENCE RULES: every evidence entry's `generation_content.resolution_status`
     says how completely its approved parents answer its request.
     SUFFICIENT: they answer it. RELEVANT: they connect to the request
-    without fully resolving it -- state what they do support, then give a
-    concise, neutral availability notice, in the customer's own wording,
-    for the part they don't cover. Do not ask a clarifying question about
+    without fully resolving it -- state what they do support for the
+    customer's request (anything they offer only as related context gets
+    its most useful point in one or two sentences, per RESPONSE LENGTH),
+    then give a concise, neutral availability notice, in the customer's
+    own wording, for the part they don't cover. Do not ask a clarifying question about
     that part or guess what the customer might mean; that judgment belongs
     to the sufficiency auditor. When it judged a question worthwhile, it
     is a separate Clarification Input for the same subquery, which you
@@ -1428,7 +1448,8 @@ _EVIDENCE_RULES_TEXT = """EVIDENCE RULES: every evidence entry's `generation_con
     product/intent than what the customer's own request was resolved to.
     When its resolution_status is RELEVANT, treat it as RELATED information the
     customer did not literally ask about, surfaced only because their exact
-    request wasn't documented -- never present it as a direct answer to
+    request wasn't documented -- share only its most useful point, in one
+    or two sentences (RESPONSE LENGTH) -- never present it as a direct answer to
     their request, and never blend its claims into the same sentence as an
     "in_scope" (or absent search_territory) entry's direct answer without
     making the distinction clear. That entry's own
@@ -7238,8 +7259,10 @@ def _generate_response_blocks(state: AgentState) -> dict:
       plainly, in one honest sentence, what the available information does
       not cover for the customer's specific situation; then, unlike a
       decline, still share the closest genuinely evidenced information as
-      clearly-scoped optional context (per the Applicability rule above)
-      instead of leaving the customer with nothing.
+      clearly-scoped optional context (per the Applicability rule above),
+      briefly (see RESPONSE LENGTH below), instead of leaving the customer
+      with nothing.
+    - {_RESPONSE_PROPORTIONALITY_RULE}
     - Respond as one considered conversation, not as a retrieval report or a
       sequence of task answers. Search tasks are internal evidence units, not
       required visible sections.
@@ -8258,6 +8281,8 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     {_GENERATION_CONDUCT_GUARDRAILS}
 
     {_GENERATION_BRIDGE_GUARDRAILS_UNIFIED}
+
+    {_RESPONSE_PROPORTIONALITY_RULE}
 
     Full current response, as natural-language text (READ-ONLY, for tone/
     coherence only -- never repeat or restate its content, and never treat

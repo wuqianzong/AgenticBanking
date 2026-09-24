@@ -17,9 +17,12 @@ from backend.app.core.system_logger import log_event
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 #model_A="openai/gpt-oss-120b"  # For response generation
-model_A="deepseek-flash"  # For response generation
-model_B="deepseek-flash"  # For sufficiency, gourndedness, and compliance audits
-model_C="deepseek-flash"  # For triage, decomposition, and journey planning
+# Each role's model can be overridden per process by an environment variable
+# (e.g. HORIZON_MODEL_A=gemini-3.5-flash-lite), so a validation run can use a
+# different provider than the live backend without editing this file.
+model_A=os.environ.get("HORIZON_MODEL_A", "deepseek-flash")  # For response generation
+model_B=os.environ.get("HORIZON_MODEL_B", "deepseek-flash")  # For sufficiency, gourndedness, and compliance audits
+model_C=os.environ.get("HORIZON_MODEL_C", "deepseek-flash")  # For triage, decomposition, and journey planning
 # Previous (free-tier Gemini): "gemini-3.5-flash-lite" for all three.
 MODEL_A_GENERATOR = model_A       # Groq: Conversational Engine
 MODEL_B_AUDITOR = model_B            # Google: Safety & Sufficiency Judge
@@ -909,6 +912,18 @@ def _call_llm_router_impl(prompt: str, model_id: str = MODEL_A_GENERATOR, respon
                 contents=prompt,
                 config=types.GenerateContentConfig(**config_kwargs),
             )
+            # Same llm.usage event as DeepSeek: Gemini's implicit prefix
+            # caching reports its hits as cached_content_token_count.
+            usage = getattr(response, "usage_metadata", None)
+            if usage is not None:
+                log_event(
+                    "llm.usage",
+                    model_id=model_id,
+                    prompt_tokens=getattr(usage, "prompt_token_count", None),
+                    prompt_cache_hit_tokens=getattr(usage, "cached_content_token_count", None) or 0,
+                    prompt_cache_miss_tokens=(getattr(usage, "prompt_token_count", None) or 0) - (getattr(usage, "cached_content_token_count", None) or 0),
+                    completion_tokens=getattr(usage, "candidates_token_count", None),
+                )
             result = response.text
 
         # 🟣 BRANCH 1b: DeepSeek (paid; schema via strict tool calling)

@@ -7563,13 +7563,19 @@ def _generate_response_blocks(state: AgentState) -> dict:
     {json.dumps(resolution_context, ensure_ascii=False)}
 
     OBLIGATIONS -- everything you must address this turn. Every entry below,
-    of every kind, carries the same three fields: "id" (cite it, and only
-    it, in that element's own source_task_ids -- never write it inside
-    customer-facing text), "generation_content" (what you know), and
+    of every kind, carries the same three fields: "id" (put it in the source_task_ids of every element that addresses this entry --
+    together with the ids of every other entry that same element also addresses --
+    and never write it inside customer-facing text), "generation_content" (what you know), and
     "generation_guidance" (a one-line instruction that names the exact rule
     section governing this entry -- named sections appear above, just
     before this data, only for the kinds actually present this turn). Do
     not skip any entry, and do not address the same entry more than once.
+    An element often addresses more than one entry, and then it cites all of them.
+    Two common cases: a shortcut sentence written inside an evidence element cites
+    both the task id and the shortcut id (e.g. ["task_1","nav_1"]); and two entries
+    for the same request combined in one passage -- such as a task and its
+    companion "_scope" task, or a no-info entry and the entry it bridges to -- cite
+    both (e.g. ["task_1","task_1_scope"]).
 
     {obligations_block}
 

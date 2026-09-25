@@ -59,7 +59,7 @@ second time).
 | BUG-038 | An audit violation on a task no block carries approves the block holding the flagged sentence; the reviser gets nothing and the flagged text ships | High | Confirmed (live) | **Deterministic code** (a RELEVANT task's separate "terminal marker" outlived its removed evidence; partition attribution) | **Fixed (all 3 steps), fixture-verified; live check pending (model spike)** |
 | BUG-039 | No turn-level consistency check: results collected for one turn could contradict each other in the response (e.g. "no information on your balance" next to the fetched balance) whenever the same-subquery BUG-018 guard could not see the conflict | High | Confirmed (live, triage merged the two components the guard relies on) | **Missing capability** (semantic, turn-wide conflict judgment) | **Fixed, fixture- and live-judgment-verified** |
 | BUG-040 | A RELEVANT entry's "not covered" notice contradicts another result in the same reply ("the available information does not cover how to view your current address" right after showing it from the customer's data) | Medium | Confirmed (live, Gemini validation) | **Deterministic code / prompt** (compose_partial guidance from 03fb488 does not limit the notice to what no other result covers) | **Fixed (bb5b83d + full-picture sufficiency auditor), replay- and live-verified** |
-| BUG-041 | A card (shortcut) sentence is written twice -- by the model and by the completeness net; when the audit flags the duplicate, the flag is matched to a different block, so the reviser cannot remove it and the turn exhausts its retries | Medium | Confirmed (live, 3 cases) | **Deterministic code** (net insertion + partition attribution) | Open |
+| BUG-041 | A card (shortcut) sentence is written twice -- by the model and by the completeness net; when the audit flags the duplicate, the flag is matched to a different block, so the reviser cannot remove it and the turn exhausts its retries | Medium | Confirmed (live, 3 cases) | **Deterministic code** (net insertion + partition attribution) | **Fixed: generator citation rule (V2); replay 0 misses, live-verified** |
 | BUG-042 | A clarifying question the sufficiency auditor authored in retry round 1 is dropped when round 2 returns none, so no question is asked | Medium | Confirmed (live, 1 case) | **Deterministic code** (clarification not retained across sufficiency rounds) | **Fixed (487b3dd), fixture-verified** |
 | BUG-043 | A no-info statement is suppressed whenever a redirect covers the need -- harmful when the planner picked the wrong screen ("Delete this account!" got only a Security Settings button) | Medium | Confirmed (live, 1 case) | **Design + LLM judgment** (redirect-covers-need rule; wrong deeplink choice) | Open |
 | BUG-044 | Small generation artifacts in customer text: a stray "(4)" after flattened steps, internal jargon ("no approved evidence or record"), a repeated opening sentence | Low | Confirmed (live, 3 cases) | LLM judgment / formatting | **Partly fixed (ed6e28d): pipeline jargon banned; stray "(4)" / repeated opening remain (model writing)** |
@@ -2428,7 +2428,7 @@ BUG-049's data-fetch guard is unchanged by this and remains open.
 
 ## BUG-041 — Duplicate card sentence the reviser cannot remove
 
-**Severity:** Medium **Confidence:** Confirmed (live, 3 cases) **Status: Open**
+**Severity:** Medium **Confidence:** Confirmed (live, 3 cases) **Status: Fixed (2026-09-25) -- prompt-level citation rule; replay- and live-verified**
 **Found in:** `research/2026-09-25_code_change_validation_gemini` -- `banking77_r1_0096` ("You can also use the Manage Card button
 below." twice), `val_address_change`, `mtsgd_32_00103` turn 3.
 
@@ -2439,6 +2439,31 @@ the duplicate, so the reviser was never handed it; three failed audits, then fal
 Duplicates existed before (e.g. `mtsgd_32_00011` turn 4 on 2026-09-10) but now also cause
 audit loops. Candidate directions (undecided): the net should recognise a card already
 mentioned in text; attribute a duplicate-card violation to the handle's own block.
+
+**Root cause (2026-09-25):** not the net's logic. The net treats an uncited obligation as
+omitted, and the model often wrote the content without citing it. In the live firings, 20
+of 21 misses were an element that cited one obligation but not a second one it also
+covered: a card sentence inside the evidence element (cited only `task_1`), or two entries
+for the same request (`task_1` + `task_1_scope`, or a no-info entry merged into the entry
+it bridges to). The shared OBLIGATIONS header said "id (cite it, and only it, in that
+element's own source_task_ids)", which reads as one id per element, and no rule section or
+example showed a multi-id citation. The net then appended a duplicate card sentence or a
+contradicting "Sorry, I don't have complete information..." sentence.
+
+**Fix:** the generator's OBLIGATIONS header now says to put each id in every element that
+addresses the entry, together with the other entries' ids, and names the two common cases.
+Placement was chosen by replaying the logged failing prompts (7 failure prompts, 5 controls,
+2 runs each, on the original models): baseline 7/13 runs with a missing citation; header
+rewording alone 8/14; **header + the two named cases 0/13 (controls 0/10)**; an
+end-of-prompt check also 0/14; shortcut-guidance-only fixed cards but left 2/10 control
+misses. No over-citation seen. The header sits after the data marker, so the cached prefix
+is unchanged (about 137 extra uncached tokens per call). The reviser needs no change: it
+cannot set citations (blocks keep their stored ids). **Live (Gemini):** "I was getting cash
+and can't get my card back." and "what's my address in the system, can i change it?" both
+cited the card with the task (`['task_1','nav_1']`, `['task_1','svc_1']`); the net did not
+fire. Observation, not part of this bug: in the address turn the model wrote the form
+sentence as a sixth stepper step, which the audit flagged as unsupported by the FAQ steps;
+the reviser fixed it in one round.
 
 ## BUG-042 — Clarifying question dropped between sufficiency rounds
 

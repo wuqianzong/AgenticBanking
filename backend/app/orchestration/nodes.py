@@ -63,6 +63,7 @@ VOLATILE_STATE_RESET = {
     "task_sufficiency_history": {},
     "task_partial_evidence": {},
     "task_partial_guidance": {},
+    "task_partial_clarification": {},
     "task_rejected_parent_ids": {},
     "task_cache_injected_parent_ids": {},
     "clarification_tasks": [],
@@ -4726,6 +4727,11 @@ def node_03c_sufficiency_auditor(state: AgentState):
         for task_id, text in state.get("task_partial_guidance", {}).items()
         if isinstance(text, str) and text.strip()
     }
+    partial_clarification = {
+        str(task_id): dict(entry)
+        for task_id, entry in state.get("task_partial_clarification", {}).items()
+        if isinstance(entry, dict) and str(entry.get("unresolved_term", "")).strip()
+    }
     rejected_parent_ids = {
         str(task_id): list(dict.fromkeys(parent_ids))
         for task_id, parent_ids in state.get("task_rejected_parent_ids", {}).items()
@@ -5400,6 +5406,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
             feedback.pop(task_id, None)
             partial_evidence.pop(str(task_id), None)
             partial_guidance.pop(str(task_id), None)
+            partial_clarification.pop(str(task_id), None)
             rejected_parent_ids.pop(str(task_id), None)
             continue
 
@@ -5525,6 +5532,19 @@ def node_03c_sufficiency_auditor(state: AgentState):
         # choice either way, but one in between depends on how the *whole
         # turn* is reading once every task's current-round result is known,
         # not on this task in isolation.
+        # BUG-042: a clarifying question authored in an earlier round is kept
+        # when this round returns none, like partial evidence and guidance --
+        # otherwise a widened retry that happens to write no question drops
+        # the one the auditor already judged worth asking.
+        round_clarification = {
+            "unresolved_term": str(audit.get("unresolved_term", "")).strip(),
+            "clarification_reason": str(audit.get("clarification_reason", "")).strip(),
+            "clarification_guesses": _normalize_clarification_guesses(audit.get("clarification_guesses", [])),
+        }
+        if round_clarification["unresolved_term"]:
+            partial_clarification[str(task_id)] = round_clarification
+        else:
+            round_clarification = partial_clarification.get(str(task_id), round_clarification)
         pending_decisions.append({
             "task_id": task_id,
             "attempt_count": attempt_count,
@@ -5533,15 +5553,15 @@ def node_03c_sufficiency_auditor(state: AgentState):
             "refinement": refinement,
             "requested_status": requested_status,
             "generation_guidance": effective_guidance,
-            "unresolved_term": str(audit.get("unresolved_term", "")).strip(),
+            "unresolved_term": round_clarification["unresolved_term"],
             # Distinct from `reason` above: reason explains the evidence
             # verdict generally (used for every status); clarification_reason
             # is specific to why THIS part needs clarification, required to
             # name a real detail from the user's own input/history rather
             # than restate evidence coverage -- see TaskSufficiencyItem in
             # llm_service.py.
-            "clarification_reason": str(audit.get("clarification_reason", "")).strip(),
-            "clarification_guesses": _normalize_clarification_guesses(audit.get("clarification_guesses", [])),
+            "clarification_reason": round_clarification["clarification_reason"],
+            "clarification_guesses": round_clarification["clarification_guesses"],
         })
 
     # This turn's own predicted grade: every financial subquery in the
@@ -5985,6 +6005,7 @@ def node_03c_sufficiency_auditor(state: AgentState):
         },
         "task_partial_evidence": partial_evidence,
         "task_partial_guidance": partial_guidance,
+        "task_partial_clarification": partial_clarification,
         "task_rejected_parent_ids": rejected_parent_ids,
         "task_resolution_instructions": task_resolution_instructions,
         "clarification_tasks": clarification_tasks,

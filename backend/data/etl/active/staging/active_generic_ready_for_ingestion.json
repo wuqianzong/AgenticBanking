@@ -3159,7 +3159,7 @@
     {
       "parent_id": "faq_24568045",
       "product_tags": "[\"Horizon_APP\"]",
-      "intent_families": "[\"General Inquiries\"]",
+      "intent_families": "[\"Profile Updates\", \"General Inquiries\"]",
       "content": "Question: What is the procedure for changing my personal details—address, phone number, or email—within the Horizon ecosystem?\n\nAnswer: - Updating your personal information can now be done directly through the Horizon App.\n{{faq_24568045_001}}. Sign in to the Horizon App.\n{{faq_24568045_002}}. Tap the Profile icon located at the upper‑right corner.\n{{faq_24568045_003}}. Within Profile, navigate to Settings ► Personal Details.\n{{faq_24568045_004}}. Choose the field you wish to modify (address, phone number, or email).\n{{faq_24568045_005}}. For phone number or email changes, enter the one‑time password (OTP) sent to you.\n{{faq_24568045_006}}. Provide your Horizon Key for additional verification before the update is applied.\n{{faq_24568045_007}}. After you submit, the change will be processed within {{faq_24568045_008}} hours for phone numbers and email addresses, while address updates take effect instantly."
     },
     {
@@ -22095,6 +22095,28 @@
           "ALL"
         ],
         "intent_family": "General Inquiries",
+        "chunk_type": "intact_answer"
+      }
+    },
+    {
+      "text": "Q: What is the procedure for changing my personal details—address, phone number, or email—within the Horizon ecosystem?",
+      "metadata": {
+        "parent_id": "faq_24568045",
+        "product_tag": [
+          "Horizon_APP"
+        ],
+        "intent_family": "Profile Updates",
+        "chunk_type": "question_anchor"
+      }
+    },
+    {
+      "text": "Q: What is the procedure for changing my personal details—address, phone number, or email—within the Horizon ecosystem?\nA: - Updating your personal information can now be done directly through the Horizon App.\n1. Sign in to the Horizon App.\n2. Tap the Profile icon located at the upper‑right corner.\n3. Within Profile, navigate to Settings ► Personal Details.\n4. Choose the field you wish to modify (address, phone number, or email).\n5. For phone number or email changes, enter the one‑time password (OTP) sent to you.\n6. Provide your Horizon Key for additional verification before the update is applied.\n7. After you submit, the change will be processed within 12 hours for phone numbers and email addresses, while address updates take effect instantly.",
+      "metadata": {
+        "parent_id": "faq_24568045",
+        "product_tag": [
+          "Horizon_APP"
+        ],
+        "intent_family": "Profile Updates",
         "chunk_type": "intact_answer"
       }
     },

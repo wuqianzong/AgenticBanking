@@ -8303,6 +8303,7 @@
         "question": "How do I update my personal information (address, phone number, email) with Trust?",
         "answer": "- You may now update your personal details (address, phone number, email) seamlessly via the Trust App. Step 1: Login to your Trust App Step 2: Tap on the Profile icon on the top right Step 3: Under Profile, go to Settings > Personal Details Step 4: Select the personal information that you want to change (address, phone number, email) Step 5: For phone number and email, you will need to enter the OTP Step 6: For additional verification, you will need to enter your Trust Key to update your personal information Step 7: After submission, your request will be completed in 12 hours (phone number/email) or instantly (address)",
         "intent_families": [
+            "Profile Update",
             "App Navigation",
             "General Inquiries"
         ],

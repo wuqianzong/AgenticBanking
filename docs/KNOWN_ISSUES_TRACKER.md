@@ -2674,6 +2674,13 @@ in 5/5. Retrieval: ATM card-capture FAQs 5/5, replacement-fee FAQ 5/5, lost-card
   General Inquiries included it ranks #1 on both models. **Decision: the data stays as is** --
   the design should be resilient to imperfect tags, and it is: the widened retry covers the
   FAQ's intent and selects it (4/4). Accepted cost: one extra retrieval round for this case.
+  **Follow-up (same day):** the tag was then confirmed as a mis-tag against the taxonomy's
+  own definitions (Profile Updates: "Address, phone number, and email updates"; General
+  Inquiries: "Catch-all. App navigation, UI bugs..."): the source listed the raw intents
+  `App Navigation` and `General Inquiries`, both consolidated to General Inquiries. `Profile
+  Update` was added to `faq_24568045` only (canonical source, staging: that parent plus its 2
+  new Profile Updates chunks; the SQLite row; 2 new Chroma chunks, embeddings identical to the
+  existing chunks of the same text). Round 1 now retrieves it on both models.
 
 ## BUG-049 — The BUG-018 guard removes FAQ evidence a data fetch does not replace
 

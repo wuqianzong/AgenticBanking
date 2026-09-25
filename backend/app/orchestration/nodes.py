@@ -1090,23 +1090,30 @@ PRODUCT_INTENT_MATRIX = {
     "Stocks": ["Fees And Charges", "General Inquiries", "Wealth And Insurance"]
 }
 
-# Business facts about how Horizon's own products relate, shared by every
-# call that chooses a product (the formulator and the Territory B retry,
-# so far). The physical card is the debit card, so a physical-card question
-# searches Debit_Card only; the FAQs about the physical card that were filed
-# only under Credit_Card or Deposit_Account also carry Debit_Card (BUG-048).
-HORIZON_PRODUCT_BRIEFING = """HORIZON PRODUCT BRIEFING -- how Horizon's own products relate (business facts):
+# Business facts about how Horizon's own products work. HORIZON_BUSINESS_FACTS
+# is shared by every call that needs them: the product-choosing calls (the
+# formulator and the Territory B retry, via HORIZON_PRODUCT_BRIEFING) and the
+# reply-writing calls (generator and reviser, as background). The physical card
+# is the debit card, so a physical-card question searches Debit_Card only; the
+# FAQs about the physical card that were filed only under Credit_Card or
+# Deposit_Account also carry Debit_Card (BUG-048). Each customer holds one
+# savings account, which the balance lookup reads (BUG-020).
+HORIZON_BUSINESS_FACTS = """HORIZON BUSINESS FACTS -- how Horizon's own products work:
 - One card, two functions. Horizon issues a single physical card ("my card",
   "my Horizon card"). It works as a debit card from the start, and a credit
   function can also be enabled on the same card. Debit_Card and Credit_Card
   are the two functions of that one card, not two cards.
-- Deposit_Account is the account linked to the debit card: debit spending and
-  ATM withdrawals draw on it, so documentation about using the debit card can
-  also be filed under Deposit_Account.
+- Deposit_Account is the customer's savings account, the account linked to the
+  debit card: debit spending and ATM withdrawals draw on it. Horizon offers
+  each customer only one savings account.
 - Horizon offers its services through the Horizon App. A service shared across
   products rather than belonging to one of them (e.g. managing the customer's
-  personal details or their app access) is offered in the Horizon App itself,
-  so it concerns Horizon_APP.
+  personal details or their app access) is offered in the Horizon App itself
+  (Horizon_APP)."""
+
+HORIZON_PRODUCT_BRIEFING = HORIZON_BUSINESS_FACTS + """
+- For search: documentation about using the debit card can also be filed under
+  Deposit_Account, and a shared service concerns Horizon_APP.
 - Classifying a card request:
   * About the physical card itself (lost, stolen, damaged, captured by an ATM,
     activation, PIN, replacement, delivery, appearance): the physical card is
@@ -1118,6 +1125,14 @@ HORIZON_PRODUCT_BRIEFING = """HORIZON PRODUCT BRIEFING -- how Horizon's own prod
   * About a function, but neither the customer's words nor the conversation
     shows which one: use CLARIFY and ask whether they mean the debit or the
     credit function -- never guess."""
+
+# The same facts for the reply-writing calls: background for understanding
+# what the customer can and cannot have, not evidence to quote.
+_BUSINESS_FACTS_FOR_REPLY = HORIZON_BUSINESS_FACTS + """
+  Use these facts to understand the customer's request and never contradict
+  them -- never present something they rule out as if it existed. They are
+  background, not approved evidence: state a policy detail to the customer
+  only when approved evidence supports it."""
 
 INTENT_GUIDELINE = """
 1. Acquisition & Setup (Getting Started)
@@ -7461,6 +7476,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
       briefly (see RESPONSE LENGTH below), instead of leaving the customer
       with nothing.
     - {_RESPONSE_PROPORTIONALITY_RULE}
+    - {_BUSINESS_FACTS_FOR_REPLY}
     - Respond as one considered conversation, not as a retrieval report or a
       sequence of task answers. Search tasks are internal evidence units, not
       required visible sections.
@@ -8531,6 +8547,8 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     {_GENERATION_BRIDGE_GUARDRAILS_UNIFIED}
 
     {_RESPONSE_PROPORTIONALITY_RULE}
+
+    {_BUSINESS_FACTS_FOR_REPLY}
 
     {PRECISION_REFERENCE_CONTRACT}
 

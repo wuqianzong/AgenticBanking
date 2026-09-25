@@ -1324,6 +1324,21 @@ other single-valued mock fields (e.g. `loyalty-status`, `profile-address`)
 if a customer implies multiplicity there too. Left for future work per
 explicit instruction.
 
+**Re-measure (2026-09-25, Gemini, current code):** still reproduces in 1 of 2 conversations
+(`mtsgd_40_00042`: "Your other savings account balance is..."; `mtsgd_32_00012` corrected the
+customer from the "only one Savings Account" FAQ). Cause: the balance lookup has no notion of
+multiple accounts (a simple demo API), the one-account FAQ was not retrieved that time, and
+the generator's PERSONAL DATA RULES present `for_request` -- the customer's own words -- as
+"exactly which request its data was fetched for", so the token is labelled with the
+customer's false premise. **Change (user's choice):** a shared `HORIZON_BUSINESS_FACTS`
+(split out of the product briefing) now states that Horizon offers each customer only one
+savings account, and is also given to the generator and reviser as background ("never
+contradict them... not approved evidence"). **Result (live, Gemini):** `mtsgd_40_00042` now
+says it cannot check another savings account and gives the one balance; `mtsgd_32_00012`
+still said "other savings account" with the fact present in its prompt -- the specific
+`for_request` wording in the PERSONAL DATA RULES wins over the general fact. Rule wording
+decision pending.
+
 ## BUG-021 — Inconsistent handling of "how long will the transfer take"
 
 **Severity:** Low-Medium **Confidence:** Confirmed (3/70 conversations in the semantic review sample) **Status: Open, not yet root-caused**

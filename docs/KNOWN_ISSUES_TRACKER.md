@@ -21,11 +21,11 @@ second time).
 | BUG-002 | Guidance-only RELEVANT admission sometimes rejected in a loop by the outbound audit | Medium | Confirmed (intermittent) | LLM judgment | **Superseded, structurally eliminated (see BUG-010)** |
 | BUG-003 | Transient upstream 503 on the Tool-Calling Planner is treated as "nothing found," not retried | Medium | Confirmed | **Deterministic code** | **Fixed, verified (mocked failure)** |
 | BUG-004 | Network-specific questions (Visa/Mastercard) answered with network-agnostic evidence marked SUFFICIENT | Medium | Confirmed (2 occurrences) | LLM judgment, **now deterministically enforced** | **Fixed, live-verified (4 independent cases)** |
-| BUG-005 | Evidence approved as SUFFICIENT can be topically mismatched to the customer's actual request | Medium–High | Confirmed | LLM judgment | Open |
-| BUG-006 | Evidence Applicability Rule missed a real premise mismatch (unauthorized-charge FAQ used for a duplicate-charge complaint) | Medium–High | Confirmed | LLM judgment | Open |
+| BUG-005 | Evidence approved as SUFFICIENT can be topically mismatched to the customer's actual request | Medium–High | Confirmed | LLM judgment | **Not reproduced (re-measure 2026-09-25, Gemini, current code): original query now asks credit-card vs deposit statement; 3 same-category cases give honest limits** |
+| BUG-006 | Evidence Applicability Rule missed a real premise mismatch (unauthorized-charge FAQ used for a duplicate-charge complaint) | Medium–High | Confirmed | LLM judgment | **Not reproduced (re-measure 2026-09-25): the restaurant duplicate-charge case now gives an honest no-info; the mismatched unauthorized-charge FAQ is no longer used** |
 | BUG-007 | Stale `generation_guidance` from an earlier round can persist into a later round's successful verdict | Low | Confirmed | **Deterministic code** | **Fixed, live-verified** |
-| SUSPECTED-001 | Triage may misclassify a genuine eligibility question as chitchat | Low | Suspected | LLM judgment | Needs verification |
-| SUSPECTED-002 | Possible query-intent misinterpretation for an ambiguous "source of funds" question | Low | Suspected | LLM judgment | Needs verification |
+| SUSPECTED-001 | Triage may misclassify a genuine eligibility question as chitchat | Low | Suspected | LLM judgment | **Not reproduced (re-measure 2026-09-25): answered "16 years or older", 2/2** |
+| SUSPECTED-002 | Possible query-intent misinterpretation for an ambiguous "source of funds" question | Low | Suspected | LLM judgment | **Reasonable (re-measure 2026-09-25): answered as where payments are drawn from (the primary account)** |
 | BUG-008 | `NARROW_TO_EVIDENCE_SCOPE` recovery silently drops the unconfirmed claim instead of admitting it | Low–Medium | Confirmed | LLM judgment (prompt gap) | Fix implemented, live-verified |
 | BUG-009 | Outbound audit silently PASSes a turn when response generation returns zero blocks | Medium–High | Confirmed (2 occurrences) | **Deterministic code** | **Fixed, verified (fixture test)** |
 | BUG-010 | "No Info Is Info" misapplied to RELEVANT let a zero-evidence Territory B task fabricate specific policy details | High | Confirmed | LLM judgment, **now deterministically enforced** | **Fixed, live-verified** |
@@ -33,15 +33,15 @@ second time).
 | BUG-012 | Response blocks with a bare-string list field crash on `_llm_text() missing 1 required positional argument: 'key'` | Medium | Confirmed | **Deterministic code** | **Fixed** |
 | BUG-013 | A structured-output response occasionally wrapped in a single-element list crashes with `'list' object has no attribute 'get'` | Low-Medium | Confirmed | **Deterministic code** | **Fixed** |
 | BUG-014 | Precision Substitution occasionally leaves raw internal template fragments (`faq_xxxxxxxx_NNN`) in customer-facing text | Medium | Confirmed | **Deterministic code** (no check handles an unbraced placeholder the generator occasionally writes) | **Fixed (repair fixture-verified); unauthorized placeholders left to the auditor by decision** |
-| BUG-015 | A small number of turns return a generic failure fallback ("please rephrase") instead of a real answer, on questions near-identical ones answer correctly -- and 22/24 of these were silently mislabeled "resolved" in every automated metric until corrected 2026-09-13 | Low-Medium | Confirmed (24 unique cases, full-corpus) | Not yet root-caused | Open |
-| BUG-016 | Sufficiency auditor doesn't recognize an explicit negative/declarative fact as a complete answer | Medium | Confirmed (13/88 sample) | LLM judgment | Open |
+| BUG-015 | A small number of turns return a generic failure fallback ("please rephrase") instead of a real answer, on questions near-identical ones answer correctly -- and 22/24 of these were silently mislabeled "resolved" in every automated metric until corrected 2026-09-13 | Low-Medium | Confirmed (24 unique cases, full-corpus) | Not yet root-caused | **Mostly resolved (re-measure 2026-09-25): the card-linking case now answers; the remaining case is blocked by the Groq prompt guard (score 0.98 on "unauthorized transaction") -- a classifier judgment outside our prompts, accepted** |
+| BUG-016 | Sufficiency auditor doesn't recognize an explicit negative/declarative fact as a complete answer | Medium | Confirmed (13/88 sample) | LLM judgment | **Accepted as model judgment (2026-09-25): improved (2 of 9 exchange cases still missed); rules work as designed, see below** |
 | BUG-017 | A successfully fetched account balance is silently dropped when the turn also carries conversational framing | Medium | Confirmed (61/619 turns; 23/70-sample conversations at least once) | **Deterministic code** (routing condition omitted personal data) | **Fixed, live-verified** |
 | BUG-018 | Response generation falsely denies having a balance it just successfully fetched | High | Confirmed (13/619) | **Deterministic code** (a RELEVANT RAG hedge left in generation data, contradicting a same-subquery tool's ground truth) | **Root-caused and fixed, fixture-verified** |
-| BUG-019 | A short account-type follow-up gets reattached to an already-resolved transfer instead of the actual current balance question | Medium | Confirmed (3/70 sample) | LLM judgment | Open |
+| BUG-019 | A short account-type follow-up gets reattached to an already-resolved transfer instead of the actual current balance question | Medium | Confirmed (3/70 sample) | LLM judgment | **Not reproduced (re-measure 2026-09-25): "my savings account, please" gets the balance, 2/2** |
 | BUG-020 | Bot fabricates a second "other" savings account rather than correcting a customer's false premise | Medium | Confirmed (2/70 sample) | LLM judgment | **Accepted for MVP (2026-09-25): demo balance API has no multi-account notion; one-savings-account fact added to shared business facts (helps in 1 of 2 live runs)** |
-| BUG-021 | Inconsistent handling of "how long will the transfer take" -- sometimes answered correctly, sometimes a generic non-answer | Low-Medium | Confirmed (3/70 sample) | Not yet root-caused | Open |
-| BUG-022 | A balance follow-up ("what about my savings account?") answered with a generic product-info dump instead of the number | Medium | Confirmed (1/70 sample) | Not yet root-caused | Open |
-| BUG-023 | Outcome depends on surface phrasing, not underlying intent -- 24/77 BANKING77 categories show a genuinely split outcome across their 40 phrasings of the same nominal question | Medium | Confirmed (full-corpus, `declined_card_payment` spot-checked) | Not yet root-caused | **Open, partial mitigation shipped** (see below) |
+| BUG-021 | Inconsistent handling of "how long will the transfer take" -- sometimes answered correctly, sometimes a generic non-answer | Low-Medium | Confirmed (3/70 sample) | Not yet root-caused | **Not reproduced (re-measure 2026-09-25): transfer-time follow-ups answered, 3/3 + control** |
+| BUG-022 | A balance follow-up ("what about my savings account?") answered with a generic product-info dump instead of the number | Medium | Confirmed (1/70 sample) | Not yet root-caused | **Not reproduced (re-measure 2026-09-25): "what about my savings account?" gets the balance** |
+| BUG-023 | Outcome depends on surface phrasing, not underlying intent -- 24/77 BANKING77 categories show a genuinely split outcome across their 40 phrasings of the same nominal question | Medium | Confirmed (full-corpus, `declined_card_payment` spot-checked) | Not yet root-caused | **Open, known variance (re-measure 2026-09-25): lost-card phrasings now consistent (8/10 SUFFICIENT); declined-payment and extra-charge phrasings still split** |
 | BUG-024 | Bot never discloses it is an AI to the customer, in any supported language or anywhere in the UI | Medium | ~~Confirmed~~ **Retracted** -- original check missed an existing persistent footer disclosure | n/a | **Retracted (not a defect)** |
 | BUG-025 | The exact same customer question, asked more than once, does not reliably get the same retrieval outcome -- no wording ambiguity involved | High | Confirmed (31/88 informative exact-duplicate-text groups, full-corpus) | Root-caused: two independent mechanisms found (retrieval-pool variance + auditor-judgment non-determinism) | **Retrieval-pool half: mitigated and live-validated. Auditor-judgment half: accepted permanent limitation, model-tuning scoped out** (see below) |
 | BUG-026 | The response generator rarely writes the required closing sentence pointing to an attached shortcut button/form -- 20 of 236 logged shortcut turns (8.5%) despite a MUST rule in its prompt | Low-Medium | Confirmed (236 logged generator calls with a shortcut supplied) | LLM instruction-following, **now structurally guaranteed regardless of it** | **Fixed, live-verified** |
@@ -1051,6 +1051,26 @@ the same bias appears in non-BANKING77 traffic. Left for future work per
 explicit instruction. Scope note: the 88-case sample was drawn only from
 single-task cases (481 of the 950); multi-task cases were excluded for
 attribution cleanliness and were not separately checked.
+
+**Re-measure and decision (2026-09-25):** in `research/2026-09-25_model_judgment_remeasure` (Gemini, current code) 7 of 9
+`exchange_via_app` cases improved -- e.g. "How do I make an exchange from one currency to
+another?" is now SUFFICIENT from `faq_32c1662f` ("supports only domestic transfers in SGD... no
+foreign-currency transfers") -- but in 2 cases the auditor saw that FAQ and still returned
+IRRELEVANT ("none list the available currencies"). Analysis: the information was present;
+the SUFFICIENT definition already allows a "no" ("need not be a literal yes/no; an explicit
+policy boundary... is a fully adequate SUFFICIENT answer"), but is written as a per-detail
+check ("every specific detail... confirmed... or NECESSARILY settled... no further assumption
+or guess"), and the FAQ says "no foreign-currency transfers", not literally "no currency
+exchange", so the step from one to the other is the borderline inference the definition
+discourages. Three prompt changes were replayed on the logged audit prompts (48 targets,
+risk controls and normal cases, plus 8 historical BUG-004 network/limit prompts): a
+"ruling out settles dependent details" clause (targets 4/12 SUFFICIENT; DeepSeek dropped
+adjacent courtesy parents on a duplicate-charge case), a one-line simple definition (no
+target gain, looser SUFFICIENT on partial requests), and the simple definition plus a
+named-detail principle (targets 2/6, BUG-004/006 safe, but some partial "contact us"
+answers became IRRELEVANT). None was clearly better than the current definition. **Decision:
+keep the current definition; the remaining misses are model judgment on a borderline
+inference caused by an FAQ gap (no FAQ states plainly that currency exchange is not offered).**
 
 ## BUG-017 — A successfully fetched account balance is silently dropped when the turn also carries conversational framing
 

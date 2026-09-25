@@ -3805,6 +3805,39 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         })
     clarification_tasks = list(state.get("clarification_tasks", [])) + new_tool_selection_clarifications
 
+    # BUG-045: FAQ search is the default tool, enforced here rather than left
+    # to the planner alone. An open subquery that got no task and no
+    # tool-selection clarification this round, and has never had a FAQ
+    # search, is given one -- otherwise it produced no obligation at all and
+    # the reply fell back to the generic apology. (If that search finds
+    # nothing, the standard no-info statement follows as usual; node_04a
+    # also has a last-resort no-info failsafe.)
+    clarified_this_round = {c["subquery_id"] for c in new_tool_selection_clarifications}
+    for subquery_id in open_subquery_ids:
+        if subquery_id in new_attempts_by_subquery or subquery_id in clarified_this_round:
+            continue
+        prior_attempts = known_subqueries.get(subquery_id, {}).get("tool_attempts", []) or []
+        if any(isinstance(a, dict) and a.get("tool_name") == "rag" for a in prior_attempts):
+            continue
+        if not TOOL_REGISTRY.get("rag", {}).get("enabled", False):
+            continue
+        seq_key = (subquery_id, "rag")
+        sequence_counter[seq_key] = sequence_counter.get(seq_key, 0) + 1
+        new_attempts_by_subquery.setdefault(subquery_id, []).append({
+            "attempt_id": _build_attempt_id(subquery_id, "rag", planning_round, sequence_counter[seq_key]),
+            "subquery_id": subquery_id,
+            "tool_name": "rag",
+            "operation": "retrieve_faq_evidence",
+            "planning_round": planning_round,
+            "status": "pending",
+            "input": {"customer_component": known_subqueries[subquery_id]["customer_component"]},
+            "result": {},
+            "availability_reason": "",
+            "rag_role": "needed",
+        })
+        print(f"   🛟 [FAQ DEFAULT]: planner gave '{subquery_id}' no tool -- adding a FAQ search")
+        log_event("tool.plan.faq_default_added", subquery_id=subquery_id, planning_round=planning_round)
+
     # Deterministic cost tiebreak: a "redundant" rag candidate -- one a
     # cheaper tool already fully covers -- is only worth including if a RAG
     # batch is already happening this round anyway for some other "needed"
@@ -6230,6 +6263,45 @@ def _run_turn_consistency_check(state: AgentState) -> dict:
     }
 
 
+def _no_info_failsafe(state: AgentState, financial_subqueries: list, open_subquery_ids: list) -> dict:
+    """BUG-045 last-resort failsafe: a financial subquery that reaches
+    response generation still OPEN, with no evidence entry, no no-info entry
+    and no decline, would produce no obligation at all -- the reply was empty
+    and the customer got the generic apology. It gets the standard
+    deterministic no-info entry instead (the same statement every other
+    empty result gets). node_03a now adds a FAQ search to any subquery the
+    planner left without a tool, so this should rarely fire; it is logged
+    when it does."""
+    if not open_subquery_ids:
+        return {}
+    tasks_by_id = {t.get("task_id"): t for t in state.get("search_tasks", []) if isinstance(t, dict)}
+    task_metadata = {t: task.get("customer_component", "") for t, task in tasks_by_id.items()}
+    covered = {tasks_by_id.get(e["task_id"], {}).get("subquery_id") for e in _response_evidence_manifest(state)}
+    no_info = _no_info_entries(state.get("task_resolution_instructions", []), task_metadata, state.get("unresolvable_search_tasks", []))
+    covered |= {tasks_by_id.get(e.get("task_id"), {}).get("subquery_id") or e.get("subquery_id") for e in no_info}
+    covered |= {d.get("subquery_id") for d in state.get("decline_tasks", []) if isinstance(d, dict)}
+    by_id = {sq.get("subquery_id"): sq for sq in financial_subqueries}
+    added = []
+    for subquery_id in open_subquery_ids:
+        if subquery_id in covered or subquery_id not in by_id:
+            continue
+        subquery = by_id[subquery_id]
+        component = str(subquery.get("customer_component", "")).strip()
+        need = str(subquery.get("need", "")).strip()
+        added.append({
+            "task_id": f"no_info_{subquery_id}",
+            "subquery_id": subquery_id,
+            "resolved_subquery": component,
+            "need": need,
+            "no_info_evidence": _no_info_evidence_text(component, need),
+        })
+    if not added:
+        return {}
+    print(f"   🛟 [NO-INFO FAILSAFE]: {[e['subquery_id'] for e in added]} reached generation with nothing to say -- adding no-info")
+    log_event("resolution.no_info_failsafe", subquery_ids=[e["subquery_id"] for e in added])
+    return {"unresolvable_search_tasks": list(state.get("unresolvable_search_tasks", [])) + added}
+
+
 def node_04a_resolution_planner(state: AgentState):
     """Assess global resolution after validated tool work, without planning UI.
 
@@ -6316,11 +6388,16 @@ def node_04a_resolution_planner(state: AgentState):
     # retry -- a needs_tools pass loops back to node_03a and will come
     # through here again), so it judges the turn's final results exactly
     # once, right before response generation.
+    failsafe_updates = (
+        _no_info_failsafe(state, financial_subqueries, genuinely_open_subquery_ids)
+        if preflight_status == "presentation_ready" else {}
+    )
     consistency_updates = (
-        _run_turn_consistency_check({**state, "financial_subqueries": financial_subqueries})
+        _run_turn_consistency_check({**state, **failsafe_updates, "financial_subqueries": financial_subqueries})
         if preflight_status == "presentation_ready" else {}
     )
     return {
+        **failsafe_updates,
         **consistency_updates,
         "preflight_status": preflight_status,
         "financial_subqueries": financial_subqueries,

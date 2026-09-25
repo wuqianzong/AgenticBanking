@@ -25,7 +25,7 @@ from backend.app.core.llm_service import (
     MODEL_E_TRIAGE,
 )
 from backend.app.core.groundedness import check_evidence_groundedness, check_conduct_compliance
-from backend.app.core.compliance import REGULATORY_LICENSING_CONTEXT, BANK_CONDUCT_CONTEXT, PRECISION_REFERENCE_CONTRACT, PERSONAL_DATA_REFERENCE_CONTRACT
+from backend.app.core.compliance import REGULATORY_LICENSING_CONTEXT, BANK_CONDUCT_CONTEXT, PRECISION_REFERENCE_CONTRACT, PERSONAL_DATA_REFERENCE_CONTRACT, DATA_FOLLOWS
 from backend.app.core.translations import get_message
 from backend.app.core.system_logger import log_event
 from backend.app.orchestration.tool_registry import enabled_tool_capabilities, is_registered_operation, TOOL_REGISTRY
@@ -1412,13 +1412,8 @@ _EVIDENCE_ONLY_GENERATION_RULES = {
 # kind(s) it governs exists this turn -- an unused section (e.g.
 # CLARIFICATION RULES on a turn with no clarification) is omitted entirely,
 # not merely irrelevant filler the model has to read past.
-# Prompt-caching layout (DeepSeek bills a repeated prompt PREFIX at ~1/50
-# of the normal input price, in 64-token blocks, from the first token up to
-# the first difference). Every LLM prompt therefore puts its fixed rules
-# first and this turn's data last, separated by this one line so the model
-# knows what to expect -- identical wording in every prompt, so it never
-# breaks a cached prefix itself.
-_DATA_FOLLOWS = """THE RULES ABOVE ARE FIXED. EVERYTHING BELOW IS SPECIFIC TO THIS CALL -- its data, and any rules that apply only to this call. Apply all of them together."""
+# Shared rules-first marker line (see compliance.DATA_FOLLOWS).
+_DATA_FOLLOWS = DATA_FOLLOWS
 
 # Shared by the response generator and the reviser. Added with the move to
 # DeepSeek, which -- unlike the terse Gemini flash-lite -- recited every
@@ -2086,15 +2081,10 @@ def node_00b_followup_check(state: AgentState):
     prompt = f"""
     LOGIN FOLLOW-UP CHECK
     You are Horizon, a banking assistant. The customer has just logged back
-    in. Below is the raw transcript of their most recently completed
-    session, if any. Decide whether a brief, natural follow-up is warranted.
+    in. At the end you are given the raw transcript of their most recently
+    completed session, if any, and the language to respond in. Decide
+    whether a brief, natural follow-up is warranted.
 
-    Last session's transcript (trusted messages only; empty if this is the
-    customer's first session, or if it was itself just a login greeting with
-    nothing else in it):
-    {json.dumps(transcript, ensure_ascii=False)}
-
-    Natively generate response in: {language}
     "Horizon" and every "Horizon <Name>" branded term (Horizon Bank,
     Horizon App, Horizon Key, etc.) is a proper brand name -- write it
     exactly as-is, in the original Latin script, regardless of the response
@@ -2115,9 +2105,17 @@ def node_00b_followup_check(state: AgentState):
       empty string -- an empty follow-up is the normal, expected outcome for
       most logins, not a failure.
     - Keep it to at most two sentences. Do not invent any fact, banking
-      procedure, or policy not present above.
+      procedure, or policy not present in the transcript.
 
     Output JSON only: {{"followup": "one or two sentences, or an empty string"}}
+
+    {_DATA_FOLLOWS}
+
+    Natively generate response in: {language}
+    Last session's transcript (trusted messages only; empty if this is the
+    customer's first session, or if it was itself just a login greeting with
+    nothing else in it):
+    {json.dumps(transcript, ensure_ascii=False)}
     """
     try:
         followup = _parse_json_robustly(call_groq_lpu(prompt)).get("followup", "").strip()
@@ -2865,9 +2863,8 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         different but related search task per failed task (Territory B) --
         reasoning through mapping_reason FIRST, before choosing its
         product/intent or writing its angles, exactly as that field requires.
-
-        Latest User Input: "{user_msg}"
-        {retry_context}
+        The Latest User Input and the Failed Tasks (with their feedback) are
+        given at the end.
 
         REQUIRED CONTRACT:
         - Exactly one companion per failed task. Never a revision of the
@@ -2890,6 +2887,11 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
 
         Output JSON ONLY:
         {{"companions": [{{"source_task_id":"exact failed task_id","search_task":{{"task_id":"<source_task_id>_scope","mapping_reason":"reasoned first: name the concrete Matrix/context basis for this genuinely different but related pairing","angle_groups":[{{"group_id":"scope","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"a valid matrix product, different from the failed task's own","target_intent":["1-3 valid intents for that product"],"search_territory":"adjacent_scope","source_task_id":"<same as the entry's own source_task_id>"}}}}]}}
+
+        {_DATA_FOLLOWS}
+
+        Latest User Input: "{user_msg}"
+        {retry_context}
         """
 
     # Set wherever a component's SEARCH/DECLINE resolution is rejected or
@@ -7833,20 +7835,14 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     PRE-DECIDED STATEMENT COMPOSITION
     You are Horizon, a Horizon Bank customer service representative. This
     turn's entire request resolves only to the pre-decided statements
-    below -- there is no other approved information to answer with this
-    turn.
+    given at the end -- there is no other approved information to answer
+    with this turn.
 
     {_style_personalization_block(user_profile)}
 
     {_GENERATION_CONDUCT_GUARDRAILS}
 
     {_GENERATION_BRIDGE_GUARDRAILS}
-
-    Customer request: {state.get("user_input", "")}
-    Trusted conversation context (use only to understand what topic this
-    continues, and the customer's own language/tone; never as factual
-    banking evidence):
-    {conversation_context}
 
     A "kind" of "decline" is a scope boundary to state; "no_info" is an
     availability notice to state -- each of these two carries its own
@@ -7859,7 +7855,7 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     A "kind" of "clarification" is different: it has no fixed sentence to
     relay. Compose your own natural question asking specifically about its
     "unresolved_request", grounded in the Customer request and
-    conversation context above for what topic this continues -- never
+    conversation context (given below) for what topic this continues -- never
     answer the request in its place, never assert a new product, policy,
     or fact, and stay within its "scope" (never overstepping into a
     different job's judgment than the one named there).
@@ -7871,10 +7867,6 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     "customer_component" -- never invent or imply a banking fact, product,
     policy, commitment, or next action for it, and never treat it as a
     question to answer.
-
-    Pre-decided statements (the ONLY permitted content; combine them into
-    ONE short, natural, coherent customer message):
-    {json.dumps(model_entries, ensure_ascii=False)}
 
     Rules:
     - Address every statement listed, using its task_id ONLY in the
@@ -7923,7 +7915,19 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
       mention.
 
     Output JSON only:
-    {{"elements": [{{"source_task_ids": ["the exact task_id(s) from the statement(s) above this element addresses"], "text": "a warm, natural statement or question, in the style above"}}]}}
+    {{"elements": [{{"source_task_ids": ["the exact task_id(s) of the statement(s) this element addresses"], "text": "a warm, natural statement or question, in the style above"}}]}}
+
+    {_DATA_FOLLOWS}
+
+    Customer request: {state.get("user_input", "")}
+    Trusted conversation context (use only to understand what topic this
+    continues, and the customer's own language/tone; never as factual
+    banking evidence):
+    {conversation_context}
+
+    Pre-decided statements (the ONLY permitted content; combine them into
+    ONE short, natural, coherent customer message):
+    {json.dumps(model_entries, ensure_ascii=False)}
     """
     try:
         result = _parse_json_robustly(call_groq_lpu(prompt))
@@ -8254,8 +8258,9 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     prompt = f"""
     FLEXIBLE RESPONSE REVISION (partial retry -- edit in place only)
     You are Horizon, revising a customer response that already partly
-    passed a compliance/groundedness audit. Below is the FULL current
-    response as one ordered list of blocks, "Full Response Skeleton." Each
+    passed a compliance/groundedness audit. At the end, after the fixed
+    rules, you are given the FULL current response as one ordered list of
+    blocks, "Full Response Skeleton." Each
     entry's own "revision_status" tells you your job on it:
     - "approved": ALREADY LOCKED IN and will be shown to the customer
       exactly as-is regardless of anything you write for it. Repeat it
@@ -8276,6 +8281,22 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     {_GENERATION_BRIDGE_GUARDRAILS_UNIFIED}
 
     {_RESPONSE_PROPORTIONALITY_RULE}
+
+    {PRECISION_REFERENCE_CONTRACT}
+
+    {PERSONAL_DATA_REFERENCE_CONTRACT}
+
+    Output JSON only -- the SAME shape as the "Full Response Skeleton" given below: a
+    single top-level object with one "response_blocks" key holding the
+    FULL list, one entry per skeleton entry in the same order, "approved"
+    entries repeated unchanged (or with empty content -- never read
+    either way) and "pending" entries corrected, each using precisely that
+    entry's own field names and nothing else. Never a bare list on its own:
+    {{"response_blocks":[{{"block_id":"...","type":"...","revision_status":"approved"|"pending", "<only the fields that entry showed you, corrected values for a pending entry>": "..."}}]}}
+
+    {_DATA_FOLLOWS}
+
+    {rules_block}
 
     Full current response, as natural-language text (READ-ONLY, for tone/
     coherence only -- never repeat or restate its content, and never treat
@@ -8307,8 +8328,8 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     that block's own source_task_ids -- never write it inside customer-
     facing text), "generation_content" (what you know), and
     "generation_guidance" (a one-line instruction that names the exact rule
-    section governing this entry -- named sections appear further below,
-    after all the data, only for the kinds actually present among this
+    section governing this entry -- named sections appear above, just
+    before this data, only for the kinds actually present among this
     round's pending blocks). This is the same shape, and the same named
     rule sections, the original response was generated under -- apply them
     identically now, whether that means composing an answer, relaying a
@@ -8316,20 +8337,6 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     shortcut, fact, or token:
 
     {obligations_block}
-
-    {rules_block}
-
-    {PRECISION_REFERENCE_CONTRACT}
-
-    {PERSONAL_DATA_REFERENCE_CONTRACT}
-
-    Output JSON only -- the SAME shape as "Full Response Skeleton" above: a
-    single top-level object with one "response_blocks" key holding the
-    FULL list, one entry per skeleton entry in the same order, "approved"
-    entries repeated unchanged (or with empty content -- never read
-    either way) and "pending" entries corrected, each using precisely that
-    entry's own field names and nothing else. Never a bare list on its own:
-    {{"response_blocks":[{{"block_id":"...","type":"...","revision_status":"approved"|"pending", "<only the fields that entry showed you, corrected values for a pending entry>": "..."}}]}}
     """
     try:
         generated = _parse_json_robustly(call_groq_lpu(prompt))
@@ -10494,15 +10501,10 @@ def _build_escalation_case_summary(state: AgentState) -> dict:
     CURRENT SESSION ESCALATION CASE SUMMARY
     You create a concise handoff brief that saves a human banking agent time
     understanding the customer's unresolved case. This is NOT a chronological
-    recap of the session.
+    recap of the session. The output language, the source material and the
+    unresolved-state signals are given at the end.
 
-    IMPORTANT LANGUAGE RULE: You MUST output the case summary strictly in {preferred_language}, as this summary will be presented directly to the user in the frontend UI. Exception: "Horizon" and every "Horizon <Name>" branded term (Horizon Bank, Horizon App, Horizon Key, etc.) is a proper brand name -- write it exactly as-is, in the original Latin script, never translated or transliterated.
-
-    Source material (use only this material):
-    {_build_current_session_escalation_context(state)}
-
-    Current unresolved-state signals (use only when they match the source material):
-    {json.dumps(unresolved_inputs, ensure_ascii=False)}
+    IMPORTANT LANGUAGE RULE: You MUST output the case summary strictly in the output language given at the end, as this summary will be presented directly to the user in the frontend UI. Exception: "Horizon" and every "Horizon <Name>" branded term (Horizon Bank, Horizon App, Horizon Key, etc.) is a proper brand name -- write it exactly as-is, in the original Latin script, never translated or transliterated.
 
     Rules:
     - First distinguish the banking topics in the supplied CURRENT-session
@@ -10538,6 +10540,16 @@ def _build_escalation_case_summary(state: AgentState) -> dict:
 
     Output JSON only:
     {{"main_pursuit": "...", "unresolved_issues": ["..."]}}
+
+    {_DATA_FOLLOWS}
+
+    Output language: {preferred_language}
+
+    Source material (use only this material):
+    {_build_current_session_escalation_context(state)}
+
+    Current unresolved-state signals (use only when they match the source material):
+    {json.dumps(unresolved_inputs, ensure_ascii=False)}
     """
     try:
         result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_C_PLANNER))

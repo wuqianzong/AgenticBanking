@@ -22,7 +22,7 @@ content, the model call, and the fail-closed error handling live here once.
 """
 import json
 from backend.app.core.llm_service import call_groq_lpu, parse_json_robustly, MODEL_B_AUDITOR
-from backend.app.core.compliance import REGULATORY_LICENSING_CONTEXT, BANK_CONDUCT_CONTEXT, PRECISION_REFERENCE_CONTRACT
+from backend.app.core.compliance import REGULATORY_LICENSING_CONTEXT, BANK_CONDUCT_CONTEXT, PRECISION_REFERENCE_CONTRACT, DATA_FOLLOWS
 
 
 def check_evidence_groundedness(
@@ -47,24 +47,27 @@ def check_evidence_groundedness(
     GROUNDEDNESS v2.0 — EVIDENCE AUDIT
     You are an evidence-groundedness auditor for a read-only Horizon Bank assistant.
 
-    Permitted Evidence ({evidence_description}):
-    {evidence_text}
-
-    Customer-Facing Content:
-    {content_block}
-
     {PRECISION_REFERENCE_CONTRACT}
 
     TASK: Assess EVIDENCE GROUNDEDNESS ONLY. Do not assess conduct, tone,
     regulatory compliance, or completeness — a separate auditor handles those.
     Every factual claim, instruction, figure, or suggestion in the Customer-Facing
-    Content must be directly supported by the Permitted Evidence above; nothing
-    outside it may be used as a factual source.
-
-    {route_specific_rules}
+    Content must be directly supported by the Permitted Evidence; nothing
+    outside it may be used as a factual source. The rules for this route, the
+    Permitted Evidence, and the Customer-Facing Content are given at the end.
 
     Output JSON only:
     {{"evidence_grounded": true/false, "reason": "...", "evidence_violations": [{{"scope": "...", "unsupported_content": ["verbatim phrase"], "evidence_gap": "..."}}]{extra_output_fields}}}
+
+    {DATA_FOLLOWS}
+
+    {route_specific_rules}
+
+    Permitted Evidence ({evidence_description}):
+    {evidence_text}
+
+    Customer-Facing Content:
+    {content_block}
     """
     try:
         result = parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
@@ -111,17 +114,19 @@ def check_conduct_compliance(
     Evaluate only the semantic meaning and behavioral intent of the content,
     regardless of what language it is written in.
 
+    TASK: Assess CONDUCT & COMPLIANCE ONLY. Do not assess whether facts are
+    supported by evidence — a separate auditor handles that. The rules for
+    this route and the Customer-Facing Content are given at the end.
+
+    Output JSON only:
+    {{"conduct_compliant": true/false, "reason": "...", "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "violation": "...", "unsupported_content": ["verbatim phrase"]}}]{extra_output_fields}}}
+
+    {DATA_FOLLOWS}
+
     {route_specific_rules}
 
     Customer-Facing Content:
     {content_block}
-
-    TASK: Assess CONDUCT & COMPLIANCE ONLY. Do not assess whether facts are
-    supported by evidence — a separate auditor handles that.
-
-
-    Output JSON only:
-    {{"conduct_compliant": true/false, "reason": "...", "conduct_violations": [{{"rule": "bank_conduct" | "regulation", "violation": "...", "unsupported_content": ["verbatim phrase"]}}]{extra_output_fields}}}
     """
     try:
         result = parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))

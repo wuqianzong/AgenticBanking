@@ -91,3 +91,11 @@ PERSONAL DATA REFERENCE CONTRACT:
   text by the backend. It is resolved only in the customer's own browser,
   from a value delivered separately alongside this turn's response.
 """
+
+
+# Prompt-caching layout (DeepSeek bills a repeated prompt PREFIX at ~1/50 of
+# the normal input price, from the first token up to the first difference).
+# Every LLM prompt puts its fixed rules first and this call's data last,
+# separated by this one line so the model knows what to expect -- identical
+# wording everywhere, so it never breaks a cached prefix itself.
+DATA_FOLLOWS = """THE RULES ABOVE ARE FIXED. EVERYTHING BELOW IS SPECIFIC TO THIS CALL -- its data, and any rules that apply only to this call. Apply all of them together."""

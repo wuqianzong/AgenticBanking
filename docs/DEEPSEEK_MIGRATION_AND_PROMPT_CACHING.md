@@ -125,6 +125,17 @@ any rules that apply only to this call."), then that call's own rules and data. 
 generator's turn-specific rule sections come after its fixed principles. No rule wording
 changed apart from correcting "above/below" references.
 
+This applies to **all 15 LLM prompts** (only the Groq prompt guard is not a DeepSeek
+call): the seven main prompts (triage, intent formulator, tool planner, sufficiency
+auditor, combined audit, response generator, consistency check) and, in a follow-up
+change, the eight smaller ones -- reviser, statement composition, login follow-up check,
+the shared evidence and conduct audits in `groundedness.py` (used for greetings, memory
+and escalation summaries), escalation case summary, Territory B retry, and memory
+summary. The marker text is one shared constant, `compliance.DATA_FOLLOWS`. The eight
+smaller prompts were confirmed live on DeepSeek: login follow-up, statement composition,
+escalation summary and its two audits fired in a full API session (81% cache hits);
+memory summary, reviser and Territory B were exercised with real inputs.
+
 ### A side effect found and fixed: the tool planner
 With the reordering alone, the tool planner stopped planning an FAQ search for borderline
 problem reports, and two of three test cases returned an empty answer. A controlled test

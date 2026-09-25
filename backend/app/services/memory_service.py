@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from backend.app.core.llm_service import call_groq_lpu, MODEL_D_PROMPT_GUARD, ModelUnavailableError
 from backend.app.core.groundedness import check_evidence_groundedness, check_conduct_compliance
+from backend.app.core.compliance import DATA_FOLLOWS
 from backend.app.core.system_logger import log_event
 
 # ⚡ FIXED PATH: Resolves up TWO levels from backend/app/services/ to find backend/data/
@@ -562,13 +563,18 @@ class LongTermMemoryManager:
         or conversation facts. Do not summarize, infer, or retain them. Only a
         message explicitly sent by the customer is a customer decision.
 
+        The existing compact memory and the newly evicted conversation are
+        given at the end.
+
+        Output JSON only: {{"summary": "updated compact memory"}}.
+
+        {DATA_FOLLOWS}
+
         Existing compact memory:
         {existing_summary or 'None'}
 
         Newly evicted conversation:
         {transcript}
-
-        Output JSON only: {{"summary": "updated compact memory"}}.
         """
         return LongTermMemoryManager._generate_validated_memory(
             prompt,

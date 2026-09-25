@@ -66,7 +66,8 @@ second time).
 | BUG-045 | A need the planner assigns no tool gets no obligation at all -- not even a no-info entry -- so the reply is empty and the customer gets the generic apology | High | Confirmed (live, DeepSeek) | **Deterministic code** (no fallback obligation for an open subquery with no tool and no evidence) | Open (made rare by the planner rewrite, cc99564) |
 | BUG-046 | "My PIN is not working and I need assistance" is rejected by the inbound word filter (`credential_pin_disclosure`) before any model runs | Medium | Confirmed (live, every model) | **Deterministic code** (keyword rule false positive) | Open |
 | BUG-047 | The completeness net's fallback sentence quotes the customer's request verbatim and ungrammatically ("Sorry, I don't have a complete answer for the part about I withdrew cash ... right now.") | Low-Medium | Confirmed (live, DeepSeek) | **Deterministic code** (net template) | Open |
-| BUG-048 | ATM card-capture FAQs are tagged `Deposit_Account` only, so a search the formulator maps to `Debit_Card` never retrieves them; a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | Open |
+| BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | Open |
+| BUG-049 | The BUG-018 guard removes a RELEVANT FAQ result whenever a data fetch completed on the same need -- even when the need also asks something the data cannot answer ("I forgot my address... where can I change it?" kept the address but lost the change-address evidence) | Medium | Confirmed (live, DeepSeek) | **Deterministic code** (guard assumes a data fetch answers the whole subquery; need-based triage can combine a lookup and a how-to in one need) | Open |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -2482,3 +2483,38 @@ happened to choose Deposit_Account. A near-identical query succeeded only becaus
 answer cache injected the two parents. Candidate directions (undecided): add `Debit_Card`
 tags to card-handling FAQs filed under Deposit_Account; always widen Debit_Card <->
 Deposit_Account on retry; formulator guidance.
+
+**Second example (live, DeepSeek, 2026-09-25):** "...i forgot my address registered in
+the system. Where can i change it for delivery of the new replacement of card?" -- the
+formulator filed the address change under `Credit_Card` (because of the replacement-card
+context); the widened retry (Credit_Card + Horizon_APP) never reached the in-app
+"update your address" FAQ (`faq_24568045`, retrieved successfully in earlier address
+tests), so round 2 approved only the onboarding Singpass/ICA procedure as RELEVANT. The
+general pattern: an FAQ reachable under a single product tag is missed whenever the
+formulator picks a different, defensible product for the same need.
+
+## BUG-049 — The BUG-018 guard removes FAQ evidence a data fetch does not replace
+
+**Severity:** Medium **Confidence:** Confirmed (live, DeepSeek) **Status: Open**
+**Found in:** live check 2026-09-25, session `sess_0be5670c...`, turn 1 ("...Also i forgot my
+address registered in the system. Where can i change it for delivery of the new
+replacement of card?").
+
+**What happens:** triage made one need of "I forgot the address registered in the system;
+where can I change it...". The planner gave it a data fetch (`profile-address`), the Change
+Address form, and a FAQ search. The FAQ search ended RELEVANT (task_2) with a related-topic
+companion (task_2_scope). Because a data fetch *completed* on that subquery,
+`_response_evidence_manifest`'s guard (`subqueries_answered_by_data_fetch`, BUG-018/037)
+dropped both RELEVANT tasks: they never reached the consistency check or the generator.
+The reply showed the address and the form, but nothing from the FAQ about changing it --
+only a clarifying question that the retrieved evidence had prompted.
+
+**Cause:** the guard assumes a completed data fetch answers the whole subquery, so any
+RELEVANT (partial) FAQ result for it can only be a contradicting hedge (the original
+BUG-018 case: "I can't access your balance" next to the fetched balance). That holds when
+the need is purely a lookup; it fails when one need combines a lookup ("what is my
+address") with a how-to ("where can I change it"), which need-based triage (BUG-033)
+does by design. The turn consistency check (BUG-039) now exists to catch real
+contradictions semantically, so the blanket guard may be removable or narrowable.
+Candidate directions (undecided): drop the guard and rely on the consistency check;
+or keep it only when the subquery's domains are purely personal_data_retrieval.

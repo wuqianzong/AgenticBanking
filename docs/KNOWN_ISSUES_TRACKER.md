@@ -67,7 +67,7 @@ second time).
 | BUG-046 | "My PIN is not working and I need assistance" is rejected by the inbound word filter (`credential_pin_disclosure`) before any model runs | Medium | Confirmed (live, every model) | **Deterministic code** (keyword rule false positive) | **Fixed (29845c7), matrix + live-verified** |
 | BUG-047 | The completeness net's fallback sentence quotes the customer's request verbatim and ungrammatically ("Sorry, I don't have a complete answer for the part about I withdrew cash ... right now.") | Low-Medium | Confirmed (live, DeepSeek) | **Deterministic code** (net template) | **Fixed (fa1114b)** |
 | BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | Open |
-| BUG-049 | The BUG-018 guard removes a RELEVANT FAQ result whenever a data fetch completed on the same need -- even when the need also asks something the data cannot answer ("I forgot my address... where can I change it?" kept the address but lost the change-address evidence) | Medium | Confirmed (live, DeepSeek) | **Deterministic code** (guard assumes a data fetch answers the whole subquery; need-based triage can combine a lookup and a how-to in one need) | Open |
+| BUG-049 | The BUG-018 guard removes a RELEVANT FAQ result whenever a data fetch completed on the same need -- even when the need also asks something the data cannot answer ("I forgot my address... where can I change it?" kept the address but lost the change-address evidence) | Medium | Confirmed (live, DeepSeek) | **Deterministic code** (guard assumes a data fetch answers the whole subquery; need-based triage can combine a lookup and a how-to in one need) | **Fixed: guard retired (full-picture auditor + consistency check handle the contradiction); fixture-verified** |
 | BUG-050 | When the reviser deletes a customer-data sentence (or any cited content), the completeness net does not restore it: the block still cites the handle (citations are locked during revision), so the net treats the obligation as covered | Medium | Confirmed (live, Gemini) | **Deterministic code** (net coverage keyed on locked citations, not on the revised text) | **Retracted -- misdiagnosis: the net did restore the address; the delivered reply contains it** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
@@ -2536,7 +2536,7 @@ formulator picks a different, defensible product for the same need.
 
 ## BUG-049 — The BUG-018 guard removes FAQ evidence a data fetch does not replace
 
-**Severity:** Medium **Confidence:** Confirmed (live, DeepSeek) **Status: Open**
+**Severity:** Medium **Confidence:** Confirmed (live, DeepSeek) **Status: Fixed (2026-09-25) -- guard retired, fixture-verified**
 **Found in:** live check 2026-09-25, session `sess_0be5670c...`, turn 1 ("...Also i forgot my
 address registered in the system. Where can i change it for delivery of the new
 replacement of card?").
@@ -2559,6 +2559,20 @@ does by design. The turn consistency check (BUG-039) now exists to catch real
 contradictions semantically, so the blanket guard may be removable or narrowable.
 Candidate directions (undecided): drop the guard and rely on the consistency check;
 or keep it only when the subquery's domains are purely personal_data_retrieval.
+
+**Fix (2026-09-25): the guard is retired.** `_response_evidence_manifest` no longer drops
+non-SUFFICIENT FAQ tasks on a subquery with a completed data fetch. The contradiction
+BUG-018 was about is now judged with the whole picture rather than prevented by
+withholding evidence: the sufficiency auditor sees the fetch as a same-need result (BUG-040
+part 2) and must not call a tool-covered part unavailable; `compose_partial` gives no
+notice for a part another entry answers; and the turn consistency check (BUG-039), which
+the guard used to hide this evidence from, drops evidence that conflicts with another
+result. **Verified:** fixture on the traced state (RELEVANT task_2 and its `_scope`
+companion now reach the manifest; consistency suppression still honoured; 5/5) and the
+existing regression suites. Live: "Hello. I need to check my balance." on DeepSeek gives
+the balance token with no denial (BUG-018 not reintroduced). The combined lookup + how-to
+need could not be reproduced live: triage now splits it into two needs in both attempts,
+so the retired guard would not have fired there either.
 
 ## BUG-050 — Completeness net misses content the reviser deleted
 

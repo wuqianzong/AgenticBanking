@@ -1222,41 +1222,17 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
         for result in state.get("task_results", [])
         if result.get("status") in ANSWERABLE_TASK_STATUSES
     }
-    # Cross-tool contradiction guard: a subquery whose need an `api` data
-    # fetch has already answered (a personal-data token or a verified fact
-    # -- the answer itself, ground truth, not a judgment call) makes a
-    # same-subquery RAG task's own RELEVANT verdict (real but incomplete
-    # evidence, never a full answer) actively dangerous rather than merely
-    # superfluous. Confirmed live (BUG-018): a RELEVANT adjacent_scope
-    # task's own required framing ("no direct evidence for this, but here's
-    # related information") sat in the same generation_content as a real,
-    # already-fetched personal_data_placeholder for the exact same request;
-    # the outbound audit's own NARROW_TO_EVIDENCE_SCOPE recovery reasoned
-    # from the RAG side alone ("no data for account balances") without
-    # checking the tool side, and its resulting generation_guidance
-    # instructed denying a capability the turn had already used. A
-    # SUFFICIENT verdict is exempt -- it is a real, complete, standalone
-    # answer to (a different angle of) the same subquery, genuinely
-    # additive rather than a hedge that only makes sense when nothing else
-    # answered the subquery at all.
-    #
-    # `api` only -- never `deeplink` or `service_request` (BUG-037). A
-    # redirect (a navigation shortcut or a form) is a path to the
-    # resolution, not the resolution itself: it still counts as RESOLVED in
-    # the turn's resolution status (_fully_covers, unchanged -- it is
-    # different from unresolved), but it delivers no information, so it
-    # must never suppress information RAG found. Counting it here removed
-    # the correct "6-7 business days" evidence from "When will my physical
-    # card arrive?" because a Manage Card shortcut had completed, and the
-    # generator, left with no evidence, invented "7 to 10 business days".
+    # No cross-tool guard here any more (retired, BUG-049). It used to drop
+    # every non-SUFFICIENT RAG task on a subquery an `api` data fetch had
+    # completed (BUG-018, narrowed to `api` by BUG-037), assuming the fetch
+    # answered the whole need. That fails when one need combines a lookup
+    # with a how-to ("I forgot my address -- where can I change it?"), and
+    # it hid the evidence from every semantic check. The contradiction it
+    # prevented is now judged with the whole picture instead: node_03c sees
+    # the fetch as a same-need result, compose_partial gives no notice for
+    # a part another entry answers, and node_04a's turn consistency check
+    # drops evidence that conflicts with another result.
     consistency_suppressed = set(state.get("consistency_suppressed_ids", []))
-    subqueries_answered_by_data_fetch = {
-        subquery.get("subquery_id")
-        for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
-        if isinstance(subquery, dict)
-        for attempt in subquery.get("tool_attempts", [])
-        if isinstance(attempt, dict) and attempt.get("tool_name") == "api" and attempt.get("status") == "completed"
-    }
     # Presentation is intentionally decoupled from retrieval-task boundaries.
     # The response and outbound groundedness audit therefore share the full
     # approved evidence set. Optional element-level source_task_ids narrow
@@ -1304,13 +1280,6 @@ def _response_evidence_manifest(state: AgentState) -> list[dict]:
         # node_03c_sufficiency_auditor) -- guidance is always a caveat on a
         # real parent, never a standalone basis for a manifest entry.
         if task_id and parent_ids
-        # Cross-tool contradiction guard (see above): drop a RELEVANT-only
-        # task whose own subquery an `api` data fetch already answered --
-        # Territory B's companion shares its source task's subquery_id
-        # (see the "Territory B" comment in node_02e's scope-expansion
-        # handling), so this also correctly suppresses a companion task
-        # built for a subquery a tool has already resolved.
-        if not (status != "SUFFICIENT" and tasks_by_id.get(task_id, {}).get("subquery_id") in subqueries_answered_by_data_fetch)
         # node_04a's turn consistency check: evidence the checker chose to
         # drop from a semantic conflict with another result this turn.
         if task_id not in consistency_suppressed

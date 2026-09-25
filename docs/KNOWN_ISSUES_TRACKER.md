@@ -66,7 +66,7 @@ second time).
 | BUG-045 | A need the planner assigns no tool gets no obligation at all -- not even a no-info entry -- so the reply is empty and the customer gets the generic apology | High | Confirmed (live, DeepSeek) | **Deterministic code** (no fallback obligation for an open subquery with no tool and no evidence) | **Fixed (ff2c0f0): deterministic FAQ default + no-info failsafe; fixture- and live-verified** |
 | BUG-046 | "My PIN is not working and I need assistance" is rejected by the inbound word filter (`credential_pin_disclosure`) before any model runs | Medium | Confirmed (live, every model) | **Deterministic code** (keyword rule false positive) | **Fixed (29845c7), matrix + live-verified** |
 | BUG-047 | The completeness net's fallback sentence quotes the customer's request verbatim and ungrammatically ("Sorry, I don't have a complete answer for the part about I withdrew cash ... right now.") | Low-Medium | Confirmed (live, DeepSeek) | **Deterministic code** (net template) | **Fixed (fa1114b)** |
-| BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | **Card part fixed: product briefing (physical card = Debit_Card) + 8 physical-card FAQs tagged Debit_Card + list-typed product field; replay-verified. Address example (ranking) still open** |
+| BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | **Fixed: card part (physical card = Debit_Card, 8 FAQs tagged) and address part (formulator search query + Horizon App briefing; retry recovers an imperfect intent tag); replay-verified** |
 | BUG-049 | The BUG-018 guard removes a RELEVANT FAQ result whenever a data fetch completed on the same need -- even when the need also asks something the data cannot answer ("I forgot my address... where can I change it?" kept the address but lost the change-address evidence) | Medium | Confirmed (live, DeepSeek) | **Deterministic code** (guard assumes a data fetch answers the whole subquery; need-based triage can combine a lookup and a how-to in one need) | **Fixed: guard retired (full-picture auditor + consistency check handle the contradiction); fixture-verified** |
 | BUG-050 | When the reviser deletes a customer-data sentence (or any cited content), the completeness net does not restore it: the block still cites the handle (citations are locked during revision), so the net treats the obligation as covered | Medium | Confirmed (live, Gemini) | **Deterministic code** (net coverage keyed on locked citations, not on the revised text) | **Retracted -- misdiagnosis: the net did restore the address; the delivered reply contains it** |
 
@@ -2574,7 +2574,7 @@ now." (generic sentence when no need is named).
 
 ## BUG-048 — ATM card-capture FAQs unreachable from a Debit_Card search
 
-**Severity:** Medium **Confidence:** Confirmed (traced) **Status: Card part fixed (2026-09-25); address example open (ranking, not tags)**
+**Severity:** Medium **Confidence:** Confirmed (traced) **Status: Fixed (2026-09-25) -- card part and address part**
 **What happens:** `faq_47fe2093` / `faq_7d02d0a7` ("An ATM has captured my Horizon card...")
 are tagged `Deposit_Account` only. When the formulator maps the need to `Debit_Card` (a
 defensible choice), the product-filtered search never retrieves them, and retry widening
@@ -2671,7 +2671,9 @@ in 5/5. Retrieval: ATM card-capture FAQs 5/5, replacement-fee FAQ 5/5, lost-card
 - *Retry:* with the clean query the widened retry selects `faq_24568045` 4/4 (was 0).
 - *Remaining:* round 1 still misses `faq_24568045` because that FAQ is tagged intent
   `General Inquiries` only, while the formulator (correctly) picks `Profile Updates`; with
-  General Inquiries included it ranks #1 on both models. Data decision pending.
+  General Inquiries included it ranks #1 on both models. **Decision: the data stays as is** --
+  the design should be resilient to imperfect tags, and it is: the widened retry covers the
+  FAQ's intent and selects it (4/4). Accepted cost: one extra retrieval round for this case.
 
 ## BUG-049 — The BUG-018 guard removes FAQ evidence a data fetch does not replace
 

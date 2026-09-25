@@ -357,11 +357,23 @@ def _compute_subquery_status(subquery: dict) -> str:
 
 
 def _normalized_product_tags(product_value: Any) -> list[str]:
-    """Return unique, matrix-valid product tags while preserving their order."""
+    """Return unique, matrix-valid product tags while preserving their order.
+
+    Several products sometimes arrive as one string -- "Debit_Card,
+    Credit_Card" or a stringified list "['Debit_Card', 'Credit_Card']" --
+    instead of a JSON list; a whole-string match would drop them all and
+    leave the task with no valid search scope, so a string is split on
+    commas first (BUG-048).
+    """
     raw_tags = product_value if isinstance(product_value, list) else [product_value]
     tags = []
-    for raw_tag in raw_tags:
-        tag = str(raw_tag).strip()
+    parts = [
+        part
+        for raw_tag in raw_tags
+        for part in (raw_tag.split(",") if isinstance(raw_tag, str) else [raw_tag])
+    ]
+    for part in parts:
+        tag = str(part).strip().strip("[]'\" ").strip()
         if tag and tag in PRODUCT_INTENT_MATRIX and tag not in tags:
             tags.append(tag)
     return tags
@@ -1077,6 +1089,32 @@ PRODUCT_INTENT_MATRIX = {
     "Rewards_Program": ["Authentication And Security", "Features And Limits", "General Inquiries", "Payments And Transfers", "Rewards And Promotions"],
     "Stocks": ["Fees And Charges", "General Inquiries", "Wealth And Insurance"]
 }
+
+# Business facts about how Horizon's own products relate, shared by every
+# call that chooses a product (the formulator and the Territory B retry,
+# so far). The FAQ data follows the business: one card serves as debit and
+# credit card, so its documentation is filed under Debit_Card,
+# Credit_Card or Deposit_Account (BUG-048).
+HORIZON_PRODUCT_BRIEFING = """HORIZON PRODUCT BRIEFING -- how Horizon's own products relate (business facts):
+- One card, two functions. Horizon issues a single physical card ("my card",
+  "my Horizon card"). It works as a debit card from the start, and a credit
+  function can also be enabled on the same card. Debit_Card and Credit_Card
+  are the two functions of that one card, not two cards.
+- Deposit_Account is the account linked to the debit card: debit spending and
+  ATM withdrawals draw on it, so documentation about using the debit card can
+  also be filed under Deposit_Account.
+- Classifying a card request:
+  * About the physical card itself (lost, stolen, damaged, captured by an ATM,
+    activation, PIN, replacement, delivery, appearance): it is the same card
+    whichever function is used, so the credit/debit distinction does not
+    matter -- target Debit_Card, Credit_Card and Deposit_Account together.
+  * About one function (e.g. credit limit, credit card bill or repayment,
+    credit interest, cash advance -> Credit_Card; spending or withdrawing
+    from the linked account -> Debit_Card with Deposit_Account): decide from
+    the customer's words and the conversation.
+  * About a function, but neither the customer's words nor the conversation
+    shows which one: use CLARIFY and ask whether they mean the debit or the
+    credit function -- never guess."""
 
 INTENT_GUIDELINE = """
 1. Acquisition & Setup (Getting Started)
@@ -2733,6 +2771,8 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     PRODUCT/INTENT MATRIX (Valid Nouns and Verbs):
     {PRODUCT_INTENT_MATRIX}
 
+    {HORIZON_PRODUCT_BRIEFING}
+
     INTENT DEFINITION GUIDELINE:
     {INTENT_GUIDELINE}
 
@@ -2784,7 +2824,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
        - "conceptual": A phrase describing what the product, feature, or service in this specific component is and how it works. Should sound like it comes from an FAQ answer's explanatory introduction for this topic.
        DO NOT use comma-separated keywords. DO NOT paraphrase the customer's original question. Use common banking vocabulary only — do not invent specific product names, amounts, dates, or branch details. Each angle MUST target a structurally different part of a hypothetical FAQ answer about the component's topic.
     5. For EACH SEARCH task, write "mapping_reason" as two explicit, ordered steps -- product before intent, never combined into one pass or decided in the other order:
-       STEP A (PRODUCT): first identify every Matrix PRODUCT (the Matrix's own top-level keys, e.g. Deposit_Account, Credit_Card, Horizon_APP -- normally one, or more than one only when the request genuinely spans multiple products at once) this component concerns, and state the concrete basis for each. When the customer's own wording names no product noun at all -- only an action, operation, or constraint (e.g. "transfer," "limit," "payment") -- you must still explicitly reason about which underlying product an ordinary retail customer would use for that action (e.g. transfers and their daily limits live on the customer's deposit/current account) -- never leave this step implicit, skip it, or defer it merely because the intent seems obvious.
+       STEP A (PRODUCT): first identify every Matrix PRODUCT (the Matrix's own top-level keys, e.g. Deposit_Account, Credit_Card, Horizon_APP -- normally one, or more than one only when the request genuinely spans multiple products at once; for a card request, follow the HORIZON PRODUCT BRIEFING; target_commercial_product is always a JSON list, e.g. ["Deposit_Account"] or ["Debit_Card","Credit_Card"]) this component concerns, and state the concrete basis for each. When the customer's own wording names no product noun at all -- only an action, operation, or constraint (e.g. "transfer," "limit," "payment") -- you must still explicitly reason about which underlying product an ordinary retail customer would use for that action (e.g. transfers and their daily limits live on the customer's deposit/current account) -- never leave this step implicit, skip it, or defer it merely because the intent seems obvious.
        STEP B (INTENT): only once STEP A is settled, identify every Matrix INTENT (1-3) that applies to this component under the product(s) just identified. Ranking or prioritizing among several plausible intents happens here, in this step -- it is never a substitute for STEP A, and settling it first is never grounds to skip STEP A.
        Both PRODUCT and INTENT may be a single value or a short list, exactly as many as the request genuinely calls for -- never pad either to look thorough, and never collapse a genuine multi-product or multi-intent request into just one to keep the reasoning simple.
        Grounded in the Product/Intent Matrix and, where relevant, Recent Conversation. Decide the reasoning first; do not write a pairing and then back-justify it afterward.
@@ -2799,7 +2839,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     8. Use "ALL" only when a component is genuinely universal and its Intent is a valid intent listed under "ALL" in the Product/Intent Matrix. "ALL" is not a fallback for an unknown product.
 
     Output JSON ONLY:
-    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","mapping_reason":"Customer named 'open an account' -- 'account' with no qualifier maps to the base Deposit_Account family, and 'open' is the Application intent verb in the Matrix.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Application"],"verification_items":[],"alternate_product_reason":"If Deposit_Account documentation doesn't cover this, opening an account is also a core Horizon_APP onboarding flow.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_7","customer_component":"I want to increase my daily transfer limit","resolution":"SEARCH","search_task":{{"task_id":"task_2","mapping_reason":"STEP A (PRODUCT): the request names no product noun at all, only the action 'transfer' and constraint 'limit' -- but daily transfer limits are configured on the customer's own deposit/current account, so PRODUCT is Deposit_Account. STEP B (INTENT): 'limit' maps to Features And Limits, and 'transfer' maps to Payments And Transfers, both valid intents under Deposit_Account.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Deposit_Account","target_intent":["Features And Limits","Payments And Transfers"],"verification_items":[],"alternate_product_reason":"Since transfer limits are also managed via digital banking, Horizon_APP may contain the same setting.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_8","customer_component":"How do I get a visa card?","resolution":"SEARCH","search_task":{{"task_id":"task_3","mapping_reason":"STEP A (PRODUCT): the request names a 'visa card' -- 'Visa' is a card network/brand name, not a product; the underlying product is Credit_Card. STEP B (INTENT): 'How do I get' maps to Application.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Credit_Card","target_intent":["Application"],"verification_items":["the card network is Visa"],"alternate_product_reason":"","alternate_products":[]}},"clarification":null,"decline":null}},{{"component_id":"component_9","customer_component":"my credit card is ugly, can I replace it?","resolution":"SEARCH","search_task":{{"task_id":"task_4","mapping_reason":"STEP A (PRODUCT): the request concerns the customer's own credit card, so PRODUCT is Credit_Card. STEP B (INTENT): 'replace it' maps to Card Logistics.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"Credit_Card","target_intent":["Card Logistics"],"verification_items":["the card replacement procedure covers cosmetic/appearance dissatisfaction, not only damage, loss, or theft"],"alternate_product_reason":"","alternate_products":[]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"the fee","clarification_reason":"No product or service is identified.","clarification_guesses":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"loan","clarification_reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","clarification_guesses":[{{"label":"Personal Loan","message":"I'm asking about a personal loan.","reason":"Personal_Loan is the only loan-type Matrix product."}}]}},"decline":null}},{{"component_id":"component_6","customer_component":"I have a question about my loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"a question about my loan","clarification_reason":"Product (Personal_Loan) is unambiguous, but no verb, action, or outcome is given -- Application, Repayment, and Eligibility are all equally plausible intents with no basis to prefer one.","clarification_guesses":[{{"label":"Applying","message":"I want to know how to apply for a loan.","reason":"Application is a valid Matrix intent for Personal_Loan."}},{{"label":"Repayment","message":"I want to know about repaying my loan.","reason":"Repayment is a valid Matrix intent for Personal_Loan."}},{{"label":"Eligibility","message":"I want to know if I'm eligible for a loan.","reason":"Eligibility is a valid Matrix intent for Personal_Loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
+    {{"components": [{{"component_id":"component_1","customer_component":"open an account","resolution":"SEARCH","search_task":{{"task_id":"task_1","mapping_reason":"Customer named 'open an account' -- 'account' with no qualifier maps to the base Deposit_Account family, and 'open' is the Application intent verb in the Matrix.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":["Deposit_Account"],"target_intent":["Application"],"verification_items":[],"alternate_product_reason":"If Deposit_Account documentation doesn't cover this, opening an account is also a core Horizon_APP onboarding flow.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_7","customer_component":"I want to increase my daily transfer limit","resolution":"SEARCH","search_task":{{"task_id":"task_2","mapping_reason":"STEP A (PRODUCT): the request names no product noun at all, only the action 'transfer' and constraint 'limit' -- but daily transfer limits are configured on the customer's own deposit/current account, so PRODUCT is Deposit_Account. STEP B (INTENT): 'limit' maps to Features And Limits, and 'transfer' maps to Payments And Transfers, both valid intents under Deposit_Account.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":["Deposit_Account"],"target_intent":["Features And Limits","Payments And Transfers"],"verification_items":[],"alternate_product_reason":"Since transfer limits are also managed via digital banking, Horizon_APP may contain the same setting.","alternate_products":["Horizon_APP"]}},"clarification":null,"decline":null}},{{"component_id":"component_8","customer_component":"How do I get a visa card?","resolution":"SEARCH","search_task":{{"task_id":"task_3","mapping_reason":"STEP A (PRODUCT): the request names a 'visa card' -- 'Visa' is a card network/brand name, not a product; the underlying product is Credit_Card. STEP B (INTENT): 'How do I get' maps to Application.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":["Credit_Card"],"target_intent":["Application"],"verification_items":["the card network is Visa"],"alternate_product_reason":"","alternate_products":[]}},"clarification":null,"decline":null}},{{"component_id":"component_9","customer_component":"my credit card is ugly, can I replace it?","resolution":"SEARCH","search_task":{{"task_id":"task_4","mapping_reason":"STEP A (PRODUCT): replacing the card for its appearance is about the physical card itself, which is the same card for its debit and credit functions (HORIZON PRODUCT BRIEFING), so PRODUCT is Debit_Card, Credit_Card and Deposit_Account. STEP B (INTENT): 'replace it' maps to Card Logistics.","angle_groups":[{{"group_id":"base","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":["Debit_Card","Credit_Card","Deposit_Account"],"target_intent":["Card Logistics"],"verification_items":["the card replacement procedure covers cosmetic/appearance dissatisfaction, not only damage, loss, or theft"],"alternate_product_reason":"","alternate_products":[]}},"clarification":null,"decline":null}},{{"component_id":"component_2","customer_component":"the fee","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"the fee","clarification_reason":"No product or service is identified.","clarification_guesses":[]}},"decline":null}},{{"component_id":"component_5","customer_component":"how to apply for a loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"loan","clarification_reason":"Personal_Loan is the only loan-type matrix product, but the customer's intended type is not confirmed.","clarification_guesses":[{{"label":"Personal Loan","message":"I'm asking about a personal loan.","reason":"Personal_Loan is the only loan-type Matrix product."}}]}},"decline":null}},{{"component_id":"component_6","customer_component":"I have a question about my loan","resolution":"CLARIFY","search_task":null,"clarification":{{"unresolved_request":"a question about my loan","clarification_reason":"Product (Personal_Loan) is unambiguous, but no verb, action, or outcome is given -- Application, Repayment, and Eligibility are all equally plausible intents with no basis to prefer one.","clarification_guesses":[{{"label":"Applying","message":"I want to know how to apply for a loan.","reason":"Application is a valid Matrix intent for Personal_Loan."}},{{"label":"Repayment","message":"I want to know about repaying my loan.","reason":"Repayment is a valid Matrix intent for Personal_Loan."}},{{"label":"Eligibility","message":"I want to know if I'm eligible for a loan.","reason":"Eligibility is a valid Matrix intent for Personal_Loan."}}]}},"decline":null}},{{"component_id":"component_3","customer_component":"margin trading account","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"Horizon does not offer margin trading accounts.","category":"out_of_scope_product"}}}},{{"component_id":"component_4","customer_component":"business credit card annual fee","resolution":"DECLINE","search_task":null,"clarification":null,"decline":{{"reason":"This assistant's information covers individual credit cards only, not business credit cards.","category":"individual_customers_only"}}}}]}}
 
     {_DATA_FOLLOWS}
 
@@ -2825,6 +2865,8 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
         retry_prompt = f"""
         PRODUCT/INTENT MATRIX (Valid Nouns and Verbs):
         {PRODUCT_INTENT_MATRIX}
+
+        {HORIZON_PRODUCT_BRIEFING}
 
         INTENT DEFINITION GUIDELINE:
         {INTENT_GUIDELINE}
@@ -2862,7 +2904,7 @@ def node_02e_intent_classifier_and_query_formulator(state: AgentState):
           product/intent pairing per companion.
 
         Output JSON ONLY:
-        {{"companions": [{{"source_task_id":"exact failed task_id","search_task":{{"task_id":"<source_task_id>_scope","mapping_reason":"reasoned first: name the concrete Matrix/context basis for this genuinely different but related pairing","angle_groups":[{{"group_id":"scope","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":"a valid matrix product, different from the failed task's own","target_intent":["1-3 valid intents for that product"],"search_territory":"adjacent_scope","source_task_id":"<same as the entry's own source_task_id>"}}}}]}}
+        {{"companions": [{{"source_task_id":"exact failed task_id","search_task":{{"task_id":"<source_task_id>_scope","mapping_reason":"reasoned first: name the concrete Matrix/context basis for this genuinely different but related pairing","angle_groups":[{{"group_id":"scope","procedural":"...","policy":"...","conceptual":"..."}}],"target_commercial_product":["a valid matrix product, different from the failed task's own"],"target_intent":["1-3 valid intents for that product"],"search_territory":"adjacent_scope","source_task_id":"<same as the entry's own source_task_id>"}}}}]}}
 
         {_DATA_FOLLOWS}
 

@@ -66,7 +66,7 @@ second time).
 | BUG-045 | A need the planner assigns no tool gets no obligation at all -- not even a no-info entry -- so the reply is empty and the customer gets the generic apology | High | Confirmed (live, DeepSeek) | **Deterministic code** (no fallback obligation for an open subquery with no tool and no evidence) | **Fixed (ff2c0f0): deterministic FAQ default + no-info failsafe; fixture- and live-verified** |
 | BUG-046 | "My PIN is not working and I need assistance" is rejected by the inbound word filter (`credential_pin_disclosure`) before any model runs | Medium | Confirmed (live, every model) | **Deterministic code** (keyword rule false positive) | **Fixed (29845c7), matrix + live-verified** |
 | BUG-047 | The completeness net's fallback sentence quotes the customer's request verbatim and ungrammatically ("Sorry, I don't have a complete answer for the part about I withdrew cash ... right now.") | Low-Medium | Confirmed (live, DeepSeek) | **Deterministic code** (net template) | **Fixed (fa1114b)** |
-| BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | Open |
+| BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | **Card part fixed: shared product briefing + list-typed product field; replay- and live-verified. Address example (ranking) still open** |
 | BUG-049 | The BUG-018 guard removes a RELEVANT FAQ result whenever a data fetch completed on the same need -- even when the need also asks something the data cannot answer ("I forgot my address... where can I change it?" kept the address but lost the change-address evidence) | Medium | Confirmed (live, DeepSeek) | **Deterministic code** (guard assumes a data fetch answers the whole subquery; need-based triage can combine a lookup and a how-to in one need) | **Fixed: guard retired (full-picture auditor + consistency check handle the contradiction); fixture-verified** |
 | BUG-050 | When the reviser deletes a customer-data sentence (or any cited content), the completeness net does not restore it: the block still cites the handle (citations are locked during revision), so the net treats the obligation as covered | Medium | Confirmed (live, Gemini) | **Deterministic code** (net coverage keyed on locked citations, not on the revised text) | **Retracted -- misdiagnosis: the net did restore the address; the delivered reply contains it** |
 
@@ -2574,7 +2574,7 @@ now." (generic sentence when no need is named).
 
 ## BUG-048 — ATM card-capture FAQs unreachable from a Debit_Card search
 
-**Severity:** Medium **Confidence:** Confirmed (traced) **Status: Open**
+**Severity:** Medium **Confidence:** Confirmed (traced) **Status: Card part fixed (2026-09-25); address example open (ranking, not tags)**
 **What happens:** `faq_47fe2093` / `faq_7d02d0a7` ("An ATM has captured my Horizon card...")
 are tagged `Deposit_Account` only. When the formulator maps the need to `Debit_Card` (a
 defensible choice), the product-filtered search never retrieves them, and retry widening
@@ -2592,6 +2592,46 @@ context); the widened retry (Credit_Card + Horizon_APP) never reached the in-app
 tests), so round 2 approved only the onboarding Singpass/ICA procedure as RELEVANT. The
 general pattern: an FAQ reachable under a single product tag is missed whenever the
 formulator picks a different, defensible product for the same need.
+
+**Decision (2026-09-25):** not a design problem and not a data problem to merge away -- it
+reflects Horizon's business: one physical card that is a debit card from the start and can
+also have a credit function enabled; Deposit_Account is the account linked to the debit
+card. The FAQ tags follow that business (card FAQs are split across Debit_Card,
+Credit_Card and Deposit_Account), so the fix belongs in how the formulator reads a card
+request, not in the tags.
+
+**Fix:**
+- A shared `HORIZON_PRODUCT_BRIEFING` constant (next to the product matrix, reusable by any
+  call that chooses a product), included in the formulator and the Territory B retry, in
+  the fixed (cached) part of each prompt. It states the one-card/two-functions fact and the
+  deposit-account link, and how to classify: a physical-card question (lost, stolen,
+  damaged, captured by an ATM, activation, PIN, replacement, delivery, appearance) targets
+  Debit_Card, Credit_Card and Deposit_Account together; a function question is decided from
+  the customer's words and the conversation; an unclear function is a CLARIFY (debit or
+  credit?), never a guess.
+- The formulator's schema forced `target_commercial_product: str` (the router attaches
+  `QueryFormulation` to this prompt), so DeepSeek wrote a single product even when its own
+  reasoning named all three, and Gemini packed several into one comma string that the
+  normaliser dropped (leaving no valid search scope). The field is now `List[str]`, the
+  prompt examples use lists, and `_normalized_product_tags` also splits a comma or
+  stringified-list string.
+- The formulator example "my credit card is ugly, can I replace it?" (Credit_Card only)
+  contradicted the briefing and now uses all three products.
+
+**Verified:** replay of 9 card questions, old vs new text, both models. Physical-card
+questions: all three products in every run (old: one product, often the wrong one --
+"I lost my card" / "activate my new card" went to Credit_Card on Gemini). "An ATM
+swallowed my card": the card-capture FAQs are now retrieved in 5/5 runs (old 0/5).
+Function questions keep their product (credit limit, credit card bill -> Credit_Card);
+savings interest stays Deposit_Account. "What's the annual fee on my card?": DeepSeek
+asks debit or credit (2/3; once it reasoned CLARIFY but wrote SEARCH with no product),
+Gemini treats it as a card-level question (all three). Live on DeepSeek: both card-capture
+FAQs retrieved and approved SUFFICIENT; the reply gives the order-a-new-card / Customer
+Care steps.
+
+**Still open -- the address example above:** the widened retry (Credit_Card +
+Horizon_APP) could reach `faq_24568045` but did not rank it; that is a ranking issue, not
+a tag gap, and is not addressed by this fix.
 
 ## BUG-049 — The BUG-018 guard removes FAQ evidence a data fetch does not replace
 

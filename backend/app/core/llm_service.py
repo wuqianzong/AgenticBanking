@@ -413,7 +413,12 @@ class SearchTask(BaseModel):
     procedural: str = Field(description="Comma-separated action verbs and tool nouns.")
     policy: str = Field(description="Comma-separated rule nouns and constraints.")
     conceptual: str = Field(description="Comma-separated definition nouns.")
-    target_commercial_product: str = Field(description="The exact Noun from the Product Matrix.")
+    target_commercial_product: List[str] = Field(
+        description=(
+            "The exact Noun(s) from the Product Matrix -- normally one; more than one only when the "
+            "request genuinely spans several products (for a card request, follow the HORIZON PRODUCT BRIEFING)."
+        )
+    )
     target_intent: List[str] = Field(description="List of 1-3 Verbs from the Intent Matrix.")
     verification_items: List[str] = Field(
         default_factory=list,

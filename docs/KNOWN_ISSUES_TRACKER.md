@@ -2682,6 +2682,14 @@ in 5/5. Retrieval: ATM card-capture FAQs 5/5, replacement-fee FAQ 5/5, lost-card
   new Profile Updates chunks; the SQLite row; 2 new Chroma chunks, embeddings identical to the
   existing chunks of the same text). Round 1 now retrieves it on both models.
 
+**Auditor side -- designed behaviour, not a defect (2026-09-25):** in the traced session the
+sufficiency auditor approved `faq_6e2d941d` (changing an address while applying for an
+account) as RELEVANT for an existing customer. It had all the information, and its rules
+deliberately let a parent on the same topic count as material and be offered as an
+unclaimed courtesy with an honest admission ("no info is info"). Approving it was the
+model's judgment within that design. With the search query and the retag, round 1 now
+finds the right FAQ, so this case no longer depends on it.
+
 ## BUG-049 — The BUG-018 guard removes FAQ evidence a data fetch does not replace
 
 **Severity:** Medium **Confidence:** Confirmed (live, DeepSeek) **Status: Fixed (2026-09-25) -- guard retired, fixture-verified**

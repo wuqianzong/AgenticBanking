@@ -68,6 +68,7 @@ second time).
 | BUG-047 | The completeness net's fallback sentence quotes the customer's request verbatim and ungrammatically ("Sorry, I don't have a complete answer for the part about I withdrew cash ... right now.") | Low-Medium | Confirmed (live, DeepSeek) | **Deterministic code** (net template) | Open |
 | BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | Open |
 | BUG-049 | The BUG-018 guard removes a RELEVANT FAQ result whenever a data fetch completed on the same need -- even when the need also asks something the data cannot answer ("I forgot my address... where can I change it?" kept the address but lost the change-address evidence) | Medium | Confirmed (live, DeepSeek) | **Deterministic code** (guard assumes a data fetch answers the whole subquery; need-based triage can combine a lookup and a how-to in one need) | Open |
+| BUG-050 | When the reviser deletes a customer-data sentence (or any cited content), the completeness net does not restore it: the block still cites the handle (citations are locked during revision), so the net treats the obligation as covered | Medium | Confirmed (live, Gemini) | **Deterministic code** (net coverage keyed on locked citations, not on the revised text) | Open |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -2518,3 +2519,26 @@ does by design. The turn consistency check (BUG-039) now exists to catch real
 contradictions semantically, so the blanket guard may be removable or narrowable.
 Candidate directions (undecided): drop the guard and rely on the consistency check;
 or keep it only when the subquery's domains are purely personal_data_retrieval.
+
+## BUG-050 — Completeness net misses content the reviser deleted
+
+**Severity:** Medium **Confidence:** Confirmed (live) **Status: Open**
+**Found in:** Gemini comparison run of the 2026-09-25 multi-need turn, session `test_gemini_compare_61d0646e`
+("...i lost my credit card... Also i forgot my address registered in the system. Where can
+i change it...").
+
+**What happens:** the generator wrote the address step block with "Your registered postal
+address on file is {{data-...}}." (citing `task_2`, `data_1`, `svc_2`). Gemini's audit wrongly
+flagged the token as disclosing the value (the misreading BUG-034 addressed in the prompt);
+the reviser then deleted that sentence. The completeness net runs after revision, but the
+block still cites `data_1` -- `sourceShortcutHandles` is locked during revision -- so the net
+counted the personal-data obligation as covered and did not re-add it. The customer, who had
+said they forgot their address, never got it.
+
+**Cause:** the net's coverage check (`_apply_response_completeness_nets`, `_is_covered`) keys
+on a block's citation fields, which only describe what the block was generated from, not
+what its text still says after revision. Related to BUG-041 (the net's duplicate sentence
+vs. the model's mention): both come from citations and text drifting apart. Candidate
+directions (undecided): for handle-type obligations with a fixed token (personal data),
+check the token is still present in the block text; or refresh a block's citations after
+revision.

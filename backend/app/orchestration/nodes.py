@@ -4710,6 +4710,47 @@ def _reject_confidence_null_hypothesis(
     }
 
 
+def _turn_tool_evidence(state: AgentState) -> list[tuple[str, dict]]:
+    """Every completed non-FAQ tool result this turn, as (subquery_id, entry)
+    for the sufficiency auditor's full picture: customer data (a data
+    lookup -- only what was fetched, never the value), app screens
+    (deeplinks) and service forms. Each entry names the need it served.
+    Per the user's design principle, the auditor sees the whole picture;
+    misjudgments are corrected by tuning its rules, not by withholding
+    information. Descriptions come from the tool registry."""
+    field_desc, screens, forms = {}, {}, {}
+    for capability in enabled_tool_capabilities():
+        for field in capability.get("available_fields", []) or []:
+            field_desc[field.get("field_id")] = field.get("description", "")
+        for dest in capability.get("available_destinations", []) or []:
+            screens[dest.get("destination_id")] = (dest.get("label", ""), dest.get("description", ""))
+        for req in capability.get("available_requests", []) or []:
+            forms[req.get("service_request_id")] = req.get("description", "")
+    evidence = []
+    for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", [])) or []:
+        if not isinstance(subquery, dict):
+            continue
+        need = str(subquery.get("need", "")).strip() or str(subquery.get("customer_component", "")).strip()
+        for attempt in subquery.get("tool_attempts", []) or []:
+            if not isinstance(attempt, dict) or attempt.get("status") != "completed":
+                continue
+            payload = attempt.get("input") or {}
+            tool = attempt.get("tool_name")
+            if tool == "api":
+                field_id = payload.get("field_id") or (attempt.get("result") or {}).get("field_id")
+                entry = {"type": "customer_data", "provides": field_desc.get(field_id, field_id or "")}
+            elif tool == "deeplink":
+                label, screen = screens.get(payload.get("destination_id"), (payload.get("destination_id", ""), ""))
+                entry = {"type": "app_screen", "label": label, "screen": screen}
+            elif tool == "service_request":
+                request_id = payload.get("service_request_id", "")
+                entry = {"type": "service_form", "label": request_id, "description": forms.get(request_id, "")}
+            else:
+                continue
+            evidence.append((subquery.get("subquery_id"), {"for_need": need, **entry}))
+    return evidence
+
+
 def node_03c_sufficiency_auditor(state: AgentState):
     print("🟢 [NODE 03c] Executing Task-Level Sufficiency & Evidence Selection")
     # OLD (removed): a session's rolling historical confidence alone used
@@ -4783,6 +4824,9 @@ def node_03c_sufficiency_auditor(state: AgentState):
     evaluation_inputs = []
     candidate_ids_by_task = {}
     auditor_results = {}
+    # The whole picture: every other tool result this turn (see
+    # _turn_tool_evidence and the OTHER TOOL RESULTS THIS TURN rule).
+    turn_tool_evidence = _turn_tool_evidence(state)
     for result in evidence_candidates:
         task_id = result.get("task_id")
         fresh_parents = list(result.get("parents", []))
@@ -4816,13 +4860,21 @@ def node_03c_sufficiency_auditor(state: AgentState):
                 "evidence_delta": [],
             }
             continue
-        evaluation_inputs.append({
+        task_input = {
             "task_id": task_id,
             "task": tasks_by_id.get(task_id, {}),
             "retained_partial_parent_ids": retained_ids,
             "prior_sufficiency_audit_history": sufficiency_history.get(str(task_id), []),
             "parents": all_parents,
-        })
+        }
+        task_subquery_id = tasks_by_id.get(task_id, {}).get("subquery_id")
+        other_tool_results = [
+            {**entry, "same_need_as_this_task": subquery_id == task_subquery_id}
+            for subquery_id, entry in turn_tool_evidence
+        ]
+        if other_tool_results:
+            task_input["other_tool_results_this_turn"] = other_tool_results
+        evaluation_inputs.append(task_input)
     if evaluation_inputs:
         prompt = f"""
         TASK-LEVEL SUFFICIENCY AND EVIDENCE SELECTION
@@ -5307,6 +5359,41 @@ def node_03c_sufficiency_auditor(state: AgentState):
           empty -- a forced lead is worse than none, since it would be
           shown to the customer immediately instead of a genuinely reasoned
           connection.
+
+        - OTHER TOOL RESULTS THIS TURN: a Task Input may include
+          `other_tool_results_this_turn` -- the results of every other tool
+          that already ran this turn (completed system results, not model
+          claims), each tagged with the customer need it served (`for_need`)
+          and whether that is the same need as this task
+          (`same_need_as_this_task`). They are evidence alongside the parents,
+          each supporting ONLY its own kind of statement:
+          * "customer_data": the customer's own value named in `provides`
+            (e.g. their address or balance) has been fetched and will be shown
+            to them through a secure token; you never see the value. It
+            answers the part of a need that asks for that value.
+          * "app_screen": the customer can be taken to that app screen to act
+            there. It supports "you can do this on this screen" -- on its own
+            it does not answer a question about rules, eligibility, fees,
+            timing, procedure details, or how something works.
+          * "service_form": the customer can submit that form for the bank to
+            process. Same limit as "app_screen".
+          How to use them:
+          * Judge every parent strictly on its own text, exactly as above; a
+            tool result never makes a parent relevant or supports a claim a
+            parent does not make, and approved_parent_ids lists parents only.
+          * For this task's own need (`same_need_as_this_task: true`), judge
+            `status` on whether the need is covered by all the evidence within
+            these limits: SUFFICIENT when the approved parents cover every part
+            the tool results do not; RELEVANT when a part remains that neither
+            covers; IRRELEVANT when no parent adds anything. When the tool
+            results alone cover the whole need, return IRRELEVANT with empty
+            generation_guidance -- nothing for the FAQ to add is not an
+            unavailability.
+          * Results for other needs are context for the whole reply: they
+            never change this task's status, but `generation_guidance`,
+            `unresolved_term` and the clarification fields must never say
+            information is unavailable for, or ask about, anything any tool
+            result covers -- speak only about what nothing covers.
 
         Output JSON only: {{"task_results": [{{"task_id": "...", "reason": "...", "status": "SUFFICIENT" | "RELEVANT" | "IRRELEVANT", "approved_parent_ids": ["..."], "generation_guidance": "", "evidence_delta": [{{"parent_id": "...", "fact": "..."}}], "verification_results": [{{"item": "...", "confirmed": true, "supporting_parent_id": "..."}}], "scope_expansion_lead_reason": "", "scope_expansion_lead_parent_id": "", "unresolved_term": "", "clarification_reason": "", "clarification_guesses": [{{"label": "...", "message": "...", "reason": "..."}}]}}]}}
 

@@ -58,17 +58,17 @@ second time).
 | BUG-037 | A completed redirect (deeplink/service_request) suppressed RAG evidence, leading the generator to fabricate a fact (card delivery "7 to 10" vs the real 6-7 days) | High | Confirmed (live) | **Deterministic code** (regression from BUG-018's fix: guard counted any completed tool, not only a data fetch) | **Fixed, fixture-verified** |
 | BUG-038 | An audit violation on a task no block carries approves the block holding the flagged sentence; the reviser gets nothing and the flagged text ships | High | Confirmed (live) | **Deterministic code** (a RELEVANT task's separate "terminal marker" outlived its removed evidence; partition attribution) | **Fixed (all 3 steps), fixture-verified; live check pending (model spike)** |
 | BUG-039 | No turn-level consistency check: results collected for one turn could contradict each other in the response (e.g. "no information on your balance" next to the fetched balance) whenever the same-subquery BUG-018 guard could not see the conflict | High | Confirmed (live, triage merged the two components the guard relies on) | **Missing capability** (semantic, turn-wide conflict judgment) | **Fixed, fixture- and live-judgment-verified** |
-| BUG-040 | A RELEVANT entry's "not covered" notice contradicts another result in the same reply ("the available information does not cover how to view your current address" right after showing it from the customer's data) | Medium | Confirmed (live, Gemini validation) | **Deterministic code / prompt** (compose_partial guidance from 03fb488 does not limit the notice to what no other result covers) | Open |
+| BUG-040 | A RELEVANT entry's "not covered" notice contradicts another result in the same reply ("the available information does not cover how to view your current address" right after showing it from the customer's data) | Medium | Confirmed (live, Gemini validation) | **Deterministic code / prompt** (compose_partial guidance from 03fb488 does not limit the notice to what no other result covers) | **Open -- root cause is the sufficiency auditor's guidance; fix direction awaiting decision** |
 | BUG-041 | A card (shortcut) sentence is written twice -- by the model and by the completeness net; when the audit flags the duplicate, the flag is matched to a different block, so the reviser cannot remove it and the turn exhausts its retries | Medium | Confirmed (live, 3 cases) | **Deterministic code** (net insertion + partition attribution) | Open |
-| BUG-042 | A clarifying question the sufficiency auditor authored in retry round 1 is dropped when round 2 returns none, so no question is asked | Medium | Confirmed (live, 1 case) | **Deterministic code** (clarification not retained across sufficiency rounds) | Open |
+| BUG-042 | A clarifying question the sufficiency auditor authored in retry round 1 is dropped when round 2 returns none, so no question is asked | Medium | Confirmed (live, 1 case) | **Deterministic code** (clarification not retained across sufficiency rounds) | **Fixed (487b3dd), fixture-verified** |
 | BUG-043 | A no-info statement is suppressed whenever a redirect covers the need -- harmful when the planner picked the wrong screen ("Delete this account!" got only a Security Settings button) | Medium | Confirmed (live, 1 case) | **Design + LLM judgment** (redirect-covers-need rule; wrong deeplink choice) | Open |
-| BUG-044 | Small generation artifacts in customer text: a stray "(4)" after flattened steps, internal jargon ("no approved evidence or record"), a repeated opening sentence | Low | Confirmed (live, 3 cases) | LLM judgment / formatting | Open |
-| BUG-045 | A need the planner assigns no tool gets no obligation at all -- not even a no-info entry -- so the reply is empty and the customer gets the generic apology | High | Confirmed (live, DeepSeek) | **Deterministic code** (no fallback obligation for an open subquery with no tool and no evidence) | Open (made rare by the planner rewrite, cc99564) |
-| BUG-046 | "My PIN is not working and I need assistance" is rejected by the inbound word filter (`credential_pin_disclosure`) before any model runs | Medium | Confirmed (live, every model) | **Deterministic code** (keyword rule false positive) | Open |
-| BUG-047 | The completeness net's fallback sentence quotes the customer's request verbatim and ungrammatically ("Sorry, I don't have a complete answer for the part about I withdrew cash ... right now.") | Low-Medium | Confirmed (live, DeepSeek) | **Deterministic code** (net template) | Open |
+| BUG-044 | Small generation artifacts in customer text: a stray "(4)" after flattened steps, internal jargon ("no approved evidence or record"), a repeated opening sentence | Low | Confirmed (live, 3 cases) | LLM judgment / formatting | **Partly fixed (ed6e28d): pipeline jargon banned; stray "(4)" / repeated opening remain (model writing)** |
+| BUG-045 | A need the planner assigns no tool gets no obligation at all -- not even a no-info entry -- so the reply is empty and the customer gets the generic apology | High | Confirmed (live, DeepSeek) | **Deterministic code** (no fallback obligation for an open subquery with no tool and no evidence) | **Fixed (ff2c0f0): deterministic FAQ default + no-info failsafe; fixture- and live-verified** |
+| BUG-046 | "My PIN is not working and I need assistance" is rejected by the inbound word filter (`credential_pin_disclosure`) before any model runs | Medium | Confirmed (live, every model) | **Deterministic code** (keyword rule false positive) | **Fixed (29845c7), matrix + live-verified** |
+| BUG-047 | The completeness net's fallback sentence quotes the customer's request verbatim and ungrammatically ("Sorry, I don't have a complete answer for the part about I withdrew cash ... right now.") | Low-Medium | Confirmed (live, DeepSeek) | **Deterministic code** (net template) | **Fixed (fa1114b)** |
 | BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | Open |
 | BUG-049 | The BUG-018 guard removes a RELEVANT FAQ result whenever a data fetch completed on the same need -- even when the need also asks something the data cannot answer ("I forgot my address... where can I change it?" kept the address but lost the change-address evidence) | Medium | Confirmed (live, DeepSeek) | **Deterministic code** (guard assumes a data fetch answers the whole subquery; need-based triage can combine a lookup and a how-to in one need) | Open |
-| BUG-050 | When the reviser deletes a customer-data sentence (or any cited content), the completeness net does not restore it: the block still cites the handle (citations are locked during revision), so the net treats the obligation as covered | Medium | Confirmed (live, Gemini) | **Deterministic code** (net coverage keyed on locked citations, not on the revised text) | Open |
+| BUG-050 | When the reviser deletes a customer-data sentence (or any cited content), the completeness net does not restore it: the block still cites the handle (citations are locked during revision), so the net treats the obligation as covered | Medium | Confirmed (live, Gemini) | **Deterministic code** (net coverage keyed on locked citations, not on the revised text) | **Retracted -- misdiagnosis: the net did restore the address; the delivered reply contains it** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -2401,6 +2401,18 @@ says to give "a neutral notice that the available information does not cover the
 their request". It does not limit "the rest" to what no *other* result covers, so the model
 attached the notice to a part the customer's data had already answered.
 
+**Root cause found (2026-09-25, while testing a first fix):** the contradiction is
+*instructed* by the sufficiency auditor. Its generation_guidance for the RELEVANT entry
+read "...while admitting plainly that there is no information available regarding how to
+view or check your current address in the system." -- true from its view (it sees only
+its own task's FAQ candidates, not the data fetch), and the generator deliberately follows
+generation guidance. A wording fix to the RELEVANT notice (limit it to what no other entry
+answers) is correct but insufficient: 6/6 test replies still contradicted the data when
+given the real guidance. Options awaiting decision: (a) show the sufficiency auditor the
+subquery's other results (e.g. "address fetched, value hidden") so its guidance never
+claims them unavailable; (b) let the generator ignore the part of an auditor note that
+another entry contradicts (weakens "the generator trusts generation guidance").
+
 ## BUG-041 — Duplicate card sentence the reviser cannot remove
 
 **Severity:** Medium **Confidence:** Confirmed (live, 3 cases) **Status: Open**
@@ -2424,6 +2436,10 @@ mentioned in text; attribute a duplicate-card violation to the handle's own bloc
 with guesses; round 2 (after widening) returned none. The terminal result used round 2, so
 no clarifying question was asked -- unlike retained partial evidence, an authored
 clarification is not carried across rounds.
+
+**Fix (487b3dd):** the last clarification the auditor authored per task is retained
+across rounds (`task_partial_clarification`) and used when a later round returns none;
+cleared when the task becomes SUFFICIENT.
 
 ## BUG-043 — No-info statement suppressed by a wrong redirect
 
@@ -2456,6 +2472,11 @@ customer got "Sorry, I don't have an answer for that right now." The planner rew
 FAQ search the default, so this rarely triggers now, but an open subquery with no tool and
 no evidence should still receive the standard no-info entry.
 
+**Fix (ff2c0f0, decided with the user):** after the planner runs, any open subquery
+with no task, no tool-selection clarification and no earlier FAQ search gets a FAQ search
+in code (`tool.plan.faq_default_added`); node_04a adds the standard no-info statement for a
+subquery that still reaches generation with nothing (`resolution.no_info_failsafe`).
+
 ## BUG-046 — PIN word-filter false positive
 
 **Severity:** Medium **Confidence:** Confirmed (live, every model) **Status: Open**
@@ -2463,6 +2484,9 @@ no evidence should still receive the standard no-info entry.
 the inbound sensitive-word rule `credential_pin_disclosure` (`inbound.sensitive_word.rejected`),
 which treats any mention of a PIN as disclosing one. Reproduced on Gemini (2026-09-05 and
 2026-09-25) and DeepSeek.
+
+**Fix (29845c7):** a credential phrase ending in "is" blocks only when the next word is
+not a state word ("not", "wrong", "blocked", "expired", ...); disclosures stay blocked.
 
 ## BUG-047 — Garbled completeness-net fallback sentence
 
@@ -2472,6 +2496,9 @@ which treats any mention of a PIN as disclosing one. Reproduced on Gemini (2026-
 received the wrong amount, and I want the cash back ... right now." Seen on DeepSeek
 (`refactor_check_banking77_r1_0237`, `refactor_check_banking77_r1_0375`); related to BUG-035's
 fix of the no-info template, which did not cover this net sentence.
+
+**Fix (fa1114b):** "Sorry, I don't have complete information available on {need} right
+now." (generic sentence when no need is named).
 
 ## BUG-048 — ATM card-capture FAQs unreachable from a Debit_Card search
 
@@ -2542,3 +2569,8 @@ vs. the model's mention): both come from citations and text drifting apart. Cand
 directions (undecided): for handle-type obligations with a fixed token (personal data),
 check the token is still present in the block text; or refresh a block's citations after
 revision.
+
+**Retracted (2026-09-25):** the delivered reply (Persistent_Chat_Message) ends with
+"Your current postal address on file is {{data-ecc2a1cb}}." -- the completeness net *did*
+re-add it; `_is_covered` already requires the token to be present in the block text. The
+original diagnosis read the reviser's raw output instead of the final reply.

@@ -62,7 +62,7 @@ second time).
 | BUG-041 | A card (shortcut) sentence is written twice -- by the model and by the completeness net; when the audit flags the duplicate, the flag is matched to a different block, so the reviser cannot remove it and the turn exhausts its retries | Medium | Confirmed (live, 3 cases) | **Deterministic code** (net insertion + partition attribution) | **Fixed: generator citation rule (V2); replay 0 misses, live-verified** |
 | BUG-042 | A clarifying question the sufficiency auditor authored in retry round 1 is dropped when round 2 returns none, so no question is asked | Medium | Confirmed (live, 1 case) | **Deterministic code** (clarification not retained across sufficiency rounds) | **Fixed (487b3dd), fixture-verified** |
 | BUG-043 | A no-info statement is suppressed whenever a redirect covers the need -- harmful when the planner picked the wrong screen ("Delete this account!" got only a Security Settings button) | Medium | Confirmed (live, 1 case) | **Design + LLM judgment** (redirect-covers-need rule; wrong deeplink choice) | **Fixed: planner chooses tools by the service they offer (not by risk); replay-verified** |
-| BUG-044 | Small generation artifacts in customer text: a stray "(4)" after flattened steps, internal jargon ("no approved evidence or record"), a repeated opening sentence | Low | Confirmed (live, 3 cases) | LLM judgment / formatting | **Partly fixed (ed6e28d): pipeline jargon banned; stray "(4)" / repeated opening remain (model writing)** |
+| BUG-044 | Small generation artifacts in customer text: a stray "(4)" after flattened steps, internal jargon ("no approved evidence or record"), a repeated opening sentence | Low | Confirmed (live, 3 cases) | LLM judgment / formatting | **Closed: jargon fixed (ed6e28d); placeholder step numbers = data quirk accepted for MVP; repetition = model writing under the existing coherence rule** |
 | BUG-045 | A need the planner assigns no tool gets no obligation at all -- not even a no-info entry -- so the reply is empty and the customer gets the generic apology | High | Confirmed (live, DeepSeek) | **Deterministic code** (no fallback obligation for an open subquery with no tool and no evidence) | **Fixed (ff2c0f0): deterministic FAQ default + no-info failsafe; fixture- and live-verified** |
 | BUG-046 | "My PIN is not working and I need assistance" is rejected by the inbound word filter (`credential_pin_disclosure`) before any model runs | Medium | Confirmed (live, every model) | **Deterministic code** (keyword rule false positive) | **Fixed (29845c7), matrix + live-verified** |
 | BUG-047 | The completeness net's fallback sentence quotes the customer's request verbatim and ungrammatically ("Sorry, I don't have a complete answer for the part about I withdrew cash ... right now.") | Low-Medium | Confirmed (live, DeepSeek) | **Deterministic code** (net template) | **Fixed (fa1114b)** |
@@ -2526,10 +2526,25 @@ Model differences in such a genuinely two-option case are acceptable.
 
 ## BUG-044 — Small generation artifacts in customer text
 
-**Severity:** Low **Confidence:** Confirmed (live) **Status: Open**
+**Severity:** Low **Confidence:** Confirmed (live) **Status: Closed (2026-09-25) -- jargon fixed; the rest accepted**
 **Found in:** `research/2026-09-25_code_change_validation_gemini` -- a stray "(4)" after flattened steps (`banking77_r1_0177`); internal
 jargon "There is no approved evidence or record to execute a transfer" (`mtsgd_32_00103`
 turn 2); the same point stated twice in a row (`banking77_r1_0014`).
+
+**Resolution (2026-09-25):**
+- *Internal jargon:* fixed (ed6e28d).
+- *Stray "(4)" and step numbers inside stepper details -- a data quirk, accepted for the
+  MVP:* ETL tokenisation stored the list numbers of 20 FAQs (92 placeholders) as precision
+  placeholders (`{{faq_7883a8c2_007}}. Horizon will issue a new card...`). The generator
+  cannot see placeholder values and must keep them verbatim, so when it reorganised the
+  steps it carried the "numbers" along: "1. Log into..." inside an already-numbered
+  stepper, and "(4)" when step 4 moved into prose. The model followed the placeholder
+  contract correctly; the cause is the data, and the user decided not to fix it in this
+  MVP.
+- *The same point stated twice -- model writing, accepted:* two evidence entries for the
+  same need both lead with "you can get a new card", and the model restated it. The
+  generator already carries the general "one coherent, natural response" instruction; with
+  that rule in place, the remaining variation is the model's own writing.
 
 ## BUG-045 — A need with no tool gets no obligation, so the reply is empty
 

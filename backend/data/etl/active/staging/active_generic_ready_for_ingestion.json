@@ -308,7 +308,7 @@
     },
     {
       "parent_id": "faq_c9998e4f",
-      "product_tags": "[\"Deposit_Account\"]",
+      "product_tags": "[\"Debit_Card\", \"Deposit_Account\"]",
       "intent_families": "[\"Account Management\", \"Features And Limits\"]",
       "content": "Question: What is the process for obtaining a premium metal card with Horizon Bank, and what are the key implications of upgrading to this card type?\n\nAnswer: As a valued Horizon Bank customer with a premium membership, you can acquire a metal card by following these straightforward steps: \n      * Access the Horizon App and navigate to your profile section\n      * Select your profile picture located at the top right corner of the screen\n      * Proceed to tap on your name to view detailed options\n      * Choose the 'metal card' option to initiate the request. \n      Upon upgrading, please note the following: \n      * Your existing card will be immediately deactivated for security purposes\n      * You will receive both a new physical and digital card, complete with a unique card number\n      * While the physical card will be delivered as soon as possible, you can start using the digital version right away\n      * Don't forget to update your new card details in digital wallets like Apple Pay or Google Pay, as well as any other platforms where your card is linked, such as the FairPrice Group app, to ensure uninterrupted service."
     },
@@ -326,19 +326,19 @@
     },
     {
       "parent_id": "faq_34e4a4ab",
-      "product_tags": "[\"Deposit_Account\"]",
+      "product_tags": "[\"Debit_Card\", \"Deposit_Account\"]",
       "intent_families": "[\"Fees And Charges\"]",
       "content": "Question: What is the cost associated with obtaining a replacement for my Horizon card if it is made of metal?\n\nAnswer: At Horizon Bank, we provide your initial metal Horizon card at no additional cost. However, please note that any subsequent replacements will incur a fee. To avoid this expense, we recommend storing your Horizon card in a secure location to prevent loss or damage."
     },
     {
       "parent_id": "faq_78b1b823",
-      "product_tags": "[\"Deposit_Account\"]",
+      "product_tags": "[\"Debit_Card\", \"Deposit_Account\"]",
       "intent_families": "[\"Account Management\", \"Features And Limits\"]",
       "content": "Question: Can I opt out of upgrading to a metal card and keep using my existing plastic card with Horizon Bank?\n\nAnswer: You have the flexibility to choose. Although your digital card displayed in the Horizon App will be represented as a metal card as a valued Horizon+ customer, you can still continue to utilize your current plastic physical card."
     },
     {
       "parent_id": "faq_bde7d1d5",
-      "product_tags": "[\"Deposit_Account\"]",
+      "product_tags": "[\"Debit_Card\", \"Deposit_Account\"]",
       "intent_families": "[\"Account Management\", \"Features And Limits\"]",
       "content": "Question: What are the eligibility criteria for obtaining the premium metal card from Horizon Bank?\n\nAnswer: To be eligible for the metal card, you must first qualify for Horizon Bank's premium membership program. Upon meeting the requirements, you will be given the opportunity to upgrade to the metal card. Please note that the rollout of the metal card will occur in phases, with select customers being invited to participate in each batch."
     },
@@ -1466,7 +1466,7 @@
     },
     {
       "parent_id": "faq_8336a2c7",
-      "product_tags": "[\"Credit_Card\"]",
+      "product_tags": "[\"Debit_Card\", \"Credit_Card\"]",
       "intent_families": "[\"Fees And Charges\"]",
       "content": "Question: Does Horizon Bank charge for replacing a lost or damaged Horizon card?\n\nAnswer: At Horizon Bank, we do not impose any charges for card replacements, ensuring that our customers can continue to use their Horizon cards without incurring additional costs."
     },
@@ -1520,7 +1520,7 @@
     },
     {
       "parent_id": "faq_83fb94a7",
-      "product_tags": "[\"Credit_Card\"]",
+      "product_tags": "[\"Debit_Card\", \"Credit_Card\"]",
       "intent_families": "[\"General Inquiries\", \"Card Logistics\"]",
       "content": "Question: If I request a lost‑card replacement for my current Horizon Link credit/debit card, will the existing physical card still accumulate Linkpoints while I wait for the new one?\n\nAnswer: - No. After you select the lost‑card replacement option, the original Horizon Link card stops earning Linkpoints. You will only be able to collect points with the replacement NTUC Link credit/debit card once it arrives, or through the FairPrice app by entering the new NTUC Link card details that appear in your Horizon App during the interim."
     },
@@ -1964,7 +1964,7 @@
     },
     {
       "parent_id": "faq_47fe2093",
-      "product_tags": "[\"Deposit_Account\"]",
+      "product_tags": "[\"Debit_Card\", \"Deposit_Account\"]",
       "intent_families": "[\"Card Logistics\"]",
       "content": "Question: An ATM has captured my Horizon card; what steps should I take to retrieve it?\n\nAnswer: - Order a new card through the Horizon App or contact Horizon Customer Care for assistance."
     },
@@ -2492,7 +2492,7 @@
     },
     {
       "parent_id": "faq_7d02d0a7",
-      "product_tags": "[\"Deposit_Account\"]",
+      "product_tags": "[\"Debit_Card\", \"Deposit_Account\"]",
       "intent_families": "[\"Card Logistics\"]",
       "content": "Question: An ATM has captured my Horizon card—what steps should I take?\n\nAnswer: - Initiate a card replacement request via the Horizon App or reach out to Horizon Customer Care for assistance."
     },
@@ -5991,6 +5991,7 @@
       "metadata": {
         "parent_id": "faq_c9998e4f",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Account Management",
@@ -6002,6 +6003,7 @@
       "metadata": {
         "parent_id": "faq_c9998e4f",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Account Management",
@@ -6013,6 +6015,7 @@
       "metadata": {
         "parent_id": "faq_c9998e4f",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Account Management",
@@ -6024,6 +6027,7 @@
       "metadata": {
         "parent_id": "faq_c9998e4f",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Features And Limits",
@@ -6035,6 +6039,7 @@
       "metadata": {
         "parent_id": "faq_c9998e4f",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Features And Limits",
@@ -6046,6 +6051,7 @@
       "metadata": {
         "parent_id": "faq_c9998e4f",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Features And Limits",
@@ -6101,6 +6107,7 @@
       "metadata": {
         "parent_id": "faq_34e4a4ab",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Fees And Charges",
@@ -6112,6 +6119,7 @@
       "metadata": {
         "parent_id": "faq_34e4a4ab",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Fees And Charges",
@@ -6123,6 +6131,7 @@
       "metadata": {
         "parent_id": "faq_78b1b823",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Account Management",
@@ -6134,6 +6143,7 @@
       "metadata": {
         "parent_id": "faq_78b1b823",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Account Management",
@@ -6145,6 +6155,7 @@
       "metadata": {
         "parent_id": "faq_78b1b823",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Features And Limits",
@@ -6156,6 +6167,7 @@
       "metadata": {
         "parent_id": "faq_78b1b823",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Features And Limits",
@@ -6167,6 +6179,7 @@
       "metadata": {
         "parent_id": "faq_bde7d1d5",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Account Management",
@@ -6178,6 +6191,7 @@
       "metadata": {
         "parent_id": "faq_bde7d1d5",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Account Management",
@@ -6189,6 +6203,7 @@
       "metadata": {
         "parent_id": "faq_bde7d1d5",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Features And Limits",
@@ -6200,6 +6215,7 @@
       "metadata": {
         "parent_id": "faq_bde7d1d5",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Features And Limits",
@@ -12889,6 +12905,7 @@
       "metadata": {
         "parent_id": "faq_8336a2c7",
         "product_tag": [
+          "Debit_Card",
           "Credit_Card"
         ],
         "intent_family": "Fees And Charges",
@@ -12900,6 +12917,7 @@
       "metadata": {
         "parent_id": "faq_8336a2c7",
         "product_tag": [
+          "Debit_Card",
           "Credit_Card"
         ],
         "intent_family": "Fees And Charges",
@@ -13175,6 +13193,7 @@
       "metadata": {
         "parent_id": "faq_83fb94a7",
         "product_tag": [
+          "Debit_Card",
           "Credit_Card"
         ],
         "intent_family": "General Inquiries",
@@ -13186,6 +13205,7 @@
       "metadata": {
         "parent_id": "faq_83fb94a7",
         "product_tag": [
+          "Debit_Card",
           "Credit_Card"
         ],
         "intent_family": "General Inquiries",
@@ -13197,6 +13217,7 @@
       "metadata": {
         "parent_id": "faq_83fb94a7",
         "product_tag": [
+          "Debit_Card",
           "Credit_Card"
         ],
         "intent_family": "Card Logistics",
@@ -13208,6 +13229,7 @@
       "metadata": {
         "parent_id": "faq_83fb94a7",
         "product_tag": [
+          "Debit_Card",
           "Credit_Card"
         ],
         "intent_family": "Card Logistics",
@@ -15320,6 +15342,7 @@
       "metadata": {
         "parent_id": "faq_47fe2093",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Card Logistics",
@@ -15331,6 +15354,7 @@
       "metadata": {
         "parent_id": "faq_47fe2093",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Card Logistics",
@@ -18348,6 +18372,7 @@
       "metadata": {
         "parent_id": "faq_7d02d0a7",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Card Logistics",
@@ -18359,6 +18384,7 @@
       "metadata": {
         "parent_id": "faq_7d02d0a7",
         "product_tag": [
+          "Debit_Card",
           "Deposit_Account"
         ],
         "intent_family": "Card Logistics",

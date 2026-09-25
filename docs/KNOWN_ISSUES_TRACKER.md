@@ -66,7 +66,7 @@ second time).
 | BUG-045 | A need the planner assigns no tool gets no obligation at all -- not even a no-info entry -- so the reply is empty and the customer gets the generic apology | High | Confirmed (live, DeepSeek) | **Deterministic code** (no fallback obligation for an open subquery with no tool and no evidence) | **Fixed (ff2c0f0): deterministic FAQ default + no-info failsafe; fixture- and live-verified** |
 | BUG-046 | "My PIN is not working and I need assistance" is rejected by the inbound word filter (`credential_pin_disclosure`) before any model runs | Medium | Confirmed (live, every model) | **Deterministic code** (keyword rule false positive) | **Fixed (29845c7), matrix + live-verified** |
 | BUG-047 | The completeness net's fallback sentence quotes the customer's request verbatim and ungrammatically ("Sorry, I don't have a complete answer for the part about I withdrew cash ... right now.") | Low-Medium | Confirmed (live, DeepSeek) | **Deterministic code** (net template) | **Fixed (fa1114b)** |
-| BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | **Card part fixed: shared product briefing + list-typed product field; replay- and live-verified. Address example (ranking) still open** |
+| BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | **Card part fixed: product briefing (physical card = Debit_Card) + 8 physical-card FAQs tagged Debit_Card + list-typed product field; replay-verified. Address example (ranking) still open** |
 | BUG-049 | The BUG-018 guard removes a RELEVANT FAQ result whenever a data fetch completed on the same need -- even when the need also asks something the data cannot answer ("I forgot my address... where can I change it?" kept the address but lost the change-address evidence) | Medium | Confirmed (live, DeepSeek) | **Deterministic code** (guard assumes a data fetch answers the whole subquery; need-based triage can combine a lookup and a how-to in one need) | **Fixed: guard retired (full-picture auditor + consistency check handle the contradiction); fixture-verified** |
 | BUG-050 | When the reviser deletes a customer-data sentence (or any cited content), the completeness net does not restore it: the block still cites the handle (citations are locked during revision), so the net treats the obligation as covered | Medium | Confirmed (live, Gemini) | **Deterministic code** (net coverage keyed on locked citations, not on the revised text) | **Retracted -- misdiagnosis: the net did restore the address; the delivered reply contains it** |
 
@@ -2628,6 +2628,25 @@ asks debit or credit (2/3; once it reasoned CLARIFY but wrote SEARCH with no pro
 Gemini treats it as a card-level question (all three). Live on DeepSeek: both card-capture
 FAQs retrieved and approved SUFFICIENT; the reply gives the order-a-new-card / Customer
 Care steps.
+
+**Refinement (2026-09-25, same day): the physical card is the debit card.** Searching all
+three products for a physical-card question widened the candidate pool (Deposit_Account
+alone has 272 FAQs), letting ranking push the right FAQ down. Business rule: the physical
+card is the debit card, so a physical-card question targets **Debit_Card only**. To keep
+every physical-card FAQ reachable under that rule, `Debit_Card` was added to the 8
+physical-card FAQs that lacked it -- `faq_8336a2c7` (replacement fee, lost/damaged card)
+and `faq_83fb94a7` (lost-card replacement), both Credit_Card only; `faq_47fe2093` and
+`faq_7d02d0a7` (ATM captured the card) and `faq_c9998e4f`, `faq_34e4a4ab`, `faq_78b1b823`,
+`faq_bde7d1d5` (metal card), all Deposit_Account only. Function FAQs (overseas usage,
+credit limit) and the Savings Pot unlock FAQs (a deposit feature) were deliberately left
+unchanged. Applied surgically to exactly those 8 entries: the canonical source
+`rectified_horizon_faqs.json` (8 added lines), the regenerated staging artifact (only
+those 8 parents and their 26 child chunks differ), the 8 `knowledge_parents` rows and the
+26 Chroma chunk metadata entries (no re-ingestion, no re-embedding). **Verified:** replay on
+both models -- every physical-card question (ATM swallowed, lost card, replacement cost,
+activation, ugly card) -> `["Debit_Card"]` in 5/5 runs; credit limit -> Credit_Card;
+savings interest -> Deposit_Account; "annual fee on my card" -> CLARIFY (debit or credit)
+in 5/5. Retrieval: ATM card-capture FAQs 5/5, replacement-fee FAQ 5/5, lost-card FAQs 5/5.
 
 **Still open -- the address example above:** the widened retry (Credit_Card +
 Horizon_APP) could reach `faq_24568045` but did not rank it; that is a ranking issue, not

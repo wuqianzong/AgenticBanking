@@ -830,6 +830,7 @@
         "synth_answer": "As a valued Horizon Bank customer with a premium membership, you can acquire a metal card by following these straightforward steps: \n      * Access the Horizon App and navigate to your profile section\n      * Select your profile picture located at the top right corner of the screen\n      * Proceed to tap on your name to view detailed options\n      * Choose the 'metal card' option to initiate the request. \n      Upon upgrading, please note the following: \n      * Your existing card will be immediately deactivated for security purposes\n      * You will receive both a new physical and digital card, complete with a unique card number\n      * While the physical card will be delivered as soon as possible, you can start using the digital version right away\n      * Don't forget to update your new card details in digital wallets like Apple Pay or Google Pay, as well as any other platforms where your card is linked, such as the FairPrice Group app, to ensure uninterrupted service.",
         "tokenized_answer": "As a valued Horizon Bank customer with a premium membership, you can acquire a metal card by following these straightforward steps: \n      * Access the Horizon App and navigate to your profile section\n      * Select your profile picture located at the top right corner of the screen\n      * Proceed to tap on your name to view detailed options\n      * Choose the 'metal card' option to initiate the request. \n      Upon upgrading, please note the following: \n      * Your existing card will be immediately deactivated for security purposes\n      * You will receive both a new physical and digital card, complete with a unique card number\n      * While the physical card will be delivered as soon as possible, you can start using the digital version right away\n      * Don't forget to update your new card details in digital wallets like Apple Pay or Google Pay, as well as any other platforms where your card is linked, such as the FairPrice Group app, to ensure uninterrupted service.",
         "product_tag": [
+            "Debit_Card",
             "Deposit_Account"
         ]
     },
@@ -875,6 +876,7 @@
         "synth_answer": "At Horizon Bank, we provide your initial metal Horizon card at no additional cost. However, please note that any subsequent replacements will incur a fee. To avoid this expense, we recommend storing your Horizon card in a secure location to prevent loss or damage.",
         "tokenized_answer": "At Horizon Bank, we provide your initial metal Horizon card at no additional cost. However, please note that any subsequent replacements will incur a fee. To avoid this expense, we recommend storing your Horizon card in a secure location to prevent loss or damage.",
         "product_tag": [
+            "Debit_Card",
             "Deposit_Account"
         ]
     },
@@ -891,6 +893,7 @@
         "synth_answer": "You have the flexibility to choose. Although your digital card displayed in the Horizon App will be represented as a metal card as a valued Horizon+ customer, you can still continue to utilize your current plastic physical card.",
         "tokenized_answer": "You have the flexibility to choose. Although your digital card displayed in the Horizon App will be represented as a metal card as a valued Horizon+ customer, you can still continue to utilize your current plastic physical card.",
         "product_tag": [
+            "Debit_Card",
             "Deposit_Account"
         ]
     },
@@ -907,6 +910,7 @@
         "synth_answer": "To be eligible for the metal card, you must first qualify for Horizon Bank's premium membership program. Upon meeting the requirements, you will be given the opportunity to upgrade to the metal card. Please note that the rollout of the metal card will occur in phases, with select customers being invited to participate in each batch.",
         "tokenized_answer": "To be eligible for the metal card, you must first qualify for Horizon Bank's premium membership program. Upon meeting the requirements, you will be given the opportunity to upgrade to the metal card. Please note that the rollout of the metal card will occur in phases, with select customers being invited to participate in each batch.",
         "product_tag": [
+            "Debit_Card",
             "Deposit_Account"
         ]
     },
@@ -3881,6 +3885,7 @@
         "synth_answer": "At Horizon Bank, we do not impose any charges for card replacements, ensuring that our customers can continue to use their Horizon cards without incurring additional costs.",
         "tokenized_answer": "At Horizon Bank, we do not impose any charges for card replacements, ensuring that our customers can continue to use their Horizon cards without incurring additional costs.",
         "product_tag": [
+            "Debit_Card",
             "Credit_Card"
         ]
     },
@@ -4021,6 +4026,7 @@
         "synth_answer": "- No. After you select the lost‑card replacement option, the original Horizon Link card stops earning Linkpoints. You will only be able to collect points with the replacement NTUC Link credit/debit card once it arrives, or through the FairPrice app by entering the new NTUC Link card details that appear in your Horizon App during the interim.",
         "tokenized_answer": "- No. After you select the lost‑card replacement option, the original Horizon Link card stops earning Linkpoints. You will only be able to collect points with the replacement NTUC Link credit/debit card once it arrives, or through the FairPrice app by entering the new NTUC Link card details that appear in your Horizon App during the interim.",
         "product_tag": [
+            "Debit_Card",
             "Credit_Card"
         ]
     },
@@ -5150,6 +5156,7 @@
         "synth_answer": "- Order a new card through the Horizon App or contact Horizon Customer Care for assistance.",
         "tokenized_answer": "- Order a new card through the Horizon App or contact Horizon Customer Care for assistance.",
         "product_tag": [
+            "Debit_Card",
             "Deposit_Account"
         ]
     },
@@ -6513,6 +6520,7 @@
         "synth_answer": "- Initiate a card replacement request via the Horizon App or reach out to Horizon Customer Care for assistance.",
         "tokenized_answer": "- Initiate a card replacement request via the Horizon App or reach out to Horizon Customer Care for assistance.",
         "product_tag": [
+            "Debit_Card",
             "Deposit_Account"
         ]
     },

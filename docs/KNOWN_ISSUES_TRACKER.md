@@ -58,7 +58,7 @@ second time).
 | BUG-037 | A completed redirect (deeplink/service_request) suppressed RAG evidence, leading the generator to fabricate a fact (card delivery "7 to 10" vs the real 6-7 days) | High | Confirmed (live) | **Deterministic code** (regression from BUG-018's fix: guard counted any completed tool, not only a data fetch) | **Fixed, fixture-verified** |
 | BUG-038 | An audit violation on a task no block carries approves the block holding the flagged sentence; the reviser gets nothing and the flagged text ships | High | Confirmed (live) | **Deterministic code** (a RELEVANT task's separate "terminal marker" outlived its removed evidence; partition attribution) | **Fixed (all 3 steps), fixture-verified; live check pending (model spike)** |
 | BUG-039 | No turn-level consistency check: results collected for one turn could contradict each other in the response (e.g. "no information on your balance" next to the fetched balance) whenever the same-subquery BUG-018 guard could not see the conflict | High | Confirmed (live, triage merged the two components the guard relies on) | **Missing capability** (semantic, turn-wide conflict judgment) | **Fixed, fixture- and live-judgment-verified** |
-| BUG-040 | A RELEVANT entry's "not covered" notice contradicts another result in the same reply ("the available information does not cover how to view your current address" right after showing it from the customer's data) | Medium | Confirmed (live, Gemini validation) | **Deterministic code / prompt** (compose_partial guidance from 03fb488 does not limit the notice to what no other result covers) | **Open -- root cause is the sufficiency auditor's guidance; fix direction awaiting decision** |
+| BUG-040 | A RELEVANT entry's "not covered" notice contradicts another result in the same reply ("the available information does not cover how to view your current address" right after showing it from the customer's data) | Medium | Confirmed (live, Gemini validation) | **Deterministic code / prompt** (compose_partial guidance from 03fb488 does not limit the notice to what no other result covers) | **Fixed (bb5b83d + full-picture sufficiency auditor), replay- and live-verified** |
 | BUG-041 | A card (shortcut) sentence is written twice -- by the model and by the completeness net; when the audit flags the duplicate, the flag is matched to a different block, so the reviser cannot remove it and the turn exhausts its retries | Medium | Confirmed (live, 3 cases) | **Deterministic code** (net insertion + partition attribution) | Open |
 | BUG-042 | A clarifying question the sufficiency auditor authored in retry round 1 is dropped when round 2 returns none, so no question is asked | Medium | Confirmed (live, 1 case) | **Deterministic code** (clarification not retained across sufficiency rounds) | **Fixed (487b3dd), fixture-verified** |
 | BUG-043 | A no-info statement is suppressed whenever a redirect covers the need -- harmful when the planner picked the wrong screen ("Delete this account!" got only a Security Settings button) | Medium | Confirmed (live, 1 case) | **Design + LLM judgment** (redirect-covers-need rule; wrong deeplink choice) | Open |
@@ -2412,6 +2412,19 @@ given the real guidance. Options awaiting decision: (a) show the sufficiency aud
 subquery's other results (e.g. "address fetched, value hidden") so its guidance never
 claims them unavailable; (b) let the generator ignore the part of an auditor note that
 another entry contradicts (weakens "the generator trusts generation guidance").
+
+**Fix (2026-09-25, decided with the user):** part 1 (bb5b83d) limits the generator's RELEVANT
+notice to what no other entry answers. Part 2 gives the sufficiency auditor the whole picture:
+every completed non-FAQ tool result this turn (customer data -- what was fetched, never the
+value; app screens; service forms), tagged with its need and whether it is the task's own need,
+scoped to what each can support (`other_tool_results_this_turn`, OTHER TOOL RESULTS THIS TURN
+rule). Design principle (user): a judging node gets the full picture; wrong decisions are fixed
+by tuning its rules, not by withholding information. Replay of 20 logged sufficiency prompts x3
+on Gemini: false "unavailable" guidance 2 -> 0; the two tool-driven suppressions each dropped
+FAQ content that did not fit the need (onboarding address procedure; damaged-card replacement for
+an ATM-retained card), which the user accepted as intended ("no need to overfeed"). Live on both
+models, the multi-need turn now answers the address part with the data token and the form only.
+BUG-049's data-fetch guard is unchanged by this and remains open.
 
 ## BUG-041 — Duplicate card sentence the reviser cannot remove
 

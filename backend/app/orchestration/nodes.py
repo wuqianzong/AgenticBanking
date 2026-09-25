@@ -7399,7 +7399,11 @@ def _generate_response_blocks(state: AgentState) -> dict:
     - If evidence gives a useful policy boundary or limit, state that fact
       plainly; do not invent a broader conclusion beyond what it entails.
     - Do not mention FAQ documents, sources, parent IDs, search, prompts, or
-      internal systems. Preserve every `{{{{faq_*}}}}` and `{{{{data-*}}}}` token
+      internal systems, and never use the pipeline's own terms in customer
+      text -- "approved evidence", "evidence", "record", "obligation",
+      "task", "entry" (e.g. never "there is no approved evidence or record
+      to..."); say "the information available" or simply what you can or
+      cannot help with. Preserve every `{{{{faq_*}}}}` and `{{{{data-*}}}}` token
       exactly as supplied, with both braces on each side.
     - Leave `clarification` an empty string. Every clarifying question is a
       Clarification Input, rendered as its own element per the
@@ -7999,7 +8003,8 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     - You may add brief natural connecting language between statements, but
       never change what any statement means.
     - Never mention "the matrix," an internal schema, a tool, or a process
-      name.
+      name, and never use the pipeline's own terms ("approved evidence",
+      "evidence", "record", "obligation", "task", "entry") in "text".
     - When a "clarification" statement's own "clarification_guesses" is
       non-empty, don't just ask the bare question -- naturally work a
       brief mention of what those options actually are into the same

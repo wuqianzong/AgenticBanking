@@ -22,10 +22,11 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "enabled": True,
         "read_only": False,
         "description": (
-            "Register a guided, multi-step form for an approved low- or "
-            "intermediate-risk service request (e.g. address update, card "
-            "replacement, KYC document resubmission). Never used for money "
-            "movement or high-risk actions -- those are deeplink's job."
+            "Register a guided, multi-step form through which the bank "
+            "carries out one of the listed services for the customer (e.g. "
+            "address update, card replacement, KYC document resubmission). "
+            "Only the listed forms exist. Never used for money movement or "
+            "other high-risk actions -- the customer does those in the app."
         ),
     },
     # These contracts intentionally exist before their real integrations. They
@@ -45,7 +46,12 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "operations": {"resolve_navigation"},
         "enabled": True,
         "read_only": True,
-        "description": "Return a validated Horizon navigation destination. Use this when the customer needs to navigate to a specific screen in the app.",
+        "description": (
+            "Return one of the listed Horizon app screens, where the customer "
+            "does themselves what that screen offers. Only the listed screens "
+            "exist; use one only when its description offers what the "
+            "customer wants to do."
+        ),
     },
 }
 

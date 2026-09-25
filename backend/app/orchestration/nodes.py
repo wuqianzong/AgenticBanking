@@ -3412,7 +3412,7 @@ def _tool_calling_plan_schema(capabilities: list[dict]) -> type:
         "DynamicSubqueryDomain",
         subquery_id=(str, ...),
         domain_reasoning=(str, ...),
-        domains=(list[Literal["information", "high_risk_transaction", "personal_data_retrieval", "service_form_submission"]], []),
+        domains=(list[Literal["information", "app_self_service", "personal_data_retrieval", "service_form_submission"]], []),
     )
     return create_model(
         "DynamicToolCallingPlan",
@@ -3535,13 +3535,20 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
           specific, verified value of their own data already on file (e.g.
           "what's my address on file", "what's my loyalty tier") -- never a
           general policy, procedure, or "how do I..." question.
-        - "high_risk_transaction" -> "deeplink": the customer wants to
-          perform, or be taken to where they would themselves perform, a
-          high-risk action (money movement, security changes) in the bank's
-          own app screens.
+        - "app_self_service" -> "deeplink": the customer wants to do
+          something themselves in the Horizon app that one of the listed app
+          screens offers (e.g. sending money, changing their PIN, freezing a
+          card) -- the deeplink takes them to that screen. Only the listed
+          screens exist.
         - "service_form_submission" -> "service_request": the customer wants
-          the bank to process an approved low- or intermediate-risk service
-          on their behalf through a guided form.
+          the bank to carry out, on their behalf, a service that one of the
+          listed forms offers (e.g. updating their address). Only the listed
+          forms exist.
+        Each specific tool is chosen for a service its own entries offer --
+        never for how risky or how important the customer's request is. Risk
+        only limits which tool may carry an action: money movement and other
+        high-risk actions are never done through a form. It never makes a
+        tool fit an action none of its entries offers.
         A subquery can contain more than one domain. A stated personal
         REASON attached to a service or transaction ("I want to replace my
         card because I don't like its appearance") also carries an
@@ -3553,15 +3560,16 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
         DECISION PROCEDURE -- for each subquery that still has a gap:
         1. Domains first: fill in its "subquery_domains" entry, naming every
            domain above that the subquery contains, with your reasoning.
-        2. Specific tools (api / deeplink / service_request): for each of
-           those domains, choose the registry entry whose WHOLE description
-           covers the customer's actual situation -- match on the whole
-           description, not the nearest keyword. A description can scope out
-           specific reasons or situations: one covering card replacement
-           "for a non-fraud reason (worn or damaged)" does not cover a lost
-           or stolen card, even though both are "card replacement". If no
-           entry covers the situation, plan no task for that tool -- what
-           the customer can do instead is then an information need (step 3).
+        2. Specific tools (api / deeplink / service_request): plan one only
+           when a registry entry's WHOLE description offers what the customer
+           actually wants. A domain named in step 1 never obliges a task: if
+           no entry offers it, plan no task for that tool -- what the customer
+           can do instead is then an information need (step 3). Match on the
+           whole description, not the nearest keyword. A description can
+           scope out specific reasons or situations: one covering card
+           replacement "for a non-fraud reason (worn or damaged)" does not
+           cover a lost or stolen card, even though both are "card
+           replacement".
         3. FAQ search ("rag"): plan one whenever the subquery has an
            information need -- including every need step 2 found no tool
            for, and a stated reason whose validity no selected tool's
@@ -3629,7 +3637,7 @@ def node_03a_knowledge_blueprint_planner(state: AgentState):
           The same applies to "deeplink" (destination_id) and "api" (field_id).
 
         Output JSON only:
-        {{"subquery_domains":[{{"subquery_id":"...","domain_reasoning":"...","domains":["information"|"high_risk_transaction"|"personal_data_retrieval"|"service_form_submission"]}}], "tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}},"rag_role":"needed"|"complementary"|"redundant"}}], "clarifications":[{{"subquery_id":"...","unresolved_request":"...","clarification_reason":"...","clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}]}}
+        {{"subquery_domains":[{{"subquery_id":"...","domain_reasoning":"...","domains":["information"|"app_self_service"|"personal_data_retrieval"|"service_form_submission"]}}], "tool_tasks":[{{"subquery_id":"...","tool_name":"...","operation":"...","input":{{}},"rag_role":"needed"|"complementary"|"redundant"}}], "clarifications":[{{"subquery_id":"...","unresolved_request":"...","clarification_reason":"...","clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}]}}
 
         {_DATA_FOLLOWS}
 

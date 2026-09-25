@@ -48,7 +48,7 @@ second time).
 | BUG-027 | The deterministic fallback for a missing shortcut sentence is skipped whenever the shortcut's label already appears anywhere in the response text (e.g. inside FAQ step wording), so no pointing sentence appears at all | Medium | Confirmed (live case + 58/236 logged calls had the label only inside steps) | **Deterministic code** (plain substring test) | **Fixed, fixture-verified** |
 | BUG-028 | A wholly-omitted clarification (or decline/no-info/conversational) obligation had no repair mechanism at all, unlike a dropped RAG task -- could exhaust every retry and reach the terminal fallback with the customer's question never asked | High | Confirmed (live trace + reproduced in the BANKING77 historical corpus) | **Deterministic code** (completeness net had detection but no repair for these obligation types) | **Fixed, live-verified** |
 | BUG-029 | Internal tool-routing/reasoning text leaked verbatim into a customer-facing clarification question | Medium | Confirmed (1 historical case, root cause shared with BUG-028) | **Deterministic code** (same net gap as BUG-028 -- the leaked text was the omitted obligation's own internal routing note, never meant to reach the customer) | **Fixed, live-verified** |
-| BUG-030 | No coherent handling for sustained upstream model unavailability -- triage silently discards the customer's message as generic small talk, and a single turn's latency can compound into minutes | Medium–High | Confirmed (2 independent symptoms, live-traced; historical latency trend across 12 greeting turns) | **Deterministic code** (no turn/node-level policy for sustained, as opposed to transient, model unavailability) | **Symptom 1 fixed (2026-09-25): overload/quota now ends the turn with a "model unavailable" message; symptom 2 (timeouts) pending decision** |
+| BUG-030 | No coherent handling for sustained upstream model unavailability -- triage silently discards the customer's message as generic small talk, and a single turn's latency can compound into minutes | Medium–High | Confirmed (2 independent symptoms, live-traced; historical latency trend across 12 greeting turns) | **Deterministic code** (no turn/node-level policy for sustained, as opposed to transient, model unavailability) | **Symptom 1 fixed (2026-09-25); symptom 2 (timeouts) deferred -- live model moved to paid DeepSeek (no free-tier spikes)** |
 | BUG-031 | Spanish `chat.footer` (the persistent AI-disclosure footer) is an untranslated copy of the English string | Low | Confirmed (static check of `frontend/src/translations.js`) | **Deterministic code (missing translation)** | **Fixed** |
 | BUG-032 | One node_05 veto permanently pollutes every later turn's audit feedback, process-wide (shared mutable list in `VOLATILE_STATE_RESET`) | High | Confirmed (reproduced in-process; 171 sessions in the multi-turn corpus) | **Deterministic code** (in-place append to a shared module-level list) | **Fixed** |
 | BUG-033 | Triage decomposed by sentence, not by need, splitting one request into overlapping subqueries (a topic lead-in became its own subquery) | Medium–High | Confirmed (opposite decompositions of the same message across runs) | LLM judgment (prompt defined components by text, not need) | **Fixed, live-verified (triage node)** |
@@ -58,6 +58,15 @@ second time).
 | BUG-037 | A completed redirect (deeplink/service_request) suppressed RAG evidence, leading the generator to fabricate a fact (card delivery "7 to 10" vs the real 6-7 days) | High | Confirmed (live) | **Deterministic code** (regression from BUG-018's fix: guard counted any completed tool, not only a data fetch) | **Fixed, fixture-verified** |
 | BUG-038 | An audit violation on a task no block carries approves the block holding the flagged sentence; the reviser gets nothing and the flagged text ships | High | Confirmed (live) | **Deterministic code** (a RELEVANT task's separate "terminal marker" outlived its removed evidence; partition attribution) | **Fixed (all 3 steps), fixture-verified; live check pending (model spike)** |
 | BUG-039 | No turn-level consistency check: results collected for one turn could contradict each other in the response (e.g. "no information on your balance" next to the fetched balance) whenever the same-subquery BUG-018 guard could not see the conflict | High | Confirmed (live, triage merged the two components the guard relies on) | **Missing capability** (semantic, turn-wide conflict judgment) | **Fixed, fixture- and live-judgment-verified** |
+| BUG-040 | A RELEVANT entry's "not covered" notice contradicts another result in the same reply ("the available information does not cover how to view your current address" right after showing it from the customer's data) | Medium | Confirmed (live, Gemini validation) | **Deterministic code / prompt** (compose_partial guidance from 03fb488 does not limit the notice to what no other result covers) | Open |
+| BUG-041 | A card (shortcut) sentence is written twice -- by the model and by the completeness net; when the audit flags the duplicate, the flag is matched to a different block, so the reviser cannot remove it and the turn exhausts its retries | Medium | Confirmed (live, 3 cases) | **Deterministic code** (net insertion + partition attribution) | Open |
+| BUG-042 | A clarifying question the sufficiency auditor authored in retry round 1 is dropped when round 2 returns none, so no question is asked | Medium | Confirmed (live, 1 case) | **Deterministic code** (clarification not retained across sufficiency rounds) | Open |
+| BUG-043 | A no-info statement is suppressed whenever a redirect covers the need -- harmful when the planner picked the wrong screen ("Delete this account!" got only a Security Settings button) | Medium | Confirmed (live, 1 case) | **Design + LLM judgment** (redirect-covers-need rule; wrong deeplink choice) | Open |
+| BUG-044 | Small generation artifacts in customer text: a stray "(4)" after flattened steps, internal jargon ("no approved evidence or record"), a repeated opening sentence | Low | Confirmed (live, 3 cases) | LLM judgment / formatting | Open |
+| BUG-045 | A need the planner assigns no tool gets no obligation at all -- not even a no-info entry -- so the reply is empty and the customer gets the generic apology | High | Confirmed (live, DeepSeek) | **Deterministic code** (no fallback obligation for an open subquery with no tool and no evidence) | Open (made rare by the planner rewrite, cc99564) |
+| BUG-046 | "My PIN is not working and I need assistance" is rejected by the inbound word filter (`credential_pin_disclosure`) before any model runs | Medium | Confirmed (live, every model) | **Deterministic code** (keyword rule false positive) | Open |
+| BUG-047 | The completeness net's fallback sentence quotes the customer's request verbatim and ungrammatically ("Sorry, I don't have a complete answer for the part about I withdrew cash ... right now.") | Low-Medium | Confirmed (live, DeepSeek) | **Deterministic code** (net template) | Open |
+| BUG-048 | ATM card-capture FAQs are tagged `Deposit_Account` only, so a search the formulator maps to `Debit_Card` never retrieves them; a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | Open |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -1909,7 +1918,7 @@ restore it, so the turn stops and the customer retries later.
   USR_999 3/3 (turn stops at triage's first call; exact message; exact
   error appended in developer mode).
 
-**Symptom 2 (timeouts) -- open:** a call that never replies is still
+**Symptom 2 (timeouts) -- deferred (2026-09-25):** the live model moved to paid DeepSeek, which has no free-tier quota spikes, so the timeout redesign was set aside (see docs/DEEPSEEK_MIGRATION_AND_PROMPT_CACHING.md). Original note: a call that never replies is still
 retried up to once per key for both models at 45s each. The user proposed
 a 15s timeout with one retry; pending a check of how many successful calls
 take longer than 15s.
@@ -2372,3 +2381,104 @@ complementary FAQ + balance (nothing dropped), two agreeing card-arrival
 FAQs (no conflict, previously a false positive). A natural live turn that
 reaches the drop path is rare now that need-based triage (BUG-033) sends a
 plain balance request only to the data fetch.
+
+## BUG-040 — A RELEVANT entry's "not covered" notice contradicts another result in the same reply
+
+**Severity:** Medium **Confidence:** Confirmed (live) **Status: Open**
+**Found in:** code-change validation on Gemini, case `val_address_change` (`research/2026-09-25_code_change_validation_gemini`)
+
+**What happens:** "what's my address in the system, can i change it?" -> the address came
+back as a data token (data_1) and the change-address FAQ was RELEVANT. The generator
+wrote "Your current postal address on file is {{data-...}}", then, for the RELEVANT
+entry: "while the available information does not cover how to view your current address
+in the system, you can update your personal information...". The audit rejected the
+contradiction three times; the turn fell back to the plain address + form.
+
+**Cause:** the RELEVANT guidance added with BUG-038 step 1 (03fb488, `compose_partial`)
+says to give "a neutral notice that the available information does not cover the rest of
+their request". It does not limit "the rest" to what no *other* result covers, so the model
+attached the notice to a part the customer's data had already answered.
+
+## BUG-041 — Duplicate card sentence the reviser cannot remove
+
+**Severity:** Medium **Confidence:** Confirmed (live, 3 cases) **Status: Open**
+**Found in:** `research/2026-09-25_code_change_validation_gemini` -- `banking77_r1_0096` ("You can also use the Manage Card button
+below." twice), `val_address_change`, `mtsgd_32_00103` turn 3.
+
+**What happens:** the model mentions a card (deeplink/form) and the completeness net also
+appends its own sentence for the same handle. In `val_address_change` the audit flagged the
+repetition, but the violation was attributed to the stepper block, not the block holding
+the duplicate, so the reviser was never handed it; three failed audits, then fallback.
+Duplicates existed before (e.g. `mtsgd_32_00011` turn 4 on 2026-09-10) but now also cause
+audit loops. Candidate directions (undecided): the net should recognise a card already
+mentioned in text; attribute a duplicate-card violation to the handle's own block.
+
+## BUG-042 — Clarifying question dropped between sufficiency rounds
+
+**Severity:** Medium **Confidence:** Confirmed (live, 1 case) **Status: Open**
+**Found in:** `research/2026-09-25_code_change_validation_gemini`, `banking77_r1_0021` ("Delete this account!").
+
+**What happens:** round 1 of the sufficiency auditor set `unresolved_term: "account type"`
+with guesses; round 2 (after widening) returned none. The terminal result used round 2, so
+no clarifying question was asked -- unlike retained partial evidence, an authored
+clarification is not carried across rounds.
+
+## BUG-043 — No-info statement suppressed by a wrong redirect
+
+**Severity:** Medium **Confidence:** Confirmed (live, 1 case) **Status: Open**
+**Found in:** `research/2026-09-25_code_change_validation_gemini`, `banking77_r1_0021`.
+
+**What happens:** the planner chose the Security Settings deeplink for "Delete this
+account!" (a model judgment). The FAQ search then found nothing, and because a completed
+redirect "covers" the need, the no-info statement was skipped by design (see BUG-037's
+notes), leaving only an unrelated button. The rule is right when the redirect fits and
+harmful when it does not; whether to keep it is a design decision.
+
+## BUG-044 — Small generation artifacts in customer text
+
+**Severity:** Low **Confidence:** Confirmed (live) **Status: Open**
+**Found in:** `research/2026-09-25_code_change_validation_gemini` -- a stray "(4)" after flattened steps (`banking77_r1_0177`); internal
+jargon "There is no approved evidence or record to execute a transfer" (`mtsgd_32_00103`
+turn 2); the same point stated twice in a row (`banking77_r1_0014`).
+
+## BUG-045 — A need with no tool gets no obligation, so the reply is empty
+
+**Severity:** High **Confidence:** Confirmed (live) **Status: Open -- made rare by the planner rewrite (cc99564)**
+**Found in:** DeepSeek comparison (`research/2026-09-25_deepseek_banking77_comparison`,
+`banking77_r1_0017` "Is there a way to revert my transaction from this morning?").
+
+**What happens:** the planner planned no tool for the subquery; it stayed OPEN with the
+budget exhausted and produced no obligation of any kind -- not even a no-info entry. The
+generator returned an empty element list, the audit passed the empty draft, and the
+customer got "Sorry, I don't have an answer for that right now." The planner rewrite makes
+FAQ search the default, so this rarely triggers now, but an open subquery with no tool and
+no evidence should still receive the standard no-info entry.
+
+## BUG-046 — PIN word-filter false positive
+
+**Severity:** Medium **Confidence:** Confirmed (live, every model) **Status: Open**
+**What happens:** "My PIN is not working and I need assistance." is rejected in 0.02s by
+the inbound sensitive-word rule `credential_pin_disclosure` (`inbound.sensitive_word.rejected`),
+which treats any mention of a PIN as disclosing one. Reproduced on Gemini (2026-09-05 and
+2026-09-25) and DeepSeek.
+
+## BUG-047 — Garbled completeness-net fallback sentence
+
+**Severity:** Low-Medium **Confidence:** Confirmed (live) **Status: Open**
+**What happens:** the net's fallback sentence embeds the customer's request verbatim:
+"Sorry, I don't have a complete answer for the part about I withdrew cash from an ATM but
+received the wrong amount, and I want the cash back ... right now." Seen on DeepSeek
+(`refactor_check_banking77_r1_0237`, `refactor_check_banking77_r1_0375`); related to BUG-035's
+fix of the no-info template, which did not cover this net sentence.
+
+## BUG-048 — ATM card-capture FAQs unreachable from a Debit_Card search
+
+**Severity:** Medium **Confidence:** Confirmed (traced) **Status: Open**
+**What happens:** `faq_47fe2093` / `faq_7d02d0a7` ("An ATM has captured my Horizon card...")
+are tagged `Deposit_Account` only. When the formulator maps the need to `Debit_Card` (a
+defensible choice), the product-filtered search never retrieves them, and retry widening
+uses the model's own `alternate_products` (it chose Credit_Card). Gemini on 2026-09-05
+happened to choose Deposit_Account. A near-identical query succeeded only because the
+answer cache injected the two parents. Candidate directions (undecided): add `Debit_Card`
+tags to card-handling FAQs filed under Deposit_Account; always widen Debit_Card <->
+Deposit_Account on retry; formulator guidance.

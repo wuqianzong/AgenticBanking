@@ -38,7 +38,7 @@ second time).
 | BUG-017 | A successfully fetched account balance is silently dropped when the turn also carries conversational framing | Medium | Confirmed (61/619 turns; 23/70-sample conversations at least once) | **Deterministic code** (routing condition omitted personal data) | **Fixed, live-verified** |
 | BUG-018 | Response generation falsely denies having a balance it just successfully fetched | High | Confirmed (13/619) | **Deterministic code** (a RELEVANT RAG hedge left in generation data, contradicting a same-subquery tool's ground truth) | **Root-caused and fixed, fixture-verified** |
 | BUG-019 | A short account-type follow-up gets reattached to an already-resolved transfer instead of the actual current balance question | Medium | Confirmed (3/70 sample) | LLM judgment | Open |
-| BUG-020 | Bot fabricates a second "other" savings account rather than correcting a customer's false premise | Medium | Confirmed (2/70 sample) | LLM judgment | Open |
+| BUG-020 | Bot fabricates a second "other" savings account rather than correcting a customer's false premise | Medium | Confirmed (2/70 sample) | LLM judgment | **Accepted for MVP (2026-09-25): demo balance API has no multi-account notion; one-savings-account fact added to shared business facts (helps in 1 of 2 live runs)** |
 | BUG-021 | Inconsistent handling of "how long will the transfer take" -- sometimes answered correctly, sometimes a generic non-answer | Low-Medium | Confirmed (3/70 sample) | Not yet root-caused | Open |
 | BUG-022 | A balance follow-up ("what about my savings account?") answered with a generic product-info dump instead of the number | Medium | Confirmed (1/70 sample) | Not yet root-caused | Open |
 | BUG-023 | Outcome depends on surface phrasing, not underlying intent -- 24/77 BANKING77 categories show a genuinely split outcome across their 40 phrasings of the same nominal question | Medium | Confirmed (full-corpus, `declined_card_payment` spot-checked) | Not yet root-caused | **Open, partial mitigation shipped** (see below) |
@@ -1299,7 +1299,7 @@ need not be related). Left for future work per explicit instruction.
 
 ## BUG-020 — Bot fabricates a second "other" savings account rather than correcting a customer's false premise
 
-**Severity:** Medium **Confidence:** Confirmed (2/70 conversations in the semantic review sample) **Status: Open, not yet root-caused**
+**Severity:** Medium **Confidence:** Confirmed (2/70 conversations in the semantic review sample) **Status: Accepted for MVP (2026-09-25) -- multiple accounts out of scope**
 **Found in:** Multi-turn SGD Banks_1/Banks_2 depth test, 70-conversation semantic review (2026-09-11)
 
 **What happens:** The mock `account-balance` field only models a single
@@ -1336,8 +1336,9 @@ savings account, and is also given to the generator and reviser as background ("
 contradict them... not approved evidence"). **Result (live, Gemini):** `mtsgd_40_00042` now
 says it cannot check another savings account and gives the one balance; `mtsgd_32_00012`
 still said "other savings account" with the fact present in its prompt -- the specific
-`for_request` wording in the PERSONAL DATA RULES wins over the general fact. Rule wording
-decision pending.
+`for_request` wording in the PERSONAL DATA RULES wins over the general fact. **Decision:
+accepted for the MVP** -- the demo balance API has no notion of multiple accounts, and
+multiple-account handling is out of scope; the rule wording is left as is.
 
 ## BUG-021 — Inconsistent handling of "how long will the transfer take"
 

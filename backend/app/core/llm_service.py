@@ -396,6 +396,18 @@ class TurnConsistencyEvaluation(BaseModel):
 # 4. 2D MATRIX QUERY FORMULATOR (Node 02e) -> NESTED SCHEMA
 class SearchTask(BaseModel):
     task_id: str = Field(description="Stable task identifier, e.g. task_1. Preserve it during retries.")
+    # Written first: the product, intent, and angle phrases below are all
+    # chosen for this search query, not for the full customer_component.
+    search_query: str = Field(
+        default="",
+        description=(
+            "The query: what is being searched for, like telling a librarian what you want, not why -- the need "
+            "itself in general terms. Its scope is general, non-personal information: leave out everything personal "
+            "to this customer (their reason, purpose, circumstances, dates, places, amounts, names) and wording that "
+            "belongs to another need. It names exactly the same need as customer_component -- never a different, "
+            "broader, or narrower one, and never a product or outcome the customer did not state."
+        ),
+    )
     # Declared before target_commercial_product/target_intent on purpose,
     # same reasoning-before-verdict principle as TaskSufficiencyItem.reason
     # above: committing to a product/intent pairing first and justifying it

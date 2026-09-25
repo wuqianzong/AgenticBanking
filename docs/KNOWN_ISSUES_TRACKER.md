@@ -2648,9 +2648,30 @@ activation, ugly card) -> `["Debit_Card"]` in 5/5 runs; credit limit -> Credit_C
 savings interest -> Deposit_Account; "annual fee on my card" -> CLARIFY (debit or credit)
 in 5/5. Retrieval: ATM card-capture FAQs 5/5, replacement-fee FAQ 5/5, lost-card FAQs 5/5.
 
-**Still open -- the address example above:** the widened retry (Credit_Card +
-Horizon_APP) could reach `faq_24568045` but did not rank it; that is a ranking issue, not
-a tag gap, and is not addressed by this fix.
+**Address example -- root cause and fix (2026-09-25):**
+- *Why it ranked 10-14:* the address subquery carried two needs -- "where can I change my
+  registered address **for delivery of the new replacement card**" -- so the product
+  (Credit_Card), all three search angles, and the direct query (the subquery text itself)
+  were about card delivery. The widened retry reused the same wording, so 13 card FAQs
+  outranked `faq_24568045`. Similarity search cannot tell two needs in one text apart.
+- *Fix 1, a search query:* the formulator now writes `search_query` first (new first field
+  of `SearchTask`) -- the query: what is being searched for, like telling a librarian what
+  you want, not why; the need in general terms, scoped to general, non-personal
+  information (no personal reason, purpose, circumstances, dates, places, amounts, names,
+  or wording of another need), consistent with the subquery. Product, intents, and angles
+  are chosen for it, and the direct-query track searches it; the full `customer_component`
+  still goes to the auditor and the generator, so the reason is not lost. Tried first in
+  triage (Gemini leaked the purpose 3/3) and moved to the formulator, which already does
+  the retrieval engineering (angles). Replay, both models: personal details stripped 12/12
+  (dates, places, amounts, names); address query clean 5/6; no reason substituted.
+- *Fix 2, product briefing:* Horizon offers its services through the Horizon App, so a
+  service shared across products (e.g. managing personal details, app access) concerns
+  Horizon_APP. Address changes now get Horizon_APP in 11/12 runs (was 0-2/12), phone-number
+  changes 6/6; card and transfer questions keep their products.
+- *Retry:* with the clean query the widened retry selects `faq_24568045` 4/4 (was 0).
+- *Remaining:* round 1 still misses `faq_24568045` because that FAQ is tagged intent
+  `General Inquiries` only, while the formulator (correctly) picks `Profile Updates`; with
+  General Inquiries included it ranks #1 on both models. Data decision pending.
 
 ## BUG-049 — The BUG-018 guard removes FAQ evidence a data fetch does not replace
 

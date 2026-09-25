@@ -41,7 +41,7 @@ second time).
 | BUG-020 | Bot fabricates a second "other" savings account rather than correcting a customer's false premise | Medium | Confirmed (2/70 sample) | LLM judgment | **Accepted for MVP (2026-09-25): demo balance API has no multi-account notion; one-savings-account fact added to shared business facts (helps in 1 of 2 live runs)** |
 | BUG-021 | Inconsistent handling of "how long will the transfer take" -- sometimes answered correctly, sometimes a generic non-answer | Low-Medium | Confirmed (3/70 sample) | Not yet root-caused | **Not reproduced (re-measure 2026-09-25): transfer-time follow-ups answered, 3/3 + control** |
 | BUG-022 | A balance follow-up ("what about my savings account?") answered with a generic product-info dump instead of the number | Medium | Confirmed (1/70 sample) | Not yet root-caused | **Not reproduced (re-measure 2026-09-25): "what about my savings account?" gets the balance** |
-| BUG-023 | Outcome depends on surface phrasing, not underlying intent -- 24/77 BANKING77 categories show a genuinely split outcome across their 40 phrasings of the same nominal question | Medium | Confirmed (full-corpus, `declined_card_payment` spot-checked) | Not yet root-caused | **Open, known variance (re-measure 2026-09-25): lost-card phrasings now consistent (8/10 SUFFICIENT); declined-payment and extra-charge phrasings still split** |
+| BUG-023 | Outcome depends on surface phrasing, not underlying intent -- 24/77 BANKING77 categories show a genuinely split outcome across their 40 phrasings of the same nominal question | Medium | Confirmed (full-corpus, `declined_card_payment` spot-checked) | Not yet root-caused | **Accepted as a known limitation (2026-09-25): consistent where an FAQ covers the topic (lost card 8/10), varies where none does (declined payment, unexplained charge) -- data gap plus model judgment** |
 | BUG-024 | Bot never discloses it is an AI to the customer, in any supported language or anywhere in the UI | Medium | ~~Confirmed~~ **Retracted** -- original check missed an existing persistent footer disclosure | n/a | **Retracted (not a defect)** |
 | BUG-025 | The exact same customer question, asked more than once, does not reliably get the same retrieval outcome -- no wording ambiguity involved | High | Confirmed (31/88 informative exact-duplicate-text groups, full-corpus) | Root-caused: two independent mechanisms found (retrieval-pool variance + auditor-judgment non-determinism) | **Retrieval-pool half: mitigated and live-validated. Auditor-judgment half: accepted permanent limitation, model-tuning scoped out** (see below) |
 | BUG-026 | The response generator rarely writes the required closing sentence pointing to an attached shortcut button/form -- 20 of 236 logged shortcut turns (8.5%) despite a MUST rule in its prompt | Low-Medium | Confirmed (236 logged generator calls with a shortcut supplied) | LLM instruction-following, **now structurally guaranteed regardless of it** | **Fixed, live-verified** |
@@ -1424,7 +1424,7 @@ exhibits both). Left for future work per explicit instruction.
 
 ## BUG-023 — Outcome depends on surface phrasing, not underlying intent
 
-**Severity:** Medium **Confidence:** Confirmed (full-corpus; `declined_card_payment` spot-checked in detail) **Status: Open, not yet root-caused**
+**Severity:** Medium **Confidence:** Confirmed (full-corpus; `declined_card_payment` spot-checked in detail) **Status: Accepted as a known limitation (2026-09-25) -- data gap plus model judgment**
 **Found in:** BANKING77 full-coverage study, Fairness/consistency pass (2026-09-13) — reframed per explicit instruction: since the bot is stateless and not customer-segment-specific, the correct fairness test is not demographic variation but whether the *same underlying intent, expressed in different wording,* produces the *same outcome*.
 
 **What happens:** For each of the 77 BANKING77 categories (40 differently
@@ -1557,6 +1557,21 @@ below any threshold that could be set without conflating unrelated
 intents. The underlying product-misrouting root cause (S1 above) is
 unpatched; see the design doc's S9 for the full scope of what this
 mitigation does and does not cover.
+
+**Re-measure and decision (2026-09-25):** re-run on Gemini with the current code (3
+categories x 10 phrasings, `research/2026-09-25_model_judgment_remeasure`). `lost_or_stolen_card`
+is now consistent (8/10 SUFFICIENT with the freeze-and-replace answer). `declined_card_payment`
+and `extra_charge_on_statement` still split by wording. Traced cause: the knowledge base has a
+direct FAQ for a lost card but none for "why was my card declined" or "what is this small
+extra charge" (BANKING77 categories from another bank's app), so the outcome depends on
+whether a nearby FAQ is retrieved and whether the auditor offers it as related information.
+Two declined-payment phrasings retrieved the same candidates (incl. `faq_efca64c1`, common
+reasons automated payments fail); one auditor offered it as a RELEVANT side result, the other
+did not. Two extra-charge phrasings retrieved different candidates because their search queries
+differed ("unrecognized charge" vs "unrecognized pending charge"). **Decision: accepted as a
+known limitation for the MVP** -- a data-coverage gap plus normal model judgment; the rules
+work as designed. Adding FAQs for these topics would close it but is a data change outside
+the MVP scope.
 
 ## BUG-025 — The exact same question, asked twice, does not reliably get the same answer
 

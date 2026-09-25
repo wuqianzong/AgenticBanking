@@ -1349,9 +1349,11 @@ _GENERATION_GUIDANCE_BY_MODE = {
         "request -- anything it offers only as related context gets its most "
         "useful point in one or two sentences -- then give a concise, "
         "neutral notice, in the customer's own wording, that the available "
-        "information does not cover the rest of their request. Never add a "
-        "fact, procedure, or product not present in it, and never fill the "
-        "uncovered part yourself."
+        "information does not cover the part of their request that no other "
+        "entry in this reply answers (another evidence entry, their own "
+        "data, a verified fact, or a shortcut); when other entries answer "
+        "the rest, give no notice. Never add a fact, procedure, or product "
+        "not present in it, and never fill the uncovered part yourself."
     ),
     "relay": (
         "This is already the final statement. Rephrase it naturally; never "
@@ -1439,7 +1441,11 @@ _EVIDENCE_RULES_TEXT = """EVIDENCE RULES: every evidence entry's `generation_con
     customer's request (anything they offer only as related context gets
     its most useful point in one or two sentences, per RESPONSE LENGTH),
     then give a concise, neutral availability notice, in the customer's
-    own wording, for the part they don't cover. Do not ask a clarifying question about
+    own wording, for the part of the request that no other entry in this
+    reply answers -- another evidence entry, the customer's own data, a
+    verified fact, or a shortcut. Never say information is unavailable for
+    something another entry in the same reply provides (BUG-040); when other
+    entries answer the rest, give no notice. Do not ask a clarifying question about
     that part or guess what the customer might mean; that judgment belongs
     to the sufficiency auditor. When it judged a question worthwhile, it
     is a separate Clarification Input for the same subquery, which you

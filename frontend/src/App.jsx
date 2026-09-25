@@ -167,6 +167,12 @@ export default function BankingBotUI() {
   const [devShowReasoning, setDevShowReasoning] = useState(
     () => localStorage.getItem('dev_show_reasoning') === 'true'
   );
+  // Development-only model choice (Settings -> Development -> "Model"):
+  // which LLM provider answers this browser's chats. Local browser
+  // preference, sent per request as llm_provider; default Gemini.
+  const [devModelProvider, setDevModelProvider] = useState(
+    () => (localStorage.getItem('dev_llm_provider') === 'deepseek' ? 'deepseek' : 'gemini')
+  );
   // Transient, turn-scoped accumulation of reasoning snippets streamed
   // live while isTyping is true. Reset at the start of each turn and
   // moved onto the finished bot message (msg.reasoning) once the turn
@@ -502,6 +508,10 @@ export default function BankingBotUI() {
   useEffect(() => {
     localStorage.setItem('dev_show_reasoning', devShowReasoning ? 'true' : 'false');
   }, [devShowReasoning]);
+
+  useEffect(() => {
+    localStorage.setItem('dev_llm_provider', devModelProvider);
+  }, [devModelProvider]);
 
   useEffect(() => {
     if (!isTyping && inputRef.current) {
@@ -896,7 +906,8 @@ export default function BankingBotUI() {
           session_id: targetSessionId,
           message: text,
           user_id: MOCK_PROFILE.userId,
-          debug_reasoning: devShowReasoning
+          debug_reasoning: devShowReasoning,
+          llm_provider: devModelProvider
         })
       });
 
@@ -2927,6 +2938,31 @@ export default function BankingBotUI() {
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-2xs transition-transform ${devShowReasoning ? 'translate-x-4' : ''}`} />
                 </span>
               </button>
+              <div className="mt-2 rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5">
+                <span className="block text-[12px] font-semibold text-slate-700">Model</span>
+                <span className="block text-[10.5px] text-slate-400 mb-1.5">Which AI model answers your chats. Applies from your next message.</span>
+                <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80" role="radiogroup" aria-label="Model">
+                  {[
+                    { id: 'gemini', label: 'Gemini' },
+                    { id: 'deepseek', label: 'DeepSeek' }
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={devModelProvider === opt.id}
+                      onClick={() => setDevModelProvider(opt.id)}
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                        devModelProvider === opt.id
+                          ? 'bg-white text-blue-700 shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
           <div className="p-3.5 border-t border-slate-100 flex justify-end bg-slate-50/50">

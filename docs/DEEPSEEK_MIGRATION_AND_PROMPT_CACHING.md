@@ -15,6 +15,16 @@ out 45-second timeouts, and many live checks could not run at all (tracked as BU
 A paid DeepSeek account has no daily quota and a per-account concurrency cap of 2,500
 requests for `deepseek-flash`, which removes this failure mode.
 
+**Update (2026-09-25, later the same day): user-selectable model.** Free-tier Gemini is the
+default again, and each user chooses the model in **Settings -> Development -> Model
+(Gemini / DeepSeek)**. The choice is sent with every chat request (`llm_provider`), placed
+in the request context by the gateway (so it also appears on every log line), and applied
+by `llm_service._provider_model_id`. There is no automatic switching between providers:
+if the chosen model is unavailable the turn ends with "The model is currently
+unavailable. Please try again later." (BUG-030) and the user can switch models in the
+setting. Requests without a choice (research harness, checkout) use the configured
+default (Gemini, or `HORIZON_MODEL_A/B/C`).
+
 ## 2. What DeepSeek offers (from the official docs)
 
 | Item | deepseek-flash (DeepSeek-V4.1-Flash) |

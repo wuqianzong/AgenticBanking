@@ -44,6 +44,7 @@ class ChatPayload(BaseModel):
     message: str
     user_id: str
     debug_reasoning: bool = False  # Dev-only, per-request opt-in: see _extract_reasoning_snippets
+    llm_provider: str = "gemini"  # Dev setting "Model": "gemini" (default) or "deepseek" -- see llm_service._provider_model_id
 
 class CloseSessionPayload(BaseModel):
     session_id: str
@@ -556,7 +557,8 @@ async def process_chat(payload: ChatPayload):
 
     # --- STANDARD INVOCATION (STREAMING) ---
     async def chat_stream():
-        context_token = set_request_context(session_id=payload.session_id, user_id=payload.user_id)
+        provider = payload.llm_provider if payload.llm_provider in ("gemini", "deepseek") else "gemini"
+        context_token = set_request_context(session_id=payload.session_id, user_id=payload.user_id, llm_provider=provider)
         previous_snapshot = app_graph.get_state(config)
         previous_turn_count = previous_snapshot.values.get("turn_count", 0) if previous_snapshot.values else 0
         initial_turn_state = {

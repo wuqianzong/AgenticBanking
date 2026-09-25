@@ -13,17 +13,18 @@ from google import genai
 from google.genai import types
 from google.genai.errors import ServerError
 from pydantic import BaseModel, Field, ValidationError
-from backend.app.core.system_logger import log_event
+from backend.app.core.system_logger import log_event, request_context
 
 # --- 🧠 MULTI-MODEL ARCHITECTURE REGISTRY ---
 #model_A="openai/gpt-oss-120b"  # For response generation
-# Each role's model can be overridden per process by an environment variable
-# (e.g. HORIZON_MODEL_A=gemini-3.5-flash-lite), so a validation run can use a
-# different provider than the live backend without editing this file.
-model_A=os.environ.get("HORIZON_MODEL_A", "deepseek-flash")  # For response generation
-model_B=os.environ.get("HORIZON_MODEL_B", "deepseek-flash")  # For sufficiency, gourndedness, and compliance audits
-model_C=os.environ.get("HORIZON_MODEL_C", "deepseek-flash")  # For triage, decomposition, and journey planning
-# Previous (free-tier Gemini): "gemini-3.5-flash-lite" for all three.
+# Default provider is free-tier Gemini. Each role can be overridden per
+# process by an environment variable (e.g. HORIZON_MODEL_A=deepseek-flash),
+# and per chat request by the user's Development setting ("Model": Gemini or
+# DeepSeek), which the gateway puts in the request context as llm_provider
+# -- see _provider_model_id below.
+model_A=os.environ.get("HORIZON_MODEL_A", "gemini-3.5-flash-lite")  # For response generation
+model_B=os.environ.get("HORIZON_MODEL_B", "gemini-3.5-flash-lite")  # For sufficiency, gourndedness, and compliance audits
+model_C=os.environ.get("HORIZON_MODEL_C", "gemini-3.5-flash-lite")  # For triage, decomposition, and journey planning
 MODEL_A_GENERATOR = model_A       # Groq: Conversational Engine
 MODEL_B_AUDITOR = model_B            # Google: Safety & Sufficiency Judge
 MODEL_C_PLANNER = model_C            # Google: Resolution Planner & Tool Calling Generator
@@ -1004,6 +1005,24 @@ def _call_llm_router_impl(prompt: str, model_id: str = MODEL_A_GENERATOR, respon
         raise e
 
 
+# The model each provider choice maps to (Settings -> Development -> Model).
+PROVIDER_MODELS = {"gemini": "gemini-3.5-flash-lite", "deepseek": "deepseek-flash"}
+
+
+def _provider_model_id(model_id: str) -> str:
+    """Apply the user's per-request provider choice (request_context
+    `llm_provider`, set by api_gateway from the chat payload) to a Gemini or
+    DeepSeek model id. Any other model (the Groq prompt guard) is untouched,
+    and without a choice in the context -- research harness, checkout,
+    background work -- the configured model is used as is. No automatic
+    fallback between providers: an unavailable provider still ends the turn
+    with the "model unavailable" message (BUG-030)."""
+    provider = str((request_context.get() or {}).get("llm_provider") or "").lower()
+    if provider in PROVIDER_MODELS and model_id.lower().startswith(("gemini", "deepseek")):
+        return PROVIDER_MODELS[provider]
+    return model_id
+
+
 def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_schema_override: Any = None, _max_attempts: int = 2) -> str:
     """Public entrypoint: wraps _call_llm_router_impl with the two live-
     traffic resilience layers that don't belong in that function's own
@@ -1059,6 +1078,7 @@ def call_llm_router(prompt: str, model_id: str = MODEL_A_GENERATOR, response_sch
     (e.g. the Groq prompt guard) has no fallback and behaves exactly as
     before.
     """
+    model_id = _provider_model_id(model_id)
     current_model_id = model_id
     models_to_try = [model_id] + ([_GEMINI_MODEL_FALLBACK[model_id]] if model_id in _GEMINI_MODEL_FALLBACK else [])
     last_error: Exception | None = None

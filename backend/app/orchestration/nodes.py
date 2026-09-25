@@ -6886,6 +6886,11 @@ def _apply_response_completeness_nets(
         for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
         if isinstance(subquery, dict)
     }
+    need_by_subquery_id = {
+        subquery.get("subquery_id"): str(subquery.get("need", "")).strip()
+        for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(subquery, dict)
+    }
     # Shortcut placement (subquery-anchored insert position) and
     # clarification originator (which deterministic template applies) both
     # need one more lookup each, same as before this rewrite.
@@ -6938,9 +6943,13 @@ def _apply_response_completeness_nets(
             if _is_covered(oid, in_handle_namespace=False):
                 continue
             component = str(content.get("resolved_request", "")).strip()
+            # BUG-047: name the need (as BUG-035 did for the no-info
+            # statement) instead of quoting the customer's request verbatim,
+            # which read "...for the part about I withdrew cash ... right now."
+            need = need_by_subquery_id.get(subquery_id_by_task_id.get(oid), "")
             fallback_text = (
-                f"Sorry, I don't have a complete answer for the part about {component} right now."
-                if component else "Sorry, I don't have a complete answer for one part of your request right now."
+                f"Sorry, I don't have complete information available on {need} right now."
+                if need else "Sorry, I don't have a complete answer for one part of your request right now."
             )
             print(f"   ⚠️ [TASK OMITTED IN DRAFT]: {oid} missing from generated elements — inserting fallback")
             log_event("response.flexible.task_omitted", task_id=oid, component=component)

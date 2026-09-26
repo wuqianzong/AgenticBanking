@@ -7,3 +7,4 @@ docs/August_2026_Individual_Monthly_Log_Wu_Qianzong.docx
 research/.research_api_keys
 uvicorn_live.log
 .deepseek_api_key
+.groq_api_key

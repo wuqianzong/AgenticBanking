@@ -36,7 +36,18 @@ MODEL_E_TRIAGE = model_C             # Google: Journey Classifier
 # independently, e.g. model_A="deepseek-flash".
 # --------------------------------------------
 
-groq_api_key = os.environ.get("GROQ_API_KEY")
+def _load_groq_api_key() -> str:
+    """GROQ_API_KEY from the environment, else the git-ignored
+    `.groq_api_key` file at the repo root -- the same pattern as the
+    DeepSeek key, so a process started without `.env` still has it."""
+    key = os.environ.get("GROQ_API_KEY", "").strip()
+    if key:
+        return key
+    key_file = Path(__file__).resolve().parents[3] / ".groq_api_key"
+    return key_file.read_text().strip() if key_file.exists() else ""
+
+
+groq_api_key = _load_groq_api_key()
 google_api_key = os.environ.get("GOOGLE_API_KEY")
 
 

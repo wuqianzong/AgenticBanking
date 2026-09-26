@@ -2314,14 +2314,18 @@ def node_02c_inbound_semantic_gate(state: AgentState):
             
     except Exception as e:
         print(f"🚨 [INBOUND GATE ERROR]: {e}")
-        # Fail-closed security design
-        return {"preflight_status": "error_malicious"} 
-        
+        # Fail-closed security design. Logged separately from a real veto so
+        # a guard outage is measured as unavailability, not as an attack.
+        log_event("inbound.prompt_guard.error", level="WARNING", error=str(e)[:300])
+        return {"preflight_status": "error_malicious"}
+
     if not is_safe:
         print(f"   🚫 [INBOUND VETO]: Malicious intent detected by Prompt Guard. Attack Probability: {res}")
+        log_event("inbound.prompt_guard.checked", verdict="blocked", score=str(res).strip()[:40])
         return {"preflight_status": "error_malicious"}
-        
+
     print(f"   ✅ [INBOUND PASS]: User input is SAFE from injections. Attack Probability: {res}")
+    log_event("inbound.prompt_guard.checked", verdict="passed", score=str(res).strip()[:40])
     history = list(state.get("chat_history", []))
     if history and isinstance(history[-1], HumanMessage):
         latest_message = history[-1]

@@ -92,7 +92,11 @@ def _turn_outcome(turn: dict, events: list[dict]) -> str:
         return "unavailable"
     summary = turn.get("summary") or {}
     if summary.get("clarification_tasks"):
-        return "clarify"
+        # A reply that answers part of the need and asks about the rest is a
+        # partial answer; "clarify" is a turn that only asks back.
+        answered = any(t.get("approved_parent_ids")
+                       for t in summary.get("task_results") or [] if isinstance(t, dict))
+        return "partial" if answered else "clarify"
     planned = [e for e in events if e.get("event") == "resolution.planned"]
     status = _parse(planned[-1].get("subquery_status")) if planned else {}
     if not isinstance(status, dict) or not status:
@@ -255,7 +259,7 @@ def build(records: list[dict]) -> dict:
             out["M8 tool-routing macro-F1"] = f"{100 * f1_score(route_true, route_pred, labels=labels, average='macro', zero_division=0):.1f}% (n={len(route_true)})"
         except Exception as error:
             out["M8 tool-routing macro-F1"] = f"error: {error}"
-        out["   routing confusion (true -> predicted)"] = dict(Counter(zip(route_true, route_pred)))
+        out["   routing confusion (true -> predicted)"] = {f"{t} -> {p}": n for (t, p), n in Counter(zip(route_true, route_pred)).items()}
     if benign_total:
         out["M22 benign-block rate"] = _pct(benign_blocked, benign_total)
     if redteam_rows:

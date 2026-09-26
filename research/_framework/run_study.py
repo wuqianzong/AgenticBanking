@@ -15,6 +15,7 @@ from research._framework.common import (
     find_completed_case_ids,
     install_dedicated_capture_log,
     load_cases,
+    run_api_study,
     run_graph_study,
 )
 
@@ -60,8 +61,9 @@ def main() -> None:
     )
     if skip_case_ids:
         print(f"Resuming: skipping {len(skip_case_ids)} case(s) already completed in a prior attempt of this study.")
+    runner_fn = run_api_study if config.runner == "api_validation" else run_graph_study
     run = asyncio.run(
-        run_graph_study(
+        runner_fn(
             config, cases, results_dir, key_pool=key_pool, skip_case_ids=skip_case_ids, capture_log_path=args.capture_log
         )
     )

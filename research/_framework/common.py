@@ -266,16 +266,18 @@ class StudyConfig:
     max_retries: int
     default_rate_limit_wait_seconds: int
     capture_system_log: bool
+    llm_provider: str = "gemini"
+    send_init: bool = False
+    unavailable_retry_wait_seconds: int = 300
 
     @classmethod
     def from_manifest(cls, manifest_path: Path) -> "StudyConfig":
         manifest = load_json(manifest_path)
         runner = str(manifest.get("runner", "graph_validation"))
-        if runner != "graph_validation":
+        if runner not in ("graph_validation", "api_validation"):
             raise ValueError(
-                "Only runner='graph_validation' is implemented. "
-                "API/persistence evaluation must be introduced as a separate adapter, "
-                "not silently approximated by this isolated runner."
+                "runner must be 'graph_validation' (graph invoked directly) or "
+                "'api_validation' (turns sent through the real /api/chat endpoint)."
             )
         fixture = manifest.get("fixture")
         if not isinstance(fixture, str) or not fixture:
@@ -292,6 +294,9 @@ class StudyConfig:
                 manifest.get("default_rate_limit_wait_seconds", DEFAULT_RATE_LIMIT_WAIT_SECONDS)
             ),
             capture_system_log=bool(manifest.get("capture_system_log", True)),
+            llm_provider=str(manifest.get("llm_provider", "gemini")),
+            send_init=bool(manifest.get("send_init", False)),
+            unavailable_retry_wait_seconds=int(manifest.get("unavailable_retry_wait_seconds", 300)),
         )
 
 
@@ -780,6 +785,167 @@ async def run_graph_study(
         "progress_path": progress_path,
         "records": records,
     }
+    write_markdown_report(report_path, run)
+    run["report_path"] = report_path
+    return run
+
+
+def _api_turn(client: Any, session_id: str, user_id: str, message: str, provider: str) -> dict[str, Any]:
+    """Send one turn through /api/chat and time what the customer would see:
+    the first streamed progress event and the final complete payload."""
+    started = time.perf_counter()
+    first_feedback = None
+    complete = None
+    with client.stream(
+        "POST", "/api/chat",
+        json={"session_id": session_id, "user_id": user_id, "message": message, "llm_provider": provider},
+    ) as response:
+        for line in response.iter_lines():
+            if not line or not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if first_feedback is None and event.get("type") in ("progress", "init", "complete"):
+                first_feedback = time.perf_counter() - started
+            if event.get("type") == "complete":
+                complete = event
+    total = time.perf_counter() - started
+    return {"first_feedback_seconds": round(first_feedback, 3) if first_feedback is not None else None,
+            "elapsed_seconds": round(total, 3), "complete": complete}
+
+
+async def run_api_study(
+    config: StudyConfig,
+    cases: list[dict[str, Any]],
+    output_dir: Path,
+    key_pool: "ApiKeyPool | None" = None,
+    skip_case_ids: set[str] | None = None,
+    capture_log_path: Path | None = None,
+) -> dict[str, Any]:
+    """Execute a fixture through the real /api/chat endpoint (in-process
+    TestClient), recording customer-visible timing -- time to first streamed
+    feedback and time to the complete reply -- and whether the turn ended in
+    the model-unavailable message, alongside the same state summary and
+    per-case log events the graph runner records. A model-unavailable turn is
+    recorded, then retried after `unavailable_retry_wait_seconds` (up to
+    max_retries) so the rest of the case can still be measured."""
+    skip_case_ids = skip_case_ids or set()
+    capture_offset = capture_log_path.stat().st_size if capture_log_path and capture_log_path.exists() else 0
+    import socket
+    import threading
+    import httpx
+    import uvicorn
+    from backend.app.api_gateway import MODEL_UNAVAILABLE_MESSAGE, app
+    from backend.app.orchestration.graph import app_graph
+
+    # A real HTTP server in this same process (so the graph state stays
+    # readable) -- FastAPI's TestClient buffers a streamed response, which
+    # would make "time to first feedback" equal the total turn time.
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    threading.Thread(target=server.run, daemon=True).start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.1)
+    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=httpx.Timeout(900.0))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
+    results_path = output_dir / f"{run_id}_results.jsonl"
+    progress_path = output_dir / f"{run_id}_progress.txt"
+    report_path = config.manifest_path.parent / "reports" / f"{run_id}_AUTOMATED_REPORT.md"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    started_at = utc_now()
+    records: list[dict[str, Any]] = []
+    if key_pool is None:
+        key_pool = ApiKeyPool()
+
+    with progress_path.open("w", encoding="utf-8") as progress, results_path.open("w", encoding="utf-8") as results_file:
+        progress.write(f"=== run started {started_at} study={config.study_id} runner=api_validation provider={config.llm_provider} cases={len(cases)} ===\n")
+        progress.flush()
+        for case_index, case in enumerate(cases, start=1):
+            if case["case_id"] in skip_case_ids:
+                progress.write(f"{utc_now()} [{case_index}/{len(cases)}] case={case['case_id']} status=SKIPPED_ALREADY_DONE\n")
+                progress.flush()
+                continue
+            session_id = f"eval_{config.study_id}_{case_index}_{uuid.uuid4().hex[:8]}"
+            graph_config = {"configurable": {"thread_id": session_id}}
+            turn_records: list[dict[str, Any]] = []
+            case_status = "OK"
+            if config.send_init:
+                await asyncio.to_thread(_api_turn, client, session_id, config.user_id, "**INIT**", config.llm_provider)
+            for turn_index, message in enumerate(case["messages"], start=1):
+                attempts = 0
+                unavailable_count = 0
+                while True:
+                    attempts += 1
+                    try:
+                        outcome = await asyncio.to_thread(_api_turn, client, session_id, config.user_id, message, config.llm_provider)
+                    except Exception as error:  # transport-level failure
+                        case_status = "ERROR"
+                        turn_records.append({"turn_index": turn_index, "message": message, "status": "ERROR", "attempts": attempts,
+                                             "error": str(error)[:1000], "assertions": []})
+                        break
+                    complete = outcome.get("complete") or {}
+                    text = str(complete.get("text", ""))
+                    unavailable = text.strip() == MODEL_UNAVAILABLE_MESSAGE or text.strip().startswith(MODEL_UNAVAILABLE_MESSAGE)
+                    if unavailable and attempts < config.max_retries:
+                        unavailable_count += 1
+                        progress.write(f"{utc_now()} case={case['case_id']} turn={turn_index} model unavailable; retry in {config.unavailable_retry_wait_seconds}s (attempt {attempts})\n")
+                        progress.flush()
+                        await asyncio.sleep(config.unavailable_retry_wait_seconds)
+                        continue
+                    snapshot = app_graph.get_state(graph_config)
+                    summary = extract_state_summary(snapshot.values or {})
+                    expected = case.get("expected", {}) if (
+                        turn_index == len(case["messages"]) or case.get("assert_each_turn", False)
+                    ) else {}
+                    turn_records.append({
+                        "turn_index": turn_index, "message": message,
+                        "status": "MODEL_UNAVAILABLE" if unavailable else "OK",
+                        "attempts": attempts, "model_unavailable_count": unavailable_count + (1 if unavailable else 0),
+                        "first_feedback_seconds": outcome.get("first_feedback_seconds"),
+                        "elapsed_seconds": outcome.get("elapsed_seconds"),
+                        "reply_text": text, "ui": {k: complete.get(k) for k in ("uiType", "navigationActions", "serviceRequestActions", "softEscalationAvailable") if k in complete},
+                        "summary": summary, "assertions": evaluate_assertions(summary, expected),
+                    })
+                    if unavailable:
+                        case_status = "MODEL_UNAVAILABLE"
+                    break
+                if case_status != "OK":
+                    break
+                if turn_index < len(case["messages"]):
+                    await asyncio.sleep(config.pacing_seconds)
+            record = {
+                "run_id": run_id, "study_id": config.study_id, "runner": "api_validation", "llm_provider": config.llm_provider,
+                "case_index": case_index, "case_id": case["case_id"], "title": case.get("title", case["case_id"]),
+                "tags": case.get("tags", []), "expected": case.get("expected", {}), "review_rubric": case.get("review_rubric", []),
+                "session_id": session_id, "status": case_status, "turns": turn_records,
+            }
+            if config.capture_system_log:
+                if capture_log_path is not None:
+                    events, capture_offset = extract_system_log_events_from(capture_log_path, session_id, capture_offset)
+                    record["system_log_events"] = events
+                else:
+                    record["system_log_events"] = extract_system_log_events(session_id)
+            records.append(record)
+            results_file.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+            results_file.flush()
+            progress.write(f"{utc_now()} [{case_index}/{len(cases)}] case={case['case_id']} status={case_status}\n")
+            progress.flush()
+            if case_index < len(cases):
+                await asyncio.sleep(config.pacing_seconds)
+        completed_at = utc_now()
+        progress.write(f"=== run finished {completed_at} cases={len(records)} ===\n")
+
+    client.close()
+    server.should_exit = True
+    run = {"run_id": run_id, "study_id": config.study_id, "runner": "api_validation", "started_at": started_at,
+           "completed_at": completed_at, "results_path": results_path, "progress_path": progress_path, "records": records}
     write_markdown_report(report_path, run)
     run["report_path"] = report_path
     return run

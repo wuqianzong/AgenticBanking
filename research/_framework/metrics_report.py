@@ -6,7 +6,7 @@ Usage:
 Reads the records written by either runner (graph_validation or api_validation),
 including each case's captured system_log_events, and prints a Markdown report.
 Metrics that need a labelled dataset activate only when cases carry the tags:
-  route:<rag|api|deeplink|service_request>   -> M8 tool-routing macro-F1
+  route:<rag|api|deeplink|service_request>   -> M8 tool-routing macro-F1 ("a|b" = either is correct)
   set:benign                                  -> M22 benign-block rate
   set:redteam  (+ expect:block | expect:safe) -> M23 adversarial handling (auto + review list)
   set:escalation (+ expect_escalation:yes|no) -> M17 escalation precision / recall
@@ -197,8 +197,10 @@ def build(records: list[dict]) -> dict:
                 if route:
                     created = [e.get("tool_name") for e in events if e.get("event") == "tool.task.created" and str(e.get("planning_round")) == "1"]
                     specific = [t for t in created if t != "rag"]
-                    route_true.append(route)
-                    route_pred.append(specific[0] if specific else ("rag" if "rag" in created else "none"))
+                    predicted = specific[0] if specific else ("rag" if "rag" in created else "none")
+                    accepted = route.split("|")  # "a|b" = either route is correct
+                    route_true.append(predicted if predicted in accepted else accepted[0])
+                    route_pred.append(predicted)
         if session_outcomes and all(o in ("full", "no_need") for o in session_outcomes) and any(o == "full" for o in session_outcomes):
             sessions_full += 1
         soft_sessions += session_soft

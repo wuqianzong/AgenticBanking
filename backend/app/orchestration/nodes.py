@@ -184,10 +184,23 @@ CONFIDENCE_TEST_ALPHA = 0.05
 # MIN_SCORED_SUBQUERIES_FOR_CONFIDENCE_TRUST below and
 # RAG_RETRY_EFFORT_v1.0.md §4e.
 CONFIDENCE_TEST_POPULATION_MEAN_H0 = 0.75
-SOFT_ESCALATION_SESSION_DURATION_SECONDS = 10 * 60
-SOFT_ESCALATION_SAME_INTENT_STREAK = 20
+# Soft escalation (node_08) is decided by two deterministic signals: the
+# same need recurring, and a low rolling confidence. The former session-
+# duration (10 min) and same-product/intent-streak (>20 turns) signals were
+# dropped: in the recorded multi-turn campaign (251 sessions) neither ever
+# fired, and elapsed time alone is not evidence of a customer struggling.
 SOFT_ESCALATION_CONFIDENCE_THRESHOLD = 0.5
-SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT = 3
+# The second time the same need comes back (was 3): a customer returning to
+# a need is the clearest sign the previous answer was not enough.
+SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT = 2
+# A partial (RELEVANT) answer delivered real information, so for the
+# escalation average it counts 0.75 rather than its stored 0.5 grade. At
+# 0.5 the average FAQ turn scored 0.53 -- right on the threshold -- and a
+# BANKING77 simulation offered escalation in ~26% of sessions; at 0.75,
+# 7-13%. Applied only inside node_08's own rolling confidence; the stored
+# grades (and node_03c's retry hypothesis test that reads them) are
+# unchanged.
+SOFT_ESCALATION_PARTIAL_ANSWER_SCORE = 0.75
 # Used by node_08's own _rolling_bot_confidence gate (a plain average, not
 # a hypothesis test -- node_03c's own gate is MIN_SCORED_SUBQUERIES_FOR_
 # CONFIDENCE_TRUST below, a different constant for a different sampling
@@ -10477,7 +10490,7 @@ def _append_failed_turn_escalation_history(state: AgentState) -> list:
     return escalation_history[-HYPOTHESIS_TEST_SAMPLE_SIZE:]
 
 
-def _turn_confidence(entry: dict) -> float | None:
+def _turn_confidence(entry: dict, partial_score: float | None = None) -> float | None:
     """One turn's confidence contribution: a user rating (see
     /api/feedback/turn-rating), when present, replaces the schema-derived
     average entirely rather than blending with it -- the customer's own
@@ -10488,7 +10501,12 @@ def _turn_confidence(entry: dict) -> float | None:
     user_rating = entry.get("user_rating")
     if user_rating is not None:
         return float(user_rating)
-    scores = [sq["score"] for sq in entry.get("subqueries", [])]
+    # partial_score, when given, re-weights a partial (0.5) grade for the
+    # caller's own purpose -- node_08 passes SOFT_ESCALATION_PARTIAL_ANSWER_SCORE.
+    scores = [
+        partial_score if partial_score is not None and sq["score"] == 0.5 else sq["score"]
+        for sq in entry.get("subqueries", [])
+    ]
     return sum(scores) / len(scores) if scores else None
 
 
@@ -10515,7 +10533,7 @@ def _historical_subquery_scores(turn_escalation_history: list) -> list[float]:
     ]
 
 
-def _rolling_bot_confidence(turn_escalation_history: list) -> float | None:
+def _rolling_bot_confidence(turn_escalation_history: list, partial_score: float | None = None) -> float | None:
     """Average _turn_confidence over up to MAX_ESCALATION_HISTORY_TURNS
     prior turns -- the same rolling metric node_08 uses to decide the soft
     escalation chip, factored out so node_03c can also read it mid-turn
@@ -10523,28 +10541,29 @@ def _rolling_bot_confidence(turn_escalation_history: list) -> float | None:
     looks at already-completed turns already sitting in state). None when
     there is no scored history yet (a brand-new session, or one that has
     been pure chitchat so far)."""
-    confidences = [c for c in (_turn_confidence(entry) for entry in turn_escalation_history) if c is not None]
+    confidences = [c for c in (_turn_confidence(entry, partial_score) for entry in turn_escalation_history) if c is not None]
     return sum(confidences) / len(confidences) if confidences else None
 
 
 def node_08_soft_escalation_analyzer(state: AgentState):
     """Signals evidence of a customer possibly struggling, even though
     nothing explicit demands it (an explicit request is the separate, hard
-    node_09 path). Four independent, deterministically-evaluated signals,
+    node_09 path). Two independent, deterministically-evaluated signals,
     each individually logged so the reason a signal fired is always
-    inspectable:
+    inspectable (a session-duration and a same-product/intent-streak
+    signal were dropped on 2026-09-26 -- neither ever fired in the recorded
+    multi-turn campaign, and elapsed time alone is not a failure signal):
 
-    1. Long session: elapsed time since login.
-    2. Same product/intent dwelt on for many consecutive turns
-       (same_intent_streak_count, maintained by node_02e).
-    3. Rolling bot-confidence, averaged over the last
+    1. Rolling bot-confidence, averaged over the last
        MAX_ESCALATION_HISTORY_TURNS turns, drops below threshold. Tool
        Calling v3.0's schema already tracks resolution at a finer grain than
        resolved/not (see _score_subquery), so this is a continuous average,
        not a binary unresolved-turn count -- and a turn's own schema-derived
        average is itself replaceable by a direct customer thumbs rating (see
        _turn_confidence) for the ambiguous band a rating is offered on.
-    4. The same underlying need recurring across several turns. Detected by
+       A partial answer counts SOFT_ESCALATION_PARTIAL_ANSWER_SCORE here.
+    2. The same underlying need recurring across turns
+       (SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT). Detected by
        node_02d/triage's own LLM call (repetitive_issue_detected), which
        judges directly from the conversation history it already sees --
        not a separately-injected list of prior subqueries (that was tried
@@ -10559,7 +10578,7 @@ def node_08_soft_escalation_analyzer(state: AgentState):
        exposure.
 
     None of these are separately persisted as a sticky "escalation active"
-    flag -- all four are recomputed fresh every turn from live/windowed
+    flag -- both are recomputed fresh every turn from live/windowed
     state, so a pattern that stops recurring naturally stops being
     signaled once it ages out of the window.
 
@@ -10617,21 +10636,7 @@ def node_08_soft_escalation_analyzer(state: AgentState):
         and not state.get("final_clarification", "").strip()
     )
 
-    duration_triggered = False
-    elapsed_seconds = None
-    session_started_at = state.get("session_started_at", "")
-    if session_started_at:
-        try:
-            started = datetime.fromisoformat(session_started_at)
-            if started.tzinfo is None:
-                started = started.replace(tzinfo=timezone.utc)
-            elapsed_seconds = (datetime.now(timezone.utc) - started).total_seconds()
-            duration_triggered = elapsed_seconds >= SOFT_ESCALATION_SESSION_DURATION_SECONDS
-        except ValueError:
-            pass
-
     same_intent_streak_count = state.get("same_intent_streak_count", 0)
-    same_intent_triggered = same_intent_streak_count > SOFT_ESCALATION_SAME_INTENT_STREAK
 
     # This node's own signals stay windowed to their original, shorter
     # recency size even though `history` itself is now stored longer for
@@ -10639,7 +10644,7 @@ def node_08_soft_escalation_analyzer(state: AgentState):
     # from 20+ turns ago is no longer an active pattern for either signal.
     recent_history = history[-MAX_ESCALATION_HISTORY_TURNS:]
     scored_turn_count = sum(1 for entry in recent_history if _turn_confidence(entry) is not None)
-    confidence = _rolling_bot_confidence(recent_history)
+    confidence = _rolling_bot_confidence(recent_history, SOFT_ESCALATION_PARTIAL_ANSWER_SCORE)
     confidence_triggered = (
         scored_turn_count >= MIN_SCORED_TURNS_FOR_CONFIDENCE_TRUST
         and confidence is not None
@@ -10650,10 +10655,6 @@ def node_08_soft_escalation_analyzer(state: AgentState):
     repeated_need_triggered = repeated_need_turns >= SOFT_ESCALATION_REPEATED_NEED_TURN_COUNT
 
     triggered_rules = []
-    if duration_triggered:
-        triggered_rules.append("long_session")
-    if same_intent_triggered:
-        triggered_rules.append("same_intent_streak")
     if confidence_triggered:
         triggered_rules.append("low_confidence")
     if repeated_need_triggered:
@@ -10689,7 +10690,6 @@ def node_08_soft_escalation_analyzer(state: AgentState):
         log_event(
             "escalation.soft.triggered",
             rules=triggered_rules,
-            elapsed_seconds=elapsed_seconds,
             same_intent_streak_count=same_intent_streak_count,
             confidence=confidence,
             scored_turn_count=scored_turn_count,

@@ -70,6 +70,8 @@ second time).
 | BUG-049 | The BUG-018 guard removes a RELEVANT FAQ result whenever a data fetch completed on the same need -- even when the need also asks something the data cannot answer ("I forgot my address... where can I change it?" kept the address but lost the change-address evidence) | Medium | Confirmed (live, DeepSeek) | **Deterministic code** (guard assumes a data fetch answers the whole subquery; need-based triage can combine a lookup and a how-to in one need) | **Fixed: guard retired (full-picture auditor + consistency check handle the contradiction); fixture-verified** |
 | BUG-050 | When the reviser deletes a customer-data sentence (or any cited content), the completeness net does not restore it: the block still cites the handle (citations are locked during revision), so the net treats the obligation as covered | Medium | Confirmed (live, Gemini) | **Deterministic code** (net coverage keyed on locked citations, not on the revised text) | **Retracted -- misdiagnosis: the net did restore the address; the delivered reply contains it** |
 | BUG-051 | Soft escalation is never offered on a turn where the bot found nothing: the evidence-only writer puts its whole reply (including "I don't have information" statements) into `final_clarification`, which node_08 reads as "this turn asks a clarifying question" and suppresses the offer | Medium-High | Confirmed (live, Gemini, v4.0 measurement: 0 offers / 18 suppressions on no-evidence turns) | **Deterministic code** (clarification flag set from the whole evidence-only reply) | **Open -- fix option undecided** |
+| BUG-052 | When the triage call fails with an error that is not a 503 or a quota error (e.g. a 500 or a call timeout), the banking question is silently turned into small talk: triage falls back to "no components", the empty-decomposition guard adds a neutral conversational component, and the customer gets "Thanks for sharing that. I'm here whenever you have a Horizon Bank question." instead of an answer or the "model unavailable" message | High | Confirmed (forced-failure test, v4.0 M14) | **Deterministic code** (triage exception path shares the malformed-output fallback) | **Open -- fix option undecided** |
+| BUG-053 | A need the intent formulator declines ("not a product or service Horizon offers") leaves no structured decision in the log: the decline reason exists only inside the raw model response, and the fixed decline reply is not audited, so the turn's trail cannot be reconstructed from events alone | Low | Confirmed (v4.0 M26, 2 turns) | **Logging gap** | **Open** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -2862,4 +2864,56 @@ has no one-turn urgency trigger, and the reply already gave the freeze steps and
 - B. Source: make `_generate_evidence_only_response` put only clarification blocks into
   `final_clarification`, like the other paths. Cleaner, but every other reader of
   `final_clarification` (e.g. next-turn pending-clarification handling) must be traced first.
+
+## BUG-052 — A failed triage call turns a banking question into small talk
+
+**Severity:** High **Confidence:** Confirmed (forced-failure test) **Status: Open -- fix option undecided**
+**Found in:** v4.0 measurement, M14 forced-failure test
+(`research/2026-09-27_v4_measurement_forced_failure`, test-only: every Gemini call raises a
+chosen provider error through a stand-in client, so llm_service's own error handling runs).
+
+**What happens:**
+
+| Injected failure | What the customer saw |
+|---|---|
+| 503 overloaded | "The model is currently unavailable. Please try again later." (correct) |
+| 429 quota on every key | Keys rotated, model fallback tried, then the same message (correct) |
+| 500 internal error | "Thanks for sharing that. I'm here whenever you have a Horizon Bank question." to "How do I freeze my card?" and "What's my balance?" |
+
+**Cause:** only errors classified as "model unavailable" (503, quota exhausted on all keys,
+DeepSeek 402/503) abandon the turn (BUG-030). Any other error from the triage call reaches
+node_02d's `except Exception` (nodes.py, `🚨 [NODE 02d EXCEPTION]`), which sets
+`raw_components = []`. The empty-decomposition guard then adds one neutral conversational
+component ("General conversational remark with no specific banking request") -- a guard
+meant for malformed model output, not for a failed call. Generation and the audit also fail
+on the same error; the audit fails closed (correct), and after three rounds the
+non-financial audit fallback returns the deterministic small-talk sentence. The customer is
+not told that anything went wrong, and the question is not answered.
+
+**Which real errors take this path:** a 500 or 504 from Gemini, and the 45 s call timeout
+(`llm.call_timeout`, seen live once in the v4.0 red-team run -- on a later call there, which
+its node handled). A timeout or 500 on the triage call specifically would produce this reply.
+
+**Candidate directions (undecided):**
+- A. Treat a failed triage call like a model outage: raise `ModelUnavailableError` so the
+  turn ends in the clear "model unavailable" message (triage is the one call every turn
+  depends on).
+- B. Keep the turn going but fall back to "one financial component = the whole message"
+  instead of a conversational one, so a later healthy call can still answer it.
+- C. Widen `_is_model_unavailable_error` to 500/504/timeouts after the call's own retries
+  are used up -- affects every node, not just triage.
+
+## BUG-053 — Formulator declines leave no structured event
+
+**Severity:** Low **Confidence:** Confirmed (v4.0 M26) **Status: Open**
+**Found in:** v4.0 measurement, `banking77_r5_0142` ("I would like to exchange some currency.")
+and `redteam_halluc_02`.
+
+**What happens:** the intent formulator declines the need (`decline_tasks`: "Horizon does not
+offer currency exchange services") and the customer gets the fixed decline sentence. The
+events show `task.formulated` with `task_count: 0` and then `chat.response`; the decline and
+its reason are only in the formulator's raw `llm.response`, and there is no outbound audit
+(the reply is a fixed template). M26 therefore cannot reconstruct the decision from
+structured events. Direction: log a `task.declined` event (subquery, reason category,
+detail) where decline_tasks are built.
 

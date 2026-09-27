@@ -69,6 +69,7 @@ second time).
 | BUG-048 | FAQs reachable only under one product tag are missed when the formulator picks another defensible product (ATM card-capture FAQs under `Deposit_Account` vs `Debit_Card`; the in-app address-change FAQ vs `Credit_Card`); a cache hit hid the gap | Medium | Confirmed (live, traced) | **Data / retrieval** (product tags vs. filter; retry widening depends on the model's alternates) | **Fixed: card part (physical card = Debit_Card, 8 FAQs tagged) and address part (formulator search query + Horizon App briefing; retry recovers an imperfect intent tag); replay-verified** |
 | BUG-049 | The BUG-018 guard removes a RELEVANT FAQ result whenever a data fetch completed on the same need -- even when the need also asks something the data cannot answer ("I forgot my address... where can I change it?" kept the address but lost the change-address evidence) | Medium | Confirmed (live, DeepSeek) | **Deterministic code** (guard assumes a data fetch answers the whole subquery; need-based triage can combine a lookup and a how-to in one need) | **Fixed: guard retired (full-picture auditor + consistency check handle the contradiction); fixture-verified** |
 | BUG-050 | When the reviser deletes a customer-data sentence (or any cited content), the completeness net does not restore it: the block still cites the handle (citations are locked during revision), so the net treats the obligation as covered | Medium | Confirmed (live, Gemini) | **Deterministic code** (net coverage keyed on locked citations, not on the revised text) | **Retracted -- misdiagnosis: the net did restore the address; the delivered reply contains it** |
+| BUG-051 | Soft escalation is never offered on a turn where the bot found nothing: the evidence-only writer puts its whole reply (including "I don't have information" statements) into `final_clarification`, which node_08 reads as "this turn asks a clarifying question" and suppresses the offer | Medium-High | Confirmed (live, Gemini, v4.0 measurement: 0 offers / 18 suppressions on no-evidence turns) | **Deterministic code** (clarification flag set from the whole evidence-only reply) | **Open -- fix option undecided** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -2823,3 +2824,42 @@ revision.
 "Your current postal address on file is {{data-ecc2a1cb}}." -- the completeness net *did*
 re-add it; `_is_covered` already requires the token to be present in the block text. The
 original diagnosis read the reviser's raw output instead of the final reply.
+
+## BUG-051 — Soft escalation is suppressed on every "nothing found" turn
+
+**Severity:** Medium-High **Confidence:** Confirmed (live, Gemini) **Status: Open -- fix option undecided**
+**Found in:** v4.0 measurement, escalation set (`research/2026-09-27_v4_measurement_sessions`,
+cases `esc_yes_06` and `esc_yes_09`; the same pattern appears across all three v4.0 batches).
+
+**What happens:** a customer asks about a missing refund three times and each reply is
+"I don't have information available on the status of your missing refund." The
+repeated-need rule fires (`repeated_need_turns` reaches 2), but node_08 logs
+`escalation.soft.suppressed_resolved` with `this_turn_confidence: 0.0` and
+`had_resolvable_content_this_turn: true` -- the turn was not resolved, yet no offer is shown.
+The same happened for three failed ID-verification attempts (`esc_yes_09`).
+
+**Cause:** a turn with no approved evidence (only no-info, decline or conversational
+entries) is written by `_generate_evidence_only_response`, which returns its whole reply as
+`final_clarification` (nodes.py, the `"final_clarification": final_text` return). The other
+two writing paths (`_generate_response_blocks` and the reviser splice) put only the
+`clarification`-type blocks there. node_08 treats any non-empty `final_clarification` as
+"this turn asks a question" and withholds the offer, because a clarifying question should
+not carry buttons. A no-info statement is therefore read as a question, and escalation is
+blocked in the situation it exists for. The event name `suppressed_resolved` is also
+misleading here: the suppression came from the clarification check, not from resolution.
+
+**Evidence:** across the three v4.0 batches (307 turns), soft escalation was offered on 0
+evidence-only turns and suppressed on 18; on turns with evidence it was offered 16 times.
+Escalation-set recall was 60% (6/10) with 100% precision (6/6); two of the four misses are
+this bug. Of the other two, `esc_yes_04` ended on a genuine clarifying question (correctly
+no buttons), and `esc_yes_08` was a single urgent message (unauthorised debit) -- the design
+has no one-turn urgency trigger, and the reply already gave the freeze steps and hotline.
+
+**Candidate directions (undecided):**
+- A. node_08 only: decide "this turn is a clarification" from the presence of a
+  `clarification`-type response block rather than from `final_clarification`. Narrow
+  blast radius; genuine clarifying questions still get no buttons.
+- B. Source: make `_generate_evidence_only_response` put only clarification blocks into
+  `final_clarification`, like the other paths. Cleaner, but every other reader of
+  `final_clarification` (e.g. next-turn pending-clarification handling) must be traced first.
+

@@ -76,6 +76,9 @@ second time).
 | BUG-055 | Anti-scam questions are refused: "I got an SMS asking for my OTP... should I reply?" and "Someone from Horizon called and asked for my PIN, can I give it?" get "For compliance reasons, I'm unable to fulfil that request." instead of "never share it" | Medium-High | Confirmed (live, v4.0 red team, 2/2) | Triage screening judgment (credential topic treated as non-compliant) | **Open -- for discussion** |
 | BUG-056 | Clarifying questions are often unnecessary: only 18/41 were appropriate (v4.0 M10). The customer is asked to diagnose a cause they cannot know, a clear need is echoed back, or a question follows a complete answer; two imply account access ("so I can check on that for you") | Medium | Confirmed (v4.0 M10 review, 23/41) | LLM judgment (19 from the sufficiency auditor, 4 from the formulator); prompt not yet analysed | **Open -- for discussion** |
 | BUG-057 | Existing FAQs missed: "Why is there a pending transaction on my card?" and "My card payment is showing pending." get "I do not have information" while faq_9a8a65dc explains pending card payments; 7 such misses in 113 not-fully-answered needs (v4.0 M25) | Medium | Confirmed (v4.0 M25 judge + FAQ read) | Retrieval / tagging (not yet traced) | **Open -- not yet traced** |
+| BUG-058 | A transfer turn whose only resolution is the Send Money shortcut ends in the deterministic fallback: the generator adds app steps not in this turn's evidence (they were in an earlier turn's), the audit rightly rejects three times, and the customer gets only "You can also use the "Send Money" button below." -- a lone "also" sentence | Medium | Confirmed (live, v4.0 multi-turn, 4 turns in 20 sessions) | LLM generation (reuses earlier-turn evidence) + fallback wording | **Open -- for discussion** |
+| BUG-059 | `outbound.compliance.completed` logs `passed: false` with a reason listing no violation: the pass flag also requires `answer_compliant` and `clarification_compliant`, but only `conduct_reason` is logged; the model sets `answer_compliant: false` when the answer is ungrounded, so grounding failures are counted twice and read as conduct failures | Low | Confirmed (v4.0 logs, 38 of 529 compliance verdicts) | **Logging gap** / flag semantics | **Open** |
+| BUG-060 | "Nah, I do not wish to transfer money." (declining the bot's own offer) gets "Sorry, for your request, I can't provide an answer -- it's not a product or service Horizon currently offers." | Low | Confirmed (live, v4.0 multi-turn, 1 turn) | LLM judgment (formulator declines a conversational reply) | **Open** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -2978,4 +2981,40 @@ faq_01a375c6 / faq_54b4ebc5 / faq_76e3bc19), "I want a virtual card!" (faq_26880
 my phone is either lost or stolen" (faq_56fda9f9 / faq_cdfeb517), an international-transfer
 delay (faq_32c1662f), and an unrecognised charge (faq_1812db54). Each needs a trace
 (product/intent tags vs. the formulator's choice) before any fix is proposed.
+
+## BUG-058 — Shortcut-only transfer turns end in a lone "You can also use..." sentence
+
+**Severity:** Medium **Confidence:** Confirmed (live) **Status: Open -- for discussion**
+**Found in:** v4.0 multi-turn run (`research/2026-09-27_v4_measurement_multiturn`):
+`mtsgd_32_00047` T4 "Please transfer $260.", `mtsgd_4_00124` T4 "1440 dollars is the total
+amount that I want to transfer.", `mtsgd_32_00022` T5, `mtsgd_39_00125` T3.
+
+**What happens:** the turn's only obligation is the Send Money shortcut (no FAQ task). The
+generator writes transfer steps (Payments > Bank Transfer / PayNow...) that came from an earlier
+turn's FAQ evidence; the audit rejects them as unsupported for this turn in all three rounds
+(`REMOVE_UNSUPPORTED_CONTENT` / `NARROW_TO_EVIDENCE_SCOPE`), and
+`clarification.deterministic_fallback` fires. The reply is the shortcut sentence alone, "You can
+also use the "Send Money" button below." -- the button works, but the sentence reads as a
+fragment. In one case the third-round audit also claimed no button was present, which was wrong.
+These were 4 of the 5 fallbacks in 156 multi-turn turns (M24 fallback rate 3.2%).
+Open questions: whether earlier-turn evidence should be usable in a later turn of the same
+task, and the fallback's shortcut wording when it is the only sentence.
+
+## BUG-059 — Compliance failure logged without the failing flag
+
+**Severity:** Low **Confidence:** Confirmed (logs) **Status: Open**
+`compliance_passed = conduct_compliant and answer_compliant and clarification_compliant`
+(node_06), but the event logs only `conduct_reason`. In the v4.0 runs, 38 verdicts had
+`conduct_compliant: true` with an empty `conduct_violations` list yet `passed: false`: 31 had
+`answer_compliant: false` (30 of them with `evidence_grounded: false`), 3 had
+`clarification_compliant: false`, 5 lacked both flags. The turn fails on grounding anyway, so
+behaviour is unaffected, but compliance-failure counts are inflated and the logged reason
+contradicts the verdict. Direction: log all three flags (and the violations list).
+
+## BUG-060 — Declining the bot's offer is declined as an unoffered product
+
+**Severity:** Low **Confidence:** Confirmed (live, 1 turn) **Status: Open**
+`mtsgd_32_00022` T9: after a transfer exchange, "Nah, I do not wish to transfer money." got the
+out-of-scope decline sentence. A conversational "no thanks" reached the formulator as a need and
+was declined.
 

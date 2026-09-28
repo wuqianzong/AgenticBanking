@@ -1,0 +1,1 @@
+{"case_id":"replace_me_001","title":"Replace with a real test query","messages":["Replace this with a real test query."],"tags":["smoke"],"expected":{"must_not_emit":["raw_route","destination_id","unresolved_placeholder"]},"review_rubric":["answer_relevance","evidence_groundedness","naturalness"]}

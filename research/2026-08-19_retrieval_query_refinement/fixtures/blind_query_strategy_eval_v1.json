@@ -1,0 +1,1762 @@
+[
+  {
+    "id": "blind_01_1",
+    "customer_query": "I am trying to sort out starting a loan request in the banking app. What should I do?",
+    "direct_query": "personal loan application in Horizon App",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Application"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "start personal loan application in app",
+        "policy": "loan application process and required application information",
+        "conceptual": "Horizon personal loan application"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_01_2",
+    "customer_query": "Before I make a decision, I need to understand starting a loan request in the banking app. Can you explain?",
+    "direct_query": "personal loan application in Horizon App",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Application"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "start personal loan application in app",
+        "policy": "loan application process and required application information",
+        "conceptual": "Horizon personal loan application"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_01_3",
+    "customer_query": "I have heard different things about starting a loan request in the banking app, and I am not sure where to begin.",
+    "direct_query": "personal loan application in Horizon App",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Application"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "start personal loan application in app",
+        "policy": "loan application process and required application information",
+        "conceptual": "Horizon personal loan application"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_01_4",
+    "customer_query": "This may be obvious, but I need help with starting a loan request in the banking app without making a mistake.",
+    "direct_query": "personal loan application in Horizon App",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Application"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "start personal loan application in app",
+        "policy": "loan application process and required application information",
+        "conceptual": "Horizon personal loan application"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_02_1",
+    "customer_query": "I am trying to sort out whether someone qualifies for a personal loan. What should I do?",
+    "direct_query": "personal loan eligibility age income residency",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Eligibility"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check personal loan eligibility",
+        "policy": "personal loan age income residency qualification rules",
+        "conceptual": "Horizon personal loan eligibility"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_02_2",
+    "customer_query": "Before I make a decision, I need to understand whether someone qualifies for a personal loan. Can you explain?",
+    "direct_query": "personal loan eligibility age income residency",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Eligibility"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check personal loan eligibility",
+        "policy": "personal loan age income residency qualification rules",
+        "conceptual": "Horizon personal loan eligibility"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_02_3",
+    "customer_query": "I have heard different things about whether someone qualifies for a personal loan, and I am not sure where to begin.",
+    "direct_query": "personal loan eligibility age income residency",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Eligibility"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check personal loan eligibility",
+        "policy": "personal loan age income residency qualification rules",
+        "conceptual": "Horizon personal loan eligibility"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_02_4",
+    "customer_query": "This may be obvious, but I need help with whether someone qualifies for a personal loan without making a mistake.",
+    "direct_query": "personal loan eligibility age income residency",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Eligibility"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check personal loan eligibility",
+        "policy": "personal loan age income residency qualification rules",
+        "conceptual": "Horizon personal loan eligibility"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_03_1",
+    "customer_query": "I am trying to sort out understanding the cost of borrowing. What should I do?",
+    "direct_query": "personal loan borrowing cost interest and rate calculation",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review personal loan borrowing cost",
+        "policy": "personal loan interest rate and borrowing cost rules",
+        "conceptual": "Horizon personal loan pricing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_03_2",
+    "customer_query": "Before I make a decision, I need to understand understanding the cost of borrowing. Can you explain?",
+    "direct_query": "personal loan borrowing cost interest and rate calculation",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review personal loan borrowing cost",
+        "policy": "personal loan interest rate and borrowing cost rules",
+        "conceptual": "Horizon personal loan pricing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_03_3",
+    "customer_query": "I have heard different things about understanding the cost of borrowing, and I am not sure where to begin.",
+    "direct_query": "personal loan borrowing cost interest and rate calculation",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review personal loan borrowing cost",
+        "policy": "personal loan interest rate and borrowing cost rules",
+        "conceptual": "Horizon personal loan pricing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_03_4",
+    "customer_query": "This may be obvious, but I need help with understanding the cost of borrowing without making a mistake.",
+    "direct_query": "personal loan borrowing cost interest and rate calculation",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review personal loan borrowing cost",
+        "policy": "personal loan interest rate and borrowing cost rules",
+        "conceptual": "Horizon personal loan pricing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_04_1",
+    "customer_query": "I am trying to sort out managing a repayment schedule. What should I do?",
+    "direct_query": "personal loan repayment schedule and payment management",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Loan And Credit Management"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check personal loan repayment schedule",
+        "policy": "loan repayment timing and management rules",
+        "conceptual": "Horizon loan repayment"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_04_2",
+    "customer_query": "Before I make a decision, I need to understand managing a repayment schedule. Can you explain?",
+    "direct_query": "personal loan repayment schedule and payment management",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Loan And Credit Management"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check personal loan repayment schedule",
+        "policy": "loan repayment timing and management rules",
+        "conceptual": "Horizon loan repayment"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_04_3",
+    "customer_query": "I have heard different things about managing a repayment schedule, and I am not sure where to begin.",
+    "direct_query": "personal loan repayment schedule and payment management",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Loan And Credit Management"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check personal loan repayment schedule",
+        "policy": "loan repayment timing and management rules",
+        "conceptual": "Horizon loan repayment"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_04_4",
+    "customer_query": "This may be obvious, but I need help with managing a repayment schedule without making a mistake.",
+    "direct_query": "personal loan repayment schedule and payment management",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Loan And Credit Management"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check personal loan repayment schedule",
+        "policy": "loan repayment timing and management rules",
+        "conceptual": "Horizon loan repayment"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_05_1",
+    "customer_query": "I am trying to sort out when savings interest is paid. What should I do?",
+    "direct_query": "deposit account interest credit timing",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check savings interest credit date",
+        "policy": "deposit interest payout schedule and timing rules",
+        "conceptual": "Horizon savings account interest"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_05_2",
+    "customer_query": "Before I make a decision, I need to understand when savings interest is paid. Can you explain?",
+    "direct_query": "deposit account interest credit timing",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check savings interest credit date",
+        "policy": "deposit interest payout schedule and timing rules",
+        "conceptual": "Horizon savings account interest"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_05_3",
+    "customer_query": "I have heard different things about when savings interest is paid, and I am not sure where to begin.",
+    "direct_query": "deposit account interest credit timing",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check savings interest credit date",
+        "policy": "deposit interest payout schedule and timing rules",
+        "conceptual": "Horizon savings account interest"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_05_4",
+    "customer_query": "This may be obvious, but I need help with when savings interest is paid without making a mistake.",
+    "direct_query": "deposit account interest credit timing",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check savings interest credit date",
+        "policy": "deposit interest payout schedule and timing rules",
+        "conceptual": "Horizon savings account interest"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_06_1",
+    "customer_query": "I am trying to sort out adding money to a savings account. What should I do?",
+    "direct_query": "fund Horizon savings account",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Payments And Transfers"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "add money to savings account",
+        "policy": "savings account funding methods and transfer rules",
+        "conceptual": "Horizon savings account funding"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_06_2",
+    "customer_query": "Before I make a decision, I need to understand adding money to a savings account. Can you explain?",
+    "direct_query": "fund Horizon savings account",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Payments And Transfers"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "add money to savings account",
+        "policy": "savings account funding methods and transfer rules",
+        "conceptual": "Horizon savings account funding"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_06_3",
+    "customer_query": "I have heard different things about adding money to a savings account, and I am not sure where to begin.",
+    "direct_query": "fund Horizon savings account",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Payments And Transfers"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "add money to savings account",
+        "policy": "savings account funding methods and transfer rules",
+        "conceptual": "Horizon savings account funding"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_06_4",
+    "customer_query": "This may be obvious, but I need help with adding money to a savings account without making a mistake.",
+    "direct_query": "fund Horizon savings account",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Payments And Transfers"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "add money to savings account",
+        "policy": "savings account funding methods and transfer rules",
+        "conceptual": "Horizon savings account funding"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_07_1",
+    "customer_query": "I am trying to sort out an account becoming dormant. What should I do?",
+    "direct_query": "deposit account dormancy and reactivation",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Account Management"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check dormant savings account status",
+        "policy": "account dormancy and reactivation rules",
+        "conceptual": "Horizon savings account management"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_07_2",
+    "customer_query": "Before I make a decision, I need to understand an account becoming dormant. Can you explain?",
+    "direct_query": "deposit account dormancy and reactivation",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Account Management"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check dormant savings account status",
+        "policy": "account dormancy and reactivation rules",
+        "conceptual": "Horizon savings account management"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_07_3",
+    "customer_query": "I have heard different things about an account becoming dormant, and I am not sure where to begin.",
+    "direct_query": "deposit account dormancy and reactivation",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Account Management"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check dormant savings account status",
+        "policy": "account dormancy and reactivation rules",
+        "conceptual": "Horizon savings account management"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_07_4",
+    "customer_query": "This may be obvious, but I need help with an account becoming dormant without making a mistake.",
+    "direct_query": "deposit account dormancy and reactivation",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Account Management"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "check dormant savings account status",
+        "policy": "account dormancy and reactivation rules",
+        "conceptual": "Horizon savings account management"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_08_1",
+    "customer_query": "I am trying to sort out activating a new debit card. What should I do?",
+    "direct_query": "activate newly received Horizon debit card",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "activate new debit card",
+        "policy": "debit card activation and verification requirements",
+        "conceptual": "Horizon debit card activation"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_08_2",
+    "customer_query": "Before I make a decision, I need to understand activating a new debit card. Can you explain?",
+    "direct_query": "activate newly received Horizon debit card",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "activate new debit card",
+        "policy": "debit card activation and verification requirements",
+        "conceptual": "Horizon debit card activation"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_08_3",
+    "customer_query": "I have heard different things about activating a new debit card, and I am not sure where to begin.",
+    "direct_query": "activate newly received Horizon debit card",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "activate new debit card",
+        "policy": "debit card activation and verification requirements",
+        "conceptual": "Horizon debit card activation"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_08_4",
+    "customer_query": "This may be obvious, but I need help with activating a new debit card without making a mistake.",
+    "direct_query": "activate newly received Horizon debit card",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "activate new debit card",
+        "policy": "debit card activation and verification requirements",
+        "conceptual": "Horizon debit card activation"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_09_1",
+    "customer_query": "I am trying to sort out when a replacement card will arrive. What should I do?",
+    "direct_query": "debit card delivery timeframe and tracking",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "track debit card delivery",
+        "policy": "debit card delivery timing and mailing rules",
+        "conceptual": "Horizon debit card delivery"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_09_2",
+    "customer_query": "Before I make a decision, I need to understand when a replacement card will arrive. Can you explain?",
+    "direct_query": "debit card delivery timeframe and tracking",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "track debit card delivery",
+        "policy": "debit card delivery timing and mailing rules",
+        "conceptual": "Horizon debit card delivery"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_09_3",
+    "customer_query": "I have heard different things about when a replacement card will arrive, and I am not sure where to begin.",
+    "direct_query": "debit card delivery timeframe and tracking",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "track debit card delivery",
+        "policy": "debit card delivery timing and mailing rules",
+        "conceptual": "Horizon debit card delivery"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_09_4",
+    "customer_query": "This may be obvious, but I need help with when a replacement card will arrive without making a mistake.",
+    "direct_query": "debit card delivery timeframe and tracking",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "track debit card delivery",
+        "policy": "debit card delivery timing and mailing rules",
+        "conceptual": "Horizon debit card delivery"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_10_1",
+    "customer_query": "I am trying to sort out replacing a lost debit card. What should I do?",
+    "direct_query": "lost debit card reporting and replacement",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "report lost debit card and request replacement",
+        "policy": "lost card security and replacement rules",
+        "conceptual": "Horizon debit card replacement"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_10_2",
+    "customer_query": "Before I make a decision, I need to understand replacing a lost debit card. Can you explain?",
+    "direct_query": "lost debit card reporting and replacement",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "report lost debit card and request replacement",
+        "policy": "lost card security and replacement rules",
+        "conceptual": "Horizon debit card replacement"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_10_3",
+    "customer_query": "I have heard different things about replacing a lost debit card, and I am not sure where to begin.",
+    "direct_query": "lost debit card reporting and replacement",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "report lost debit card and request replacement",
+        "policy": "lost card security and replacement rules",
+        "conceptual": "Horizon debit card replacement"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_10_4",
+    "customer_query": "This may be obvious, but I need help with replacing a lost debit card without making a mistake.",
+    "direct_query": "lost debit card reporting and replacement",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "report lost debit card and request replacement",
+        "policy": "lost card security and replacement rules",
+        "conceptual": "Horizon debit card replacement"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_11_1",
+    "customer_query": "I am trying to sort out applying for a credit card. What should I do?",
+    "direct_query": "credit card application process",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Application"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "start credit card application",
+        "policy": "credit card application steps and required information",
+        "conceptual": "Horizon credit card application"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_11_2",
+    "customer_query": "Before I make a decision, I need to understand applying for a credit card. Can you explain?",
+    "direct_query": "credit card application process",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Application"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "start credit card application",
+        "policy": "credit card application steps and required information",
+        "conceptual": "Horizon credit card application"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_11_3",
+    "customer_query": "I have heard different things about applying for a credit card, and I am not sure where to begin.",
+    "direct_query": "credit card application process",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Application"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "start credit card application",
+        "policy": "credit card application steps and required information",
+        "conceptual": "Horizon credit card application"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_11_4",
+    "customer_query": "This may be obvious, but I need help with applying for a credit card without making a mistake.",
+    "direct_query": "credit card application process",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Application"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "start credit card application",
+        "policy": "credit card application steps and required information",
+        "conceptual": "Horizon credit card application"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_12_1",
+    "customer_query": "I am trying to sort out costs of a balance transfer. What should I do?",
+    "direct_query": "credit card balance transfer fees and charges",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review balance transfer charges",
+        "policy": "balance transfer fees and additional cost rules",
+        "conceptual": "Horizon balance transfer pricing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_12_2",
+    "customer_query": "Before I make a decision, I need to understand costs of a balance transfer. Can you explain?",
+    "direct_query": "credit card balance transfer fees and charges",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review balance transfer charges",
+        "policy": "balance transfer fees and additional cost rules",
+        "conceptual": "Horizon balance transfer pricing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_12_3",
+    "customer_query": "I have heard different things about costs of a balance transfer, and I am not sure where to begin.",
+    "direct_query": "credit card balance transfer fees and charges",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review balance transfer charges",
+        "policy": "balance transfer fees and additional cost rules",
+        "conceptual": "Horizon balance transfer pricing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_12_4",
+    "customer_query": "This may be obvious, but I need help with costs of a balance transfer without making a mistake.",
+    "direct_query": "credit card balance transfer fees and charges",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review balance transfer charges",
+        "policy": "balance transfer fees and additional cost rules",
+        "conceptual": "Horizon balance transfer pricing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_13_1",
+    "customer_query": "I am trying to sort out an unrecognised card transaction. What should I do?",
+    "direct_query": "unrecognised credit card transaction dispute",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Transaction Disputes"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "report unrecognised card transaction",
+        "policy": "card transaction dispute investigation and refund rules",
+        "conceptual": "Horizon credit card transaction dispute"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_13_2",
+    "customer_query": "Before I make a decision, I need to understand an unrecognised card transaction. Can you explain?",
+    "direct_query": "unrecognised credit card transaction dispute",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Transaction Disputes"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "report unrecognised card transaction",
+        "policy": "card transaction dispute investigation and refund rules",
+        "conceptual": "Horizon credit card transaction dispute"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_13_3",
+    "customer_query": "I have heard different things about an unrecognised card transaction, and I am not sure where to begin.",
+    "direct_query": "unrecognised credit card transaction dispute",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Transaction Disputes"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "report unrecognised card transaction",
+        "policy": "card transaction dispute investigation and refund rules",
+        "conceptual": "Horizon credit card transaction dispute"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_13_4",
+    "customer_query": "This may be obvious, but I need help with an unrecognised card transaction without making a mistake.",
+    "direct_query": "unrecognised credit card transaction dispute",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Transaction Disputes"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "report unrecognised card transaction",
+        "policy": "card transaction dispute investigation and refund rules",
+        "conceptual": "Horizon credit card transaction dispute"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_14_1",
+    "customer_query": "I am trying to sort out recovering access after forgetting an app password. What should I do?",
+    "direct_query": "Horizon App password reset and account access",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Authentication And Security"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "reset Horizon App password",
+        "policy": "app authentication password reset and security rules",
+        "conceptual": "Horizon App account access"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_14_2",
+    "customer_query": "Before I make a decision, I need to understand recovering access after forgetting an app password. Can you explain?",
+    "direct_query": "Horizon App password reset and account access",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Authentication And Security"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "reset Horizon App password",
+        "policy": "app authentication password reset and security rules",
+        "conceptual": "Horizon App account access"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_14_3",
+    "customer_query": "I have heard different things about recovering access after forgetting an app password, and I am not sure where to begin.",
+    "direct_query": "Horizon App password reset and account access",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Authentication And Security"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "reset Horizon App password",
+        "policy": "app authentication password reset and security rules",
+        "conceptual": "Horizon App account access"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_14_4",
+    "customer_query": "This may be obvious, but I need help with recovering access after forgetting an app password without making a mistake.",
+    "direct_query": "Horizon App password reset and account access",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Authentication And Security"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "reset Horizon App password",
+        "policy": "app authentication password reset and security rules",
+        "conceptual": "Horizon App account access"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_15_1",
+    "customer_query": "I am trying to sort out what the mobile banking app can do. What should I do?",
+    "direct_query": "Horizon App features and available functions",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Features And Limits"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review Horizon App functions",
+        "policy": "mobile banking app feature availability and limits",
+        "conceptual": "Horizon mobile banking app"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_15_2",
+    "customer_query": "Before I make a decision, I need to understand what the mobile banking app can do. Can you explain?",
+    "direct_query": "Horizon App features and available functions",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Features And Limits"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review Horizon App functions",
+        "policy": "mobile banking app feature availability and limits",
+        "conceptual": "Horizon mobile banking app"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_15_3",
+    "customer_query": "I have heard different things about what the mobile banking app can do, and I am not sure where to begin.",
+    "direct_query": "Horizon App features and available functions",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Features And Limits"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review Horizon App functions",
+        "policy": "mobile banking app feature availability and limits",
+        "conceptual": "Horizon mobile banking app"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_15_4",
+    "customer_query": "This may be obvious, but I need help with what the mobile banking app can do without making a mistake.",
+    "direct_query": "Horizon App features and available functions",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Features And Limits"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review Horizon App functions",
+        "policy": "mobile banking app feature availability and limits",
+        "conceptual": "Horizon mobile banking app"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_16_1",
+    "customer_query": "I am trying to sort out setting up recurring stock investments. What should I do?",
+    "direct_query": "automatic stock investment setup",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "set up recurring stock investment",
+        "policy": "AutoInvest schedule funding and setup rules",
+        "conceptual": "Horizon automated stock investing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_16_2",
+    "customer_query": "Before I make a decision, I need to understand setting up recurring stock investments. Can you explain?",
+    "direct_query": "automatic stock investment setup",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "set up recurring stock investment",
+        "policy": "AutoInvest schedule funding and setup rules",
+        "conceptual": "Horizon automated stock investing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_16_3",
+    "customer_query": "I have heard different things about setting up recurring stock investments, and I am not sure where to begin.",
+    "direct_query": "automatic stock investment setup",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "set up recurring stock investment",
+        "policy": "AutoInvest schedule funding and setup rules",
+        "conceptual": "Horizon automated stock investing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_16_4",
+    "customer_query": "This may be obvious, but I need help with setting up recurring stock investments without making a mistake.",
+    "direct_query": "automatic stock investment setup",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "set up recurring stock investment",
+        "policy": "AutoInvest schedule funding and setup rules",
+        "conceptual": "Horizon automated stock investing"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_17_1",
+    "customer_query": "I am trying to sort out fees for stock investing. What should I do?",
+    "direct_query": "stock investment fees and charges",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review stock investment fees",
+        "policy": "stock trading and investment charge rules",
+        "conceptual": "Horizon stock investing costs"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_17_2",
+    "customer_query": "Before I make a decision, I need to understand fees for stock investing. Can you explain?",
+    "direct_query": "stock investment fees and charges",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review stock investment fees",
+        "policy": "stock trading and investment charge rules",
+        "conceptual": "Horizon stock investing costs"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_17_3",
+    "customer_query": "I have heard different things about fees for stock investing, and I am not sure where to begin.",
+    "direct_query": "stock investment fees and charges",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review stock investment fees",
+        "policy": "stock trading and investment charge rules",
+        "conceptual": "Horizon stock investing costs"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_17_4",
+    "customer_query": "This may be obvious, but I need help with fees for stock investing without making a mistake.",
+    "direct_query": "stock investment fees and charges",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "review stock investment fees",
+        "policy": "stock trading and investment charge rules",
+        "conceptual": "Horizon stock investing costs"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_18_1",
+    "customer_query": "I am trying to sort out available mutual fund investments. What should I do?",
+    "direct_query": "available Horizon mutual fund products",
+    "scope_pairs": [
+      {
+        "product": "Mutual_Funds",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "view mutual fund products",
+        "policy": "mutual fund availability and investment product rules",
+        "conceptual": "Horizon mutual fund offerings"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_18_2",
+    "customer_query": "Before I make a decision, I need to understand available mutual fund investments. Can you explain?",
+    "direct_query": "available Horizon mutual fund products",
+    "scope_pairs": [
+      {
+        "product": "Mutual_Funds",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "view mutual fund products",
+        "policy": "mutual fund availability and investment product rules",
+        "conceptual": "Horizon mutual fund offerings"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_18_3",
+    "customer_query": "I have heard different things about available mutual fund investments, and I am not sure where to begin.",
+    "direct_query": "available Horizon mutual fund products",
+    "scope_pairs": [
+      {
+        "product": "Mutual_Funds",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "view mutual fund products",
+        "policy": "mutual fund availability and investment product rules",
+        "conceptual": "Horizon mutual fund offerings"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_18_4",
+    "customer_query": "This may be obvious, but I need help with available mutual fund investments without making a mistake.",
+    "direct_query": "available Horizon mutual fund products",
+    "scope_pairs": [
+      {
+        "product": "Mutual_Funds",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "view mutual fund products",
+        "policy": "mutual fund availability and investment product rules",
+        "conceptual": "Horizon mutual fund offerings"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_19_1",
+    "customer_query": "I am trying to sort out viewing life insurance policy details online. What should I do?",
+    "direct_query": "digital access to life insurance policy details",
+    "scope_pairs": [
+      {
+        "product": "Insurance",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "view life insurance policy details",
+        "policy": "life insurance policy information access rules",
+        "conceptual": "Horizon life insurance policy"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_19_2",
+    "customer_query": "Before I make a decision, I need to understand viewing life insurance policy details online. Can you explain?",
+    "direct_query": "digital access to life insurance policy details",
+    "scope_pairs": [
+      {
+        "product": "Insurance",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "view life insurance policy details",
+        "policy": "life insurance policy information access rules",
+        "conceptual": "Horizon life insurance policy"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_19_3",
+    "customer_query": "I have heard different things about viewing life insurance policy details online, and I am not sure where to begin.",
+    "direct_query": "digital access to life insurance policy details",
+    "scope_pairs": [
+      {
+        "product": "Insurance",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "view life insurance policy details",
+        "policy": "life insurance policy information access rules",
+        "conceptual": "Horizon life insurance policy"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_19_4",
+    "customer_query": "This may be obvious, but I need help with viewing life insurance policy details online without making a mistake.",
+    "direct_query": "digital access to life insurance policy details",
+    "scope_pairs": [
+      {
+        "product": "Insurance",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "view life insurance policy details",
+        "policy": "life insurance policy information access rules",
+        "conceptual": "Horizon life insurance policy"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_20_1",
+    "customer_query": "I am trying to sort out linking an existing rewards membership to a card. What should I do?",
+    "direct_query": "link rewards membership to Horizon card",
+    "scope_pairs": [
+      {
+        "product": "Rewards_Program",
+        "intents": [
+          "Rewards And Promotions"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "link existing rewards membership",
+        "policy": "rewards membership and card linking rules",
+        "conceptual": "Horizon card rewards membership"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_20_2",
+    "customer_query": "Before I make a decision, I need to understand linking an existing rewards membership to a card. Can you explain?",
+    "direct_query": "link rewards membership to Horizon card",
+    "scope_pairs": [
+      {
+        "product": "Rewards_Program",
+        "intents": [
+          "Rewards And Promotions"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "link existing rewards membership",
+        "policy": "rewards membership and card linking rules",
+        "conceptual": "Horizon card rewards membership"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_20_3",
+    "customer_query": "I have heard different things about linking an existing rewards membership to a card, and I am not sure where to begin.",
+    "direct_query": "link rewards membership to Horizon card",
+    "scope_pairs": [
+      {
+        "product": "Rewards_Program",
+        "intents": [
+          "Rewards And Promotions"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "link existing rewards membership",
+        "policy": "rewards membership and card linking rules",
+        "conceptual": "Horizon card rewards membership"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  },
+  {
+    "id": "blind_20_4",
+    "customer_query": "This may be obvious, but I need help with linking an existing rewards membership to a card without making a mistake.",
+    "direct_query": "link rewards membership to Horizon card",
+    "scope_pairs": [
+      {
+        "product": "Rewards_Program",
+        "intents": [
+          "Rewards And Promotions"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "link existing rewards membership",
+        "policy": "rewards membership and card linking rules",
+        "conceptual": "Horizon card rewards membership"
+      }
+    ],
+    "expected_parent_id": "__BLIND_REVIEW_NO_PRESELECTED_TARGET__"
+  }
+]

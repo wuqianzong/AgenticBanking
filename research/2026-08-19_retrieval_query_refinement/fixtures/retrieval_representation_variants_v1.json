@@ -1,0 +1,37 @@
+[
+  {
+    "id": "instant_loan_eligibility_v1",
+    "customer_query": "Am I qualified to apply for an Instant Loan right now?",
+    "expected_parent_id": "faq_0ae0bb51",
+    "scope_pairs": [{"product": "Personal_Loan", "intents": ["Eligibility"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "check loan qualifications", "policy": "personal loan criteria rules", "conceptual": "instant loan prerequisite understanding"}]
+  },
+  {
+    "id": "deposit_interest_crediting_v1",
+    "customer_query": "At what point does interest get deposited into my Horizon account?",
+    "expected_parent_id": "faq_fc5a7921",
+    "scope_pairs": [{"product": "Deposit_Account", "intents": ["Interest And Rates"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "track deposit interest payout", "policy": "interest crediting schedule guidelines", "conceptual": "Horizon account interest timing"}]
+  },
+  {
+    "id": "debit_card_activation_v1",
+    "customer_query": "What steps should I take to start using my new Horizon card?",
+    "expected_parent_id": "faq_74abafeb",
+    "scope_pairs": [{"product": "Debit_Card", "intents": ["Card Logistics"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "complete card activation steps", "policy": "new card activation requirements", "conceptual": "Horizon debit card readiness"}]
+  },
+  {
+    "id": "stock_autoinvest_setup_v1",
+    "customer_query": "Can you guide me through enabling recurring stock purchases?",
+    "expected_parent_id": "faq_2f201863",
+    "scope_pairs": [{"product": "Stocks", "intents": ["Wealth And Insurance"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "configure automatic stock buys", "policy": "recurring investment program terms", "conceptual": "automated stock purchasing logic"}]
+  },
+  {
+    "id": "stock_autoinvest_multiple_plans_v1",
+    "customer_query": "Is it possible to run several automated stock investment schedules at once?",
+    "expected_parent_id": "faq_9a88fadb",
+    "scope_pairs": [{"product": "Stocks", "intents": ["Wealth And Insurance"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "add multiple autoinvest schedules", "policy": "limit on active investment plans", "conceptual": "concurrent stock automation capability"}]
+  }
+]

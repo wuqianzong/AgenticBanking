@@ -1,0 +1,4582 @@
+{
+  "metadata": {
+    "purpose": "retrieval-only angle ablation using frozen narrative variants",
+    "selection_contract": "RRF with identical top-four and 50% drop-off rules for every arm",
+    "important_limit": "expected_parent_id is a diagnostic proxy, not the sole acceptable-answer definition"
+  },
+  "cases": [
+    {
+      "id": "threeway_activate_my_card_01",
+      "source_intent": "activate_my_card",
+      "customer_query": "Tell me how to go about activating my new card?",
+      "expected_parent_id": "faq_74abafeb",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_6dae126c",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_6dae126c",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_6dae126c",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_74392fe2",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_74392fe2",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_activate_my_card_02",
+      "source_intent": "activate_my_card",
+      "customer_query": "Assist me please with card activation.",
+      "expected_parent_id": "faq_74abafeb",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_66004845",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_ff1c2b9c",
+            "faq_66004845"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_6dae126c",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_6dae126c",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_6dae126c",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_activate_my_card_03",
+      "source_intent": "activate_my_card",
+      "customer_query": "I got my new card where do I go to activate it?",
+      "expected_parent_id": "faq_74abafeb",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_7883a8c2",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_7883a8c2",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_66004845",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_7883a8c2",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_74392fe2",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_activate_my_card_04",
+      "source_intent": "activate_my_card",
+      "customer_query": "I just got this card & I don't know how to activate it.",
+      "expected_parent_id": "faq_74abafeb",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_66004845",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_66004845",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_66004845",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_74392fe2",
+            "faq_6dae126c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_activate_my_card_05",
+      "source_intent": "activate_my_card",
+      "customer_query": "How do I go about activating my new card?",
+      "expected_parent_id": "faq_74abafeb",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_6dae126c",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_6dae126c",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_6dae126c",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_66004845",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_74392fe2",
+            "faq_66004845"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_activate_my_card_06",
+      "source_intent": "activate_my_card",
+      "customer_query": "Would like to use my card and need to activate it first.  Can you help me do this?",
+      "expected_parent_id": "faq_74abafeb",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_6dae126c",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_7883a8c2",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_6dae126c",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_66004845",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_6dae126c",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_activate_my_card_07",
+      "source_intent": "activate_my_card",
+      "customer_query": "How do I activate a new card?",
+      "expected_parent_id": "faq_74abafeb",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_7883a8c2",
+            "faq_66004845"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_7883a8c2",
+            "faq_6dae126c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_66004845",
+            "faq_6dae126c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_74392fe2",
+            "faq_6dae126c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_6dae126c",
+            "faq_66004845"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_activate_my_card_08",
+      "source_intent": "activate_my_card",
+      "customer_query": "I received my new card, how is it activated?",
+      "expected_parent_id": "faq_74abafeb",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_74392fe2",
+            "faq_6dae126c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_74392fe2",
+            "faq_66004845"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_74392fe2",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_66004845",
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_6dae126c",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_activate_my_card_09",
+      "source_intent": "activate_my_card",
+      "customer_query": "I would like to get help from someone with activating my card.",
+      "expected_parent_id": "faq_74abafeb",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_74abafeb",
+            "faq_7883a8c2",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_ff1c2b9c",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_ff1c2b9c",
+            "faq_66004845"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_74392fe2",
+            "faq_6dae126c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_activate_my_card_10",
+      "source_intent": "activate_my_card",
+      "customer_query": "I tried activating my bill of fare and it didn't workplace",
+      "expected_parent_id": "faq_74abafeb",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_66004845",
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_74392fe2",
+            "faq_ff1c2b9c",
+            "faq_7883a8c2",
+            "faq_66004845"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_66004845",
+            "faq_74392fe2",
+            "faq_74abafeb",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_66004845",
+            "faq_74392fe2",
+            "faq_7883a8c2",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_74392fe2",
+            "faq_66004845",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_change_pin_01",
+      "source_intent": "change_pin",
+      "customer_query": "Please tell me which cash machines will allow me to change my pin.",
+      "expected_parent_id": "faq_6dae126c",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_change_pin_02",
+      "source_intent": "change_pin",
+      "customer_query": "How do I update my PIN to a new number?",
+      "expected_parent_id": "faq_6dae126c",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_7883a8c2",
+            "faq_74abafeb",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_7883a8c2",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_change_pin_03",
+      "source_intent": "change_pin",
+      "customer_query": "I want to set a new PIN",
+      "expected_parent_id": "faq_6dae126c",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_change_pin_04",
+      "source_intent": "change_pin",
+      "customer_query": "How might  I change my PIN?",
+      "expected_parent_id": "faq_6dae126c",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_change_pin_05",
+      "source_intent": "change_pin",
+      "customer_query": "Do cash machines let me change my pin?",
+      "expected_parent_id": "faq_6dae126c",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_26561f81",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_26561f81",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_26561f81",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_change_pin_06",
+      "source_intent": "change_pin",
+      "customer_query": "How can I change my Tholepin ?",
+      "expected_parent_id": "faq_6dae126c",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_66004845",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_change_pin_07",
+      "source_intent": "change_pin",
+      "customer_query": "I am travelling for two more weeks but really need to change my PIN asap. What do I do?",
+      "expected_parent_id": "faq_6dae126c",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_7883a8c2",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_change_pin_08",
+      "source_intent": "change_pin",
+      "customer_query": "I need to change my pin but I am on the road.",
+      "expected_parent_id": "faq_6dae126c",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_ff1c2b9c",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_7883a8c2",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_change_pin_09",
+      "source_intent": "change_pin",
+      "customer_query": "Where can I find instructions to change my PIN?",
+      "expected_parent_id": "faq_6dae126c",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_change_pin_10",
+      "source_intent": "change_pin",
+      "customer_query": "How to change the PIN on my card?",
+      "expected_parent_id": "faq_6dae126c",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_card_arrival_01",
+      "source_intent": "card_arrival",
+      "customer_query": "My card hasn't arrived yet.",
+      "expected_parent_id": "faq_9d7a4b83",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74392fe2",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_9d7a4b83",
+            "faq_5ad80c63"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_card_arrival_02",
+      "source_intent": "card_arrival",
+      "customer_query": "When will I get my card?",
+      "expected_parent_id": "faq_9d7a4b83",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_card_arrival_03",
+      "source_intent": "card_arrival",
+      "customer_query": "My card has not arrived yet, where is it?",
+      "expected_parent_id": "faq_9d7a4b83",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_5ad80c63"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_5ad80c63"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_5ad80c63"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74392fe2",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74392fe2",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_card_arrival_04",
+      "source_intent": "card_arrival",
+      "customer_query": "i want to track the card you sent",
+      "expected_parent_id": "faq_9d7a4b83",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_9d7a4b83",
+            "faq_5ad80c63"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_7883a8c2"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_e020eab7"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_06121b7c",
+            "faq_19256af7",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_06121b7c"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_card_arrival_05",
+      "source_intent": "card_arrival",
+      "customer_query": "I was expecting my new card and am wondering why I haven't received it yet?",
+      "expected_parent_id": "faq_9d7a4b83",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74392fe2",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74392fe2",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74392fe2",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_card_arrival_06",
+      "source_intent": "card_arrival",
+      "customer_query": "Is there tracking info available?",
+      "expected_parent_id": "faq_9d7a4b83",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_04a55dce",
+            "faq_ff1c2b9c",
+            "faq_6dae126c",
+            "faq_e020eab7"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_04a55dce",
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_04a55dce"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_04a55dce",
+            "faq_06121b7c",
+            "faq_19256af7"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_9c75a2d2",
+            "faq_04a55dce",
+            "faq_5ad80c63"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        }
+      }
+    },
+    {
+      "id": "threeway_card_arrival_07",
+      "source_intent": "card_arrival",
+      "customer_query": "How long should my new card take to arrive?",
+      "expected_parent_id": "faq_9d7a4b83",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_74392fe2",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_ff1c2b9c",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_card_arrival_08",
+      "source_intent": "card_arrival",
+      "customer_query": "My card has not arrived yet.",
+      "expected_parent_id": "faq_9d7a4b83",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74392fe2",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_card_arrival_09",
+      "source_intent": "card_arrival",
+      "customer_query": "Is there a way to know when my card will arrive?",
+      "expected_parent_id": "faq_9d7a4b83",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_9d7a4b83",
+            "faq_5ad80c63"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_9d7a4b83",
+            "faq_5ad80c63"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_9d7a4b83",
+            "faq_5ad80c63"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_card_arrival_10",
+      "source_intent": "card_arrival",
+      "customer_query": "I ordered a card but it has not arrived. Help please!",
+      "expected_parent_id": "faq_9d7a4b83",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74392fe2",
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_7883a8c2",
+            "faq_5ad80c63"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74392fe2",
+            "faq_9d7a4b83"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_74392fe2",
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_5ad80c63",
+            "faq_74abafeb"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        }
+      }
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_01",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "How do I report my card stolen?",
+      "expected_parent_id": "faq_7883a8c2",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_23b30ec5",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_02",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "My entire gym bag, including my wallet, was stolen out of my locker today. Everything in my wallet is gone - how do I block the card to make it can't be used?",
+      "expected_parent_id": "faq_7883a8c2",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_23b30ec5",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_84458a8e",
+            "faq_66004845"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_03",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "Is a copy of the police report necessary for completing the report process?",
+      "expected_parent_id": "faq_7883a8c2",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7e20cb52",
+            "faq_26561f81",
+            "faq_6dae126c",
+            "faq_8e5e63ca"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_7e20cb52",
+            "faq_6dae126c",
+            "faq_8e5e63ca",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_26561f81",
+            "faq_7e20cb52",
+            "faq_8e5e63ca",
+            "faq_6dae126c"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_7e20cb52",
+            "faq_26561f81",
+            "faq_6dae126c",
+            "faq_8e5e63ca"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_7e20cb52",
+            "faq_6dae126c",
+            "faq_8e5e63ca",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        }
+      }
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_04",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "I believe my credit card was stolen.",
+      "expected_parent_id": "faq_7883a8c2",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_26561f81"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_05",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "I can't find my card and think it may have been stolen.",
+      "expected_parent_id": "faq_7883a8c2",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_23b30ec5",
+            "faq_8e5e63ca",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_ff1c2b9c",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_23b30ec5",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_23b30ec5",
+            "faq_66004845"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_23b30ec5",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_06",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "I cant find my card, it's gone.",
+      "expected_parent_id": "faq_7883a8c2",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_ff1c2b9c",
+            "faq_8e5e63ca",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_ff1c2b9c",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_74392fe2",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_07",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "I believe my card has been stolen, what can I do about this situation? It's urgent.",
+      "expected_parent_id": "faq_7883a8c2",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_6eed6806"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_08",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "Help.  I have a stolen card!",
+      "expected_parent_id": "faq_7883a8c2",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_74392fe2"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_26561f81",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_09",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "My card is gone I think it was stolen",
+      "expected_parent_id": "faq_7883a8c2",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_ff1c2b9c",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_ff1c2b9c",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_ff1c2b9c",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af",
+            "faq_ff1c2b9c"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_ff1c2b9c",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_lost_or_stolen_card_10",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "My card is lost! What can I do?",
+      "expected_parent_id": "faq_7883a8c2",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_74392fe2",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_6eed6806"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_timing_01",
+      "source_intent": "transfer_timing",
+      "customer_query": "I need a fast transfer from China?  How fast will it be?",
+      "expected_parent_id": "faq_ccd37584",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_6f4ef9e6",
+            "faq_44bb339e",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_44bb339e",
+            "faq_6f4ef9e6",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_6f4ef9e6",
+            "faq_44bb339e",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_6f4ef9e6",
+            "faq_44bb339e",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_6f4ef9e6",
+            "faq_44bb339e",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_timing_02",
+      "source_intent": "transfer_timing",
+      "customer_query": "How long do I have to wait for a transfer from the US?",
+      "expected_parent_id": "faq_ccd37584",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_32c1662f",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_2fe8118e",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_32c1662f",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_6f4ef9e6",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_28ce64f2",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_timing_03",
+      "source_intent": "transfer_timing",
+      "customer_query": "What is the fastest that I can make a transfer?",
+      "expected_parent_id": "faq_ccd37584",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6f4ef9e6",
+            "faq_ccd37584",
+            "faq_44bb339e",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6f4ef9e6",
+            "faq_44bb339e",
+            "faq_ccd37584"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6f4ef9e6",
+            "faq_ccd37584",
+            "faq_44bb339e"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6f4ef9e6",
+            "faq_ccd37584",
+            "faq_44bb339e"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6f4ef9e6",
+            "faq_ccd37584",
+            "faq_44bb339e",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_timing_04",
+      "source_intent": "transfer_timing",
+      "customer_query": "What would the approximate delivery date be if I transferred something urgently to China?",
+      "expected_parent_id": "faq_ccd37584",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_32c1662f",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_32c1662f",
+            "faq_28ce64f2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_32c1662f",
+            "faq_28ce64f2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_b928f182",
+            "faq_28ce64f2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_28ce64f2",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_timing_05",
+      "source_intent": "transfer_timing",
+      "customer_query": "How long does it take for funds to come through the US to my account?",
+      "expected_parent_id": "faq_ccd37584",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_28ce64f2",
+            "faq_2fe8118e"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_2fe8118e"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_2fe8118e"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_28ce64f2",
+            "faq_2fe8118e"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_2fe8118e",
+            "faq_13757d59"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_timing_06",
+      "source_intent": "transfer_timing",
+      "customer_query": "How long is the wait for a US transfer?",
+      "expected_parent_id": "faq_ccd37584",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_b928f182",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_6f4ef9e6",
+            "faq_28ce64f2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_b928f182",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_6f4ef9e6",
+            "faq_b928f182"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_timing_07",
+      "source_intent": "transfer_timing",
+      "customer_query": "When will money be available in my account?",
+      "expected_parent_id": "faq_ccd37584",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_28ce64f2",
+            "faq_68f6ae39",
+            "faq_7d49c937",
+            "faq_a3e5d877"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_4b2d99b1",
+            "faq_a3e5d877",
+            "faq_13757d59"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_28ce64f2",
+            "faq_4b2d99b1",
+            "faq_7d49c937",
+            "faq_13757d59"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_28ce64f2",
+            "faq_13757d59",
+            "faq_863433e0",
+            "faq_68f6ae39"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_13757d59",
+            "faq_28ce64f2",
+            "faq_4b2d99b1",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_timing_08",
+      "source_intent": "transfer_timing",
+      "customer_query": "How long do i have to wait for a transfer to reach my account?",
+      "expected_parent_id": "faq_ccd37584",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_b928f182",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_b928f182",
+            "faq_28ce64f2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_6f4ef9e6",
+            "faq_28ce64f2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_28ce64f2",
+            "faq_b928f182"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_timing_09",
+      "source_intent": "transfer_timing",
+      "customer_query": "How long does a funds transfer take from one back to another?",
+      "expected_parent_id": "faq_ccd37584",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_44bb339e",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_44bb339e",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_44bb339e",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_44bb339e",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_44bb339e",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_timing_10",
+      "source_intent": "transfer_timing",
+      "customer_query": "How many days does a transfer from the US take?",
+      "expected_parent_id": "faq_ccd37584",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_32c1662f",
+            "faq_6f4ef9e6",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_32c1662f",
+            "faq_6f4ef9e6",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_32c1662f",
+            "faq_6f4ef9e6",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_6f4ef9e6",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_6f4ef9e6",
+            "faq_32c1662f",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_cancel_transfer_01",
+      "source_intent": "cancel_transfer",
+      "customer_query": "If I make a transaction can I cancel it?",
+      "expected_parent_id": "faq_ea430613",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_b928f182",
+            "faq_80b5d788"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_80b5d788",
+            "faq_b928f182"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_80b5d788",
+            "faq_b928f182"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_80b5d788",
+            "faq_b928f182"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_80b5d788"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_cancel_transfer_02",
+      "source_intent": "cancel_transfer",
+      "customer_query": "Can i cancel a charge?",
+      "expected_parent_id": "faq_ea430613",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_3c9718d5",
+            "faq_ea430613",
+            "faq_0eff8f34"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_3c9718d5",
+            "faq_ea430613",
+            "faq_beeeec2d"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_cancel_transfer_03",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I made a transaction this morning and would like to revert it.",
+      "expected_parent_id": "faq_ea430613",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_cancel_transfer_04",
+      "source_intent": "cancel_transfer",
+      "customer_query": "My transaction needs to be canceled.",
+      "expected_parent_id": "faq_ea430613",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_efca64c1",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_4b2d99b1",
+            "faq_3c9718d5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_80b5d788",
+            "faq_efca64c1"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_cancel_transfer_05",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I don't want the transaction to go through now",
+      "expected_parent_id": "faq_ea430613",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b928f182",
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_b928f182",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_b928f182",
+            "faq_6ec2e740",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_4b2d99b1",
+            "faq_b928f182"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_4b2d99b1",
+            "faq_b928f182"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_cancel_transfer_06",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I want to go back on what I did this morning",
+      "expected_parent_id": "faq_ea430613",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_824abbaf",
+            "faq_ea430613",
+            "faq_3c9718d5"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_ccd37584",
+            "faq_824abbaf"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_824abbaf",
+            "faq_ccd37584"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_ccd37584",
+            "faq_28ce64f2"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_cancel_transfer_07",
+      "source_intent": "cancel_transfer",
+      "customer_query": "Cancel my last transfer",
+      "expected_parent_id": "faq_ea430613",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_4b2d99b1",
+            "faq_0eff8f34"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_4b2d99b1",
+            "faq_80b5d788"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_80b5d788",
+            "faq_4b2d99b1"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_4b2d99b1",
+            "faq_80b5d788"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_4b2d99b1",
+            "faq_80b5d788"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_cancel_transfer_08",
+      "source_intent": "cancel_transfer",
+      "customer_query": "How do i cancel my transaction?",
+      "expected_parent_id": "faq_ea430613",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_80b5d788",
+            "faq_3c9718d5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_cancel_transfer_09",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I made a transaction but did it to the wrong account.",
+      "expected_parent_id": "faq_ea430613",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_efca64c1",
+            "faq_ea430613",
+            "faq_a3e5d877",
+            "faq_824abbaf"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_efca64c1",
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_824abbaf"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_efca64c1",
+            "faq_6ec2e740",
+            "faq_a3e5d877"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_efca64c1",
+            "faq_05669a00",
+            "faq_a3e5d877"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_efca64c1",
+            "faq_6ec2e740",
+            "faq_05669a00"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_cancel_transfer_10",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I made a mistake and need to cancel a transaction",
+      "expected_parent_id": "faq_ea430613",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_efca64c1",
+            "faq_3c9718d5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_80b5d788",
+            "faq_3c9718d5"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_into_account_01",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I don't understand the money transfer process.",
+      "expected_parent_id": "faq_7d49c937",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6c321602",
+            "faq_02489175",
+            "faq_ccd37584",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_6c321602",
+            "faq_44bb339e",
+            "faq_863433e0",
+            "faq_02489175"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_6f4ef9e6",
+            "faq_ccd37584",
+            "faq_44bb339e",
+            "faq_6c321602"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_6c321602",
+            "faq_44bb339e",
+            "faq_863433e0",
+            "faq_02489175"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_6c321602",
+            "faq_863433e0"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_into_account_02",
+      "source_intent": "transfer_into_account",
+      "customer_query": "How can I transfer money from an outside bank?",
+      "expected_parent_id": "faq_7d49c937",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_32c1662f",
+            "faq_05669a00",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_7d49c937",
+            "faq_863433e0"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_863433e0",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_32c1662f",
+            "faq_863433e0"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_863433e0",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_into_account_03",
+      "source_intent": "transfer_into_account",
+      "customer_query": "Are there ways to transfer money into my account?",
+      "expected_parent_id": "faq_7d49c937",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_d6da9860",
+            "faq_453239a8"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_453239a8",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_453239a8",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_453239a8",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_453239a8",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_into_account_04",
+      "source_intent": "transfer_into_account",
+      "customer_query": "CAN YOU EXPLAIN HOW TO TRANSFER MONEY INTO MY  ACCOUNT FOR ME?",
+      "expected_parent_id": "faq_7d49c937",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_beeeec2d",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_7d49c937",
+            "faq_beeeec2d"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_6f4ef9e6",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_453239a8",
+            "faq_2fe8118e"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_into_account_05",
+      "source_intent": "transfer_into_account",
+      "customer_query": "How to I transfer my funds into my account?",
+      "expected_parent_id": "faq_7d49c937",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_7d49c937",
+            "faq_05669a00",
+            "faq_beeeec2d"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_7d49c937",
+            "faq_05669a00",
+            "faq_453239a8"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_7d49c937",
+            "faq_05669a00",
+            "faq_2fe8118e"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_7d49c937",
+            "faq_453239a8"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_7d49c937",
+            "faq_05669a00",
+            "faq_453239a8"
+          ],
+          "expected_parent_rank": 2,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_into_account_06",
+      "source_intent": "transfer_into_account",
+      "customer_query": "When I want to transfer money to my account, how can I do that?",
+      "expected_parent_id": "faq_7d49c937",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_7d49c937",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_7d49c937",
+            "faq_453239a8"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_6f4ef9e6",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_453239a8",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_453239a8",
+            "faq_7d49c937"
+          ],
+          "expected_parent_rank": 4,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_into_account_07",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I would like to transfer some money from my other bank account into this one.",
+      "expected_parent_id": "faq_7d49c937",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_32c1662f",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_7d49c937",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": 3,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_453239a8",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_453239a8",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_453239a8",
+            "faq_32c1662f"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_into_account_08",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I want to transfer from accounts in order to Top up. What are the steps necessary.",
+      "expected_parent_id": "faq_7d49c937",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_6f4ef9e6",
+            "faq_05e7c520"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_6f4ef9e6",
+            "faq_453239a8"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_05669a00",
+            "faq_6f4ef9e6",
+            "faq_44bb339e",
+            "faq_13757d59"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_05669a00",
+            "faq_44bb339e",
+            "faq_6f4ef9e6",
+            "faq_453239a8"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_into_account_09",
+      "source_intent": "transfer_into_account",
+      "customer_query": "How can I perform a dual money transferring from one account to another?",
+      "expected_parent_id": "faq_7d49c937",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_32c1662f",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_32c1662f",
+            "faq_453239a8"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_32c1662f",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_32c1662f",
+            "faq_6f4ef9e6"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_32c1662f",
+            "faq_453239a8"
+          ],
+          "expected_parent_rank": null,
+          "passed": false
+        }
+      }
+    },
+    {
+      "id": "threeway_transfer_into_account_10",
+      "source_intent": "transfer_into_account",
+      "customer_query": "What methods can I use to add money to my account?",
+      "expected_parent_id": "faq_7d49c937",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_05669a00",
+            "faq_beeeec2d"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_863433e0",
+            "faq_beeeec2d"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_863433e0",
+            "faq_05669a00"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_863433e0",
+            "faq_2fe8118e",
+            "faq_05669a00"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_2fe8118e",
+            "faq_863433e0",
+            "faq_13757d59"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_passcode_forgotten_01",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I have forgotten my password.",
+      "expected_parent_id": "faq_b00e6476",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_e50ada50",
+            "faq_56fda9f9"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_56fda9f9",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_56fda9f9",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_passcode_forgotten_02",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "Can you tell me what to do to reset my passcode?",
+      "expected_parent_id": "faq_b00e6476",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_46116179",
+            "faq_56fda9f9"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_406bf55a"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_passcode_forgotten_03",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I can't find my password",
+      "expected_parent_id": "faq_b00e6476",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_56fda9f9",
+            "faq_83b0a90a"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_e50ada50",
+            "faq_56fda9f9"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_56fda9f9",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_56fda9f9",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_56fda9f9",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_passcode_forgotten_04",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I can't recall my passcode and need to reset it.",
+      "expected_parent_id": "faq_b00e6476",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_46116179",
+            "faq_56fda9f9"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_46116179",
+            "faq_56fda9f9",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_passcode_forgotten_05",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "Can I be given a new passcode?",
+      "expected_parent_id": "faq_b00e6476",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_406bf55a",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_406bf55a",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_406bf55a",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_406bf55a",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_406bf55a",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_passcode_forgotten_06",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I don't remember my code to get into the app.",
+      "expected_parent_id": "faq_b00e6476",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_46116179",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_46116179",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_46116179",
+            "faq_56fda9f9"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_56fda9f9",
+            "faq_9da9234e"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_83b0a90a",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_passcode_forgotten_07",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "What should I do if the passcode doesn't work for me?",
+      "expected_parent_id": "faq_b00e6476",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_46116179",
+            "faq_e50ada50",
+            "faq_56fda9f9"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_46116179",
+            "faq_e50ada50",
+            "faq_56fda9f9"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_b00e6476"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_9da9234e"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_9da9234e",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_passcode_forgotten_08",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "How do I reset a forgotten passcode, please?",
+      "expected_parent_id": "faq_b00e6476",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_46116179",
+            "faq_e50ada50",
+            "faq_56fda9f9"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_46116179",
+            "faq_56fda9f9",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_83b0a90a"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_passcode_forgotten_09",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "Something is wrong with my passcode",
+      "expected_parent_id": "faq_b00e6476",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_46116179",
+            "faq_406bf55a"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_46116179",
+            "faq_406bf55a"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_b00e6476"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_46116179",
+            "faq_518c355e"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_46116179",
+            "faq_e50ada50",
+            "faq_518c355e"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    },
+    {
+      "id": "threeway_passcode_forgotten_10",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "Can I resent my passcode?",
+      "expected_parent_id": "faq_b00e6476",
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_406bf55a"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_procedural": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_46116179",
+            "faq_56fda9f9",
+            "faq_e50ada50"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_policy": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_406bf55a"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_conceptual": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_e50ada50",
+            "faq_7f54cd55"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        },
+        "direct_plus_all_three": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_e50ada50",
+            "faq_46116179"
+          ],
+          "expected_parent_rank": 1,
+          "passed": true
+        }
+      }
+    }
+  ]
+}

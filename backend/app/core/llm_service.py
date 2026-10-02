@@ -389,11 +389,15 @@ class TriageEvaluation(BaseModel):
     components: List[TriageComponent] = Field(default_factory=list, description="For DECOMPOSED only: one standalone component per distinct customer NEED in the resolved TRUE REQUEST (not per sentence -- sentences serving the same need share one component; components never overlap), together covering everything the customer asked, each tagged with its own resolution. Empty for NON_COMPLIANT/ESCALATION.")
     repetitive_issue_detected: bool = Field(default=False, description="True only when the Trusted Conversation Context shows the customer repeatedly raising substantially the same underlying banking need or issue across multiple recent turns, especially if it still appears unresolved. Judge by meaning, not wording. Independent of triage_status.")
 
-# INBOUND COMPLIANCE SCREEN (Node 02f) -- runs in parallel with triage. The
-# predicted response is declared before the verdict on purpose (reasoning
-# before output): the verdict must follow from that prediction, judged
-# against the shared compliance module, never from the topic of the message.
+# INBOUND COMPLIANCE SCREEN (Node 02f) -- runs in parallel with triage.
+# Fields are declared in reasoning order on purpose (Gemini generates them in
+# declaration order, same principle as TaskSufficiencyItem.reason): first what
+# the customer is asking Horizon to produce, then the response that would
+# fulfil it, then the verdict. Without the first step the model sometimes
+# judged an action the customer only described ("receive money and send it
+# on -- is that allowed?") as if Horizon were asked to perform it.
 class InboundComplianceScreen(BaseModel):
+    requested_from_horizon: str = Field(description="Written first: what the customer is asking Horizon itself to produce -- an answer to a question (including whether something is allowed, safe or advisable), information, or an action by Horizon -- and, if the message describes an action, who would perform it: the customer or someone else, or Horizon.")
     predicted_bank_response: str = Field(description="Written before non_compliant: one or two sentences predicting the truthful, compliant response Horizon would give to fulfil the customer's resolved request -- or exactly NONE if the request can only be fulfilled by output or an action that breaches the MAS compliance context or the bank conduct rules. A refusal or a redirect is not a way of fulfilling the request.")
     non_compliant: bool = Field(description="True only when predicted_bank_response is NONE.")
 

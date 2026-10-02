@@ -2690,8 +2690,15 @@ def node_02f_inbound_compliance_screen(state: AgentState):
     pronoun, an ellipsis, or a short reply such as "yes" confirming the
     assistant's previous offer.
 
-    Then decide in two steps:
-    1. Write predicted_bank_response: the truthful, compliant response
+    Then decide in three steps:
+    1. Write requested_from_horizon: what the customer is asking Horizon
+       itself to produce -- an answer to a question, information, or an
+       action by Horizon. A question about whether something is allowed,
+       safe or advisable asks for an answer. If the message describes an
+       action, say who would perform it: an action the customer or someone
+       else would perform is part of the question's subject, not a request
+       for Horizon to perform it.
+    2. Write predicted_bank_response: the truthful, compliant response
        Horizon would give to fulfil the request. A question is fulfilled by
        answering it truthfully; the true answer may be "no" or a warning and
        need not agree with what the customer proposes. A request for an
@@ -2700,10 +2707,10 @@ def node_02f_inbound_compliance_screen(state: AgentState):
        does not fulfil the request. If the request can only be fulfilled by
        output or an action that breaches the MAS COMPLIANCE CONTEXT or the
        BANK CONDUCT RULES, write exactly NONE.
-    2. Set non_compliant to true only when predicted_bank_response is NONE.
+    3. Set non_compliant to true only when predicted_bank_response is NONE.
 
     Output JSON only:
-    {{"predicted_bank_response": "...", "non_compliant": true | false}}
+    {{"requested_from_horizon": "...", "predicted_bank_response": "...", "non_compliant": true | false}}
 
     {_DATA_FOLLOWS}
 
@@ -2715,6 +2722,7 @@ def node_02f_inbound_compliance_screen(state: AgentState):
         predicted = str(result.get("predicted_bank_response", "")).strip()
         non_compliant = bool(result.get("non_compliant", False)) or predicted.upper() == "NONE"
         log_event("inbound.compliance.checked", verdict="non_compliant" if non_compliant else "compliant",
+                  requested_from_horizon=str(result.get("requested_from_horizon", "")).strip()[:300],
                   predicted_bank_response=predicted[:300])
     except Exception as error:
         # Fail closed, like the prompt guard: an unreadable verdict never lets

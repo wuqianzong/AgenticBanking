@@ -1436,10 +1436,14 @@ _GENERATION_RULE_BY_TYPE = {
 
 # The only obligation kinds _generate_evidence_only_response's narrow
 # sub-prompt handles. A turn whose obligations all fall in these routes
-# there; any other obligation (evidence, verified fact, shortcut,
-# unavailable request, personal data -- or a kind added later) makes the
-# turn substantive and keeps it on the full generator (BUG-017).
+# there; any other obligation (evidence, verified fact, unavailable request,
+# personal data -- or a kind added later) makes the turn substantive and
+# keeps it on the full generator (BUG-017). A shortcut is included (BUG-058):
+# when a tool alone answers the turn, there is nothing for the full
+# generator to compose from, and it used to fill the gap with steps from an
+# earlier turn that the audit then rejected three times.
 _EVIDENCE_ONLY_GENERATION_RULES = {
+    _GENERATION_RULE_BY_TYPE["shortcut"],
     _GENERATION_RULE_BY_TYPE["clarification"],
     _GENERATION_RULE_BY_TYPE["decline"],
     _GENERATION_RULE_BY_TYPE["no_info"],
@@ -2667,6 +2671,8 @@ def _assistant_service_scope() -> str:
         for form in capability.get("available_requests", []):
             lines.append(f"- Offer a service form the customer fills in: {form.get('description', '')}")
     lines.append("- Hand the conversation to a human agent when the customer asks for one.")
+    lines.append("An app screen is only a redirect: the actual transaction takes place on the bank app's own transaction page.")
+    lines.append("The assistant cannot see personal data: the data lookup shows it to the customer only.")
     return "\n    ".join(lines)
 
 
@@ -7301,11 +7307,7 @@ def _apply_response_completeness_nets(
             label = str(content.get("label", "")).strip()
             if not label or _is_covered(oid, in_handle_namespace=True, required_text=label):
                 continue
-            fallback_text = (
-                f'You can also fill in and submit the "{label}" form below.'
-                if content.get("kind") == "form"
-                else f'You can also use the "{label}" button below.'
-            )
+            fallback_text = _shortcut_fallback_sentence(content)
             print(f"   ⚠️ [SHORTCUT OMITTED IN DRAFT]: '{label}' ({oid}) not covered by a citing block — inserting deterministic fallback")
             log_event("response.flexible.shortcut_omitted", label=label, kind=content.get("kind"), handle=oid)
             block = _net_block_shell(oid, True)
@@ -7445,8 +7447,8 @@ def _generate_response_blocks(state: AgentState) -> dict:
         obligation.get("generation_rule") not in _EVIDENCE_ONLY_GENERATION_RULES
         for obligation in obligations
     )
-    if not has_real_evidence and (intent_clarifications or decline_context or no_info_context or conversational_context):
-        return _generate_evidence_only_response(intent_clarifications, decline_context, no_info_context, conversational_context, state)
+    if not has_real_evidence and (intent_clarifications or decline_context or no_info_context or conversational_context or available_shortcuts):
+        return _generate_evidence_only_response(intent_clarifications, decline_context, no_info_context, conversational_context, state, available_shortcuts)
     conversation_context = _build_conversation_context(state)
     user_baseline = _build_user_baseline_context(state)
     audit_feedback = state.get("draft_feedback_history", [])[-4:]
@@ -8147,7 +8149,16 @@ def _generate_response_blocks(state: AgentState) -> dict:
     }
 
 
-def _generate_evidence_only_response(intent_clarifications: list, decline_context: list, no_info_context: list, conversational_context: list, state: AgentState) -> dict:
+def _shortcut_fallback_sentence(shortcut: dict) -> str:
+    """Fixed sentence for a shortcut the generated text does not cover. No
+    "also": on a tool-only turn it is the whole reply (BUG-058)."""
+    label = str(shortcut.get("label", "")).strip()
+    if shortcut.get("kind") == "form":
+        return f'You can fill in and submit the "{label}" form below.'
+    return f'You can use the "{label}" button below.'
+
+
+def _generate_evidence_only_response(intent_clarifications: list, decline_context: list, no_info_context: list, conversational_context: list, state: AgentState, available_shortcuts: list | None = None) -> dict:
     """The same response-generator role as _generate_response_blocks, just
     dispatched to a narrower sub-prompt for a turn with no real evidence at
     all -- only clarification/decline_evidence/no_info_evidence/
@@ -8208,6 +8219,14 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
             "fallback_text": "Got it!",
         }
         for v in conversational_context if v.get("customer_component")
+    ] + [
+        {
+            "task_id": sc["handle"], "kind": "shortcut",
+            "label": sc.get("label", ""), "shortcut_type": sc.get("kind", ""),
+            "for_request": sc.get("for_request", ""),
+            "fallback_text": _shortcut_fallback_sentence(sc),
+        }
+        for sc in (available_shortcuts or []) if sc.get("handle") and sc.get("label")
     ]
     if not entries:
         # Defensive only -- node_02d/node_02e already validated this turn
@@ -8263,6 +8282,17 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     "customer_component" -- never invent or imply a banking fact, product,
     policy, commitment, or next action for it, and never treat it as a
     question to answer.
+
+    A "kind" of "shortcut" is an app screen ("shortcut_type" "navigation")
+    or a service form ("form") that a tool has already prepared for the
+    customer's request ("for_request"); its button or form appears right
+    after your text automatically. Write one concise, natural sentence that
+    acknowledges the request and points the customer to it by its exact
+    "label" -- "the ___ button below" for a navigation shortcut, "fill in
+    and submit the ___ form below" for a form. The shortcut is only a
+    redirect; the customer completes the action there. Do not repeat the
+    amount, payee or other details, describe steps, or say the action has
+    been started or done.
 
     Rules:
     - Address every statement listed, using its task_id ONLY in the
@@ -8349,7 +8379,11 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
             continue
         covered_ids.update(source_ids)
         block_type = "clarification" if any(entries_by_id[tid]["kind"] == "clarification" for tid in source_ids) else "text"
-        response_blocks.append({"blockId": f"element_{'_'.join(source_ids)}", "sourceTaskIds": source_ids, "type": block_type, "text": text, "options": []})
+        # A shortcut handle goes in sourceShortcutHandles, which node_07 uses
+        # to place the button card right after the sentence that mentions it.
+        task_ids = [tid for tid in source_ids if entries_by_id[tid]["kind"] != "shortcut"]
+        handles = [tid for tid in source_ids if entries_by_id[tid]["kind"] == "shortcut"]
+        response_blocks.append({"blockId": f"element_{'_'.join(source_ids)}", "sourceTaskIds": task_ids, "sourceShortcutHandles": handles, "type": block_type, "text": text, "options": []})
         parts.append(text)
     model_covered_count = len(covered_ids)
 
@@ -8366,6 +8400,16 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
         if entry["task_id"] in covered_ids:
             continue
         print(f"   ℹ️ [ENTRY NOT EXPLICITLY CITED]: {entry['task_id']} ({entry['kind']}) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)")
+        # A shortcut is a fixed label, not a statement that may have been
+        # blended into another element: if its label appears nowhere in the
+        # reply, add its fixed sentence so the card never arrives unexplained.
+        if entry["kind"] == "shortcut" and parts and entry["label"] not in " ".join(parts):
+            response_blocks.append({"blockId": entry["task_id"], "sourceTaskIds": [], "sourceShortcutHandles": [entry["task_id"]],
+                                    "type": "text", "text": entry["fallback_text"], "options": []})
+            parts.append(entry["fallback_text"])
+            covered_ids.add(entry["task_id"])
+            log_event("response.evidence_only.entry_omitted", task_id=entry["task_id"], kind="shortcut", fallback_inserted=True)
+            continue
         log_event("response.evidence_only.entry_omitted", task_id=entry["task_id"], kind=entry["kind"], fallback_inserted=False)
 
     # Defensive only: a malformed/empty model response (parse failure, or a
@@ -8376,7 +8420,9 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     if not parts:
         for entry in entries:
             block_type = "clarification" if entry["kind"] == "clarification" else "text"
-            response_blocks.append({"blockId": entry["task_id"], "sourceTaskIds": [entry["task_id"]], "type": block_type, "text": entry["fallback_text"], "options": []})
+            is_shortcut = entry["kind"] == "shortcut"
+            response_blocks.append({"blockId": entry["task_id"], "sourceTaskIds": [] if is_shortcut else [entry["task_id"]],
+                                    "sourceShortcutHandles": [entry["task_id"]] if is_shortcut else [], "type": block_type, "text": entry["fallback_text"], "options": []})
             parts.append(entry["fallback_text"])
         covered_ids = {entry["task_id"] for entry in entries}
 

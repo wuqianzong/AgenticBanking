@@ -18,6 +18,8 @@ def build_agent_graph():
     workflow.add_node("n1b", nodes.node_01b_load_user_profile)
     workflow.add_node("n16", nodes.node_02c_inbound_semantic_gate)
     workflow.add_node("n2d", nodes.node_02d_user_journey_classifier_and_triage)
+    workflow.add_node("n2f", nodes.node_02f_inbound_compliance_screen)
+    workflow.add_node("n2g", nodes.node_02g_inbound_compliance_join)
     workflow.add_node("n2e", nodes.node_02e_intent_classifier_and_query_formulator)
     workflow.add_node("n14", nodes.node_03a_knowledge_blueprint_planner)
     workflow.add_node("n17_dispatch", nodes.node_03b_tool_dispatcher)
@@ -64,12 +66,14 @@ def build_agent_graph():
     def route_n16(state: AgentState):
         return "n1b" if state.get("preflight_status") == "pass" else "n5"
 
-    def route_n2d(state: AgentState):
+    def route_n2g(state: AgentState):
+        # node_02g has already applied node_02f's compliance verdict: a
+        # blocked request carries triage_status NON_COMPLIANT here.
         status = state.get("triage_status")
-        if status == "ESCALATION":
-            return "n23"
         if status == "NON_COMPLIANT":
             return "n5"
+        if status == "ESCALATION":
+            return "n23"
         # DECOMPOSED: triage always partitions the turn into components
         # (TOOL_ELIGIBLE / NON_FINANCIAL / CLARIFICATION -- see node_02d).
         # Only a turn with at least one TOOL_ELIGIBLE component needs n14
@@ -159,8 +163,12 @@ def build_agent_graph():
     workflow.add_edge("n00b", END)
     workflow.add_conditional_edges("n3", route_n3, {"n16": "n16", "n23": "n23", "n5": "n5"})
     workflow.add_conditional_edges("n16", route_n16, {"n1b": "n1b", "n5": "n5"})
+    # Triage and the inbound compliance screen run in parallel; the join
+    # waits for both and applies the compliance verdict first (BUG-055).
     workflow.add_edge("n1b", "n2d")
-    workflow.add_conditional_edges("n2d", route_n2d, {"n23": "n23", "n14": "n14", "n5": "n5", "n19": "n19"})
+    workflow.add_edge("n1b", "n2f")
+    workflow.add_edge(["n2d", "n2f"], "n2g")
+    workflow.add_conditional_edges("n2g", route_n2g, {"n23": "n23", "n14": "n14", "n5": "n5", "n19": "n19"})
     workflow.add_conditional_edges("n2e", route_n2e, {"n17_rag": "n17_rag", "n19": "n19", "n8": "n8", "n5": "n5"})
     workflow.add_conditional_edges("n14", route_tool_planner, {"n17_dispatch": "n17_dispatch", "n19": "n19"})
     workflow.add_conditional_edges("n17_dispatch", route_tool_dispatcher, {"n2e": "n2e", "n19": "n19"})

@@ -45,7 +45,8 @@ class AgentState(TypedDict):
     rag_payload: str                             # Buffer for RAG agent
     api_payload: str                             # Buffer for API agent
     deeplink_payload: str                        # Buffer for Deeplink agent
-    triage_status: str                           # 'NON_COMPLIANT', 'ESCALATION', or 'DECOMPOSED'
+    triage_status: str                           # 'ESCALATION' or 'DECOMPOSED' from node_02d; 'NON_COMPLIANT' only when set by node_02g's compliance join
+    inbound_compliance: Dict[str, Any]           # node_02f's verdict, run in parallel with triage: {non_compliant: bool, predicted_bank_response: str}. Applied by node_02g before triage's result is used (BUG-055).
     repeated_need_detected_this_turn: bool       # Set by node_02d/triage: true when any of this turn's financial subqueries substantially repeats a recent prior one. Consumed only by node_08's soft-escalation rollup.
     low_confidence_mode: bool                    # Set by node_03c when this task's own live dynamic confidence is genuinely below threshold (not merely a session with no track record yet) -- surfaced to the frontend progress stream as "Thinking harder" (see api_gateway.py's chat_stream).
     live_task_confidence: float | None            # Set by node_03c each round: average _dynamic_task_confidence across this round's tasks, 0.0-1.0. None when RAG hasn't run this turn. Streamed live to the frontend progress bar, updating once per retry round -- see RAG_RETRY_EFFORT_v1.0.md.

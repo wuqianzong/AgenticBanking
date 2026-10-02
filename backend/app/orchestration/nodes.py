@@ -85,6 +85,7 @@ VOLATILE_STATE_RESET = {
     "last_session_transcript": [],
     "personal_data_reveal_map": {},
     "repeated_need_detected_this_turn": False,
+    "inbound_compliance": {},
     "low_confidence_mode": False,
     "live_task_confidence": None,
 }
@@ -2337,11 +2338,12 @@ def node_02c_inbound_semantic_gate(state: AgentState):
 
 
 def node_02d_user_journey_classifier_and_triage(state: AgentState):
-    """Whole-turn compliance/escalation gate, then a per-component subquery
-    decomposition. Non-compliance and escalation remain whole-turn vetoes
-    (returning zero components) -- folding those into per-component lanes
-    changes customer-visible compliance/escalation behavior and is a
-    deliberately deferred, separate decision. Everything else always
+    """Whole-turn escalation gate, then a per-component subquery
+    decomposition. Escalation remains a whole-turn veto (returning zero
+    components). Inbound compliance is no longer judged here: it runs as its
+    own focused call in parallel (node_02f_inbound_compliance_screen) and
+    node_02g's join applies its verdict before this node's result is used
+    (BUG-055). Everything else always
     decomposes into one or more components, each independently tagged
     TOOL_ELIGIBLE / NON_FINANCIAL / CLARIFICATION -- the same "exhaustive,
     mutually exclusive partition" principle node_02e's own SEARCH/CLARIFY/
@@ -2367,9 +2369,6 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     prompt = f"""
     WHOLE-TURN FINANCIAL TRIAGE FOR A READ-ONLY HORIZON BANK ASSISTANT
 
-    MAS COMPLIANCE CONTEXT (screening only; never quote it):
-    {REGULATORY_LICENSING_CONTEXT}
-
     The rules come first; the Trusted Conversation Context and Latest User
     Input they refer to follow at the end.
 
@@ -2377,7 +2376,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     Latest User Input together with Trusted Conversation Context. A short
     reply, confirmation, correction, reason, preference, pronoun, or ellipsis
     may continue the immediately relevant prior request. For example, "yes"
-    can confirm a prior escalation or prohibited action; "the card is ugly"
+    can confirm a prior escalation; "the card is ugly"
     after a card-replacement discussion can continue that banking request.
     Do not invent a banking fact, product capability, eligibility, procedure,
     or customer objective that is not supported by the latest input and trusted
@@ -2415,25 +2414,10 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
     all when the Latest User Input genuinely does not already say it.
 
     Apply these rules to the resolved TRUE REQUEST in this exact order:
-    1. NON_COMPLIANT — Assess the complete resolved TRUE REQUEST exclusively
-       against the MAS COMPLIANCE CONTEXT above. Return NON_COMPLIANT only when
-       the customer asks Horizon or this assistant to perform, process,
-       facilitate, provide tactics for, or advise on an action whose fulfilment
-       would conflict with that shared context. Return no components. Do not
-       preserve an otherwise valid portion for later retrieval. Do not create a
-       second or abbreviated definition of prohibited conduct.
-       Do NOT return NON_COMPLIANT merely because the customer asks whether an
-       action is allowed, describes a possible improper action, expresses
-       uncertainty, corrects or denies a premise, or mentions an action that
-       Horizon itself could not fulfil. When such a question is banking-related,
-       classify it as VALID_REQUEST and let the evidence-bound downstream path
-       answer only what approved information supports. Never turn that route
-       into help, tactics, or advice for deception, evasion, or other prohibited
-       conduct.
-    2. ESCALATION — Only if compliant: if the resolved TRUE REQUEST is an
+    1. ESCALATION — If the resolved TRUE REQUEST is an
        explicit request or contextual confirmation to transfer to a human
        agent or manager, return ESCALATION with no components.
-    3. DECOMPOSED — Only if compliant and not escalation: decompose the
+    2. DECOMPOSED — Otherwise, decompose the
        resolved TRUE REQUEST by the customer's distinct NEEDS, not by its
        sentences -- one standalone component per distinct need, together
        covering everything the customer asked. Never silently drop a part:
@@ -2562,7 +2546,7 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
        Latest User Input, is never enough on its own.
 
     Output JSON only:
-    {{"triage_status":"NON_COMPLIANT" | "ESCALATION" | "DECOMPOSED", "components":[{{"subquery_id":"subquery_1","need":"...","customer_component":"...","resolution":"TOOL_ELIGIBLE" | "NON_FINANCIAL" | "CLARIFICATION","clarification":null | {{"unresolved_request":"...", "clarification_reason":"...", "clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}}}], "repetitive_issue_detected":true | false}}
+    {{"triage_status":"ESCALATION" | "DECOMPOSED", "components":[{{"subquery_id":"subquery_1","need":"...","customer_component":"...","resolution":"TOOL_ELIGIBLE" | "NON_FINANCIAL" | "CLARIFICATION","clarification":null | {{"unresolved_request":"...", "clarification_reason":"...", "clarification_guesses":[{{"label":"...","message":"...","reason":"..."}}]}}}}], "repetitive_issue_detected":true | false}}
 
     {_DATA_FOLLOWS}
 
@@ -2582,7 +2566,9 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
         triage_status = "DECOMPOSED"
         raw_components = []
         repeated_need_detected_this_turn = False
-    if triage_status not in {"NON_COMPLIANT", "ESCALATION", "DECOMPOSED"}:
+    # Compliance is judged by node_02f in parallel; a stray NON_COMPLIANT
+    # here carries no components to act on, so it is treated as DECOMPOSED.
+    if triage_status not in {"ESCALATION", "DECOMPOSED"}:
         triage_status = "DECOMPOSED"
 
     print(f"   🧠 [TRIAGE STATUS]: {triage_status}")
@@ -2666,6 +2652,90 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
         "clarification_tasks": clarification_tasks,
         "repeated_need_detected_this_turn": repeated_need_detected_this_turn,
     }
+
+def node_02f_inbound_compliance_screen(state: AgentState):
+    """Inbound compliance screen, run in parallel with triage (BUG-055).
+
+    The shared compliance module regulates Horizon, not the customer, so the
+    check never judges the customer, the topic or the intent behind a message.
+    It predicts what Horizon would say or do if it fulfilled the request and
+    judges only that predicted response against REGULATORY_LICENSING_CONTEXT
+    and BANK_CONDUCT_CONTEXT. A question is fulfilled by a truthful answer,
+    which may be "no" or a warning, so a customer asking whether to share an
+    OTP is answered rather than refused. It used to be one rule inside the
+    triage prompt, where the judgment kept contradicting its own reasoning;
+    as a focused call it is reliable. Writes only `inbound_compliance` --
+    triage writes the rest of this step's state in the same superstep."""
+    print("🟢 [NODE 02f] Executing Inbound Compliance Screen")
+    user_msg = state.get("user_input", "")
+    history_str = _build_conversation_context(state)
+    prompt = f"""
+    INBOUND COMPLIANCE SCREEN FOR A READ-ONLY HORIZON BANK ASSISTANT
+
+    The rules come first; the conversation and the latest customer message
+    they refer to follow at the end.
+
+    MAS COMPLIANCE CONTEXT:
+    {REGULATORY_LICENSING_CONTEXT}
+    BANK CONDUCT RULES:
+    {BANK_CONDUCT_CONTEXT}
+
+    The MAS COMPLIANCE CONTEXT and the BANK CONDUCT RULES regulate Horizon,
+    not the customer: a customer cannot be non-compliant, so never judge the
+    customer, the topic, or the intent behind the message. Judge only what
+    Horizon would be doing if it fulfilled the request.
+
+    First resolve the customer's actual request from the latest message. Use
+    the conversation only to fill what the message itself leaves open -- a
+    pronoun, an ellipsis, or a short reply such as "yes" confirming the
+    assistant's previous offer.
+
+    Then decide in two steps:
+    1. Write predicted_bank_response: the truthful, compliant response
+       Horizon would give to fulfil the request. A question is fulfilled by
+       answering it truthfully; the true answer may be "no" or a warning and
+       need not agree with what the customer proposes. A request for an
+       action is fulfilled by what this read-only assistant can offer for it:
+       information, an app screen, or a service form. A refusal or a redirect
+       does not fulfil the request. If the request can only be fulfilled by
+       output or an action that breaches the MAS COMPLIANCE CONTEXT or the
+       BANK CONDUCT RULES, write exactly NONE.
+    2. Set non_compliant to true only when predicted_bank_response is NONE.
+
+    Output JSON only:
+    {{"predicted_bank_response": "...", "non_compliant": true | false}}
+
+    {_DATA_FOLLOWS}
+
+    Conversation context: {history_str}
+    Latest customer message: "{user_msg}"
+    """
+    try:
+        result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
+        predicted = str(result.get("predicted_bank_response", "")).strip()
+        non_compliant = bool(result.get("non_compliant", False)) or predicted.upper() == "NONE"
+        log_event("inbound.compliance.checked", verdict="non_compliant" if non_compliant else "compliant",
+                  predicted_bank_response=predicted[:300])
+    except Exception as error:
+        # Fail closed, like the prompt guard: an unreadable verdict never lets
+        # a request through unscreened.
+        print(f"🚨 [NODE 02f EXCEPTION]: {error}")
+        log_event("inbound.compliance.error", level="WARNING", error=str(error)[:300])
+        predicted, non_compliant = "", True
+    return {"inbound_compliance": {"non_compliant": non_compliant, "predicted_bank_response": predicted}}
+
+
+def node_02g_inbound_compliance_join(state: AgentState):
+    """Join of the parallel compliance screen (node_02f) and triage (node_02d).
+    The compliance verdict is applied first: a non-compliant request ends the
+    turn with the fixed refusal and triage's result is not used."""
+    if state.get("inbound_compliance", {}).get("non_compliant"):
+        print("   ⛔ [COMPLIANCE JOIN]: request blocked by the inbound compliance screen")
+        return {"preflight_status": "non_compliant", "triage_status": "NON_COMPLIANT"}
+    # Never return an empty update: LangGraph streams it as None, which the
+    # API gateway's progress loop cannot read. Re-state triage's own status.
+    return {"triage_status": state.get("triage_status", "DECOMPOSED")}
+
 
 def node_02e_intent_classifier_and_query_formulator(state: AgentState):
     """n2e: formulate retrieval, clarification, or scope-decline resolutions for

@@ -385,9 +385,17 @@ class TriageComponent(BaseModel):
     clarification: IntentClarificationTask | None = Field(default=None, description="Present only when resolution is CLARIFICATION; otherwise null.")
 
 class TriageEvaluation(BaseModel):
-    triage_status: str = Field(description="Must be NON_COMPLIANT, ESCALATION, or DECOMPOSED.")
+    triage_status: str = Field(description="Must be ESCALATION or DECOMPOSED.")
     components: List[TriageComponent] = Field(default_factory=list, description="For DECOMPOSED only: one standalone component per distinct customer NEED in the resolved TRUE REQUEST (not per sentence -- sentences serving the same need share one component; components never overlap), together covering everything the customer asked, each tagged with its own resolution. Empty for NON_COMPLIANT/ESCALATION.")
     repetitive_issue_detected: bool = Field(default=False, description="True only when the Trusted Conversation Context shows the customer repeatedly raising substantially the same underlying banking need or issue across multiple recent turns, especially if it still appears unresolved. Judge by meaning, not wording. Independent of triage_status.")
+
+# INBOUND COMPLIANCE SCREEN (Node 02f) -- runs in parallel with triage. The
+# predicted response is declared before the verdict on purpose (reasoning
+# before output): the verdict must follow from that prediction, judged
+# against the shared compliance module, never from the topic of the message.
+class InboundComplianceScreen(BaseModel):
+    predicted_bank_response: str = Field(description="Written before non_compliant: one or two sentences predicting the truthful, compliant response Horizon would give to fulfil the customer's resolved request -- or exactly NONE if the request can only be fulfilled by output or an action that breaches the MAS compliance context or the bank conduct rules. A refusal or a redirect is not a way of fulfilling the request.")
+    non_compliant: bool = Field(description="True only when predicted_bank_response is NONE.")
 
 # TURN CONSISTENCY CHECK (Node 04a) -- semantic conflicts between one
 # turn's collected results, judged once, after tool calling has finished and
@@ -908,6 +916,8 @@ def _call_llm_router_impl(prompt: str, model_id: str = MODEL_A_GENERATOR, respon
             active_schema = SemanticEvaluation
         elif "TRIAGE A BANKING REQUEST" in prompt or "WHOLE-TURN FINANCIAL TRIAGE" in prompt:
             active_schema = TriageEvaluation
+        elif "INBOUND COMPLIANCE SCREEN" in prompt:
+            active_schema = InboundComplianceScreen
         elif "Act as a Decoupled Database Search Architect" in prompt:
             active_schema = QueryFormulation
         elif "INCREMENTAL TOOL-CALLING PLANNER" in prompt:

@@ -10844,10 +10844,19 @@ def node_08_soft_escalation_analyzer(state: AgentState):
 
     # Clarification responses intentionally have no UI actions -- the same
     # reason this never touched payload["options"] even when it was a chip.
+    # Judged from the reply's own blocks, not final_clarification: the
+    # evidence-only writer puts its whole reply there, so a "no information"
+    # turn used to read as a question and a stuck customer was never offered
+    # a person. Allowing the offer on such turns is a business decision
+    # (BUG-051, 2026-10-02).
+    asks_clarifying_question = any(
+        isinstance(block, dict) and block.get("type") == "clarification"
+        for block in payload.get("responseBlocks", []) or []
+    )
     soft_escalation_available = (
         bool(triggered_rules)
         and not turn_fully_resolved
-        and not state.get("final_clarification", "").strip()
+        and not asks_clarifying_question
     )
     payload["softEscalationAvailable"] = soft_escalation_available
     if soft_escalation_available:

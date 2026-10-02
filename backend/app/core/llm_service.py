@@ -397,8 +397,8 @@ class TriageEvaluation(BaseModel):
 # judged an action the customer only described ("receive money and send it
 # on -- is that allowed?") as if Horizon were asked to perform it.
 class InboundComplianceScreen(BaseModel):
-    requested_from_horizon: str = Field(description="Written first: what the customer is asking Horizon itself to produce -- an answer to a question (including whether something is allowed, safe or advisable), information, or an action by Horizon -- and, if the message describes an action, who would perform it: the customer or someone else, or Horizon.")
-    predicted_bank_response: str = Field(description="Written before non_compliant: one or two sentences predicting the truthful, compliant response Horizon would give to fulfil the customer's resolved request -- or exactly NONE if the request can only be fulfilled by output or an action that breaches the MAS compliance context or the bank conduct rules. A refusal or a redirect is not a way of fulfilling the request.")
+    requested_from_horizon: str = Field(description="Written first: what the customer wants from this assistant -- an answer to a question (including whether something is allowed, safe or advisable), information, their own data, or help with an action -- and which part of the assistant's service scope serves it, or that none does.")
+    predicted_bank_response: str = Field(description="Written before non_compliant: one or two sentences predicting the truthful, compliant response Horizon would give to fulfil the customer's resolved request -- or exactly NONE if the request can only be fulfilled by output or an action that breaches the MAS compliance context or the bank conduct rules. Offering the app screen or service form where the customer completes an action does fulfil it; a refusal does not.")
     non_compliant: bool = Field(description="True only when predicted_bank_response is NONE.")
 
 # TURN CONSISTENCY CHECK (Node 04a) -- semantic conflicts between one

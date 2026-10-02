@@ -2653,6 +2653,23 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
         "repeated_need_detected_this_turn": repeated_need_detected_this_turn,
     }
 
+def _assistant_service_scope() -> str:
+    """The assistant's service scope for the inbound compliance screen, built
+    from the same registries the tool planner uses, so it always matches what
+    the bot can actually do. Descriptions only -- no ids or routes."""
+    from backend.app.orchestration.tool_registry import enabled_tool_capabilities
+    lines = ["- Answer questions from Horizon's own FAQ and policy information."]
+    for capability in enabled_tool_capabilities():
+        for field in capability.get("available_fields", []):
+            lines.append(f"- Show the customer their own data: {field.get('description', '')}")
+        for screen in capability.get("available_destinations", []):
+            lines.append(f"- Offer an app screen where the customer acts themselves: {screen.get('description', '')}")
+        for form in capability.get("available_requests", []):
+            lines.append(f"- Offer a service form the customer fills in: {form.get('description', '')}")
+    lines.append("- Hand the conversation to a human agent when the customer asks for one.")
+    return "\n    ".join(lines)
+
+
 def node_02f_inbound_compliance_screen(state: AgentState):
     """Inbound compliance screen, run in parallel with triage (BUG-055).
 
@@ -2685,28 +2702,47 @@ def node_02f_inbound_compliance_screen(state: AgentState):
     customer, the topic, or the intent behind the message. Judge only what
     Horizon would be doing if it fulfilled the request.
 
+    THIS ASSISTANT'S SERVICE SCOPE (everything it can do, and nothing else):
+    {_assistant_service_scope()}
+    Showing the customer their own data and offering a listed screen or form
+    are legitimate service and breach no rule: showing the customer their
+    own data is not unauthorised access, and offering a screen or form is
+    not executing a banking action or claiming authority -- the customer
+    completes the action there themselves.
+
     First resolve the customer's actual request from the latest message. Use
     the conversation only to fill what the message itself leaves open -- a
     pronoun, an ellipsis, or a short reply such as "yes" confirming the
     assistant's previous offer.
 
     Then decide in three steps:
-    1. Write requested_from_horizon: what the customer is asking Horizon
-       itself to produce -- an answer to a question, information, or an
-       action by Horizon. A question about whether something is allowed,
-       safe or advisable asks for an answer. If the message describes an
-       action, say who would perform it: an action the customer or someone
-       else would perform is part of the question's subject, not a request
-       for Horizon to perform it.
+    1. Write requested_from_horizon: what the customer wants from this
+       assistant -- an answer to a question, information, their own data, or
+       help with an action -- and which part of the SERVICE SCOPE serves it
+       (or that none does). A question about whether something is allowed,
+       safe or advisable asks for an answer. An action the customer or
+       someone else would perform is the subject of the request; this
+       assistant never performs actions itself, it offers the screen or
+       form where the customer does.
     2. Write predicted_bank_response: the truthful, compliant response
        Horizon would give to fulfil the request. A question is fulfilled by
        answering it truthfully; the true answer may be "no" or a warning and
-       need not agree with what the customer proposes. A request for an
-       action is fulfilled by what this read-only assistant can offer for it:
-       information, an app screen, or a service form. A refusal or a redirect
-       does not fulfil the request. If the request can only be fulfilled by
+       need not agree with what the customer proposes. Predict only what
+       this assistant would do within its SERVICE SCOPE above -- never an
+       action outside it. A request for an action is fulfilled by what the
+       scope offers for it:
+       information, the customer's own data, or the app screen or service
+       form where the customer completes it -- pointing the customer there
+       does fulfil it. When the scope cannot do exactly what is asked (for
+       example the customer asks Horizon to carry out an action it can only
+       offer a screen for), predict what the assistant would offer instead
+       within its scope: the matching screen or form, information, or an
+       honest statement that this is not available here. Being unable to do
+       something is never a breach. If the request can only be fulfilled by
        output or an action that breaches the MAS COMPLIANCE CONTEXT or the
-       BANK CONDUCT RULES, write exactly NONE.
+       BANK CONDUCT RULES, write exactly NONE. NONE means the request asks
+       for something prohibited, never merely something this assistant
+       cannot do.
     3. Set non_compliant to true only when predicted_bank_response is NONE.
 
     Output JSON only:

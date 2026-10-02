@@ -2660,17 +2660,21 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
 def _assistant_service_scope() -> str:
     """The assistant's service scope for the inbound compliance screen, built
     from the same registries the tool planner uses, so it always matches what
-    the bot can actually do. Descriptions only -- no ids or routes."""
+    the bot can actually do. Every tool -- FAQ search included -- is listed
+    the same way, as an equal option. Descriptions only, no ids or routes."""
     from backend.app.orchestration.tool_registry import enabled_tool_capabilities
-    lines = ["- Answer questions from Horizon's own FAQ and policy information."]
+    lines = []
     for capability in enabled_tool_capabilities():
+        name = capability.get("tool_name")
+        if name == "rag":
+            lines.append("- FAQ search: answer the customer's question from Horizon's FAQ and policy information.")
         for field in capability.get("available_fields", []):
-            lines.append(f"- Show the customer their own data: {field.get('description', '')}")
+            lines.append(f"- Own-data lookup: {field.get('description', '')}")
         for screen in capability.get("available_destinations", []):
-            lines.append(f"- Offer an app screen where the customer acts themselves: {screen.get('description', '')}")
+            lines.append(f"- App screen: {screen.get('description', '')}")
         for form in capability.get("available_requests", []):
-            lines.append(f"- Offer a service form the customer fills in: {form.get('description', '')}")
-    lines.append("- Hand the conversation to a human agent when the customer asks for one.")
+            lines.append(f"- Service form: {form.get('description', '')}")
+    lines.append("- Human handover: pass the conversation to a human agent when the customer asks for one.")
     lines.append("An app screen is only a redirect: the actual transaction takes place on the bank app's own transaction page.")
     lines.append("The assistant cannot see personal data: the data lookup shows it to the customer only.")
     return "\n    ".join(lines)
@@ -2746,10 +2750,10 @@ def node_02f_inbound_compliance_screen(state: AgentState):
        honest statement that this is not available here. Being unable to do
        something is never a breach. If the request can only be fulfilled by
        output or an action that breaches the MAS COMPLIANCE CONTEXT or the
-       BANK CONDUCT RULES, write exactly NONE. NONE means the request asks
+       BANK CONDUCT RULES, write exactly PROHIBITED. PROHIBITED means the request asks
        for something prohibited, never merely something this assistant
        cannot do.
-    3. Set non_compliant to true only when predicted_bank_response is NONE.
+    3. Set non_compliant to true only when predicted_bank_response is PROHIBITED.
 
     Output JSON only:
     {{"requested_from_horizon": "...", "predicted_bank_response": "...", "non_compliant": true | false}}
@@ -2762,7 +2766,7 @@ def node_02f_inbound_compliance_screen(state: AgentState):
     try:
         result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_E_TRIAGE))
         predicted = str(result.get("predicted_bank_response", "")).strip()
-        non_compliant = bool(result.get("non_compliant", False)) or predicted.upper() == "NONE"
+        non_compliant = bool(result.get("non_compliant", False)) or predicted.upper() == "PROHIBITED"
         log_event("inbound.compliance.checked", verdict="non_compliant" if non_compliant else "compliant",
                   requested_from_horizon=str(result.get("requested_from_horizon", "")).strip()[:300],
                   predicted_bank_response=predicted[:300])

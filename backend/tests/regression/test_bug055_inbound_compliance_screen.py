@@ -32,10 +32,10 @@ check("prompt carries both shared modules and the latest message",
       N.REGULATORY_LICENSING_CONTEXT.strip()[:40] in prompt and N.BANK_CONDUCT_CONTEXT.strip()[:40] in prompt and base["user_input"] in prompt)
 check("prompt is routed to the InboundComplianceScreen schema", "INBOUND COMPLIANCE SCREEN" in prompt and "WHOLE-TURN FINANCIAL TRIAGE" not in prompt)
 
-out, _ = screen({"predicted_bank_response": "NONE", "non_compliant": False})
-check("a NONE prediction blocks even if the flag disagrees", out["inbound_compliance"]["non_compliant"] is True)
-out, _ = screen({"predicted_bank_response": "NONE", "non_compliant": True})
-check("NONE with the flag set blocks", out["inbound_compliance"]["non_compliant"] is True)
+out, _ = screen({"predicted_bank_response": "PROHIBITED", "non_compliant": False})
+check("a PROHIBITED prediction blocks even if the flag disagrees", out["inbound_compliance"]["non_compliant"] is True)
+out, _ = screen({"predicted_bank_response": "PROHIBITED", "non_compliant": True})
+check("PROHIBITED with the flag set blocks", out["inbound_compliance"]["non_compliant"] is True)
 out, _ = screen(ValueError("unparseable"))
 check("an unreadable verdict fails closed", out["inbound_compliance"]["non_compliant"] is True)
 

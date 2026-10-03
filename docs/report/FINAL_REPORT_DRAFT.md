@@ -494,7 +494,7 @@ Customer: "I want to transfer $200 to Maria." → *"You can complete your transf
 Customer: "Yes, that's correct." → the same pointer; the bot never claims to have sent money.
 
 **UC-2 Lost card (US-05).**
-"I lost my card, what should I do?" → steps to freeze the card and order a replacement in the app (Figure `05_lost_card.png`).
+"I lost my card, what should I do?" → steps to freeze the card and order a replacement in the app (Figure 12).
 
 **UC-3 Product question (US-09).**
 "How old do I need to be to open a savings account?" → *"You must be 16 years old or older to open a Savings Account with Horizon Bank."* — grounded in the FAQ.

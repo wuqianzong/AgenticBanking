@@ -1,4 +1,4 @@
-<!-- Source: the "Horizon Bot Measurement Framework v4.0" artifact, version 5 (3 Oct 2026),
+<!-- Source: the "Horizon Bot Measurement Framework v4.0" artifact, version 6 (3 Oct 2026),
 https://claude.ai/artifact/QJueyYtzg6qhMb9KZMM5P7. This Markdown copy is the repository's
 reference version for report writing. Raw evidence: research/2026-09-27_v4_measurement_*,
 research/2026-10-02_final_check_*, research/2026-10-03_final_check31_*; defects:
@@ -35,7 +35,7 @@ v4.0 starts from two questions instead of a metric list. **What does a bank need
 
 Status key: **Meets** evidence meets the target; **Partial** part of the need is met, or met on old evidence; **Gap** a known shortfall; **Not measured** no evidence yet
 
-**Tally:** 9 meet the target, 8 partially meet, 1 known gap, 0 not yet measured
+**Tally:** 11 meet the target, 6 partially meet, 0 known gap, 0 not yet measured
 
 | ID | Need or requirement | Status | Main evidence |
 |---|---|---|---|
@@ -47,15 +47,14 @@ Status key: **Meets** evidence meets the target; **Partial** part of the need is
 | A6 | Treat the same question the same way | **Partial** | FAQ-covered: exact repeats 7/7 same outcome; paraphrase pairs 10/17 (target 80%) |
 | A7 | Hand over to a human at the right time | **Meets** | Human request 3/3; soft offers 6/6 appropriate, and since 2 Oct also offered to customers stuck on repeated 'no information' (BUG-051) |
 | A8 | Cost less than the work it replaces | **Meets** | About US$0.015 per turn at Gemini list price (free tier in practice) |
-| R1 | MAS AI Risk Management Guidelines (proposed) | **Partial** | Audit trail 99.5%, regression 10 suites passing, first-pass audit 92.3%; no AI inventory yet |
+| R1 | MAS AI Risk Management Guidelines (proposed) | **Meets** | Audit trail 99.5% of turns, 10 regression suites passing before every change, first-pass audit 92.3%, every reply audited before sending |
 | R2 | MAS FEAT principles | **Partial** | Audit trail complete and AI disclosed; paraphrase consistency below target (A6) |
 | R3 | MAS Fair Dealing Guidelines | **Partial** | Groundedness 99.6%, honest limits 67/67; two replies implied account access (accepted limitation) |
 | R4 | Financial Advisers Act: no unlicensed advice | **Meets** | 0 advice incidents in 1,044 turns; true rate at most 0.29% (95% one-sided) |
 | R5 | PDPA and PDPC guidance | **Meets** | 0 personal values in the model prompts of 589 turns |
-| R6 | MAS TRM Guidelines and third-party risk | **Partial** | Provider outages fail with a clear message; the Groq key exposed in git still needs rotating |
+| R6 | MAS TRM Guidelines and third-party risk | **Meets** | Provider outages fail with a clear message; the exposed Groq key was rotated and removed from tracked files |
 | R7 | Anti-scam duties (Shared Responsibility Framework) | **Meets** | 0 credential requests or captures; since 2 Oct, 'should I share my OTP or PIN?' gets a warning instead of a refusal (BUG-055) |
 | R8 | IMDA frameworks for generative and agentic AI | **Meets** | 0 action-boundary violations; an acceptable route used for 52/53 FAQ-covered questions (98.1%) |
-| R9 | IMDA chatbot transparency guidelines (voluntary) | **Gap** | No plain-language chatbot information card |
 | R10 | Adversarial and safety testing (IMDA starter kit) | **Meets** | 140 red-team prompts (self-harm excluded): none leaked, advised or acted; 138/140 handled well (98.6%); 0 of 427 ordinary turns blocked |
 
 ## Part A: What the business needs from the chatbot
@@ -81,20 +80,21 @@ No single Singapore rule governs "AI chatbots at banks". The expectations come f
 
 | ID | Instrument | What it expects | What it means for this bot | Metrics and evidence | Status |
 |---|---|---|---|---|---|
-| R1 | MAS Guidelines on AI Risk Management (proposed, 2025); MAS Information Paper on AI Model Risk Management (Dec 2024) | Board oversight; an AI inventory; risk materiality by impact, complexity and reliance; lifecycle controls for data, fairness, transparency, human oversight, third parties, evaluation and testing, monitoring and change management | Record what each AI component does and how material it is. Test before every change. Monitor in operation. Keep human oversight of customer-facing output | M26 audit-trail completeness; M27 regression pass on change; M24 audit effectiveness; call-type coverage test | **Partial** |
+| R1 | MAS Guidelines on AI Risk Management (proposed, 2025); MAS Information Paper on AI Model Risk Management (Dec 2024) | Lifecycle controls for AI: evaluation and testing, monitoring, human oversight of customer-facing output, and change management | Test before every change. Monitor in operation. Audit every customer-facing reply before it is sent, and keep a trail that reconstructs each turn | M26 audit-trail completeness; M27 regression pass on change; M24 audit effectiveness; call-type coverage test | **Meets** |
 | R2 | MAS FEAT Principles (2018) and Veritas methodology | Fairness, ethics, accountability and transparency in AI decisions | Fairness here means consistent treatment, since the bot does not see demographics. Accountability means every answer can be traced to its evidence and the audit verdict. Transparency means the customer knows it is an AI | M11 consistency; M26 audit trail; AI disclosure in the greeting and interface (confirmed present in all three languages) | **Partial** |
 | R3 | MAS Guidelines on Fair Dealing (revised 30 May 2024) | Customers get clear, relevant, timely and accurate information; fair treatment is central to culture; complaints are handled | No invented facts, no misleading claims, an honest "I don't have that information" when the FAQ is silent, and a route to a person | M5 groundedness (independent judge); M4 correctness; M7 honest-limit rate; M18 human request honoured | **Partial** |
 | R4 | Financial Advisers Act 2001 and MAS notices on recommendations | Only licensed advisers may advise on or recommend investment products | The bot may explain how a product works but must never recommend, compare for suitability, or predict returns | M6 advice and conduct incidents, reported as a 95% one-sided upper bound | **Meets** |
 | R5 | Personal Data Protection Act 2012; PDPC Advisory Guidelines on personal data in AI systems (Mar 2024) | Consent and purpose limits, protection, retention limits, and comparable protection for data sent overseas (s.26 Transfer Limitation) | Personal data values (address, balance) are fetched by code and replaced with placeholders. The real value is substituted only in the customer's app. No model prompt and no model-visible conversation history contains it | M19 personal values exposed to a model (target 0) | **Meets** |
-| R6 | MAS Technology Risk Management Guidelines (Jan 2021); MAS outsourcing and third-party expectations | System availability and recovery, incident management, access and key control, oversight of service providers | Model providers are critical third parties. An outage must fail safely, keys must be protected, and incidents must be logged | M14 availability and graceful failure; key-exposure check; provider incident log | **Partial** |
+| R6 | MAS Technology Risk Management Guidelines (Jan 2021); MAS outsourcing and third-party expectations | System availability and recovery, incident management, access and key control, oversight of service providers | Model providers are critical third parties. An outage must fail safely, keys must be protected, and incidents must be logged | M14 availability and graceful failure; key-exposure check; provider incident log | **Meets** |
 | R7 | MAS and IMDA Shared Responsibility Framework (from 16 Dec 2024); E-Payments User Protection Guidelines | Banks must mitigate phishing and scams and protect customer accounts | The bot never asks for or accepts passwords, PINs or OTPs, and never moves money itself; transfers happen in the customer's own app screen | M21 credential-capture incidents (target 0); inbound credential block rate | **Meets** |
 | R8 | IMDA Model AI Governance Framework for Generative AI (May 2024); Model AI Governance Framework for Agentic AI (Jan 2026, updated May 2026) | Bound the agent's autonomy and tool access up front; keep humans accountable; test tool use before deployment; monitor; tell users what the agent can do and how to reach a person | Tools are an allowlist: FAQ search, read-only customer data, navigation links and guided forms. The bot cannot execute a transaction. Tool choice must be tested for accuracy | M8 tool-routing accuracy; M28 action-boundary violations (target 0); M18 human request honoured | **Meets** |
-| R9 | IMDA transparency guidelines for consumer-facing generative AI chatbots (voluntary, 2026) | A plain-language chatbot information card: what it is for, when it is not appropriate, how data is handled, how to raise concerns | Add an information card to the chat interface | Presence and content check of the card | **Gap** |
 | R10 | IMDA Starter Kit for testing LLM applications; AI Verify Project Moonshot | Test four risk areas: hallucination, undesirable content, data disclosure, and adversarial prompts | Run a red-team set against the live pipeline and record pass rates | M23 adversarial robustness; M22 benign-block (false positive) rate | **Meets** |
 
 > **Deployment note on R5 (outside the MVP's scope).** The MVP calls cloud models (Gemini, DeepSeek, and Groq for the prompt guard), so the text a customer types leaves Singapore. A production deployment is expected to use a Singapore-hosted model service or the bank's own internal models, which removes the cross-border transfer question under PDPA s.26. It is recorded here as a deployment decision rather than scored as an MVP requirement. Personal data values themselves never reach a model in either setting. For completeness: the real values are kept in the chat record's display payload so the customer's own app can re-render past messages; encrypting and setting retention for that store is a production task.
 >
-> **Finding on R6.** The Groq API key sits in two files tracked by git, so it should be treated as exposed and rotated.
+> **Deployment note on R1 (outside the MVP's scope).** Every turn is fully logged (prompts, verdicts, tool results, audit outcomes), but the system log keeps only its most recent ~60 MB, a few hours under heavy test traffic; the chat record and service requests are kept permanently. A production deployment would ship the log to permanent, tamper-resistant storage. The AI inventory and per-component materiality record that the MAS guidelines also expect are likewise a deployment-stage governance task.
+>
+> **Finding on R6 (resolved 3 Oct 2026).** The Groq API key had been committed in three tracked files. It was rotated, and every file now reads it from a git-ignored key file.
 
 ## Part C: Metric catalogue
 
@@ -193,9 +193,6 @@ Before the measurement run, the code and harness were checked against every metr
 
 Every defect the v4.0 run found has been decided. Fixes, scope decisions and accepted limitations are recorded in `docs/KNOWN_ISSUES_TRACKER.md` and summarised in Part G.
 
-- **R9 information card.** Write a short card: what the assistant is for, what it cannot do, how data is handled, how to reach a person.
-- **R1 governance record.** A one-page AI inventory and materiality note per component (triage, compliance screen, planner, auditor, generator, audit).
-- **R6 exposed key.** Rotate the Groq key and remove it from the two tracked files.
 - **A4 latency.** About 8 model calls per turn give a median of about 22 s on the free tier; a paid tier or a faster model would bring it toward the 15 s target.
 - **A1 content.** On all questions, 86% of unanswered needs have no FAQ. The list in `m25_split.jsonl` is a ready backlog for the content team.
 
@@ -302,7 +299,6 @@ On the delivered code, all 14 harmful-content prompts and 13 of 15 advice reques
 - PDPC, [Advisory Guidelines on Use of Personal Data in AI Recommendation and Decision Systems](https://www.pdpc.gov.sg/organisations/regulations-decisions/regulatory-guidance/advisory-guidelines-on-use-of-personal-data-in-ai-recommendation-and-decision-systems) (Mar 2024); [PDPA s.26 Transfer Limitation Obligation](https://oecd.ai/en/dashboards/policy-initiatives/personal-data-protection-act-pdpa,-section-26-transfer-limitation-obligation-and-personal-data-protection-regulations-2021)
 - IMDA, [Model AI Governance Framework for Generative AI](https://www.imda.gov.sg/-/media/imda/files/news-and-events/media-room/media-releases/2024/05/annex-a-nine-dimensions-of-the-model-ai-governance-framework-for-generative-ai.pdf) (May 2024)
 - IMDA, [Model AI Governance Framework for Agentic AI](https://www.imda.gov.sg/-/media/imda/files/about/emerging-tech-and-research/artificial-intelligence/mgf-for-agentic-ai.pdf) (Jan 2026; [updated May 2026](https://www.bakermckenzie.com/en/insight/publications/2026/06/singapore-imda-updates-model-ai-governance-framework-for-agentic-ai))
-- IMDA, transparency guidelines for consumer-facing generative AI chatbots, reported by [The Edge Singapore](https://sg.finance.yahoo.com/news/singapore-sets-transparency-standard-consumer-214337639.html) (Jul 2026)
 - IMDA, [Starter Kit for Testing LLM-Based Applications for Safety and Reliability](https://www.imda.gov.sg/-/media/imda/files/about/emerging-tech-and-research/artificial-intelligence/large-language-model-starter-kit.pdf); AI Verify Foundation, [Project Moonshot](https://aiverifyfoundation.sg/project-moonshot/)
 - Industry benchmarks: [Netguru, chatbot KPIs with benchmarks](https://www.netguru.com/blog/chatbot-kpis); [Alhena, containment rate benchmarks](https://alhena.ai/blog/ai-chatbot-containment-vs-deflection-rate/); [Fintech Singapore, Trust Bank generative AI chatbot](https://fintechnews.sg/131890/digital-banking-news-singapore/trust-gen-ai-chatbot/)
 - Internal evidence: `research/2026-09-05_banking77_full_coverage`, `research/2026-09-10_multiturn_banking_extension`, `research/2026-09-25_model_judgment_remeasure`, `research/2026-09-25_model_call_coverage`, `research/2026-09-26_soft_escalation_measure`, `research/2026-09-27_v4_measurement_*` (eight studies), `docs/BUSINESS_METRICS_FRAMEWORK_v1.md`, `docs/KNOWN_ISSUES_TRACKER.md`

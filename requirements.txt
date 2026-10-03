@@ -1,0 +1,19 @@
+# Backend runtime (Python 3.11) -- versions used for the September-October 2026 evaluation
+fastapi==0.136.3
+uvicorn==0.49.0
+pydantic==2.13.4
+python-dotenv==1.2.2
+httpx==0.28.1
+langgraph==1.2.4
+langchain-core==1.4.1
+langchain-community==0.4.2
+chromadb==1.5.9
+sentence-transformers==5.5.1
+numpy==2.4.6
+google-genai==2.17.0
+openai==2.53.0
+groq==1.4.0
+
+# Research harness and reporting (optional)
+scikit-learn==1.9.0
+playwright==1.61.0

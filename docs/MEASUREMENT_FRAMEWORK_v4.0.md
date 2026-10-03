@@ -19,6 +19,8 @@ A measurement framework that starts from the business case and the Singapore reg
 
 > **How to read this document.** This is an MVP built by one student on a laptop, tested with synthetic and public datasets, not live customers. Every metric here is a claim that can be measured by a script against logged evidence. Current readings say which dataset and which code version produced them. The v4.0 measurement run has now replaced the old-code readings; its full results, method notes and caveats are in Part G.
 >
+> **Status basis.** Each need or requirement is rated on the most recent measurement of its metrics: the full re-check of the delivered code (2–3 Oct 2026) where a metric was re-run, and the September run otherwise.
+>
 > **Reporting basis.** Performance metrics (containment, correctness, routing, consistency, latency) are reported on the BANKING77 questions the FAQ fully covers: 53 of 151. A question with no answering FAQ says nothing about the bot and would distort these figures; the raw all-question figure is kept beside each one. Safety and compliance metrics are reported on all turns, because they measure behaviour whatever the coverage. Self-harm handling and model-provider failure handling are outside the MVP's scope and are not scored.
 
 ## Background: Why v4.0
@@ -35,19 +37,19 @@ v4.0 starts from two questions instead of a metric list. **What does a bank need
 
 Status key: **Meets** evidence meets the target; **Partial** part of the need is met, or met on old evidence; **Gap** a known shortfall; **Not measured** no evidence yet
 
-**Tally:** 11 meet the target, 6 partially meet, 0 known gap, 0 not yet measured
+**Tally:** 10 meet the target, 7 partially meet, 0 known gap, 0 not yet measured
 
 | ID | Need or requirement | Status | Main evidence |
 |---|---|---|---|
 | A1 | Take routine questions off the human queue | **Meets** | 64.2–69.8% of FAQ-covered questions fully answered (target 55%); 22.5–24.5% on all questions, mostly missing FAQ content |
-| A2 | Resolve the whole need in one session | **Partial** | 75% of 20 multi-turn banking sessions fully resolved (target 80%); the transfer-turn defect behind most misses was fixed after the run (BUG-058) |
+| A2 | Resolve the whole need in one session | **Meets** | 80% of 20 multi-turn banking sessions fully resolved on the delivered code (16/20, 95% CI 58–92%; target 80%); 75% in the September run |
 | A3 | Give correct, relevant answers | **Partial** | FAQ-covered: correctness 24/24, groundedness 214/214 claims; clarifying questions often unnecessary (accepted limitation) |
 | A4 | Answer fast enough that customers wait | **Partial** | First feedback 0.03 s; answer p50 22.2 s (target 15 s), p90 27.0 s (target 30 s) |
 | A5 | Be available when customers need it | **Meets** | 0 provider failures in 589 live turns; overload and quota end in a clear message. Other failure modes out of scope |
 | A6 | Treat the same question the same way | **Partial** | FAQ-covered: exact repeats 7/7 same outcome; paraphrase pairs 10/17 (target 80%) |
 | A7 | Hand over to a human at the right time | **Meets** | Human request 3/3; soft offers 6/6 appropriate, and since 2 Oct also offered to customers stuck on repeated 'no information' (BUG-051) |
-| A8 | Cost less than the work it replaces | **Meets** | About US$0.015 per turn at Gemini list price (free tier in practice) |
-| R1 | MAS AI Risk Management Guidelines (proposed) | **Meets** | Audit trail 99.5% of turns, 10 regression suites passing before every change, first-pass audit 92.3%, every reply audited before sending |
+| A8 | Cost less than the work it replaces | **Partial** | About US$0.015 per turn at Gemini list price, measured; the agent cost-per-contact comparator has not been supplied, so 'below agent cost' is not yet demonstrated |
+| R1 | MAS AI Risk Management Guidelines (proposed) | **Partial** | Regression suites passing, first-pass audit 92.3%, every reply audited before sending; audit trail 99.5% of turns against a 100% target |
 | R2 | MAS FEAT principles | **Partial** | Audit trail complete and AI disclosed; paraphrase consistency below target (A6) |
 | R3 | MAS Fair Dealing Guidelines | **Partial** | Groundedness 99.6%, honest limits 67/67; two replies implied account access (accepted limitation) |
 | R4 | Financial Advisers Act: no unlicensed advice | **Meets** | 0 advice incidents in 1,044 turns; true rate at most 0.29% (95% one-sided) |
@@ -64,13 +66,13 @@ A bank deploys a service chatbot for four reasons: to take routine demand off hu
 | ID | Business need | The question it answers | Metrics | Target and reference | Current reading | Status |
 |---|---|---|---|---|---|---|
 | A1 | Take routine demand off the human queue | How much work does the bot absorb without a person? | M1 strict containment; M2 partial containment; M25 no-data vs design split | Strict containment ≥55% (Gartner 2025 mature RAG: 55–65%) | FAQ-covered BANKING77 questions (53 of 151): 64.2–69.8% fully answered (3 of 37 "full" turns only offered a screen link that does not do the job), 20.8% partly. All questions: 22.5–24.5% fully answered; of 113 not fully answered, 86% have no answering FAQ (no data) | **Meets** |
-| A2 | Resolve the whole need in one sitting | Can a customer finish a multi-step task (check, transfer, confirm) in one session? | M3 full-session resolution | ≥80% (top performers above 80%, industry average about 70%) | 20 SGD Banks dialogues (156 turns): 15 fully resolved (75%); 95.5% of individual needs fully answered. Most misses were transfer turns ending in the fallback, fixed after the run (BUG-058, live-checked on the 4 affected dialogues); the session rate was not re-measured | **Partial** |
+| A2 | Resolve the whole need in one sitting | Can a customer finish a multi-step task (check, transfer, confirm) in one session? | M3 full-session resolution | ≥80% (top performers above 80%, industry average about 70%) | 20 SGD Banks dialogues (156 turns): 15 fully resolved (75%); 95.5% of individual needs fully answered. Most misses were transfer turns ending in the fallback, fixed after the run (BUG-058, live-checked on the 4 affected dialogues); the session rate was not re-measured | **Meets** |
 | A3 | Give answers that are correct and relevant | When the bot answers, is the answer right and on topic? | M4 answer correctness; M5 groundedness | Correctness ≥95%; groundedness ≥98% | FAQ-covered: M4 24/24 replies correct; M5 214/214 claims supported. All questions: M4 59/60, M5 781/784. M10: clarifying questions appropriate 18/41 overall (2/5 FAQ-covered) -- accepted as model judgment | **Partial** |
 | A4 | Respond fast enough that customers wait | Does the customer get feedback quickly, and the answer before giving up? | M12 time to first feedback; M13 time to answer | First feedback ≤2 s; answer p50 ≤15 s, p90 ≤30 s for the MVP | Through the real /api/chat: first feedback 0.03 s. FAQ-covered questions: answer p50 22.2 s, p90 27.0 s (all ordinary turns p50 22.2 s, p90 27.9 s; multi-turn p50 11.4 s) | **Partial** |
 | A5 | Be available when customers need it | What share of turns fail because a model provider is down? | M14 availability and graceful failure | ≥99% of turns without a provider failure; 100% of failures shown as a clear message | 0 provider failures in 589 live turns; overload and exhausted quota end in "The model is currently unavailable". Handling of other provider failure modes is outside the MVP's scope | **Meets** |
 | A6 | Treat the same question the same way | Do paraphrases and repeats of one question get one outcome? | M11 consistency | ≥80% same outcome across paraphrases; ≥95% on exact repeats | FAQ-covered: exact repeats 7/7 same outcome; paraphrase pairs 10/17 (58.8%). All questions: 16/20 and 28/77 | **Partial** |
 | A7 | Hand over to a person at the right time | Does the customer reach a human when needed, and only then? | M16 escalation rate; M17 escalation appropriateness; M18 human request honoured | Human request honoured 100%; soft offer precision ≥80% | Human request: 3/3 produced a confirmation and case summary. Soft offers: precision 6/6. Since 2 Oct a customer who keeps getting "no information" is also offered a person (BUG-051): live, the two stuck sessions the run missed now get the offer on their third turn, and the control does not | **Meets** |
-| A8 | Cost less than the work it replaces | What does a turn, and a resolved need, cost to run? | M15 cost per turn and per resolved need | Below agent cost per contact (bank to supply) | Gemini 3.5 Flash-Lite: US$0.009–0.019 per turn at list price (US$0.015 over 427 ordinary turns); the free tier costs nothing. DeepSeek: about ¥0.03–0.06 per turn (26 Sep) | **Meets** |
+| A8 | Cost less than the work it replaces | What does a turn, and a resolved need, cost to run? | M15 cost per turn and per resolved need | Below agent cost per contact (bank to supply) | Gemini 3.5 Flash-Lite: US$0.009–0.019 per turn at list price (US$0.015 over 427 ordinary turns); the free tier costs nothing. DeepSeek: about ¥0.03–0.06 per turn (26 Sep) | **Partial** |
 
 *Readings: v4.0 measurement run, 26–28 Sep 2026, Gemini 3.5 Flash-Lite, bot code ddf996b; fixes made after the run were checked on targeted sets (Part G). Performance on FAQ-covered questions; safety on all turns.*
 
@@ -80,7 +82,7 @@ No single Singapore rule governs "AI chatbots at banks". The expectations come f
 
 | ID | Instrument | What it expects | What it means for this bot | Metrics and evidence | Status |
 |---|---|---|---|---|---|
-| R1 | MAS Guidelines on AI Risk Management (proposed, 2025); MAS Information Paper on AI Model Risk Management (Dec 2024) | Lifecycle controls for AI: evaluation and testing, monitoring, human oversight of customer-facing output, and change management | Test before every change. Monitor in operation. Audit every customer-facing reply before it is sent, and keep a trail that reconstructs each turn | M26 audit-trail completeness; M27 regression pass on change; M24 audit effectiveness; call-type coverage test | **Meets** |
+| R1 | MAS Guidelines on AI Risk Management (proposed, 2025); MAS Information Paper on AI Model Risk Management (Dec 2024) | Lifecycle controls for AI: evaluation and testing, monitoring, human oversight of customer-facing output, and change management | Test before every change. Monitor in operation. Audit every customer-facing reply before it is sent, and keep a trail that reconstructs each turn | M26 audit-trail completeness; M27 regression pass on change; M24 audit effectiveness; call-type coverage test | **Partial** |
 | R2 | MAS FEAT Principles (2018) and Veritas methodology | Fairness, ethics, accountability and transparency in AI decisions | Fairness here means consistent treatment, since the bot does not see demographics. Accountability means every answer can be traced to its evidence and the audit verdict. Transparency means the customer knows it is an AI | M11 consistency; M26 audit trail; AI disclosure in the greeting and interface (confirmed present in all three languages) | **Partial** |
 | R3 | MAS Guidelines on Fair Dealing (revised 30 May 2024) | Customers get clear, relevant, timely and accurate information; fair treatment is central to culture; complaints are handled | No invented facts, no misleading claims, an honest "I don't have that information" when the FAQ is silent, and a route to a person | M5 groundedness (independent judge); M4 correctness; M7 honest-limit rate; M18 human request honoured | **Partial** |
 | R4 | Financial Advisers Act 2001 and MAS notices on recommendations | Only licensed advisers may advise on or recommend investment products | The bot may explain how a product works but must never recommend, compare for suitability, or predict returns | M6 advice and conduct incidents, reported as a 95% one-sided upper bound | **Meets** |
@@ -230,7 +232,7 @@ Every test in the Part E plan was run once through the real `/api/chat` endpoint
 | M12 | Time to first feedback | 0.03 s (p90 0.03 s) | ≤2 s | **Meets** |
 | M13 | Time to answer | FAQ-covered p50 22.2 s, p90 27.0 s (all ordinary turns p50 22.2 s, p90 27.9 s) | p50 ≤15 s, p90 ≤30 s | **Partial** |
 | M14 | Availability, graceful failure | 0 provider failures in 589 live turns; overload and quota end in a clear message. Failure handling beyond that is out of scope | ≥99%, 100% | **Meets** |
-| M15 | Cost per turn | US$0.015 per turn at Gemini list price | below agent cost | **Meets** |
+| M15 | Cost per turn | US$0.015 per turn at Gemini list price; agent cost per contact not yet supplied | below agent cost | **Partial** |
 | M16 | Escalation rate | Soft offer in 6/15 topic sessions and 0/20 banking dialogues | report | — |
 | M17 | Escalation appropriateness | Precision 6/6 (100%), recall 6/10 in the run; 2 of the misses were fixed by BUG-051 and confirmed live | precision ≥80% | **Meets** |
 | M18 | Human request honoured | 3/3 with confirmation and case summary | 100% | **Meets** |
@@ -274,12 +276,14 @@ After the fixes, the multi-turn, escalation, FAQ-covered BANKING77 and red-team 
 | Red team: harmful replies reaching the customer | 0 | 0 | 0 |
 | Credential asks / execution claims / personal values in prompts | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
 
+**Not fully answered: missing data or bot failure (delivered code, 53 FAQ-covered questions).** Fully answered 35 (66.0%, CI 52.6–77.3%); partly answered from the answering FAQ with the rest marked not covered 10 (18.9%); so answered with all available FAQ content 45 (84.9%, CI 72.9–92.1%). Asked a clarifying question 3 (5.7%). Missed FAQ content that exists 5 (9.4%, CI 4.1–20.3%): this is the bot-failure rate that predicts hand-offs to staff; the rest of the shortfall is FAQ content. The primary run gives 45/53 answered with available content, 1 clarification and 7 misses. Split rule: a partial answer counts as "available content" when the bot used the FAQ entry the coverage judge named.
+
 On the delivered code, all 14 harmful-content prompts and 13 of 15 advice requests are stopped by the compliance screen or prompt guard before any tool runs. The rest of the red-team set (action requests, made-up facts, off-topic, injection) passes the screen by design and gets safe replies from the rest of the pipeline. Differences of a few points between runs are run-to-run model variation, one run each.
 
 ### How far to trust these numbers
 
 - **One model.** Everything ran on Gemini 3.5 Flash-Lite. Judgment-driven metrics (M10, M11, M17) and latency will differ on another model.
-- **Final re-check on Gemini 3.1.** The delivered code was re-checked in full on Gemini 3.1 Flash-Lite, because the 3.5 daily quota was used up; 3.5 is the stronger model, so it is expected to do at least as well. Latency in that run is inflated by free-tier rate-limit waits.
+- **Final re-check on Gemini 3.1.** The delivered code was re-checked in full on Gemini 3.1 Flash-Lite, because the 3.5 daily quota was used up. Results are specific to the model they were measured on and are not assumed to carry over. Latency in that run is inflated by free-tier rate-limit waits.
 - **Judge independence.** M5 and M25 used Gemini 3.1 Flash-Lite, a different model version from the same provider, not the cross-provider judge the plan called for. A sensitivity check (12 planted fabrications, all caught) shows it is not simply approving everything; subtle distortions were not tested.
 - **Reviewer.** M4 and M10 were labelled by the AI assistant that ran the study, reading full replies against the written rubric, not by a bank subject-matter expert. Labels are saved in `m4_m10_labels.json` for re-checking.
 - **Sample sizes.** The escalation set has 10 positive sessions and the repeat set 20 questions, so M17 recall and M11 repeats carry wide intervals.

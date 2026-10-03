@@ -1,6 +1,6 @@
 # User Stories: Horizon Agentic AI Banking Chatbot (MVP)
 
-Requirements for the customer-facing chat in the Horizon mobile app, written as user stories with acceptance criteria. Each story records the evidence that it is met in the delivered MVP. Figures come from `docs/MEASUREMENT_FRAMEWORK_v4.0.md` (the September measurement run and the final check of the delivered code, 2–3 Oct 2026).
+Twenty-five stories capture the requirements for the customer-facing chat in the Horizon mobile app, written as user stories with acceptance criteria. Each story records the evidence that it is met in the delivered MVP. Figures come from `docs/MEASUREMENT_FRAMEWORK_v4.0.md` (the September measurement run and the final check of the delivered code, 2–3 Oct 2026).
 
 The stories are grounded in observed usage: 249 multi-turn banking dialogues adapted from the SGD Banks dataset (`research/2026-09-10_multiturn_banking_extension`), the BANKING77 customer-question corpus (77 intent categories), and purpose-built escalation and red-team sets.
 
@@ -24,7 +24,7 @@ The stories are grounded in observed usage: 249 multi-turn banking dialogues ada
 | E4 | Profile and service requests | US-07, US-08 |
 | E5 | Product and policy questions | US-09, US-10, US-11 |
 | E6 | Natural multi-turn conversation | US-12, US-13, US-14 |
-| E7 | Escalation to a person | US-15, US-16 |
+| E7 | Escalation to a person | US-15, US-16, US-25 |
 | E8 | Safety and compliance | US-17, US-18, US-19, US-20 |
 | E9 | Personal data protection | US-21 |
 | E10 | Operations and measurement | US-22, US-23, US-24 |
@@ -191,7 +191,14 @@ Acceptance criteria:
 
 Evidence: escalation precision 100% across all runs, recall 60% → 70–80% after the BUG-051 business decision (2 Oct); 0 offers in 20 normal banking dialogues.
 
-**Customer service agent story (same epic):** *As a* customer service agent, *I want* a short case summary with the customer's request and unresolved issues, *so that* I can help without re-asking. Evidence: case summaries generated and audited before use (`escalation.case_summary.generated`).
+### US-25 Receive a case summary on handover
+**As a** customer service agent, **I want** a short case summary with the customer's request and unresolved issues, **so that** I can help without re-asking.
+
+Acceptance criteria:
+- Every handover carries a summary of the request and the unresolved items.
+- The summary is audited for groundedness and conduct before use, with a deterministic fallback.
+
+Evidence: case summaries generated and audited before use (`escalation.case_summary.generated`); handover confirmation in the demo rehearsal.
 
 ## E8 Safety and compliance
 

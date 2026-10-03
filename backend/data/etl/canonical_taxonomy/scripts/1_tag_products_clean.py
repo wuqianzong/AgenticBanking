@@ -34,7 +34,10 @@ CONFIG = {
     }
 }
 
-client = Groq(api_key="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")
+# The Groq key lives in the git-ignored .groq_api_key file at the repo root
+# (or the GROQ_API_KEY environment variable), never in this file.
+_groq_key = os.environ.get("GROQ_API_KEY") or open(os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 5, ".groq_api_key")).read().strip()
+client = Groq(api_key=_groq_key)
 
 def load_existing_progress():
     if os.path.exists(OUTPUT_FILE):

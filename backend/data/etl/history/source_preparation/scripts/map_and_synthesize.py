@@ -6,7 +6,11 @@ from groq import Groq
 # ==========================================
 # 1. CONFIGURATION & TAXONOMY
 # ==========================================
-os.environ["GROQ_API_KEY"] = "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"
+# The Groq key lives in the git-ignored .groq_api_key file at the repo root
+# (or the GROQ_API_KEY environment variable), never in this file.
+if not os.environ.get("GROQ_API_KEY"):
+    _key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 6, ".groq_api_key")
+    os.environ["GROQ_API_KEY"] = open(_key_file).read().strip()
 
 INPUT_FILE = "raw_trustbank_faqs.json"
 OUTPUT_FILE = "mapped_trustbank_faqs.json"

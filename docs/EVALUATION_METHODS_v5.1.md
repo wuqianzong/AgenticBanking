@@ -244,3 +244,7 @@ Across the 6 valid cases the bot used only the entry's legitimate sentence (or, 
 - Labels, answer keys, fixtures and pass counts are unaffected (they do not depend on the code) and stay frozen; the freeze manifest is re-written to record the new code commit.
 - Holdout use: the defect was noticed on holdout replies. The fix was designed and validated on development sets, the red team and new cases; a few of the 14 false-block questions came from H1 and were used in the replay sets. The report states this.
 - Labeller B's scores of the paused run are discarded; scoring restarts on the new replies.
+
+**Re-freeze for the re-run (5 Oct 2026).** The void run's results and scores were moved to `void_run_bug062/` (the runner resumes by default and would otherwise skip cases it had already run). `FREEZE.json` was re-written: code commit `39acfd2` (BUG-062 fix), no uncommitted changes under `backend/app`, SHA-256 `62e1e66b…563eb5e`. Label, key and fixture hashes are unchanged (for example `labels_final.jsonl` `638fa7c1…`, `answer_keys_final.jsonl` `42118c7d…`).
+
+**R7 on the new commit.** R7a: 10 of 10 suites pass, 96 of 96 checks (`offline/r7a_release_run_39acfd2.log`). R7b: all three seeded defects are detected by their suites' assertions -- BUG-055 17/18, BUG-058 7/8, BUG-038 17/21 (`offline/r7b_summary.json`; the earlier run on `5e882e0` is kept in `offline/void_5e882e0/`).

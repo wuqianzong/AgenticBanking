@@ -80,7 +80,7 @@ second time).
 | BUG-059 | `outbound.compliance.completed` logs `passed: false` with a reason listing no violation: the pass flag also requires `answer_compliant` and `clarification_compliant`, but only `conduct_reason` is logged; the model sets `answer_compliant: false` when the answer is ungrounded, so grounding failures are counted twice and read as conduct failures | Low | Confirmed (v4.0 logs, 38 of 529 compliance verdicts) | **Logging gap** / flag semantics | **Accepted as a known limitation (2026-10-02, final delivery): minor, not demo-affecting; recorded for the report** |
 | BUG-060 | "Nah, I do not wish to transfer money." (declining the bot's own offer) gets "Sorry, for your request, I can't provide an answer -- it's not a product or service Horizon currently offers." | Low | Confirmed (live, v4.0 multi-turn, 1 turn) | LLM judgment (formulator declines a conversational reply) | **Accepted as a known limitation (2026-10-02, final delivery): minor, not demo-affecting; recorded for the report** |
 | BUG-061 | Anti-scam questions that pass the compliance screen depend on retrieval: "Someone from Horizon called and asked for my PIN, can I give it?" got "I do not have information available" although phishing and OTP-safeguarding FAQs exist (faq_c77746cd, faq_730ac28e) | Medium | Confirmed (live, BUG-055 validation, 1 of 2 runs) | Retrieval (not yet traced) | **Accepted as a known limitation (2026-10-02, final delivery): minor, not demo-affecting; recorded for the report** |
-| BUG-062 | The inbound compliance screen refused ordinary questions: 9 of 189 v5.1 holdout questions (4.8%) on Gemini 3.5, mostly customers reporting fraud or theft ("I think someone stole my card", "a payment I did not make", "the ATM took my card"). It treated "this assistant may not serve this" as "prohibited" | High | Confirmed (live holdout run; offline replay of the screen) | Prompt design: the screen mixed scope and compliance judgment and had a binary verdict on boundary cases | **Fixed (2026-10-05): work-scope whitelist, then a compliant-route test; only "no compliant route" blocks. Replay on Gemini 3.5: false blocks 5/42 → 0/42; full-pipeline check 38/38 safe. See `docs/report/INBOUND_COMPLIANCE_SCREEN_STUDY.md`** |
+| BUG-062 | The inbound compliance screen refused ordinary questions: 9 of 189 v5.1 holdout questions (4.8%) on Gemini 3.5, mostly customers reporting fraud or theft ("I think someone stole my card", "a payment I did not make", "the ATM took my card"). It treated "this assistant may not serve this" as "prohibited" | High | Confirmed (live holdout run; offline replay of the screen) | Prompt design: the screen mixed scope and compliance judgment and had a binary verdict on boundary cases | **Fixed (2026-10-05): work-scope whitelist, then a compliant-route test; only "no compliant route" blocks. Replay on Gemini 3.5: false blocks 5/42 → 0/42; full-pipeline check 38/38 safe. See `docs/report/evaluation/INBOUND_COMPLIANCE_SCREEN_STUDY.md`** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -945,7 +945,7 @@ where an earlier attempt hit this fallback but a later resumed/backfilled
 attempt (same case_id, genuine LLM non-determinism on retry) did not.
 
 **Evaluation-metric impact, found and corrected 2026-09-13 while building
-the agentic evaluation plan (`docs/AGENTIC_EVALUATION_PLAN_v1.md`):** of
+the agentic evaluation plan (`docs/report/evaluation/AGENTIC_EVALUATION_PLAN_v1.md`):** of
 the 24 case_ids, **22 carry a `task_results` status of
 `SUFFICIENT`/`RELEVANT`** (or no `task_results` at all with no
 decline/clarification recorded) — i.e. the sufficiency/retrieval layer
@@ -959,7 +959,7 @@ turn's text). This means **every automated, `task_results`-based metric
 silently counting these 22 cases as successes** — the customer received a
 total failure, but the internal verdict said otherwise. This is now
 corrected as a data-labeling adjustment (not a code fix) everywhere these
-metrics are reported: see `docs/BUSINESS_METRICS_FRAMEWORK_v1.md` B1b for
+metrics are reported: see `docs/report/evaluation/BUSINESS_METRICS_FRAMEWORK_v1.md` B1b for
 the corrected figures (Overall Resolution 67.79%→67.08%; Bot Reliability
 96.5%→95.9%; KB Coverage unchanged at 82.9%, since the underlying
 evidence genuinely existed — only *delivery* failed, which is exactly
@@ -1983,7 +1983,7 @@ restore it, so the turn stops and the customer retries later.
   USR_999 3/3 (turn stops at triage's first call; exact message; exact
   error appended in developer mode).
 
-**Symptom 2 (timeouts) -- deferred (2026-09-25):** the live model moved to paid DeepSeek, which has no free-tier quota spikes, so the timeout redesign was set aside (see docs/DEEPSEEK_MIGRATION_AND_PROMPT_CACHING.md). Original note: a call that never replies is still
+**Symptom 2 (timeouts) -- deferred (2026-09-25):** the live model moved to paid DeepSeek, which has no free-tier quota spikes, so the timeout redesign was set aside (see docs/report/design/DEEPSEEK_MIGRATION_AND_PROMPT_CACHING.md). Original note: a call that never replies is still
 retried up to once per key for both models at 45s each. The user proposed
 a 15s timeout with one retry; pending a check of how many successful calls
 take longer than 15s.

@@ -785,7 +785,7 @@ Table: E1 | Evidence locations
 
 | Evidence | Location |
 |---|---|
-| Measurement framework and full results | docs/MEASUREMENT_FRAMEWORK_v4.0.md |
+| Measurement framework and full results | docs/report/evaluation/MEASUREMENT_FRAMEWORK_v4.0.md |
 | Primary run (26–28 Sep) | research/2026-09-27_v4_measurement_* (BANKING77, sessions, multi-turn, red team, repeats, forced failure, judges) |
 | Delivered-code check (3 Oct) | research/2026-10-03_final_check31_* |
 | Demo rehearsals and use-case quotes | research/2026-10-03_demo_rehearsal, research/2026-10-03_demo_rehearsal_deepseek |

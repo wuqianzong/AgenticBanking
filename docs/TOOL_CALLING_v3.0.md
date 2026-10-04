@@ -3,7 +3,7 @@
 **Status: IMPLEMENTED**, with two deliberate deviations from the original
 design below, both agreed before implementation to minimize risk against a
 system with no automated test coverage. This document supersedes the
-data-model portion of `docs/TOOL_CALLING_v2.0.md` (that document's
+data-model portion of `docs/report/design/TOOL_CALLING_v2.0.md` (that document's
 turn-boundary and triage sections, and its Runtime Flow through Node 02d,
 remain accurate — only the `tool_task` / `tool_result` / `search_task` /
 `task_result` schema and the Node 04a resolution step changed).

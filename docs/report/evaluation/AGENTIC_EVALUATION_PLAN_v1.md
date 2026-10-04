@@ -154,7 +154,7 @@ metric found":
 
 ---
 
-*Companion to `docs/BUSINESS_METRICS_FRAMEWORK_v1.md` (the business/cost
+*Companion to `docs/report/evaluation/BUSINESS_METRICS_FRAMEWORK_v1.md` (the business/cost
 layer this plan's Pillar D and F draw from without duplicating) and
 `docs/KNOWN_ISSUES_TRACKER.md` (bug-level detail behind every Pillar B,
 C, and E finding cited above).*

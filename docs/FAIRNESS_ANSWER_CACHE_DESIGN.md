@@ -2,7 +2,7 @@
 
 **v1.0 — 2026-09-17.** Implements a targeted mitigation for the Fairness
 findings in `docs/KNOWN_ISSUES_TRACKER.md` (BUG-023, BUG-025) and
-`docs/AGENTIC_EVALUATION_PLAN_v1.md` (Pillar E). Documents the design
+`docs/report/evaluation/AGENTIC_EVALUATION_PLAN_v1.md` (Pillar E). Documents the design
 decided in conversation, the actual code shipped, and the historical
 backfill run against the real production knowledge base.
 

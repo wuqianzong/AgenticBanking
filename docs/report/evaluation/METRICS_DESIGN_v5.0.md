@@ -1,7 +1,7 @@
 # Horizon Metrics Design v5.0: Business, Compliance and Risk
 
 Status: design for review (3 Oct 2026). No results yet; results are computed after the design is approved.
-Supersedes the metric list in `docs/MEASUREMENT_FRAMEWORK_v4.0.md` for the final report. v4.0 IDs are mapped in Part F.
+Supersedes the metric list in `docs/report/evaluation/MEASUREMENT_FRAMEWORK_v4.0.md` for the final report. v4.0 IDs are mapped in Part F.
 
 ## Part A. Purpose and principles
 

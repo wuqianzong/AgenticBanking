@@ -1,6 +1,6 @@
 # User Stories: Horizon Agentic AI Banking Chatbot (MVP)
 
-Twenty-five stories capture the requirements for the customer-facing chat in the Horizon mobile app, written as user stories with acceptance criteria. Each story records the evidence that it is met in the delivered MVP. Figures come from `docs/MEASUREMENT_FRAMEWORK_v4.0.md` (the September measurement run and the final check of the delivered code, 2–3 Oct 2026).
+Twenty-five stories capture the requirements for the customer-facing chat in the Horizon mobile app, written as user stories with acceptance criteria. Each story records the evidence that it is met in the delivered MVP. Figures come from `docs/report/evaluation/MEASUREMENT_FRAMEWORK_v4.0.md` (the September measurement run and the final check of the delivered code, 2–3 Oct 2026).
 
 The stories are grounded in observed usage: 249 multi-turn banking dialogues adapted from the SGD Banks dataset (`research/2026-09-10_multiturn_banking_extension`), the BANKING77 customer-question corpus (77 intent categories), and purpose-built escalation and red-team sets.
 

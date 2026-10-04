@@ -87,7 +87,7 @@ one tested); the 26 affected tasks are relabeled as a confirmed bot
 failure, separate from BUG-016's projected rate, and every downstream
 figure in this document (Overall Resolution, Containment/Handoff Rate,
 Bot Reliability) is restated accordingly. Companion document
-`docs/AGENTIC_EVALUATION_PLAN_v1.md` now carries the full six-pillar
+`docs/report/evaluation/AGENTIC_EVALUATION_PLAN_v1.md` now carries the full six-pillar
 evaluation plan (retrieval quality, generation quality, agentic task
 completion, handoff/cost, trust/compliance, latency) this framework feeds
 into. Adds a Statistical Methodology appendix

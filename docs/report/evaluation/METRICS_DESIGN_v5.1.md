@@ -1,6 +1,6 @@
 # Horizon Metrics Design v5.1: Business Value, Compliance Assurance and Risk Mitigation
 
-Status: **v5.1-final, frozen 3 Oct 2026.** Revises v5.0 against `docs/METRICS_DESIGN_v5.0_REVIEW.md` (Part L), applies `docs/METRICS_DESIGN_v5.1_REVIEW.md` (Part M), and records the confirmed sample sizes and AI-only labelling (Part O). No results are computed until the manifests, labels, answer keys and pass counts are frozen with their hashes.
+Status: **v5.1-final, frozen 3 Oct 2026.** Revises v5.0 against `docs/report/evaluation/METRICS_DESIGN_v5.0_REVIEW.md` (Part L), applies `docs/report/evaluation/METRICS_DESIGN_v5.1_REVIEW.md` (Part M), and records the confirmed sample sizes and AI-only labelling (Part O). No results are computed until the manifests, labels, answer keys and pass counts are frozen with their hashes.
 
 ## Part A. Purpose, scope and principles
 

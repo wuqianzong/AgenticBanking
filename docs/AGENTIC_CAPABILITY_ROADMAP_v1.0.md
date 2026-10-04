@@ -416,7 +416,7 @@ anticipate:
 
 ## WP-2: `deeplink` Tool — Executor and Validated Destination Registry
 
-**Detailed design:** see `docs/DEEPLINK_DESIGN_v1.0.md` — full end-to-end
+**Detailed design:** see `docs/report/design/DEEPLINK_DESIGN_v1.0.md` — full end-to-end
 
 > **Implementation status (supersedes the proposal below): IMPLEMENTED.**
 > Deeplink is enabled through the generic inline dispatcher, not through a

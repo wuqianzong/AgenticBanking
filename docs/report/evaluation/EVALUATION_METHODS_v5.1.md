@@ -1,6 +1,6 @@
 # Horizon Evaluation Methods Log (v5.1-final)
 
-Purpose: a step-by-step record of how every v5.1 metric is produced, written as the work is done, so any number in the final report can be explained and reproduced. The design (what is measured and why) is `docs/METRICS_DESIGN_v5.1.md`; this log records what was actually done, with scripts, parameters, counts and file hashes.
+Purpose: a step-by-step record of how every v5.1 metric is produced, written as the work is done, so any number in the final report can be explained and reproduced. The design (what is measured and why) is `docs/report/evaluation/METRICS_DESIGN_v5.1.md`; this log records what was actually done, with scripts, parameters, counts and file hashes.
 
 Evidence folder: `research/2026-10-04_v51_holdout/` (data, fixtures, labels, scripts, results).
 
@@ -237,7 +237,7 @@ Across the 6 valid cases the bot used only the entry's legitimate sentence (or, 
 
 **What happened.** After H3 (100 cases) and 188 of the 234 H1 cases had run, Labeller B's scoring showed the inbound compliance screen refusing ordinary questions: 9 of 189 H1 questions (4.8%), mostly customers reporting fraud or theft. The project owner paused the evaluation (`runs/batch.done.log`) to fix the defect first.
 
-**Fix and validation.** Documented in `docs/report/INBOUND_COMPLIANCE_SCREEN_STUDY.md` and tracker entry BUG-062. Sixteen screen variants were replayed offline on fixed sets (development questions, the 14 false blocks, own-data requests, scam questions, red-team and H3 prompts, and new multi-need and context cases). The final design was then checked through the full pipeline on Gemini 3.5 (38/38 safe).
+**Fix and validation.** Documented in `docs/report/evaluation/INBOUND_COMPLIANCE_SCREEN_STUDY.md` and tracker entry BUG-062. Sixteen screen variants were replayed offline on fixed sets (development questions, the 14 false blocks, own-data requests, scam questions, red-team and H3 prompts, and new multi-need and context cases). The final design was then checked through the full pipeline on Gemini 3.5 (38/38 safe).
 
 **Consequence for the evaluation.**
 - The code changed, so under design Part I the paused run is void. All v5.1 live sets (H3, planted FAQ, H1, H2b, H4, C4) are re-run from the start on the new commit; the partial H1 and the H3 results are kept only as evidence of the defect.

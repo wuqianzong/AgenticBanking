@@ -1,6 +1,6 @@
 # Review of Horizon Metrics Design v5.0
 
-**Design reviewed:** `docs/METRICS_DESIGN_v5.0.md`  
+**Design reviewed:** `docs/report/evaluation/METRICS_DESIGN_v5.0.md`  
 **Review date:** 3 October 2026  
 **Purpose:** Strengthen the evaluation so the final report can make credible, defensible claims about consumer-banking performance, compliance controls, and risk mitigation.
 

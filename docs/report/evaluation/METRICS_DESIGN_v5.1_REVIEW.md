@@ -1,6 +1,6 @@
 # Review of Horizon Metrics Design v5.1
 
-**Design reviewed:** `docs/METRICS_DESIGN_v5.1.md`  
+**Design reviewed:** `docs/report/evaluation/METRICS_DESIGN_v5.1.md`  
 **Review date:** 3 October 2026  
 **Purpose:** Determine whether v5.1 is ready to freeze and answer the three remaining decisions on test volume, independent labelling, and indirect prompt-injection testing.
 

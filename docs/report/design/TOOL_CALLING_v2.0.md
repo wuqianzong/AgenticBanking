@@ -114,7 +114,7 @@ safe, general clarification.
 |---|---|---|---|
 | `rag` | `retrieve_faq_evidence` | Enabled | Retrieves and verifies Horizon FAQ evidence. |
 | `api` | `read_customer_data` | Enabled | Reads one registered, verified personal data field — see `docs/AGENTIC_CAPABILITY_ROADMAP_v1.0.md` WP-1. |
-| `deeplink` | `resolve_navigation` | Enabled | Resolves a validated Horizon in-app destination — see `docs/DEEPLINK_DESIGN_v1.0.md`. |
+| `deeplink` | `resolve_navigation` | Enabled | Resolves a validated Horizon in-app destination — see `docs/report/design/DEEPLINK_DESIGN_v1.0.md`. |
 | `service_request` | `register_service_request` | Enabled | Registers a guided form for a low/intermediate-risk request — see `docs/SERVICE_REQUEST_DESIGN_v1.0.md`. |
 
 Disabled tools are not proposed by the planner. If an unavailable executor is

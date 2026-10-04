@@ -25,17 +25,21 @@ def screen(reply):
     return N.node_02f_inbound_compliance_screen(dict(base)), seen.get("prompt", "")
 
 
-out, prompt = screen({"predicted_bank_response": "No -- never share your PIN; Horizon will never ask for it.", "non_compliant": False})
-check("compliant prediction passes", out == {"inbound_compliance": {"non_compliant": False, "predicted_bank_response": "No -- never share your PIN; Horizon will never ask for it."}})
+out, prompt = screen({"compliance_area": "commitments or banking actions", "compliant_route": "Answer: no -- never share your PIN; Horizon will never ask for it.", "verdict": "route_found"})
+check("a found route passes", out == {"inbound_compliance": {"non_compliant": False, "compliant_route": "Answer: no -- never share your PIN; Horizon will never ask for it."}})
 check("screen writes only inbound_compliance (triage writes the rest in the same step)", set(out) == {"inbound_compliance"})
+check("BUG-062: prompt states the work scope and excludes attacks on the assistant", "WORK SCOPE OF THIS CHECK" in prompt and "prompt injection" in prompt)
+check("BUG-062: prompt explains the assistant's tools", "THE ASSISTANT'S TOOLS" in prompt and "FAQ search" in prompt)
 check("prompt carries both shared modules and the latest message",
       N.REGULATORY_LICENSING_CONTEXT.strip()[:40] in prompt and N.BANK_CONDUCT_CONTEXT.strip()[:40] in prompt and base["user_input"] in prompt)
 check("prompt is routed to the InboundComplianceScreen schema", "INBOUND COMPLIANCE SCREEN" in prompt and "WHOLE-TURN FINANCIAL TRIAGE" not in prompt)
 
-out, _ = screen({"predicted_bank_response": "PROHIBITED", "non_compliant": False})
-check("a PROHIBITED prediction blocks even if the flag disagrees", out["inbound_compliance"]["non_compliant"] is True)
-out, _ = screen({"predicted_bank_response": "PROHIBITED", "non_compliant": True})
-check("PROHIBITED with the flag set blocks", out["inbound_compliance"]["non_compliant"] is True)
+out, _ = screen({"compliance_area": "investment advice", "compliant_route": "none", "verdict": "no_compliant_route"})
+check("BUG-062: no compliant route blocks", out["inbound_compliance"]["non_compliant"] is True)
+out, _ = screen({"compliance_area": "investment advice", "compliant_route": "none", "verdict": "maybe"})
+check("BUG-062: an unknown verdict fails closed", out["inbound_compliance"]["non_compliant"] is True)
+out, _ = screen({"compliance_area": "none", "compliant_route": "", "verdict": "out_of_scope"})
+check("BUG-062: an out-of-scope request passes", out["inbound_compliance"]["non_compliant"] is False)
 out, _ = screen(ValueError("unparseable"))
 check("an unreadable verdict fails closed", out["inbound_compliance"]["non_compliant"] is True)
 
@@ -64,7 +68,7 @@ def stream_updates(screen_reply):
     except Exception:
         pass
     return updates
-ups = stream_updates({"predicted_bank_response": "No -- never share your PIN.", "non_compliant": False})
+ups = stream_updates({"compliance_area": "commitments or banking actions", "compliant_route": "Answer: no -- never share your PIN.", "verdict": "route_found"})
 check("streamed join update on a passed turn is a dict (gateway can read it)", any(n == "n2g" and isinstance(u, dict) for n, u in ups) and not any(n == "n2g" and u is None for n, u in ups))
 
 seen = {}

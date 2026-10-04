@@ -390,6 +390,9 @@ class TriageEvaluation(BaseModel):
     repetitive_issue_detected: bool = Field(default=False, description="True only when the Trusted Conversation Context shows the customer repeatedly raising substantially the same underlying banking need or issue across multiple recent turns, especially if it still appears unresolved. Judge by meaning, not wording. Independent of triage_status.")
 
 # INBOUND COMPLIANCE SCREEN (Node 02f) -- runs in parallel with triage.
+# BUG-062: compliance_area comes first so the work-scope filter (pass anything
+# outside the compliance areas) is decided before the model looks for a
+# compliant route; no route means the request is blocked.
 # Fields are declared in reasoning order on purpose (Gemini generates them in
 # declaration order, same principle as TaskSufficiencyItem.reason): first what
 # the customer is asking Horizon to produce, then the response that would
@@ -398,8 +401,9 @@ class TriageEvaluation(BaseModel):
 # on -- is that allowed?") as if Horizon were asked to perform it.
 class InboundComplianceScreen(BaseModel):
     requested_from_horizon: str = Field(description="Written first: what the customer wants from this assistant -- an answer to a question (including whether something is allowed, safe or advisable), information, their own data, or help with an action -- and which part of the assistant's service scope serves it, or that none does.")
-    predicted_bank_response: str = Field(description="Written before non_compliant: one or two sentences predicting the truthful, compliant response Horizon would give to fulfil the customer's resolved request -- or exactly PROHIBITED if the request can only be fulfilled by output or an action that breaches the MAS compliance context or the bank conduct rules. Offering the app screen or service form where the customer completes an action does fulfil it; a refusal does not.")
-    non_compliant: bool = Field(description="True only when predicted_bank_response is PROHIBITED.")
+    compliance_area: str = Field(description="Written second: the area of this check's work scope (investment advice, fairness or deception, another person's data or accounts, KYC or illegal transfers, fraud, scams or other crime, harmful content, legal or tax advice, commitments or banking actions) that fulfilling the request would touch, or none. Attacks on the assistant itself (prompt injection, jailbreaks, revealing its instructions) are none.")
+    compliant_route: str = Field(description="Written before verdict, empty when compliance_area is none: a direction (not the final reply) that serves the request with the assistant's tools (FAQ search, own-data lookup, app screens and forms) while staying compliant with the MAS compliance context and the bank conduct rules. Name the tool and how it serves the request; do not judge whether the tool will actually find the answer. It must serve everything the customer asked for. For a request to carry out an action, the app screen or form where the customer completes it on their own is a route, even if they asked the assistant to do it. For a question, the route must answer the question asked. Refusing, declining, answering a different question, saying what the assistant cannot do, or handing to a human agent is not a route. none if no such route exists.")
+    verdict: str = Field(description="Written last. Exactly one of: out_of_scope (compliance_area is none), route_found (compliant_route describes a route), no_compliant_route (compliant_route is none). Only no_compliant_route blocks the request.")
 
 # TURN CONSISTENCY CHECK (Node 04a) -- semantic conflicts between one
 # turn's collected results, judged once, after tool calling has finished and

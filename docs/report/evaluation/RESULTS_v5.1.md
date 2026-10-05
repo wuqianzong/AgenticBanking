@@ -20,8 +20,8 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 | Accuracy | C2 replies with every claim supported | **136/137 (99.3%)** | Reported | One wrong number (section 3.3) |
 | Accuracy | R5 seeded unsupported claims caught | **30/30**; false alarms 2/30 | 90% | **Demonstrated** |
 | Completeness | B2 FULL questions answered completely, after the project owner's review of every failure | **141/163 (86.5%)**, exact lower bound 81.3%; 75/163 before the review, 71/163 counting key facts only | 80% (demonstrated at 140) | **Demonstrated** |
-| Resolution | B0a end-to-end autonomous resolution | **60/153 (39.2%)**, Wilson 95% 31.8–47.1% | Reported | — |
-| Resolution | B0b safe disposition | **66/153 (43.1%)** | Reported | — |
+| Resolution | B0a end-to-end autonomous resolution | **60/152 (39.5%)** | Reported | — |
+| Resolution | B0b safe disposition | **66/152 (43.4%)** | Reported | — |
 | Context | B4 multi-turn sessions completed | **11/15 (73%)**; 12/15 with handover | 80% | **Not met** (estimate; n = 15) |
 | Context | Follow-up turns that kept context | **25/25** (Labeller B) | — | — |
 | Handover | B6a explicit requests honoured | **5/5** | Gate: zero failures | **Passed** |
@@ -31,7 +31,7 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 | Leakage | R4 internal data in replies | **0** in all sets; 1 planted-FAQ canary | Gate: zero | **Passed**, planted canary reported |
 | Consistency | C4 same outcome in 3 runs | **12/20**; 14/20 merging answered and self-service | 90% | **Not met** |
 | Consistency | C5 same outcome across 5 wordings | **6/12**; 8/12 merged | 80% | **Not met** |
-| Channel | B5b reply uses a suitable channel (answer, button, form or person) | **156/218 (71.6%)** after the owner review; 138/218 before | 90% | **Not met** |
+| Channel | B5b reply uses a suitable channel (answer, button, form or person) | **188/217 (86.6%)** after the owner reviews, exact lower bound 82.2%; 138/217 before | 90% | **Not met** |
 | Speed | B7 p50 / p90 / p95 time to answer | **21.7 s / 26.0 s / 29.4 s**; first feedback ≤ 0.15 s | ≤15 s / ≤30 s; ≤2 s | p50 **not met**; p90 and first feedback **met** |
 | Availability | R6 turns without provider failure | **229/234 (97.9%)** | 99% | **Not met** (quota errors during the run) |
 | Change safety | R7a regression checks | **96/96** | All pass | **Passed** |
@@ -85,7 +85,7 @@ Before the owner review the count was 88 of 163: most of the difference was answ
 
 ### 3.6 Channels, speed, cost and availability
 
-- **B5b right channel:** 156/218 (71.6%) after the owner review (a reply judged complete uses a suitable channel); 138/218 (63.3%) before it. Target 90%, not met. Of the 62 replies still on the wrong channel, 39 are PARTIAL questions answered with "no information" (not covered by the owner review, which was limited to FULL questions) and 23 are FULL questions, mainly the 22 remaining B2 misses.
+- **B5b right channel:** 188/217 (86.6%) after two owner reviews; 138/217 (63.6%) before. Target 90%, not met. The FULL review counts a reply judged complete as a suitable channel; a second review covered the 39 PARTIAL replies judged the wrong channel (section 3.9). One case, an attack-guard false block, is excluded as out of MVP scope.
 - **B7:** p50 21.7 s, p90 26.0 s, p95 29.4 s; 8 of 234 turns over 30 s; first feedback at most 0.15 s.
 - **B8 cost:** a turn makes 8.6 Gemini calls on average and uses 49,300 input and 1,860 output tokens (median 49,000 / 1,680; p90 58,100 / 2,560). At the list price used elsewhere in the project (US$0.30 / US$2.50 per million input / output tokens, Gemini 3.5 Flash-Lite, prices as recorded in [BUSINESS_METRICS_FRAMEWORK_v1.md](BUSINESS_METRICS_FRAMEWORK_v1.md)), that is about **US$0.019 per turn**, without the cache discount (40% of input tokens were cache hits). Per resolved need (B0a): about **US$0.085**.
 - **R6:** 5 turns met a provider failure: 3 recorded a model-unavailable retry and were still answered, and 2 hit a quota error (429) and returned the fallback reply ("I'm not able to answer that right now"). Ten calls were served by the Gemini 3.1 fallback model. Provider-failure handling is out of the MVP's scope by project decision.
@@ -111,6 +111,17 @@ Rules the owner set:
 - **Provider-failure fallbacks are excluded** (2 quota-error turns), as provider failure handling is out of MVP scope.
 
 Effect: B2 141/163 (86.5%), the 80% target demonstrated at the exact lower bound (81.3%); B0a 60/153 (39.2%); B0b 66/153 (43.1%). The answer keys were written before the run and were stricter than the owner's standard: they listed every fact in the answering entries rather than only what the question asked. Both figures are reported: 75/163 against the frozen keys, 141/163 after review.
+
+### 3.9 Owner review of PARTIAL replies judged the wrong channel (5 Oct 2026)
+
+The 39 PARTIAL questions whose reply both labellers judged an unsuitable channel (nearly all "I don't have information") went on a second review page with the same traces. The question: was the reply acceptable for a partly covered question, or should the bot have given the available part, a contact route or a person? Labeller B pre-filled suggestions from the owner's rules; the owner confirmed or changed them. Evidence: `labels/b5b_owner_review.jsonl` (32 acceptable, 6 not acceptable, 1 excluded).
+
+Rules added in this review:
+- **Own-case questions.** When the customer asks about their own case ("why did my transfer fail", "why hasn't my top-up gone through"), the bot cannot know the answer; "no information" is acceptable and the FAQ's general facts are optional.
+- **No FAQ answer.** Where the FAQ entries do not actually answer the question, "no information" is acceptable and becomes a signal to add an FAQ entry.
+- **Attack-guard false blocks are excluded** from the quality metrics: the guard's logic is a third-party model the project does not govern (out of MVP scope).
+
+Not acceptable after review: refund status ×2 (the FAQ states where refunds go), cheque deposit balance (the FAQ states cheques are not accepted), an unexplained $1 charge (contact route), account inactivation (no route offered), and the purpose of the identity check (the FAQ explains it). Effect: B5b 188/217 (86.6%).
 
 ## 4. Safety, privacy and security
 

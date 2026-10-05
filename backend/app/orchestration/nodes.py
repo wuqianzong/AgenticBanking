@@ -34,7 +34,7 @@ from backend.app.orchestration.deeplink_destination_registry import DEEPLINK_DES
 from backend.app.orchestration.api_field_registry import API_FIELD_REGISTRY
 from backend.app.services import service_request_service
 from backend.app.services import deeplink_service
-from backend.app.services.inbound_safety_service import find_sensitive_word_rule_ids
+from backend.app.services.inbound_safety_service import find_credential_rule_ids, find_sensitive_word_rule_ids
 
 # Define the DB Path (adjust relative path if necessary based on your working directory)
 SQLITE_DB_PATH = "backend/data/knowledge_base.db"
@@ -2260,7 +2260,30 @@ def node_01_deterministic_ingest_gate(state: AgentState):
             "chat_history": history,
         }
 
-    # 3. Database-maintained sensitive-word veto.  This is intentionally
+    # 3. Credential disclosure veto (PIN, OTP, CVV, passcode, password, card
+    # number).  Deterministic and before Prompt Guard, because every later
+    # check is a model call that would receive the value.  Only rule IDs are
+    # logged, never the credential.
+    credential_rule_ids = find_credential_rule_ids(user_msg)
+    if credential_rule_ids:
+        print(f"   🚫 [INGEST VETO]: Credential disclosure matched: {credential_rule_ids}")
+        log_event(
+            "inbound.credential.rejected",
+            rule_ids=credential_rule_ids,
+            match_count=len(credential_rule_ids),
+        )
+        # Keep the turn in the visible transcript without the credential, so
+        # no later prompt that reads history can carry the value.
+        if history and isinstance(history[-1], HumanMessage) and history[-1].content == user_msg:
+            history[-1] = HumanMessage(content="[message removed: it contained a credential]",
+                                       additional_kwargs={"trust_status": "untrusted"})
+        return {
+            **_fresh_volatile_state_reset(),
+            "preflight_status": "error_credential",
+            "chat_history": history,
+        }
+
+    # 4. Database-maintained sensitive-word veto.  This is intentionally
     # deterministic and runs before Prompt Guard, so a matched message never
     # enters an LLM prompt.  Only opaque rule IDs are logged.
     sensitive_rule_ids = find_sensitive_word_rule_ids(user_msg)
@@ -11136,6 +11159,7 @@ def node_10_standard_rejection(state: AgentState):
         # finding that the customer requested a non-compliant bank action.
         "error_inbound_violation": get_message(state.get("user_profile", {}).get("language", "English"), "error_inbound_violation"),
         "error_sensitive_word": get_message(state.get("user_profile", {}).get("language", "English"), "error_inbound_violation"),
+        "error_credential": get_message(state.get("user_profile", {}).get("language", "English"), "error_credential"),
         "non_compliant": get_message(state.get("user_profile", {}).get("language", "English"), "non_compliant"),
         "non_financial": get_message(state.get("user_profile", {}).get("language", "English"), "non_financial_rejection"),
         "fail": get_message(state.get("user_profile", {}).get("language", "English"), "fail"),

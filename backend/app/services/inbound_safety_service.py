@@ -7,6 +7,7 @@ phrases.  Prompt injection remains the job of the downstream Prompt Guard.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from backend.app.services.memory_service import DB_PATH, ensure_memory_schema
@@ -46,6 +47,74 @@ _STATUS_WORDS = {
     "disabled", "suspended", "reset", "changed", "correct", "the", "a",
     "still", "no", "too", "being", "also", "missing", "unknown", "stuck",
 }
+
+
+# ---------------------------------------------------------------------------
+# Credential disclosure (v5.1 R3 follow-up). A credential typed into the chat
+# must be stopped here, before Prompt Guard or any other model call, because
+# every later check is itself a model that would receive the value. Pattern
+# rules only; a match returns opaque rule IDs and never the value.
+# ---------------------------------------------------------------------------
+
+_NUMBER_WORDS = r"(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)"
+# A short numeric secret: 3-8 digits, optionally spaced or dashed
+# ("482913", "6 3 9 1 0 4", "7-7-3-2"), or three or more number words.
+_DIGIT_VALUE = r"(?<![\d$])(?:\d[ \-]?){2,7}\d(?!\d|,\d|\s*(?:digits?|-digit|times?|days?|hours?|%|sgd|dollars?))"
+_WORD_VALUE = rf"{_NUMBER_WORDS}(?:[\s\-]+{_NUMBER_WORDS}){{2,}}\b"
+# Between the credential word and its value: connectors such as "is", ":",
+# "=", "->", "es", "是", plus at most three short words ("the code I got is").
+_BRIDGE = r"(?:\s*(?:[:=]|->|>|is|was|were|es|是|为|：)?\s*(?:[a-z']{1,6}\s+){0,3}?(?:is\s+|was\s+|:\s*|=\s*)?)"
+
+_NUMERIC_SECRET_WORDS = {
+    "pin_value": r"(?:\bpin\b|p-i-n|\bpin\s*code\b|密码|clave|\bnip\b)",
+    "otp_value": r"(?:\botp\b|one[\s-]?time\s+(?:password|passcode|code|pin)|verification\s+code|security\s+code|sms\s+code|验证码|c[oó]digo\s+de\s+verificaci[oó]n)",
+    "cvv_value": r"(?:\bcvv2?\b|\bcvc2?\b|\bcsc\b|card\s+security\s+code)",
+    "passcode_value": r"(?:\bpasscode\b|\bapp\s+code\b)",
+}
+_PASSWORD_WORD = r"(?:\bpassword\b|\bpasswd\b|\bpwd\b|contraseña|登录密码|\blogin\b|\bsign[\s-]?in\b)"
+# A password value: one token right after a connector, containing a digit
+# or a symbol, or a "user / password" pair.
+_PASSWORD_VALUE = r"\s*(?:is|=|:|-)\s*[\"']?(?=\S*[\d!@#$%^&*])\S{4,}"
+_LOGIN_PAIR = r"\s*[:=]?\s*\S{3,}\s*/\s*\S{4,}"
+
+_CARD_CANDIDATE = re.compile(r"(?<!\d)(?:\d[ \-]?){12,18}\d(?!\d)")
+
+
+def _luhn_ok(digits: str) -> bool:
+    total, alt = 0, False
+    for ch in reversed(digits):
+        d = int(ch)
+        if alt:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+        alt = not alt
+    return total % 10 == 0
+
+
+def find_credential_rule_ids(user_input: str) -> list[str]:
+    """Return rule IDs for credentials disclosed in *user_input* (PIN, OTP, CVV,
+    passcode, password or login, or a card number that passes the Luhn check).
+
+    A credential word alone ("my PIN is not working", "a 6-digit PIN",
+    "I forgot my password") does not match; a value must follow it.
+    """
+    text = str(user_input or "").casefold()
+    if not text:
+        return []
+    hits: list[str] = []
+    for rule_id, word in _NUMERIC_SECRET_WORDS.items():
+        if re.search(word + _BRIDGE + rf"(?:{_DIGIT_VALUE}|{_WORD_VALUE})", text):
+            hits.append(rule_id)
+    if re.search(_PASSWORD_WORD + rf"(?:{_PASSWORD_VALUE}|{_LOGIN_PAIR})", text):
+        hits.append("password_value")
+    for m in _CARD_CANDIDATE.finditer(text):
+        digits = re.sub(r"\D", "", m.group())
+        if 13 <= len(digits) <= 19 and _luhn_ok(digits):
+            hits.append("card_number")
+            break
+    return hits
 
 
 def _matches(term: str, text: str) -> bool:

@@ -13,6 +13,7 @@ import os
 from backend.app.orchestration.graph import app_graph
 from backend.app.services.memory_service import LongTermMemoryManager, ShortTermMemoryManager
 from backend.app.core.system_logger import log_event, reset_request_context, set_request_context
+from backend.app.services.inbound_safety_service import find_credential_rule_ids
 from backend.app.core.llm_service import ModelUnavailableError
 from backend.app.services import service_request_service
 from backend.app.services import deeplink_service
@@ -524,7 +525,10 @@ async def process_chat(payload: ChatPayload):
     Yields node execution progress in real-time before returning the final payload.
     """
     config = {"configurable": {"thread_id": payload.session_id}}
-    log_event("chat.request", session_id=payload.session_id, user_id=payload.user_id, message=payload.message)
+    # A message carrying a credential is rejected at the ingest gate; keep the value out of the log as well.
+    logged_message = ("[message removed: it contained a credential]" if find_credential_rule_ids(payload.message)
+                      else payload.message)
+    log_event("chat.request", session_id=payload.session_id, user_id=payload.user_id, message=logged_message)
 
     # --- FRONTEND INITIALIZATION ---
     # Restore an existing thread, or run Turn 0 to generate and persist a greeting.

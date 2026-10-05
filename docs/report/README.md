@@ -11,6 +11,7 @@ Everything needed to write the final report and presentation, in one place.
 | [FINAL_REPORT_REVIEW.md](FINAL_REPORT_REVIEW.md) | Review of the report draft |
 | [LESSONS_LEARNT_DRAFT.md](LESSONS_LEARNT_DRAFT.md) | Lessons learnt |
 | [USER_STORIES.md](USER_STORIES.md) | User stories |
+| [RISK_MITIGATION_CAPABILITIES.md](RISK_MITIGATION_CAPABILITIES.md) | **All risk controls in one place**: layers, how each works, regulation mapping, test results, scope limits |
 | [ui/](ui/) | UI screenshots used as figures |
 
 ## Project brief and assessment ([brief/](brief/))

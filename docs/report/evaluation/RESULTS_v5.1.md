@@ -63,6 +63,8 @@ End-to-end sample of 154: FULL 85, PARTIAL 55, NO_DATA 14 (B9). The bot fully re
 | Asked a clarifying question on a question that is not ambiguous | 4 | 5 of 14 clarifying questions were judged necessary by both labellers (B10a); 4 more, on genuinely ambiguous questions, count as correct handling (section 3.7) |
 | Refused or blocked | 3 | One compliance-screen false block (wrong-account transfer), one prompt-guard false positive, one "not a product we offer" for currency exchange |
 
+**Proposed fix for search misses: precondition sub-queries (project owner, 5 Oct 2026).** Some questions carry an unstated precondition that the FAQ answers instead of the question itself. "I made a transfer from a UK account; how long does it take to show up?" assumes Horizon receives international transfers; the FAQ answer is that it does not ("SGD domestic transfers only"). Similarity search on the question's own wording finds transfer-timing entries and never the entry that answers the precondition. The proposed fix: when planning retrieval, reason out the question's preconditions (here, "does Horizon accept inbound international transfers?") and search them as extra sub-queries; if a precondition is false, that fact is the answer. This would also cover currency conversion, USD top-ups and cheque deposits, where the bot said "no information" although the FAQ states the service is not offered.
+
 ### 3.3 Accuracy
 
 - **B1:** 11 substantive replies failed. Most are off-target rather than false, for example attributing a pending card payment to the 24-hour security hold, or describing outgoing AutoPay when the customer asked about topping up.

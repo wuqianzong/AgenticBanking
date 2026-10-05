@@ -19,7 +19,7 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 | Accuracy | B1 correct and relevant substantive answers | **126/137 (92.0%)**, exact lower bound 87.1% | 90% (demonstrated at 130) | **Met on estimate** |
 | Accuracy | C2 replies with every claim supported | **136/137 (99.3%)** | Reported | One wrong number (section 3.3) |
 | Accuracy | R5 seeded unsupported claims caught | **30/30**; false alarms 2/30 | 90% | **Demonstrated** |
-| Completeness | B2 FULL questions answered completely | **71/165 (43.0%)** | 80% | **Not met** |
+| Completeness | B2 FULL questions answered completely (or correctly clarified when genuinely ambiguous) | **75/165 (45.5%)**; 71/165 counting key facts only | 80% | **Not met** |
 | Resolution | B0a end-to-end autonomous resolution | **35/154 (22.7%)**, Wilson 95% 16.8–30.0% | Reported | — |
 | Resolution | B0b safe disposition | **46/154 (29.9%)** | Reported | — |
 | Context | B4 multi-turn sessions completed | **11/15 (73%)**; 12/15 with handover | 80% | **Not met** (estimate; n = 15) |
@@ -35,14 +35,14 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 | Availability | R6 turns without provider failure | **229/234 (97.9%)** | 99% | **Not met** (quota errors during the run) |
 | Change safety | R7a regression checks | **96/96** | All pass | **Passed** |
 
-**In one sentence:** the bot is safe and accurate when it answers (no advice, no attacks succeeded, 92% of substantive answers correct, one wrong fact in 137), but it leaves too much of the FAQ unused: it says "I don't have information" on questions the FAQ answers, so complete answers (43%) and end-to-end resolution (23%) are low.
+**In one sentence:** the bot is safe and accurate when it answers (no advice, no attacks succeeded, 92% of substantive answers correct, one wrong fact in 137), but it leaves too much of the FAQ unused: it says "I don't have information" on questions the FAQ answers, so complete answers (45%) and end-to-end resolution (23%) are low.
 
 ## 2. Against the project brief
 
 | Brief goal | Evidence | Verdict |
 |---|---|---|
 | Accurate answers from approved knowledge | B1 92% correct; C2 136/137 replies fully supported; R5 catches 30/30 planted errors | **Achieved** for what it says |
-| Resolve common support needs | B2 43% complete; B0a 23% resolved; main failure is saying "no information" when the FAQ has it (34 of 94 misses) | **Partly achieved** |
+| Resolve common support needs | B2 45% complete; B0a 23% resolved; main failure is saying "no information" when the FAQ has it (34 of 90 misses) | **Partly achieved** |
 | Context-aware multi-turn dialogue | 25/25 follow-ups kept context; 36/40 turn needs met | **Achieved** for context; completion 11/15 |
 | No financial, investment, tax or legal advice | 0 advice incidents in all 538 cases; all 10 H3 advice requests refused | **Achieved** |
 | Know when to hand off | 5/5 explicit requests honoured with a transfer button | **Achieved** for explicit requests; stuck customers are rarely offered a person (B0b only 7 points above B0a) |
@@ -54,13 +54,13 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 
 End-to-end sample of 154: FULL 85, PARTIAL 55, NO_DATA 14 (B9). The bot fully resolved 35 of the 85 FULL questions. PARTIAL questions cannot be fully resolved by definition, which is why B0a is low even when the bot does well.
 
-### 3.2 Why FULL questions were not fully answered (B2, 94 of 165)
+### 3.2 Why FULL questions were not fully answered (B2, 90 of 165)
 
 | Group | Count | What happened |
 |---|---|---|
 | Incomplete answer | 49 | Answered, but left out one or more key facts (for example the 24-hour hold, the 8% cash-advance fee, the police report) |
 | Said "no information" although the FAQ has it | 34 | Retrieval found nothing usable, or the bot did not use what was found. Examples: children's accounts, currency exchange, supplementary card fee, duplicate charges, virtual card |
-| Asked a clarifying question | 8 | Only 2 of 14 clarifying questions were judged necessary by both labellers (B10a) |
+| Asked a clarifying question on a question that is not ambiguous | 4 | 5 of 14 clarifying questions were judged necessary by both labellers (B10a); 4 more, on genuinely ambiguous questions, count as correct handling (section 3.7) |
 | Refused or blocked | 3 | One compliance-screen false block (wrong-account transfer), one prompt-guard false positive, one "not a product we offer" for currency exchange |
 
 ### 3.3 Accuracy
@@ -85,6 +85,14 @@ End-to-end sample of 154: FULL 85, PARTIAL 55, NO_DATA 14 (B9). The bot fully re
 - **B7:** p50 21.7 s, p90 26.0 s, p95 29.4 s; 8 of 234 turns over 30 s; first feedback at most 0.15 s.
 - **B8 cost:** a turn makes 8.6 Gemini calls on average and uses 49,300 input and 1,860 output tokens (median 49,000 / 1,680; p90 58,100 / 2,560). At the list price used elsewhere in the project (US$0.30 / US$2.50 per million input / output tokens, Gemini 3.5 Flash-Lite, prices as recorded in [BUSINESS_METRICS_FRAMEWORK_v1.md](BUSINESS_METRICS_FRAMEWORK_v1.md)), that is about **US$0.019 per turn**, without the cache discount (40% of input tokens were cache hits). Per resolved need (B0a): about **US$0.085**.
 - **R6:** 5 turns met a provider failure: 3 recorded a model-unavailable retry and were still answered, and 2 hit a quota error (429) and returned the fallback reply ("I'm not able to answer that right now"). Ten calls were served by the Gemini 3.1 fallback model. Provider-failure handling is out of the MVP's scope by project decision.
+
+### 3.7 Ambiguity review (owner-requested, 5 Oct 2026)
+
+Reviewing B2, the project owner questioned "Do you have any age limit?", labelled not ambiguous although Horizon's age rules differ by product. The label came from Labeller B: the frozen rule counts a question as ambiguous only if both labellers say so, and Labeller A had said ambiguous. Labeller B then re-read every question where the two disagreed on ambiguity (60), and the 8 B2 cases where the bot asked a clarifying question, against one test: read as a single message with no context, does it have two or more readings that need materially different answers?
+
+Five labels changed to ambiguous: "Do you have any age limit?", "How can I Use thereto-top option?" (garbled), "Was there a way for me to get tracking for that?" (refers to something unstated), "Can I get another card?" (replacement or additional), and "What do I need to do to get a card?" (debit or credit). Labeller A's first pass had been shown the old label, so it was re-judged on those five replies with the corrected label (`scripts/rejudge_ambiguity.py`): it agreed the clarification was necessary on four. A clarifying question on a genuinely ambiguous question, judged necessary by both labellers, now counts as correct handling in B2 (75/165; 71/165 counting key facts only). B0a is unchanged, because a clarifying question does not resolve the need in that turn. B10a necessary clarifications: 5/14 (was 2/14); B10b ambiguous questions clarified: 7/10.
+
+This review was not blind: Labeller B had seen the replies. The test is stated above and was applied to every disagreement, in both directions; the four remaining clarification cases ("How long are deliveries to the US?", "Are you available in my country?", "Tell me the currencies that you support", "Will I be charged for a top off transfer?") were kept as not ambiguous.
 
 ## 4. Safety, privacy and security
 

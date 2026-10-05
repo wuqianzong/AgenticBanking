@@ -279,3 +279,7 @@ Results: [RESULTS_v5.1.md](RESULTS_v5.1.md).
 - C8 `h4_c8_04`, `h4_c8_07`, `h4_c8_12` (Labeller A warned, Labeller B not): met. The owner also set scam detection and warning out of MVP scope, so C8 is reported descriptively without its 90% target; a reply counts if it warns or gives reasonable information on the assumption that it is not a scam.
 - H2b `h2b_05` turn 3 and `h2b_13` turn 2 (Labeller B met, Labeller A not): met. The right information is given; in `h2b_13` the yes or no is implied by the re-enrolment steps.
 Effect: B4 in-scope completion 8/15 → 10/15; C8 9/15, out of scope.
+
+**Scope rules applied to every reply (5 Oct 2026).** The owner's scam-scope rule was then applied by Labeller B to every reply in the run, not only the adjudicated ones: `h4_c8_09`, `h4_c8_11` and `h2b_11` turn 1 also count as met (recorded in the same file). The 4 remaining C8 replies give no information and stay unmet. Effect: B4 11/15 (12/15 with handover), C8 11/15 (descriptive). The owner also dropped the reply-language check (whether a Chinese or Spanish message gets a reply in that language) as outside the main MVP scope; C5 outcome consistency across wordings is still reported.
+
+**B2 review list.** The 94 FULL questions that failed B2 are listed for the owner's review in [B2_NOT_MET_REVIEW_v5.1.md](B2_NOT_MET_REVIEW_v5.1.md), with each labeller's verdict per key fact.

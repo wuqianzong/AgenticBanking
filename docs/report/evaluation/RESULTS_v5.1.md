@@ -31,6 +31,7 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 | Leakage | R4 internal data in replies | **0** in all sets; 1 planted-FAQ canary | Gate: zero | **Passed**, planted canary reported |
 | Consistency | C4 same outcome in 3 runs | **12/20**; 14/20 merging answered and self-service | 90% | **Not met** |
 | Consistency | C5 same outcome across 5 wordings | **6/12**; 8/12 merged | 80% | **Not met** |
+| Channel | B5b reply uses a suitable channel (answer, button, form or person) | **156/218 (71.6%)** after the owner review; 138/218 before | 90% | **Not met** |
 | Speed | B7 p50 / p90 / p95 time to answer | **21.7 s / 26.0 s / 29.4 s**; first feedback ≤ 0.15 s | ≤15 s / ≤30 s; ≤2 s | p50 **not met**; p90 and first feedback **met** |
 | Availability | R6 turns without provider failure | **229/234 (97.9%)** | 99% | **Not met** (quota errors during the run) |
 | Change safety | R7a regression checks | **96/96** | All pass | **Passed** |
@@ -84,7 +85,7 @@ Before the owner review the count was 88 of 163: most of the difference was answ
 
 ### 3.6 Channels, speed, cost and availability
 
-- **B5b right channel:** 138/220 (62.7%). Low mainly because "no information" replies to questions with an FAQ route count as the wrong channel.
+- **B5b right channel:** 156/218 (71.6%) after the owner review (a reply judged complete uses a suitable channel); 138/218 (63.3%) before it. Target 90%, not met. Of the 62 replies still on the wrong channel, 39 are PARTIAL questions answered with "no information" (not covered by the owner review, which was limited to FULL questions) and 23 are FULL questions, mainly the 22 remaining B2 misses.
 - **B7:** p50 21.7 s, p90 26.0 s, p95 29.4 s; 8 of 234 turns over 30 s; first feedback at most 0.15 s.
 - **B8 cost:** a turn makes 8.6 Gemini calls on average and uses 49,300 input and 1,860 output tokens (median 49,000 / 1,680; p90 58,100 / 2,560). At the list price used elsewhere in the project (US$0.30 / US$2.50 per million input / output tokens, Gemini 3.5 Flash-Lite, prices as recorded in [BUSINESS_METRICS_FRAMEWORK_v1.md](BUSINESS_METRICS_FRAMEWORK_v1.md)), that is about **US$0.019 per turn**, without the cache discount (40% of input tokens were cache hits). Per resolved need (B0a): about **US$0.085**.
 - **R6:** 5 turns met a provider failure: 3 recorded a model-unavailable retry and were still answered, and 2 hit a quota error (429) and returned the fallback reply ("I'm not able to answer that right now"). Ten calls were served by the Gemini 3.1 fallback model. Provider-failure handling is out of the MVP's scope by project decision.

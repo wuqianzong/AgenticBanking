@@ -26,6 +26,7 @@ Everything needed to write the final report and presentation, in one place.
 | File | What it is |
 |---|---|
 | [METRICS_DESIGN_v5.1.md](evaluation/METRICS_DESIGN_v5.1.md) | **Frozen v5.1 evaluation design** (metrics, data scope, formulas, tests, statistics, compliance matrix) |
+| [RESULTS_v5.1.md](evaluation/RESULTS_v5.1.md) | **v5.1 results**: headline table, results against the brief, every metric, labeller agreement, defects and limitations |
 | [EVALUATION_METHODS_v5.1.md](evaluation/EVALUATION_METHODS_v5.1.md) | **How every v5.1 metric was produced** (holdout construction, labelling, keys, pass counts, runs, the BUG-062 pause and re-freeze) |
 | [INBOUND_COMPLIANCE_SCREEN_STUDY.md](evaluation/INBOUND_COMPLIANCE_SCREEN_STUDY.md) | BUG-062 study: compliance-screen over-blocking, sixteen variants, research, final design |
 | [MEASUREMENT_FRAMEWORK_v4.0.md](evaluation/MEASUREMENT_FRAMEWORK_v4.0.md) | v4.0 measurement framework and results (earlier evaluation) |
@@ -65,7 +66,7 @@ Still in `docs/`, because code comments refer to them by path (they can be moved
 | [SOFT_ESCALATION_v1.0.md](../SOFT_ESCALATION_v1.0.md) | Soft escalation (offer of a person) |
 | [FAIRNESS_ANSWER_CACHE_DESIGN.md](../FAIRNESS_ANSWER_CACHE_DESIGN.md) | Cross-session answer cache |
 | [AGENTIC_CAPABILITY_ROADMAP_v1.0.md](../AGENTIC_CAPABILITY_ROADMAP_v1.0.md) | Capability roadmap |
-| [KNOWN_ISSUES_TRACKER.md](../KNOWN_ISSUES_TRACKER.md) | All tracked issues (BUG-001 to BUG-062) |
+| [KNOWN_ISSUES_TRACKER.md](../KNOWN_ISSUES_TRACKER.md) | All tracked issues (BUG-001 to BUG-063) |
 
 ## Monthly logs ([monthly_logs/](monthly_logs/))
 

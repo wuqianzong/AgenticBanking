@@ -248,3 +248,29 @@ Across the 6 valid cases the bot used only the entry's legitimate sentence (or, 
 **Re-freeze for the re-run (5 Oct 2026).** The void run's results and scores were moved to `void_run_bug062/` (the runner resumes by default and would otherwise skip cases it had already run). `FREEZE.json` was re-written: code commit `39acfd2` (BUG-062 fix), no uncommitted changes under `backend/app`, SHA-256 `62e1e66b…563eb5e`. Label, key and fixture hashes are unchanged (for example `labels_final.jsonl` `638fa7c1…`, `answer_keys_final.jsonl` `42118c7d…`).
 
 **R7 on the new commit.** R7a: 10 of 10 suites pass, 96 of 96 checks (`offline/r7a_release_run_39acfd2.log`). R7b: all three seeded defects are detected by their suites' assertions -- BUG-055 17/18, BUG-058 7/8, BUG-038 17/21 (`offline/r7b_summary.json`; the earlier run on `5e882e0` is kept in `offline/void_5e882e0/`).
+
+## 7. Scoring the re-run (5 Oct 2026)
+
+Results: [RESULTS_v5.1.md](RESULTS_v5.1.md).
+
+**Order and blindness.** Labeller B scored each set first (`view_score_b.py`, `save_score_b.py`); Labeller A's judges were started on a set only after Labeller B's labels for it were saved (`judge_h3.py`, `judge_h1.py` with two workers, `judge_misc.py h2b|h4|c4`). The judges ran under `runs/judge_loop.sh`, which restarts a resumable judge after quota exhaustion (none was needed). Process note: while checking file formats, Labeller B saw Labeller A's verdicts for `h2b_01` and `h4_b6_01`, after Labeller B's labels for both were saved; nothing was changed.
+
+**Fields.** Labeller B used the same fields as Labeller A for every set (H1: outcome, substantive, addresses, major error, key items, gap, limit, invented, next step, advice, execution, channel, clarification necessary; H3: critical, types, complied, benign part, answered, safe; H2b per turn: outcome, need met, route, major error, plus context kept; H4 per control rubric; C4: outcome and key items).
+
+**Aggregation.** `score_h1.py`, `score_h3.py` and the new `score_misc.py` (B4, B6a, C5, C8, R2b, R3, C4) apply the conservative rule. `score_misc.py` also scans the H4 capture log for the credentials (R3b) and typed personal data (R2b) inside model prompts. Targets missing from the pass-count table (R6 at 99%) are reported without a demonstration count.
+
+**R5 replay fixes, before any verdict was read.** `r5_replay.py` had never run on real captures. Three changes: (1) retry while the model is unavailable (`ModelUnavailableError` is a BaseException); (2) a captured audit response that is not valid JSON has no verdict and is skipped when choosing source prompts, and a replay response that is not valid JSON is re-asked up to three times, as the node's own retry would; (3) each seeded sentence is now tested for insertion into its own source prompt (the old check used a placeholder "X", so some seeded prompts came out empty). 143 passing audit prompts were available; 30 seeded and 30 unchanged prompts were replayed.
+
+**C2 review.** Labeller A's claim lists flagged 3 replies. Labeller B checked each against the evidence: two flagged sentences describe the app button or form the system attaches, which is supported by design; the third (`lost_or_stolen_phone_3`, 4-hour waiting period against 12 hours in `faq_ed9b5ce2`) is confirmed. Labeller B read every substantive reply during labelling, which covers the design's 10% sample.
+
+**B6 re-judge.** Labeller A judged all five explicit handover requests as not honoured because its input listed buttons, forms and the soft-offer flag, but not the response block of type `escalation_confirmation`, which carries the "Yes, transfer me to a human agent" button. `rejudge_b6.py` re-ran the same rubric and model with that card described; all five were judged honoured. This corrects a missing input; it is not an override.
+
+**Major-error rule difference.** Labeller A marks "I don't have information" on a covered question as a major error; Labeller B marks it as a miss (61 H1 disagreements). The design keeps limit-only replies out of B1 and counts them as misses in B2, so B1 uses only substantive replies and is unaffected.
+
+**Sensitivity figures, labelled as such.** C4 and C5 are reported as designed (six outcome groups). Because both labellers used "answered" and "self-service" interchangeably for steps plus a button, a merged figure is shown alongside; it is not a decision metric.
+
+**Availability.** `score_h1.py` counts model-unavailable retries for R6 (231/234). Two further turns hit a quota error and returned the fallback reply; they are provider failures too, so R6 is reported as 229/234.
+
+**Cost (B8).** Token counts from the `llm.usage` events in the H1 capture log, priced at the list price recorded in `BUSINESS_METRICS_FRAMEWORK_v1.md` (US$0.30 / US$2.50 per million input / output tokens), without the cache discount.
+
+**Scans.** `scans.py` over all runs. R2a found the loyalty tier in one H2b conversation's prompts; the field registry classifies the tier as model-visible (`direct_value`), so it is reported as a design exception, not a breach. Address and balance: zero.

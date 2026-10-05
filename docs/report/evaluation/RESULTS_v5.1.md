@@ -19,9 +19,9 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 | Accuracy | B1 correct and relevant substantive answers | **126/137 (92.0%)**, exact lower bound 87.1% | 90% (demonstrated at 130) | **Met on estimate** |
 | Accuracy | C2 replies with every claim supported | **136/137 (99.3%)** | Reported | One wrong number (section 3.3) |
 | Accuracy | R5 seeded unsupported claims caught | **30/30**; false alarms 2/30 | 90% | **Demonstrated** |
-| Completeness | B2 FULL questions answered completely (or correctly clarified when genuinely ambiguous) | **75/165 (45.5%)**; 71/165 counting key facts only | 80% | **Not met** |
-| Resolution | B0a end-to-end autonomous resolution | **35/154 (22.7%)**, Wilson 95% 16.8–30.0% | Reported | — |
-| Resolution | B0b safe disposition | **46/154 (29.9%)** | Reported | — |
+| Completeness | B2 FULL questions answered completely, after the project owner's review of every failure | **141/163 (86.5%)**, exact lower bound 81.3%; 75/163 before the review, 71/163 counting key facts only | 80% (demonstrated at 140) | **Demonstrated** |
+| Resolution | B0a end-to-end autonomous resolution | **60/153 (39.2%)**, Wilson 95% 31.8–47.1% | Reported | — |
+| Resolution | B0b safe disposition | **66/153 (43.1%)** | Reported | — |
 | Context | B4 multi-turn sessions completed | **11/15 (73%)**; 12/15 with handover | 80% | **Not met** (estimate; n = 15) |
 | Context | Follow-up turns that kept context | **25/25** (Labeller B) | — | — |
 | Handover | B6a explicit requests honoured | **5/5** | Gate: zero failures | **Passed** |
@@ -35,14 +35,14 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 | Availability | R6 turns without provider failure | **229/234 (97.9%)** | 99% | **Not met** (quota errors during the run) |
 | Change safety | R7a regression checks | **96/96** | All pass | **Passed** |
 
-**In one sentence:** the bot is safe and accurate when it answers (no advice, no attacks succeeded, 92% of substantive answers correct, one wrong fact in 137), but it leaves too much of the FAQ unused: it says "I don't have information" on questions the FAQ answers, so complete answers (45%) and end-to-end resolution (23%) are low.
+**In one sentence:** the bot is safe and accurate when it answers (no advice, no attacks succeeded, 92% of substantive answers correct, one wrong fact in 137), and it answers 86.5% of FAQ-covered questions completely. Its main remaining weakness is saying "I don't have information" when the FAQ has the answer or a contact route (17 of 163), and end-to-end resolution is 39% because a third of the sampled demand is only partly covered by the FAQ.
 
 ## 2. Against the project brief
 
 | Brief goal | Evidence | Verdict |
 |---|---|---|
 | Accurate answers from approved knowledge | B1 92% correct; C2 136/137 replies fully supported; R5 catches 30/30 planted errors | **Achieved** for what it says |
-| Resolve common support needs | B2 45% complete; B0a 23% resolved; main failure is saying "no information" when the FAQ has it (34 of 90 misses) | **Partly achieved** |
+| Resolve common support needs | B2 86.5% complete (target 80% demonstrated); B0a 39% resolved end to end; remaining misses are mostly "no information" when the FAQ has it (17 of 163) | **Achieved** for FAQ-covered questions; resolution limited by FAQ coverage |
 | Context-aware multi-turn dialogue | 25/25 follow-ups kept context; 36/40 turn needs met | **Achieved** for context; completion 11/15 |
 | No financial, investment, tax or legal advice | 0 advice incidents in all 538 cases; all 10 H3 advice requests refused | **Achieved** |
 | Know when to hand off | 5/5 explicit requests honoured with a transfer button | **Achieved** for explicit requests; stuck customers are rarely offered a person (B0b only 7 points above B0a) |
@@ -52,16 +52,17 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 
 ### 3.1 Coverage and resolution
 
-End-to-end sample of 154: FULL 85, PARTIAL 55, NO_DATA 14 (B9). The bot fully resolved 35 of the 85 FULL questions. PARTIAL questions cannot be fully resolved by definition, which is why B0a is low even when the bot does well.
+End-to-end sample of 154: FULL 85, PARTIAL 55, NO_DATA 14 (B9). After the owner review, 60 of the 153 scorable questions were resolved (one provider-failure turn excluded). PARTIAL questions cannot be fully resolved by definition, which is why B0a is low even when the bot does well.
 
-### 3.2 Why FULL questions were not fully answered (B2, 90 of 165)
+### 3.2 Why FULL questions were not fully answered (B2, 22 of 163 after the owner review)
 
 | Group | Count | What happened |
 |---|---|---|
-| Incomplete answer | 49 | Answered, but left out one or more key facts (for example the 24-hour hold, the 8% cash-advance fee, the police report) |
-| Said "no information" although the FAQ has it | 34 | Retrieval found nothing usable, or the bot did not use what was found. Examples: children's accounts, currency exchange, supplementary card fee, duplicate charges, virtual card |
-| Asked a clarifying question on a question that is not ambiguous | 4 | 5 of 14 clarifying questions were judged necessary by both labellers (B10a); 4 more, on genuinely ambiguous questions, count as correct handling (section 3.7) |
-| Refused or blocked | 3 | One compliance-screen false block (wrong-account transfer), one prompt-guard false positive, one "not a product we offer" for currency exchange |
+| Said "no information" although the FAQ has the answer or a contact route | 17 | Duplicate charges (3), unrecognised direct debits (2), unrecognised cash withdrawals (2), virtual card (2), pending card payment, wrong transfer fee, unexpected card fee, extra cards, ID proof, a transfer from a UK account, "paid in GBP" (a correct answer lost in parsing, BUG-065), and the Send Money button offered for money coming *in* |
+| Incomplete or off-target answer | 3 | Pending card payment explained as the 24-hour security hold; "locked out of my account" given in-app steps but no hotline; top-up fees answered with "no information" plus funding methods |
+| Refused or blocked | 2 | Compliance-screen false block (wrong-account transfer, BUG-062 residual); "fiat currencies are not a product we offer" (misleading: SGD is a fiat currency) |
+
+Before the owner review the count was 88 of 163: most of the difference was answer-key facts the customer had not asked for (section 3.8).
 
 **Proposed fix for search misses: precondition sub-queries (project owner, 5 Oct 2026).** Some questions carry an unstated precondition that the FAQ answers instead of the question itself. "I made a transfer from a UK account; how long does it take to show up?" assumes Horizon receives international transfers; the FAQ answer is that it does not ("SGD domestic transfers only"). Similarity search on the question's own wording finds transfer-timing entries and never the entry that answers the precondition. The proposed fix: when planning retrieval, reason out the question's preconditions (here, "does Horizon accept inbound international transfers?") and search them as extra sub-queries; if a precondition is false, that fact is the answer. This would also cover currency conversion, USD top-ups and cheque deposits, where the bot said "no information" although the FAQ states the service is not offered.
 
@@ -95,6 +96,20 @@ Reviewing B2, the project owner questioned "Do you have any age limit?", labelle
 Five labels changed to ambiguous: "Do you have any age limit?", "How can I Use thereto-top option?" (garbled), "Was there a way for me to get tracking for that?" (refers to something unstated), "Can I get another card?" (replacement or additional), and "What do I need to do to get a card?" (debit or credit). Labeller A's first pass had been shown the old label, so it was re-judged on those five replies with the corrected label (`scripts/rejudge_ambiguity.py`): it agreed the clarification was necessary on four. A clarifying question on a genuinely ambiguous question, judged necessary by both labellers, now counts as correct handling in B2 (75/165; 71/165 counting key facts only). B0a is unchanged, because a clarifying question does not resolve the need in that turn. B10a necessary clarifications: 5/14 (was 2/14); B10b ambiguous questions clarified: 7/10.
 
 This review was not blind: Labeller B had seen the replies. The test is stated above and was applied to every disagreement, in both directions; the four remaining clarification cases ("How long are deliveries to the US?", "Are you available in my country?", "Tell me the currencies that you support", "Will I be charged for a top off transfer?") were kept as not ambiguous.
+
+### 3.8 Owner review of every B2 failure (5 Oct 2026)
+
+After scoring, all FULL questions that failed B2 were put on a review page showing, for each, the answer key with both labellers' verdicts, the reply, and the full pipeline trace (inbound checks, every search round with the answering FAQ entries marked, the evidence check's decision and reason, the reply audit). The project owner reviewed them and set the rules; Labeller B applied the rules to the remaining cases as marked suggestions, and the owner confirmed all of them. Evidence: `labels/b2_owner_review.jsonl` (90 verdicts: 66 complete, 22 real misses, 2 excluded).
+
+Rules the owner set:
+- **Answer what was asked.** A key fact that answers a question the customer did not ask (the ATM fee on "which ATMs can I use", the police report on "how do I cut off the card", "PayNow is free" on "what does a transfer cost") is optional.
+- **"No information" is acceptable when the answer needs an assumption**, for example concluding there is no children's account from a minimum-age rule, or no currency exchange from an SGD-only transfer rule. Being cautious here is a business choice.
+- **A clarifying question is acceptable when a needed detail is missing or a term is unclear** ("Are you available in my country?", "top off transfer", currencies without a product named).
+- **A reasonable default reading counts** (cash withdrawal means the savings account at an ATM), and **a message that is not a question passes**.
+- **"No information" is a real miss when the FAQ plainly gives the answer or a contact route.**
+- **Provider-failure fallbacks are excluded** (2 quota-error turns), as provider failure handling is out of MVP scope.
+
+Effect: B2 141/163 (86.5%), the 80% target demonstrated at the exact lower bound (81.3%); B0a 60/153 (39.2%); B0b 66/153 (43.1%). The answer keys were written before the run and were stricter than the owner's standard: they listed every fact in the answering entries rather than only what the question asked. Both figures are reported: 75/163 against the frozen keys, 141/163 after review.
 
 ## 4. Safety, privacy and security
 
@@ -185,7 +200,7 @@ Process note: while checking file formats, Labeller B saw Labeller A's verdicts 
 
 | Finding | Severity for the brief | Status |
 |---|---|---|
-| Says "no information" on questions the FAQ answers (34 FULL misses; most PARTIAL questions) | High: main cause of low B2 and B0a | Limitation; retrieval and evidence-use tuning would be the next work |
+| Says "no information" on questions the FAQ answers (17 FULL misses; most PARTIAL questions) | High: main remaining miss | Limitation; the precondition sub-query proposal (section 3.2) and evidence-check tuning would be the next work |
 | Scam questions: 4/15 give no information ("no information" on remote-access apps, money-mule job offers, reading out a texted code) | Out of MVP scope | Reported; a scam-awareness capability is future work |
 | Credentials reached model prompts before the screens blocked them (14/15) | High | **Fixed after the run** (section 4.5): deterministic credential veto before any model |
 | Prompt guard blocks short or unusual wording (3 ordinary questions) | Medium | Limitation; threshold 0.10 |

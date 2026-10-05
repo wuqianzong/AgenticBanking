@@ -1,5 +1,7 @@
 # B2 review: FAQ-covered questions not answered completely (v5.1)
 
+> **Superseded (5 Oct 2026).** This first list (94 cases, before the ambiguity review) was replaced by the interactive review page. The final verdicts are in `research/2026-10-04_v51_holdout/labels/b2_owner_review.jsonl` and the results in [RESULTS_v5.1.md](RESULTS_v5.1.md) section 3.8.
+
 94 of 165 FULL questions failed B2 (complete answer = every answer-key fact present, judged by both labellers). Grouped by what happened. For each: the question, the answer key with each labeller's verdict per fact (A = Gemini 3.1 Labeller A, B = Claude Labeller B; ✓ present, ✗ missing), and the bot's reply.
 
 To record a verdict, write it under the item (for example `VERDICT: complete` or `VERDICT: key item 2 not needed`).

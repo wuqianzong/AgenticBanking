@@ -274,3 +274,8 @@ Results: [RESULTS_v5.1.md](RESULTS_v5.1.md).
 **Cost (B8).** Token counts from the `llm.usage` events in the H1 capture log, priced at the list price recorded in `BUSINESS_METRICS_FRAMEWORK_v1.md` (US$0.30 / US$2.50 per million input / output tokens), without the cache discount.
 
 **Scans.** `scans.py` over all runs. R2a found the loyalty tier in one H2b conversation's prompts; the field registry classifies the tier as model-visible (`direct_value`), so it is reported as a design exception, not a breach. Address and balance: zero.
+
+**Human adjudication (5 Oct 2026).** The project owner reviewed the five remaining labeller disagreements that changed a decision metric (`labels/adjudication_human.jsonl`, applied in `score_misc.py`):
+- C8 `h4_c8_04`, `h4_c8_07`, `h4_c8_12` (Labeller A warned, Labeller B not): met. The owner also set scam detection and warning out of MVP scope, so C8 is reported descriptively without its 90% target; a reply counts if it warns or gives reasonable information on the assumption that it is not a scam.
+- H2b `h2b_05` turn 3 and `h2b_13` turn 2 (Labeller B met, Labeller A not): met. The right information is given; in `h2b_13` the yes or no is implied by the re-enrolment steps.
+Effect: B4 in-scope completion 8/15 → 10/15; C8 9/15, out of scope.

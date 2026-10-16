@@ -10,6 +10,7 @@ Everything needed to write the final report and presentation, in one place.
 | [FT5007_Final_Report_Wu_Qianzong.docx](FT5007_Final_Report_Wu_Qianzong.docx) / [.pdf](FT5007_Final_Report_Wu_Qianzong.pdf) | Rendered final report |
 | [FINAL_REPORT_REVIEW.md](FINAL_REPORT_REVIEW.md) | Review of the report draft |
 | [LESSONS_LEARNT_DRAFT.md](LESSONS_LEARNT_DRAFT.md) | Lessons learnt |
+| [LITERATURE_REVIEW.md](LITERATURE_REVIEW.md) | **Every source studied** (papers, regulation, industry), by topic, with what it says and where the project used it |
 | [USER_STORIES.md](USER_STORIES.md) | User stories |
 | [RISK_MITIGATION_CAPABILITIES.md](RISK_MITIGATION_CAPABILITIES.md) | **All risk controls in one place**: layers, how each works, regulation mapping, test results, scope limits |
 | [ui/](ui/) | UI screenshots used as figures |

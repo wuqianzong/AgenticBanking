@@ -35,6 +35,27 @@ Now, before writing a prompt, I decide its single task, where its boundary lies 
 
 **2.4 [added for review] Switching models is not a fix until it is measured on the hard cases.** Earlier runs suggested Gemini 3.1 blocked no ordinary questions while 3.5 did. On a replay that included the hard cases (customers reporting fraud or theft), 3.1 blocked the same 5 of 42 as 3.5. The earlier evidence came from question sets that happened not to contain those cases. A comparison is only as good as the cases it includes.
 
+**2.5 Schemas make the messages between pipeline steps safe, but a schema also steers what the model writes, so it is not neutral for every task.** The pipeline passes JSON from one model call to the next. Where a call asked for JSON without a schema, Gemini occasionally returned something unreadable: a missing comma, an unquoted key, a stray "- " before a key, or prose. A deterministic scan of 8,178 replies across five runs found 19 malformed replies among 2,104 schema-less calls (0.9%) and none among 5,122 schema-constrained calls. The damage never showed as "bad JSON". It showed as other problems: an empty answer (BUG-065), or a fact-check verdict replaced by an "audit unavailable" placeholder, which wasted a revision round and ended in a generic fallback that discarded a correct answer. The cause was mundane: the schema was chosen by matching a phrase in the prompt, and a renamed prompt title silently stopped matching. Repairing broken JSON deterministically was not a real option, because the failures came in six different shapes and only two could be fixed without guessing. Giving the fact-checker and the two reply writers explicit schemas fixed it: 53 of 53 replayed prompts parsed, including all 9 that had failed, with no loss of content or audit accuracy (R5 still caught 30/30 planted errors).
+
+The limitation appeared in the reviser, the one step that edits existing text instead of creating or judging it. With a schema, it kept a sentence the fact-checker had told it to remove in 7 of 10 repeated runs, against 0 of 5 without a schema. It usually added the requested replacement and left the flagged sentence in front of it. **Root cause: two mechanisms, one backed by research and one our own inference.**
+
+1. *Committing before deciding (supported by research).* A model writes left to right and cannot go back and delete what it has already written. Under a strict schema the field order fixes the writing order, and the decoder checks only that each token is valid JSON, not that the content is right. So the model starts writing a block's text before it has worked out what must go. Once the flagged sentence is on the page, the best it can do is add the correction after it. Without a schema the model can plan the whole block first. Research agrees: format restrictions reduce reasoning quality while helping classification, and key order matters (Tam et al., 2024); constrained decoding distorts what the model would otherwise write (Park et al., 2024). Full references are in [LITERATURE_REVIEW.md](LITERATURE_REVIEW.md).
+2. *A pull towards copying (our inference, no paper found).* The reviser is shown each block's current text and returns the same structure. A field with no description gives the model only its name and the value it was shown, which favours "copy, then change". The prompt's instruction to remove the flagged phrase sits far away in a long prompt.
+
+Evidence, all on one case where the reviser should remove one flagged sentence (lower is better):
+
+| Variant | Kept the flagged sentence |
+|---|---|
+| Plain schema | 7 of 10 |
+| Text field moved after the other fields | 4 of 5 |
+| A "phrases to remove" field written before the text (decide first) | 2 of 5 |
+| Removal instruction written into the text field's description | 1 of 5 |
+| No schema | 0 of 5 |
+
+Making the model decide first helped (2 of 5), which supports mechanism 1. In 3 of the 4 runs where it listed the phrase first, it then removed it. But in one run it listed the sentence and still kept it, which mechanism 1 cannot explain, so something like mechanism 2 also plays a part. No variant matched the result without a schema. The reviser had produced no malformed JSON in 97 calls, so it was left without a schema.
+
+The lessons: give every model-to-model message a schema chosen explicitly at the call site, never by matching prompt text; and treat schema field descriptions as instructions. A schema suits steps that judge, classify or create content in one pass. For a step that has to reason about what to delete before it writes, a schema can make the model commit too early, so measure the step's real job (here, removing flagged text) with and without the schema before adopting it.
+
 ## 3. Retrieval (RAG)
 
 **3.1 Cosine similarity means similar in form, not the same in meaning.** A query mixing two needs, or wrapped in personal context, retrieves documents that resemble its wording rather than answer its need. Retrieval quality depends on what you search for as much as on how.
@@ -79,3 +100,4 @@ Now, before writing a prompt, I decide its single task, where its boundary lies 
 - Plan for model and provider limits (quota, latency, cost) as part of the architecture.
 - Give every check an explicit work scope and decide which component owns each risk before writing its prompt.
 - Include boundary cases (benign requests that resemble harmful ones) in every safety test set from the start.
+- Give every model-to-model message an explicit schema from the start, and check after each change, by a deterministic scan of real replies, that every message still parses.

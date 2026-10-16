@@ -205,6 +205,157 @@ class AnswerGroundednessEvaluation(BaseModel):
     reason: str = Field(description="Concise overall internal audit result.")
     grounding_violations: List[GroundingViolation] = Field(default_factory=list, description="Every material visible grounding failure, labelled by audit layer.")
 
+# 1b. RESPONSE-PATH SCHEMAS (JSON-integrity fix, 2026-10-16).
+# The combined outbound audit, the reply writer, the pre-decided statement
+# writer and the reviser used to run with response_mime_type only and no
+# response_schema: across 8,178 Gemini replies in five recent runs, 19 of the
+# 2,104 schema-less replies were malformed JSON (0.9%) against 0 of 5,122
+# schema-constrained ones (research/2026-10-16_json_malform_scan). Each model
+# below mirrors its prompt's "Output JSON only" shape field for field, in the
+# prompt's order (reasoning fields first). Fields the consumers read but the
+# old model lacked -- e.g. generation_guidance on a grounding violation -- are
+# declared, because an undeclared field is silently dropped by the decoder.
+
+class AuditConductViolation(BaseModel):
+    rule: str = Field(description="bank_conduct or regulation.")
+    task_id: str = Field(description="The task_id or subquery_id this conduct issue traces back to, or an empty string for a genuinely response-wide issue.")
+    violation: str = Field(description="What rule the flagged content breaks.")
+    unsupported_content: List[str] = Field(description="Verbatim customer-facing phrase(s) that break the rule.")
+    generation_guidance: str = Field(description="What the next draft should write instead, scoped to this entry's own flagged content.")
+
+
+class AuditEvidenceViolation(BaseModel):
+    scope: str = Field(description="answer, ui_payload, or clarification.")
+    unsupported_content: List[str] = Field(description="Verbatim customer-facing phrase(s) the permitted evidence does not support.")
+    evidence_gap: str = Field(description="The missing permitted evidence only; never a proposed remedy.")
+    generation_guidance: str = Field(description="What the next draft should write instead, scoped to this entry's own flagged content.")
+
+
+class AuditGroundingViolation(BaseModel):
+    task_id: str = Field(description="The related task ID, or an empty string when not task-specific.")
+    scope: str = Field(description="answer, ui_payload, or clarification.")
+    audit_layer: str = Field(description="evidence, bridge, or other.")
+    violation_type: str = Field(description="unsupported_factual_claim, unsupported_bridge_inference, unsupported_instruction, wrong_task_evidence, unsupported_clarification_suggestion, missing_decline_reference, task_not_answered, or other.")
+    unsupported_content: List[str] = Field(description="Verbatim customer-facing phrase(s) that failed the audit.")
+    evidence_gap: str = Field(description="Missing permitted evidence only; no proposed remedy.")
+    generation_guidance: str = Field(description="What the next draft should write instead, scoped to this entry's own flagged content.")
+
+
+class CombinedAuditBase(BaseModel):
+    conduct_reason: str = Field(description="Compact per-rule conduct summary, e.g. 'commitments: none; advice: none; ...'.")
+    conduct_compliant: bool = Field(description="True only when no conduct or regulatory rule is broken.")
+    conduct_violations: List[AuditConductViolation] = Field(description="Every conduct or regulatory violation; empty when compliant.")
+    answer_compliant: bool = Field(description="True when the Customer-Facing Answer and its UI payload are compliant.")
+    clarification_compliant: bool = Field(description="True when the Customer-Facing Clarification is compliant.")
+    rewrite_instruction: str = Field(description="Names only the specific flagged claim or instruction and how to correct or remove it; empty when nothing is flagged.")
+    evidence_reason: str = Field(description="Concise evidence-groundedness result.")
+    evidence_grounded: bool = Field(description="True only when every visible claim is supported by the permitted evidence.")
+    evidence_violations: List[AuditEvidenceViolation] = Field(description="Every unsupported visible claim; empty when grounded.")
+
+
+class NonFinancialCombinedAudit(CombinedAuditBase):
+    """Combined outbound audit, non-financial (courtesy) response route."""
+    answer_bridge_grounded: bool = Field(description="True only when every connection in the answer is supported.")
+    clarification_grounded: bool = Field(description="True when clarification content uses only its permitted sources.")
+    clarification_connected: bool = Field(description="True when each clarification identifies its supplied unresolved term.")
+
+
+class NormalCombinedAudit(CombinedAuditBase):
+    """Combined outbound audit, normal financial response route."""
+    answer_evidence_grounded: bool = Field(description="True only when all explicit answer and answer-UI facts are directly supported by task-level approved evidence.")
+    answer_bridge_grounded: bool = Field(description="True only when every conclusion or logical connection in the answer is a bounded inference from task-level approved evidence.")
+    clarification_grounded: bool = Field(description="True when clarification content uses only its permitted sources.")
+    clarification_connected: bool = Field(description="True when each clarification identifies its supplied unresolved term.")
+    response_recovery_strategy: str = Field(description="NO_STRATEGY, REMOVE_UNSUPPORTED_CONTENT, NARROW_TO_EVIDENCE_SCOPE, or CLARIFY_FROM_ALLOWED_CONTEXT.")
+    grounding_violations: List[AuditGroundingViolation] = Field(description="Every material visible grounding failure, labelled by task and audit layer.")
+
+
+# Reply writer (FLEXIBLE RESPONSE GENERATION). One element shape covers every
+# component type; a field that does not apply to the element's type is left
+# "" or [] -- the consumer reads every field through _llm_text/_llm_list,
+# which treat empty and absent alike, and branches on `type`.
+class WriterProgressStep(BaseModel):
+    title: str = Field(default="")
+    detail: str = Field(default="")
+
+
+class WriterComparisonRow(BaseModel):
+    feature: str = Field(default="")
+    values: List[str] = Field(default_factory=list)
+
+
+class WriterAction(BaseModel):
+    label: str = Field(default="")
+    action: str = Field(default="")
+
+
+class WriterSection(BaseModel):
+    title: str = Field(default="")
+    content: str = Field(default="")
+
+
+class WriterTimelineStep(BaseModel):
+    title: str = Field(default="")
+    description: str = Field(default="")
+    status: str = Field(default="", description="completed, active, or pending.")
+    date: str = Field(default="")
+
+
+class WriterCarouselItem(BaseModel):
+    title: str = Field(default="")
+    subtitle: str = Field(default="")
+    badge: str = Field(default="")
+    highlight: str = Field(default="")
+    details: List[str] = Field(default_factory=list)
+    actionLabel: str = Field(default="")
+    actionMessage: str = Field(default="")
+
+
+class WriterOption(BaseModel):
+    label: str = Field(default="", description="Short action.")
+    message: str = Field(default="", description="Complete grounded question.")
+
+
+class WriterElement(BaseModel):
+    type: str = Field(description="TEXT, LIST, PROGRESS, COMPARISON, ACCORDION, TIMELINE, CAROUSEL, or ALERT.")
+    source_task_ids: List[str] = Field(description="Exact obligation ids this element addresses.")
+    context_text: str = Field(default="", description="Optional natural connector; empty when unused.")
+    answer: str = Field(default="", description="Grounded prose; empty when the component carries the content.")
+    title: str = Field(default="", description="Optional component title.")
+    list_title: str = Field(default="", description="Only for LIST.")
+    list_items: List[str] = Field(default_factory=list, description="Only for LIST.")
+    progress_title: str = Field(default="", description="Only for PROGRESS.")
+    progress_steps: List[WriterProgressStep] = Field(default_factory=list, description="Only for PROGRESS.")
+    headers: List[str] = Field(default_factory=list, description="Only for COMPARISON.")
+    rows: List[WriterComparisonRow] = Field(default_factory=list, description="Only for COMPARISON.")
+    actions: List[WriterAction] = Field(default_factory=list, description="Only for COMPARISON.")
+    sections: List[WriterSection] = Field(default_factory=list, description="Only for ACCORDION.")
+    subtitle: str = Field(default="", description="Only for TIMELINE.")
+    steps: List[WriterTimelineStep] = Field(default_factory=list, description="Only for TIMELINE.")
+    items: List[WriterCarouselItem] = Field(default_factory=list, description="Only for CAROUSEL.")
+    severity: str = Field(default="", description="Only for ALERT: warning, security, info, or success.")
+    message: str = Field(default="", description="Only for ALERT.")
+    action: WriterAction = Field(default_factory=WriterAction, description="Only for ALERT; empty label and action otherwise.")
+    extended_text: str = Field(default="", description="Optional additional grounded prose.")
+    options: List[WriterOption] = Field(default_factory=list)
+
+
+class FlexibleResponseGeneration(BaseModel):
+    elements: List[WriterElement] = Field(description="The response elements, in order.")
+    clarification: str = Field(default="", description="Clarifying question, or empty.")
+    next_actions: List[str] = Field(default_factory=list, description="Short natural next questions grounded in unfeatured approved evidence; may be empty.")
+
+
+# Pre-decided statement writer (PRE-DECIDED STATEMENT COMPOSITION).
+class StatementElement(BaseModel):
+    source_task_ids: List[str] = Field(description="The exact task_id(s) of the statement(s) this element addresses.")
+    text: str = Field(description="A warm, natural statement or question.")
+
+
+class PreDecidedStatementComposition(BaseModel):
+    elements: List[StatementElement] = Field(description="One element per statement group, in order.")
+
+
 # 2. SUFFICIENCY AUDITOR (Node 03c)
 class RetryEvidenceDeltaItem(BaseModel):
     """One newly observed, task-relevant fact from an unapproved candidate."""

@@ -19,6 +19,10 @@ from backend.app.core.llm_service import (
     ClarificationGuess,
     TerritoryBPlan,
     TurnConsistencyEvaluation,
+    FlexibleResponseGeneration,
+    PreDecidedStatementComposition,
+    NonFinancialCombinedAudit,
+    NormalCombinedAudit,
     MODEL_B_AUDITOR,
     MODEL_C_PLANNER,
     MODEL_D_PROMPT_GUARD,
@@ -7998,7 +8002,7 @@ def _generate_response_blocks(state: AgentState) -> dict:
     {json.dumps(audit_feedback, ensure_ascii=False)}
     """
     try:
-        generated = _parse_json_robustly(call_groq_lpu(prompt))
+        generated = _parse_json_robustly(call_groq_lpu(prompt, response_schema_override=FlexibleResponseGeneration))
     except Exception as error:
         print(f"🚨 [FLEXIBLE RESPONSE GENERATOR ERROR]: {error}")
         generated = {}
@@ -8558,7 +8562,7 @@ def _generate_evidence_only_response(intent_clarifications: list, decline_contex
     {json.dumps(model_entries, ensure_ascii=False)}
     """
     try:
-        result = _parse_json_robustly(call_groq_lpu(prompt))
+        result = _parse_json_robustly(call_groq_lpu(prompt, response_schema_override=PreDecidedStatementComposition))
         generated_elements = result.get("elements", []) if isinstance(result.get("elements"), list) else []
     except Exception as e:
         print(f"🚨 [EVIDENCE-ONLY RESPONSE EXCEPTION]: {e}")
@@ -8985,6 +8989,10 @@ def node_04c_response_reviser(state: AgentState) -> dict:
     {obligations_block}
     """
     try:
+        # No response_schema here, deliberately (2026-10-16): with a schema the
+        # reviser kept a flagged sentence in 7 of 10 repeated runs of one case
+        # against 0 of 5 without, and it produced no malformed JSON in 97
+        # observed schema-less calls (research/2026-10-16_schema_injection_check).
         generated = _parse_json_robustly(call_groq_lpu(prompt))
     except Exception as error:
         print(f"🚨 [RESPONSE REVISER ERROR]: {error}")
@@ -9664,7 +9672,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
     """
     recovery_strategy_field = ', "response_recovery_strategy":"NO_STRATEGY" | "REMOVE_UNSUPPORTED_CONTENT" | "NARROW_TO_EVIDENCE_SCOPE" | "CLARIFY_FROM_ALLOWED_CONTEXT"'
 
-    def _run_combined_audit(evidence_bundle, evidence_description, evidence_route_specific_rules, evidence_extra_output_fields):
+    def _run_combined_audit(evidence_bundle, evidence_description, evidence_route_specific_rules, evidence_extra_output_fields, response_schema):
         """One call, both axes -- prompt bodies copied verbatim from
         check_conduct_compliance/check_evidence_groundedness (groundedness.py),
         just concatenated instead of issued as two separate calls."""
@@ -9743,7 +9751,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         {content_block}
         """
         try:
-            result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR))
+            result = _parse_json_robustly(call_groq_lpu(prompt, model_id=MODEL_B_AUDITOR, response_schema_override=response_schema))
             result.setdefault("conduct_compliant", False)
             result.setdefault("conduct_violations", [])
             result.setdefault("conduct_reason", "Conduct compliance audit did not return a reason.")
@@ -9802,6 +9810,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
             evidence_description="Non-Financial Conversation (no factual evidence permitted)",
             evidence_route_specific_rules=evidence_route_specific_rules,
             evidence_extra_output_fields=', "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false',
+            response_schema=NonFinancialCombinedAudit,
         )
         audit_scope = "non_financial_response"
     else:
@@ -10278,6 +10287,7 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
             evidence_description="Task-Level Approved Evidence, Available Shortcuts, Unavailable Service Requests, Verified Customer-Specific Facts, and Personal Data References — the only factual sources for answers and answer UI",
             evidence_route_specific_rules=evidence_route_specific_rules,
             evidence_extra_output_fields=f', "answer_evidence_grounded": true/false, "answer_bridge_grounded": true/false, "clarification_grounded": true/false, "clarification_connected": true/false{recovery_strategy_field}, "grounding_violations": [{{"task_id": "task_1", "scope": "answer" | "ui_payload" | "clarification", "audit_layer": "evidence" | "bridge" | "other", "violation_type": "unsupported_factual_claim" | "unsupported_bridge_inference" | "unsupported_instruction" | "wrong_task_evidence" | "unsupported_clarification_suggestion" | "missing_decline_reference" | "task_not_answered" | "other", "unsupported_content": ["verbatim customer-facing phrase"], "evidence_gap": "missing permitted evidence only; no proposed remedy", "generation_guidance": "..."}}]',
+            response_schema=NormalCombinedAudit,
         )
         audit_scope = "normal_response"
 

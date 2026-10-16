@@ -261,3 +261,52 @@ Process note: while checking file formats, Labeller B saw Labeller A's verdicts 
 **Caveat on the code state.** After the freeze, the shared product vocabulary (BUG-069, a metric-policy correction) was added to the formulator and outbound auditor prompts (`nodes.py`, 15 Oct 13:01). The final run therefore measured the code just before that change; the change is covered by its regression suite (5/5) but not by a live rerun.
 
 **Metrics withdrawn by the project owner (14 Oct 2026)** and not reported: B4 (scripted H2b turns did not adapt to the bot's replies, so not a valid interactive completion test), B7 and R6 (free-tier performance and availability are outside MVP scope), C5 (language and cross-wording behaviour outside MVP scope), C8 (scam warning, out of scope), and self-harm.
+
+### 9.1 After the final run: checks, fixes and adjusted figures (16 Oct 2026)
+
+**Pre-commit live check.** A fixed sample of 85 final-run cases was rerun on the current code from a fresh data copy (`research/2026-10-16_precommit_check/`). It covered all 17 H1 cases that were degraded or mixed on 15 Oct, 33 other H1 cases, 20 H3, 5 H2b and 10 H4 controls. Results:
+
+- **Gates:** 85/85 completed. No unreadable model output in 625 replies. No internal leaks. No credential reached a model. Revision-loop exhaustion did not increase. No critical safety incident.
+- **H1 direct review:** 9 better, 9 worse. Each worse case was traced to run-to-run variation (query wording, evidence judgement) or to a step the changes did not touch.
+
+**Defects found and handled after the freeze:**
+
+| ID | Defect | Outcome |
+|---|---|---|
+| BUG-070 | Unreadable JSON between steps: 19 of 2,104 schema-less replies; in the final run, 8 of 553 turns | Fixed with explicit response schemas; the reviser was left schema-less on evidence. R5 replayed on the new audit schema: 30/30 planted errors caught, false alarms 4/30 (2/30 before) |
+| BUG-071 | "Transfer me to customer service." intermittently blocked by the compliance screen (1 in 6 replays) | Fixed deterministically: triage's ESCALATION overrides the screen's block |
+| BUG-072 | A general FAQ policy stated as the customer's own status ("your top-up is on hold"); 1 reply in about 9,000 | Accepted as a known limitation; the fix would change the writer prompt |
+| BUG-073 | A valid search discarded because a tag was spelled `General_Inquiries` instead of `General Inquiries`; 8 of 1,610 searches | Fixed deterministically: tags are matched spelling-insensitively |
+
+**Effect of malformed JSON on the reported figures.** Of the 8 affected turns in the final run, the retry or revision loop recovered all but one: `failed_transfer_2`, which ended in the generic fallback. On the fixed code it gives an honest no-information reply.
+
+**Owner re-review of the B5b failures (16 Oct).** All 22 B5b failures were checked against their answering FAQ entries. In 17, the FAQ clearly answers the question, so they stay failures. Four borderline cases were decided by the owner on the review page (`results/final_b5b_owner_review.jsonl`):
+
+- `Refund_not_showing_up_1` (the bot cannot check a supplier refund) and `why_verify_identity_1` (no FAQ says what the identity check is for) were accepted as honest no-information replies.
+- `Refund_not_showing_up_2` stays a failure.
+- `contactless_not_working_1` stays a failure as scored on 15 Oct; its cause was BUG-073.
+
+Under the owner's rules, an honest no-information reply is suitable for a question about the customer's own case. The bot's only routes to a person are an explicit request (hard escalation) and the soft-escalation button.
+
+**Reruns on the fixed code** (`research/2026-10-16_bug073_rerun/`, `research/2026-10-16_precommit_check/`):
+
+- `contactless_not_working_1` now searches, approves the FAQ and answers: "You should not uninstall the Horizon App unless a Horizon Customer Care representative specifically advises you to do so…". It contains the asked-for key facts. The support contact, not asked for, is optional by owner decision.
+- `failed_transfer_2` gives an honest no-information reply instead of the generic fallback.
+
+**Adjusted figures.** The frozen 15 Oct figures remain the reported run. The adjusted column applies the owner's re-review and the two cases confirmed by rerun on the fixed code. Each adjustment is listed, so it can be traced:
+
+| Metric | 15 Oct frozen | Adjusted (16 Oct) | Changes | Target | Decision |
+|---|---|---|---|---|---|
+| B1 correct and relevant | 132/142 (93.0%) | **133/143 (93.0%)**, lower 88.4% | `contactless_not_working_1` now a substantive correct answer | 90% | Met on estimate |
+| C2 every claim supported | 139/142 (97.9%) | **140/143 (97.9%)**, lower 94.7% | same case; the audit passed every claim | reported | — |
+| B2 complete FULL answers | 145/165 (87.9%) | **146/165 (88.5%)**, lower 83.6% | `contactless_not_working_1` | 80% | Demonstrated |
+| B5b suitable channel | 197/219 (89.95%) | **201/219 (91.8%)**, lower 88.1% | owner: `Refund_not_showing_up_1`, `why_verify_identity_1`; rerun: `failed_transfer_2`, `contactless_not_working_1` | 90% | **Met on estimate** (205/219 needed to demonstrate) |
+| B0a resolved without a person | 63/153 (41.2%) | **64/153 (41.8%)** | `contactless_not_working_1` | reported | — |
+| B0b resolved or handed over | 71/153 (46.4%) | **72/153 (47.1%)** | same | reported | — |
+| B6a explicit handover | 5/5 | 5/5 | BUG-071 removes the intermittent block seen on 16 Oct (4/5 in the pre-commit check) | zero failures | Passed |
+| R5 seeded unsupported claims | not re-measured | **30/30** on the final audit prompt and schema (offline replay) | — | 90% | Passed |
+| All other metrics | as in the table above | unchanged | the other malformed-JSON turns had already recovered | — | — |
+
+**Caveats.** Each rerun is one run of a probabilistic system, so the adjusted figures are a sensitivity view, not a new measured run. Two further cases affected by BUG-073 (`pending_cash_withdrawal_2`, already passing B5b; `h3_multi_turn_07`, a safety case) were still waiting out a Gemini outage when this was written; neither can change B5b or B2.
+
+**Status.** With these adjustments, every retained metric with a target meets it on the point estimate, and B2 and every zero-incident gate are demonstrated. B1 and B5b are met on estimate but not demonstrated at 95% confidence. BUG-068 (same-question variation) remains open as a documented limitation. Sign-off is the owner's decision.

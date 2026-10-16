@@ -374,6 +374,42 @@ def _compute_subquery_status(subquery: dict) -> str:
     return "OPEN"
 
 
+def _tag_key(value: Any) -> str:
+    """Spelling-insensitive key for a matrix product or intent name."""
+    return re.sub(r"[\s_\-]+", " ", str(value)).strip().casefold()
+
+
+def _canonical_product(value: Any) -> str:
+    """The matrix's own spelling of a product tag, or the stripped input when
+    no matrix product matches. BUG-073: models write tags in either style --
+    "Deposit Account" for Deposit_Account, "General_Inquiries" for "General
+    Inquiries" -- and an exact match rejected an otherwise valid pair, so the
+    search never ran."""
+    key = _tag_key(value)
+    return next((product for product in PRODUCT_INTENT_MATRIX if _tag_key(product) == key), str(value).strip())
+
+
+def _canonical_intent(value: Any) -> str:
+    """The matrix's own spelling of an intent tag (see _canonical_product)."""
+    key = _tag_key(value)
+    for intents in PRODUCT_INTENT_MATRIX.values():
+        for intent in intents:
+            if _tag_key(intent) == key:
+                return intent
+    return str(value).strip()
+
+
+def _normalized_intent_tags(intent_value: Any) -> list[str]:
+    """Unique intent tags in the matrix's spelling, preserving their order."""
+    raw_intents = [intent_value] if isinstance(intent_value, str) else (intent_value or [])
+    tags = []
+    for raw_intent in raw_intents:
+        intent = _canonical_intent(raw_intent) if str(raw_intent).strip() else ""
+        if intent and intent not in tags:
+            tags.append(intent)
+    return tags
+
+
 def _normalized_product_tags(product_value: Any) -> list[str]:
     """Return unique, matrix-valid product tags while preserving their order.
 
@@ -391,7 +427,7 @@ def _normalized_product_tags(product_value: Any) -> list[str]:
         for part in (raw_tag.split(",") if isinstance(raw_tag, str) else [raw_tag])
     ]
     for part in parts:
-        tag = str(part).strip().strip("[]'\" ").strip()
+        tag = _canonical_product(str(part).strip().strip("[]'\" ").strip())
         if tag and tag in PRODUCT_INTENT_MATRIX and tag not in tags:
             tags.append(tag)
     return tags
@@ -439,13 +475,7 @@ def _valid_product_intent_scope_pairs(task: dict) -> list[dict]:
     angle group.  They are constraints, not independent retrieval branches.
     """
     products = _normalized_product_tags(task.get("target_commercial_product"))
-    raw_intents = task.get("target_intent", [])
-    raw_intents = [raw_intents] if isinstance(raw_intents, str) else raw_intents
-    intents = []
-    for raw_intent in raw_intents:
-        intent = str(raw_intent).strip()
-        if intent and intent not in intents:
-            intents.append(intent)
+    intents = _normalized_intent_tags(task.get("target_intent", []))
 
     return [
         {
@@ -466,11 +496,7 @@ def _verified_session_parent_ids_for_task(state: AgentState, task: dict) -> list
     current turn's sufficiency audit before it becomes approved evidence.
     """
     current_products = set(_normalized_product_tags(task.get("target_commercial_product")))
-    current_intents = {
-        str(intent).strip()
-        for intent in (task.get("target_intent", []) if isinstance(task.get("target_intent", []), list) else [task.get("target_intent", "")])
-        if str(intent).strip()
-    }
+    current_intents = set(_normalized_intent_tags(task.get("target_intent", [])))
     if not current_products or not current_intents:
         return []
 
@@ -481,9 +507,7 @@ def _verified_session_parent_ids_for_task(state: AgentState, task: dict) -> list
         for verified_task in reversed(record.get("tasks", []) if isinstance(record, dict) else []):
             prior_task = verified_task.get("search_task", {}) if isinstance(verified_task, dict) else {}
             prior_products = set(_normalized_product_tags(prior_task.get("target_commercial_product")))
-            prior_raw_intents = prior_task.get("target_intent", [])
-            prior_raw_intents = prior_raw_intents if isinstance(prior_raw_intents, list) else [prior_raw_intents]
-            prior_intents = {str(intent).strip() for intent in prior_raw_intents if str(intent).strip()}
+            prior_intents = set(_normalized_intent_tags(prior_task.get("target_intent", [])))
             if not (current_products & prior_products and current_intents & prior_intents):
                 continue
             for parent_id in verified_task.get("approved_parent_ids", []):
@@ -537,14 +561,7 @@ def _normalize_search_task_scope(task: dict) -> dict | None:
     if not angle_groups:
         return None
     product_tags = _normalized_product_tags(normalized.get("target_commercial_product"))
-    intents = normalized.get("target_intent", [])
-    if isinstance(intents, str):
-        intents = [intents]
-    intent_tags = []
-    for raw_intent in intents:
-        intent = str(raw_intent).strip()
-        if intent and intent not in intent_tags:
-            intent_tags.append(intent)
+    intent_tags = _normalized_intent_tags(normalized.get("target_intent", []))
 
     # Keep only products that support at least one requested intent, then keep
     # only intents supported by at least one remaining product. This permits a

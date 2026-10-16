@@ -97,6 +97,8 @@ Run-to-run difference alone is evidence to review, not a failure verdict.
 | BUG-069 | Canonical product name `Deposit_Account` was classified as an internal leak | ~~Medium~~ n/a | ~~Confirmed~~ **Retracted — metric-policy error** | R4 scanner treated an approved standardized product name as a forbidden internal identifier | **Retracted; shared mapping added to formulator and outbound auditor** |
 | BUG-070 | Malformed JSON between pipeline steps: 19 of 2,104 schema-less Gemini replies (0.9%) in five recent runs could not be parsed (outbound fact-check 8, reply writer 11), against 0 of 5,122 schema-constrained replies. The failure surfaces as other problems: an empty reply (BUG-065), or an 'audit unavailable' placeholder that wastes a revision round and ends in the generic fallback (`failed_transfer_2`) | Medium (silent, ~1 in 25–30 turns reaches a step with unreadable JSON) | Confirmed (deterministic scan of 8,178 replies) | The combined fact-check prompt title no longer matched the schema router; the writer and statement writer never had a schema | **Fixed (2026-10-16): response schemas for the fact-check (both routes), reply writer and statement writer; replay 53/53 parse, R5 30/30. Reviser left schema-less on evidence (schema degraded revisions). See `research/2026-10-16_schema_injection_check/`** |
 | BUG-071 | "Transfer me to customer service." got the compliance refusal instead of the handover offer: triage correctly returned ESCALATION, but the parallel inbound compliance screen returned no_compliant_route, and its block overrode triage | Medium (denies an explicit request for a person; demo-visible) | Confirmed (pre-commit check 16 Oct, h4_b6_03; captured prompt blocked 1 of 6 replays) | The screen filed the request under banking actions and, by its own rule, a human handover is not a route, so it found none; the join applied any block before triage's result | **Fixed (2026-10-16): deterministic override in the join -- an ESCALATION from triage overrides the screen's block; no prompt changed. Regression-verified (test_bug055, 20/20)** |
+| BUG-072 | A general FAQ policy stated as the customer's own status: asked why a top-up was not processed, the reply opened "Your top-up transaction is currently experiencing a temporary security hold"; the FAQ only says Horizon holds *certain* transactions for 24 hours, for a customer notified of a delay | Medium (untrue statement about the customer's own money; rare: 1 reply in ~9,000) | Confirmed (pre-commit check 16 Oct, `h1_pending_top_up_2`; 0 of 3 repeats) | The evidence check read the general FAQ as a finding about this customer and wrote a note telling the writer to admit the hold; the writer follows such notes; the fact-checker does not see the note and accepted the sentence as a reasonable conclusion (missed 10 of 10 replays, with and without schema) | **Accepted as a known limitation (owner, 16 Oct): a prompt fix would touch the writer, which shapes every reply; not worth the regression risk this late** |
+| BUG-073 | A valid search was discarded because a tag was spelled in the other style: the query step wrote intent `General_Inquiries` (underscore) for the matrix's `General Inquiries` (space); the exact-match scope check rejected the pair, no search ran, and the reply was "I do not have information" (`contactless_not_working_1`, 15 and 16 Oct) | Medium (silent; 8 of 1,610 logged search tasks, 0.5%) | Confirmed (replay of every logged search task) | Product and intent tags were compared with the matrix by exact string; models copy the underscore style of product names into intent names | **Fixed (2026-10-16): tags are matched spelling-insensitively (case, spaces, underscores, hyphens) and rewritten in the matrix's spelling, deterministically; no prompt changed. Regression-verified (test_bug073, 10/10)** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -3468,3 +3470,91 @@ exclusion, which would have needed another round of live testing).
 override, and runs the whole graph with the screen forced to block and triage
 returning ESCALATION: the turn reaches the handover offer, not the refusal.
 20/20 checks, all 16 suites pass.
+
+
+## BUG-072 — A general FAQ policy was stated as the customer's own status
+
+**Severity:** Medium **Confidence:** Confirmed **Status: Accepted as a known limitation (owner, 2026-10-16)**
+
+**Found in:** the pre-commit live check (`research/2026-10-16_precommit_check`),
+case `h1_h1_pending_top_up_2`.
+
+**Customer question:** "Please explain why my top-up hasn't been processed yet?"
+
+**Customer-visible result:** the reply opened with "Your top-up transaction is
+currently experiencing a temporary security hold." The bot cannot see transaction
+status. The only approved FAQ (`faq_4b2d99b1`) answers a customer who has been
+notified that a transfer will be delayed, and says Horizon holds *certain*
+transactions for 24 hours.
+
+**Cause, step by step:**
+
+1. The evidence check (sufficiency auditor) approved the FAQ as RELEVANT. Its
+   reason said the FAQ "directly addresses" the question, skipping the FAQ's own
+   condition (a delay notice). Its note to the writer said: "Admit that the top-up
+   transaction is experiencing a temporary security hold..."
+2. The writer prompt treats such a note as "a directive... never optional", so the
+   writer stated the hold as fact. The writer has no reasoning field (only the
+   judging steps reason before their output), so nothing asks it what the evidence
+   establishes about this customer.
+3. The fact-checker does not see the note. It read the sentence as a reasonable
+   bridge from the hold policy and passed it. Replaying its prompt gave 10 of 10
+   misses, with the schema and without, so the BUG-070 schema change is not the
+   cause.
+
+**Extent:** rare. The writer's claim did not recur in 3 repeats of the question.
+A deterministic scan of recent runs found one note in 656 that asserted the
+customer's own status (this one), and one reply in 8,959 that stated such a status
+unhedged without the customer having said it (this one).
+
+**Decision:** not fixed. A fix (telling the evidence check and the writer that
+approved evidence is general FAQ information, not a check of this customer's
+account, never to be stated as their current status or cause; or a reasoning
+field for the writer) would change the writer prompt, which shapes every reply,
+and would need another full regression round. Recorded as a design lesson
+(LESSONS_LEARNT 2.6).
+
+
+## BUG-073 — A valid search was discarded over the spelling of a tag
+
+**Severity:** Medium **Confidence:** Confirmed **Status: Fixed 2026-10-16, regression-verified**
+
+**Found in:** the B5b review of the 15 Oct final run, case
+`h1_h1_contactless_not_working_1` ("Should I uninstall the app before I try it
+again?"). The same failure recurred in the 16 Oct pre-commit check.
+
+**Customer-visible result:** "I am sorry, but I do not have information
+available regarding reinstalling the Horizon App." An FAQ says not to uninstall
+the app unless Customer Care advises it, but no search ran.
+
+**Cause:** the query step chose product `Horizon_APP` and intent
+`General_Inquiries`. The product-intent matrix spells the intent
+`General Inquiries`. `_normalize_search_task_scope` compared tags by exact
+string, so it rejected the pair as invalid (`task.scope_rejected`), the task had
+nowhere to go, and the turn fell through to a no-information reply. The model
+copies the underscore style of product names (`Horizon_APP`, `Deposit_Account`)
+into intent names. It was not a clarification decision: triage judged the need
+clear, and no step was asked to clarify.
+
+**Extent:** a replay of all 1,610 logged search tasks found 11 rejected pairs,
+8 of them valid apart from spelling (7 `General_Inquiries`, 1
+`Transaction_Disputes`). In 3 more tasks the misspelt intent was silently
+dropped from the search filter while another intent kept the task alive. In the
+15 Oct final run it affected `contactless_not_working_1` (a B5b failure),
+`pending_cash_withdrawal_2` (scored acceptable) and `h3_multi_turn_07` (refused
+later in the conversation).
+
+**Fix:** `_canonical_product`, `_canonical_intent` and `_normalized_intent_tags`
+match tags ignoring case, spaces, underscores and hyphens, and rewrite them in
+the matrix's own spelling. They are used everywhere tags meet the matrix: scope
+validation, the retrieval filter pairs, and session-history matching. An unknown
+tag passes through unchanged and is still rejected by the matrix check.
+Deterministic; no prompt changed.
+
+**Verification:** `test_bug073_tag_normalization.py` (10/10, fails on the old
+code) uses the recorded task. Replaying all 1,610 logged search tasks: the 8
+spelling rejections are now accepted, the 3 genuine invalid pairs are still
+rejected, and the only change to previously valid tasks is the 3 dropped intents
+now being kept. All 17 offline suites pass. The reported metrics are not
+adjusted: what the bot would answer once the search runs has not been measured,
+so `contactless_not_working_1` stays a B5b failure.

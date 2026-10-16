@@ -96,6 +96,7 @@ Run-to-run difference alone is evidence to review, not a failure verdict.
 | BUG-068 | Frozen same-query replay sometimes falls from a usable answer to no information, unnecessary clarification, or a wrong answer | Medium–High | Suspected (11 reviewed regressions plus 1 unresolved mixed case; individual causes not yet traced) | Under investigation; likely a mixture of retrieval and auditor/model-judgment variants | **Open — debug cohort, not a claim that every semantic difference is a defect** |
 | BUG-069 | Canonical product name `Deposit_Account` was classified as an internal leak | ~~Medium~~ n/a | ~~Confirmed~~ **Retracted — metric-policy error** | R4 scanner treated an approved standardized product name as a forbidden internal identifier | **Retracted; shared mapping added to formulator and outbound auditor** |
 | BUG-070 | Malformed JSON between pipeline steps: 19 of 2,104 schema-less Gemini replies (0.9%) in five recent runs could not be parsed (outbound fact-check 8, reply writer 11), against 0 of 5,122 schema-constrained replies. The failure surfaces as other problems: an empty reply (BUG-065), or an 'audit unavailable' placeholder that wastes a revision round and ends in the generic fallback (`failed_transfer_2`) | Medium (silent, ~1 in 25–30 turns reaches a step with unreadable JSON) | Confirmed (deterministic scan of 8,178 replies) | The combined fact-check prompt title no longer matched the schema router; the writer and statement writer never had a schema | **Fixed (2026-10-16): response schemas for the fact-check (both routes), reply writer and statement writer; replay 53/53 parse, R5 30/30. Reviser left schema-less on evidence (schema degraded revisions). See `research/2026-10-16_schema_injection_check/`** |
+| BUG-071 | "Transfer me to customer service." got the compliance refusal instead of the handover offer: triage correctly returned ESCALATION, but the parallel inbound compliance screen returned no_compliant_route, and its block overrode triage | Medium (denies an explicit request for a person; demo-visible) | Confirmed (pre-commit check 16 Oct, h4_b6_03; captured prompt blocked 1 of 6 replays) | The screen filed the request under banking actions and, by its own rule, a human handover is not a route, so it found none; the join applied any block before triage's result | **Fixed (2026-10-16): deterministic override in the join -- an ESCALATION from triage overrides the screen's block; no prompt changed. Regression-verified (test_bug055, 20/20)** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -3427,3 +3428,43 @@ returned a temporary 503 and was recorded as unavailable rather than scored.
 **Why the reviser gets worse with a schema (root cause, tested 16 Oct):** two mechanisms. (1) Commit before deciding, supported by research: the model generates left to right and cannot backtrack. Under a strict schema the field order fixes the generation order, and the decoder enforces only valid tokens. So the model starts writing a block's text before deciding what to remove, and can only append the fix after the flagged sentence (Tam et al. 2024, "Let Me Speak Freely?", arXiv 2408.02442: format restrictions hurt reasoning and key order matters; Park et al. 2024, "Grammar-Aligned Decoding", arXiv 2405.21047: constrained decoding distorts the output distribution). (2) A copying pull, our inference: the reviser is shown each block's current text and returns the same structure, and an undescribed field favours copying the shown value and appending; the removal instruction is far away in the prompt. Evidence on one repeated case, counting runs that kept the flagged sentence: plain schema 7/10; text field moved last 4/5; "phrases to remove" field written first 2/5 (in 3 of the 4 runs that listed the phrase it was removed; 1 run listed it and still kept it, which supports (2)); field description requiring removal 1/5; no schema 0/5. Decision: no schema for the reviser (owner, 16 Oct).
 
 **Verification:** 53 real prompts replayed, including all 9 whose original reply was malformed: 53/53 parse, no missing fields; fact-check verdicts as stable as a no-schema rerun; writer content as close to the original as a no-schema rerun; R5 planted errors 30/30 caught (false alarms 4/30 vs 2/30, all on the adjacent-scope framing rule); offline suites all pass.
+
+
+## BUG-071 — An explicit request for a person was blocked by the compliance screen
+
+**Severity:** Medium **Confidence:** Confirmed **Status: Fixed 2026-10-16, regression-verified**
+
+**Found in:** the pre-commit live check (`research/2026-10-16_precommit_check`),
+case `h4_b6_03`, "Transfer me to customer service." On 15 Oct and in earlier
+runs the same message got the handover offer.
+
+**Customer-visible result:** "For compliance reasons, I'm unable to fulfil that
+request. Could you try rephrasing your question, or asking about something
+else?" instead of "I can prepare a summary for a human agent to review your
+request."
+
+**Cause:** triage and the inbound compliance screen run in parallel, and the join
+applied the screen's verdict first. Triage correctly returned ESCALATION. The
+screen filed the request under "commitments or banking actions" (probably
+because of the word "transfer") and, since its prompt says that handing the
+conversation to a human is not a route, found no compliant route. Replaying the
+captured screen prompt six times gave one block, three out-of-scope verdicts and
+two routes through the FAQ's contact details: an intermittent model judgement.
+The other four handover phrasings in the check were not blocked.
+
+**Fix:** a deterministic override in `node_02g_inbound_compliance_join`. When
+triage returns ESCALATION, the screen's block is ignored and the turn goes to the
+escalation broker. This is safe because triage returns ESCALATION only for an
+explicit request (or contextual confirmation) to reach a human, with no
+components, and the broker answers nothing: it shows a fixed handover offer and
+a case summary for the agent. A mixed message such as "get me a human and tell
+me which stock to buy" therefore goes to a person without the stock question
+being answered. The prompt-attack check and the credential filter run before
+this point and are unaffected. Neither prompt changed, so the screen's tuned
+behaviour on every other request is untouched (owner's choice over a prompt
+exclusion, which would have needed another round of live testing).
+
+**Verification:** `test_bug055_inbound_compliance_screen.py` checks the join
+override, and runs the whole graph with the screen forced to block and triage
+returning ESCALATION: the turn reaches the handover offer, not the refusal.
+20/20 checks, all 16 suites pass.

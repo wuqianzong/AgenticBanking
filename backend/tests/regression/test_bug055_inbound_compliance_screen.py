@@ -47,6 +47,8 @@ join = N.node_02g_inbound_compliance_join
 check("join blocks a non-compliant verdict",
       join({**base, "inbound_compliance": {"non_compliant": True}, "triage_status": "DECOMPOSED"}) == {"preflight_status": "non_compliant", "triage_status": "NON_COMPLIANT"})
 check("join leaves a compliant turn to triage (non-empty update)", join({**base, "inbound_compliance": {"non_compliant": False}, "triage_status": "ESCALATION"}) == {"triage_status": "ESCALATION"})
+check("BUG-071: an explicit human request overrides the screen's block",
+      join({**base, "inbound_compliance": {"non_compliant": True}, "triage_status": "ESCALATION"}) == {"triage_status": "ESCALATION"})
 
 import asyncio
 def stream_updates(screen_reply):
@@ -70,6 +72,9 @@ def stream_updates(screen_reply):
     return updates
 ups = stream_updates({"compliance_area": "commitments or banking actions", "compliant_route": "Answer: no -- never share your PIN.", "verdict": "route_found"})
 check("streamed join update on a passed turn is a dict (gateway can read it)", any(n == "n2g" and isinstance(u, dict) for n, u in ups) and not any(n == "n2g" and u is None for n, u in ups))
+ups = stream_updates({"compliance_area": "commitments or banking actions", "compliant_route": "none", "verdict": "no_compliant_route"})
+check("BUG-071: a blocked explicit human request still reaches the handover offer, not the refusal",
+      any(n == "n23" and "human agent" in (u or {}).get("final_response", "") for n, u in ups) and not any(n == "n5" for n, u in ups))
 
 seen = {}
 def fake_triage(prompt, *a, **k):

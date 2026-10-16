@@ -2863,7 +2863,17 @@ def node_02f_inbound_compliance_screen(state: AgentState):
 def node_02g_inbound_compliance_join(state: AgentState):
     """Join of the parallel compliance screen (node_02f) and triage (node_02d).
     The compliance verdict is applied first: a non-compliant request ends the
-    turn with the fixed refusal and triage's result is not used."""
+    turn with the fixed refusal and triage's result is not used -- except an
+    explicit request for a human (BUG-071). Triage returns ESCALATION only
+    for that, with no components, and the escalation broker answers nothing:
+    it shows a fixed handover offer. So the screen's verdict cannot matter
+    there, and a block would deny the customer a person; the screen had
+    blocked "Transfer me to customer service." 1 time in 6. Deterministic on
+    purpose, so neither prompt changes."""
+    if state.get("inbound_compliance", {}).get("non_compliant") and state.get("triage_status") == "ESCALATION":
+        print("   🙋 [COMPLIANCE JOIN]: explicit human request -- escalation overrides the screen's block")
+        log_event("inbound.compliance.escalation_override")
+        return {"triage_status": "ESCALATION"}
     if state.get("inbound_compliance", {}).get("non_compliant"):
         print("   ⛔ [COMPLIANCE JOIN]: request blocked by the inbound compliance screen")
         return {"preflight_status": "non_compliant", "triage_status": "NON_COMPLIANT"}

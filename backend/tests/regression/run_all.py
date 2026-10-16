@@ -15,7 +15,7 @@ here = Path(__file__).resolve().parent
 failed = 0
 for suite in sorted(here.glob("test_*.py")):
     run = subprocess.run([sys.executable, str(suite)], capture_output=True, text=True, cwd=here.parents[2])
-    totals = re.findall(r"^(\d+)/(\d+)\s*$", run.stdout, re.M)
+    totals = re.findall(r"^(\d+)/(\d+)(?:\s+checks passed)?\s*$", run.stdout, re.M)
     passed, total = (int(totals[-1][0]), int(totals[-1][1])) if totals else (0, 0)
     ok = run.returncode == 0 and total > 0 and passed == total
     failed += not ok

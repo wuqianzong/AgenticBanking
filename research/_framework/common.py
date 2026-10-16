@@ -828,9 +828,16 @@ async def run_api_study(
     TestClient), recording customer-visible timing -- time to first streamed
     feedback and time to the complete reply -- and whether the turn ended in
     the model-unavailable message, alongside the same state summary and
-    per-case log events the graph runner records. A model-unavailable turn is
-    recorded, then retried after `unavailable_retry_wait_seconds` (up to
-    max_retries) so the rest of the case can still be measured."""
+    per-case log events the graph runner records.
+
+    Research runs are expected to survive laptop sleep, temporary network
+    loss, and exhaustion of the complete free-tier key/model pool. The
+    production router owns bounded per-request key rotation and Gemini model
+    fallback; the research-only wrapper below waits and retries only after
+    that complete pool is exhausted. HTTP transport failures between this
+    runner and its in-process API are likewise retried instead of turning a
+    sleeping laptop into a recorded product failure.
+    """
     skip_case_ids = skip_case_ids or set()
     capture_offset = capture_log_path.stat().st_size if capture_log_path and capture_log_path.exists() else 0
     import socket
@@ -866,6 +873,15 @@ async def run_api_study(
 
     with progress_path.open("w", encoding="utf-8") as progress, results_path.open("w", encoding="utf-8") as results_file:
         progress.write(f"=== run started {started_at} study={config.study_id} runner=api_validation provider={config.llm_provider} cases={len(cases)} ===\n")
+        if key_pool.available:
+            progress.write(
+                f"{utc_now()} API key pool active: {len(key_pool.keys)} key(s); "
+                "production rotation and cross-model fallback enabled\n"
+            )
+            key_pool.install_call_site_rotation(
+                progress,
+                all_keys_wait_seconds=max(config.unavailable_retry_wait_seconds, 600),
+            )
         progress.flush()
         for case_index, case in enumerate(cases, start=1):
             if case["case_id"] in skip_case_ids:
@@ -885,7 +901,16 @@ async def run_api_study(
                     attempts += 1
                     try:
                         outcome = await asyncio.to_thread(_api_turn, client, session_id, config.user_id, message, config.llm_provider)
-                    except Exception as error:  # transport-level failure
+                    except Exception as error:  # runner-to-local-API transport failure
+                        if _is_persistent_transient_error(error):
+                            progress.write(
+                                f"{utc_now()} case={case['case_id']} turn={turn_index} "
+                                f"transport unavailable; retry in {config.unavailable_retry_wait_seconds}s: "
+                                f"{str(error)[:200]}\n"
+                            )
+                            progress.flush()
+                            await asyncio.sleep(config.unavailable_retry_wait_seconds)
+                            continue
                         case_status = "ERROR"
                         turn_records.append({"turn_index": turn_index, "message": message, "status": "ERROR", "attempts": attempts,
                                              "error": str(error)[:1000], "assertions": []})

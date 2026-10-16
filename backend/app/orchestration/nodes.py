@@ -1104,6 +1104,33 @@ PRODUCT_INTENT_MATRIX = {
     "Stocks": ["Fees And Charges", "General Inquiries", "Wealth And Insurance"]
 }
 
+# One product vocabulary shared by the intent formulator and the outbound
+# auditor.  Matrix keys are Horizon's standardized product names; the values
+# are equivalent customer/data vocabulary, not replacements that the response
+# writer is required to use.  In particular, `Deposit_Account` and "savings
+# account" name the same Horizon product, so either wording is factually valid
+# in a customer response.
+PRODUCT_NAME_EQUIVALENCES = {
+    "ALL": ["general or shared Horizon banking services"],
+    "Credit_Card": ["credit card", "credit-card account"],
+    "Debit_Card": ["debit card"],
+    "Deposit_Account": ["deposit account", "savings account", "Savings_Account"],
+    "Horizon_APP": ["Horizon App"],
+    "Insurance": ["insurance"],
+    "Mutual_Funds": ["mutual funds"],
+    "Personal_Loan": ["personal loan"],
+    "Rewards_Program": ["rewards program"],
+    "Stocks": ["stocks"],
+}
+
+_PRODUCT_VOCABULARY_CONTRACT = """STANDARD PRODUCT VOCABULARY
+The keys below are Horizon's standardized product names. Each value lists
+equivalent names for the same product. The canonical key and its equivalents
+must be interpreted as the same product; the canonical key is itself an
+approved product name and is permitted in customer-facing content.
+{mapping}
+""".format(mapping=json.dumps(PRODUCT_NAME_EQUIVALENCES, ensure_ascii=False, sort_keys=True))
+
 # Business facts about how Horizon's own products work. HORIZON_BUSINESS_FACTS
 # is shared by every call that needs them: the product-choosing calls (the
 # formulator and the Territory B retry, via HORIZON_PRODUCT_BRIEFING) and the
@@ -1125,7 +1152,7 @@ HORIZON_BUSINESS_FACTS = """HORIZON BUSINESS FACTS -- how Horizon's own products
   personal details or their app access) is offered in the Horizon App itself
   (Horizon_APP)."""
 
-HORIZON_PRODUCT_BRIEFING = HORIZON_BUSINESS_FACTS + """
+HORIZON_PRODUCT_BRIEFING = HORIZON_BUSINESS_FACTS + "\n" + _PRODUCT_VOCABULARY_CONTRACT + """
 - For search: documentation about using the debit card can also be filed under
   Deposit_Account, and a shared service concerns Horizon_APP.
 - Classifying a card request:
@@ -4846,6 +4873,15 @@ async def node_03b_rag_worker(state: AgentState):
             for result in retrieved_results
             if result.get("cache_hits")
         },
+        cache_lookup_queries={
+            task.get("task_id"): task.get("direct_query", task.get("customer_component", ""))
+            for task in tasks_to_retrieve
+        },
+        cache_hits={
+            result.get("task_id"): result.get("cache_hits", [])
+            for result in retrieved_results
+            if result.get("cache_hits")
+        },
     )
     cache_injected_by_task = dict(state.get("task_cache_injected_parent_ids", {}))
     for result in retrieved_results:
@@ -7062,6 +7098,30 @@ def _flatten_response_block_text(block: dict) -> str:
     return "\n".join(p for p in parts if p).strip()
 
 
+def _drop_duplicate_terminal_clarification_elements(
+    response_blocks: list[dict], terminal_clarification: str
+) -> list[dict]:
+    """Remove an ordinary text element that duplicates the legacy top-level
+    clarification field.
+
+    The top-level copy is intentionally kept: because it has no obligation
+    citation, the outbound checks can reject/revise it. Keeping the ordinary
+    cited copy instead would let the same rejected question lock as approved
+    under a different representation (BUG-066).
+    """
+    normalized = re.sub(r"\s+", " ", str(terminal_clarification or "")).strip().casefold()
+    if not normalized:
+        return response_blocks
+    return [
+        block for block in response_blocks
+        if not (
+            str(block.get("blockId") or "").startswith("element_")
+            and block.get("type") == "text"
+            and re.sub(r"\s+", " ", _flatten_response_block_text(block)).strip().casefold() == normalized
+        )
+    ]
+
+
 # Every stored response block (see _generate_response_blocks's block-
 # building loop) always carries the FULL union of every type's fields, so
 # unrelated types can share dict-shape code -- a checklist block, for
@@ -7104,6 +7164,79 @@ def _simplify_block_for_revision(block: dict) -> dict:
         "type": block_type,
         **{field: block.get(field) for field in fields},
     }
+
+
+def _normalize_reviser_output(generated: Any, pending_blocks: list[dict]) -> dict[str, dict]:
+    """Normalize only BUG-065's observed, unambiguous reviser deviations.
+
+    The reviser occasionally returns a pending block's sole source task ID
+    instead of its transport ``block_id`` and uses generic ``content`` for a
+    text leaf. Both can be resolved deterministically from the skeleton that
+    was sent to the model. Unknown IDs, ambiguous source IDs, structural
+    changes, and fields that do not map to the pending block's own editable
+    shape are discarded rather than guessed.
+    """
+    if isinstance(generated, list):
+        raw_revisions = generated
+    elif isinstance(generated, dict):
+        raw_revisions = generated.get("response_blocks", generated.get("revised_blocks", []))
+    else:
+        raw_revisions = []
+    if not isinstance(raw_revisions, list):
+        return {}
+
+    pending_by_id = {
+        str(block.get("blockId")): block
+        for block in pending_blocks
+        if str(block.get("blockId") or "")
+    }
+    source_to_block_ids: dict[str, set[str]] = {}
+    for block_id, block in pending_by_id.items():
+        source_ids = [*(block.get("sourceTaskIds") or []), *(block.get("sourceShortcutHandles") or [])]
+        for source_id in source_ids:
+            if source_id:
+                source_to_block_ids.setdefault(str(source_id), set()).add(block_id)
+
+    normalized: dict[str, dict] = {}
+    for entry in raw_revisions:
+        if not isinstance(entry, dict):
+            continue
+        returned_id = str(entry.get("block_id") or entry.get("blockId") or "")
+        exact_block_id = returned_id in pending_by_id
+        block_id = returned_id if exact_block_id else ""
+        if not block_id:
+            matches = source_to_block_ids.get(returned_id, set())
+            if len(matches) == 1:
+                block_id = next(iter(matches))
+        if not block_id:
+            continue
+
+        block = pending_by_id[block_id]
+        block_type = str(block.get("type") or "text")
+        editable_fields = set(_BLOCK_EDITABLE_FIELDS.get(block_type, ["contextText", "text", "extendedText"]))
+        # An exact pending skeleton entry may deliberately clear a field.
+        # That is how the reviser removes content after a REMOVE/no-obligation
+        # finding. Preserve explicit empty strings/lists/dicts so reassembly
+        # can distinguish "clear this field" from an omitted field. Aliased
+        # historical shapes remain non-empty-only: an alias is tolerated for
+        # content recovery, never granted deletion semantics.
+        revision = {
+            key: value
+            for key, value in entry.items()
+            if key in editable_fields
+            and value is not None
+            and (exact_block_id or value not in ("", [], {}))
+        }
+
+        # Historical BUG-065 shape: {block_id: "task_1", content: "..."}
+        # for a text fallback whose skeleton exposes the leaf as `text`.
+        content = entry.get("content")
+        content_target = "message" if block_type == "alert" else "text" if block_type == "text" else ""
+        if content_target and content_target in editable_fields and content not in (None, "", [], {}):
+            revision.setdefault(content_target, content)
+        if revision:
+            normalized[block_id] = revision
+    return normalized
 
 
 def _personal_data_fallback_sentence(field_description: str, insert_token: str) -> str:
@@ -7293,6 +7426,7 @@ def _apply_response_completeness_nets(
             log_event("response.flexible.task_omitted", task_id=oid, component=component)
             block = _net_block_shell(oid, False)
             block["text"] = fallback_text
+            block["requiresEvidenceRevision"] = True
             _insert_at_end(block)
 
         elif rule == "EVIDENCE RULES":
@@ -8085,6 +8219,20 @@ def _generate_response_blocks(state: AgentState) -> dict:
     for block in response_blocks:
         block["sourceUnmatchedIds"] = unmatched_by_block.get(block.get("blockId"), [])
 
+    # `clarification` is a legacy top-level writer field with no obligation
+    # citation of its own. A model can copy the same question into a normal
+    # element as well, causing two independently audited representations:
+    # the ordinary element may lock as approved while the uncited
+    # clarification is rejected. Remove only equivalent ordinary text copies
+    # before the completeness net; the net can then restore the real cited
+    # clarification obligation, if one exists, and the legacy copy remains
+    # independently auditable.
+    terminal_clarification = _llm_text(generated, "clarification")
+    if terminal_clarification:
+        response_blocks = _drop_duplicate_terminal_clarification_elements(
+            response_blocks, terminal_clarification
+        )
+
     # The model can regenerate one flagged task's element during a redraft and
     # simply forget to re-emit an already-correct task's element alongside it.
     # Since nothing is left to flag, outbound audits pass on the truncated
@@ -8118,7 +8266,6 @@ def _generate_response_blocks(state: AgentState) -> dict:
     # same generic builder node_11 uses. Still read here so text the model
     # puts in it anyway is kept and audited rather than silently lost; such
     # a block has no source obligation.
-    terminal_clarification = _llm_text(generated, "clarification")
     if terminal_clarification:
         response_blocks.append({
             "blockId": "clarification", "sourceTaskIds": [], "type": "clarification",
@@ -8843,35 +8990,10 @@ def node_04c_response_reviser(state: AgentState) -> dict:
         print(f"🚨 [RESPONSE REVISER ERROR]: {error}")
         generated = {}
 
-    # Tolerate multiple shapes for the same content -- the model is asked
-    # for the full skeleton back under "response_blocks", but has been
-    # observed deviating to a bare list or the old "revised_blocks" key.
-    # Whatever the wrapper, only entries whose block_id is in
-    # pending_block_ids are ever read below -- an "approved" entry (or an
-    # unrecognized block_id) is always discarded regardless of what the
-    # model wrote for it, and the stored approved copy is used instead.
-    if isinstance(generated, list):
-        raw_revisions = generated
-    elif isinstance(generated, dict):
-        raw_revisions = generated.get("response_blocks", generated.get("revised_blocks", []))
-    else:
-        raw_revisions = []
-    revised_by_block_id = {}
-    for entry in raw_revisions:
-        if not isinstance(entry, dict):
-            continue
-        block_id = entry.get("block_id")
-        if block_id not in pending_block_ids:
-            continue
-        # _simplify_block_for_revision showed this block using exactly its
-        # own stored field names as both the input AND the required output
-        # shape -- one vocabulary, so no field-name translation is needed
-        # here at all; _reassemble_response_blocks's own merge already
-        # ignores blockId/type/sourceTaskIds and any empty value.
-        # "revision_status" is this prompt's own bookkeeping tag, added by
-        # full_skeleton above and never a real block field -- stripped here
-        # so it can never leak into the merged, customer-facing block.
-        revised_by_block_id[block_id] = {k: v for k, v in entry.items() if k not in ("block_id", "type", "revision_status")}
+    # Normalize only wrappers/aliases that can be resolved against the exact
+    # pending skeleton without guessing; unknown or ambiguous output remains
+    # unusable and the prior safe block is retained.
+    revised_by_block_id = _normalize_reviser_output(generated, pending_blocks)
 
     spliced = _reassemble_response_blocks(approved_blocks, original_blocks, pending_block_ids, revised_by_block_id)
     spliced = _apply_response_completeness_nets(
@@ -8933,8 +9055,19 @@ _DETERMINISTIC_FINDING_TEXT = {
         "This block is not based on any obligation given for this response.",
         "Remove every banking fact, procedure, product, policy, or next step from it; keep at most a brief courtesy or connecting sentence.",
     ),
+    "approved_evidence_omitted": (
+        "Approved evidence exists for this task, but response generation produced no usable answer block.",
+        "Write a substantive answer for this task from its approved evidence; do not leave the deterministic omission fallback as the final response.",
+    ),
+    "empty_stepper_instruction": (
+        "A procedural step has a generic step label and no content beyond the same ordinal number as its position.",
+        "Rewrite every step in this block from its approved obligations so its label or detail contains a concrete action or description; never use a list-number precision token as the whole instruction.",
+    ),
 }
-_BLOCK_METADATA_KEYS = {"blockId", "taskId", "sourceTaskIds", "sourceShortcutHandles", "sourceUnmatchedIds", "revised"}
+_BLOCK_METADATA_KEYS = {
+    "blockId", "taskId", "sourceTaskIds", "sourceShortcutHandles",
+    "sourceUnmatchedIds", "requiresEvidenceRevision", "revised",
+}
 
 
 def _deterministic_outbound_findings(state: AgentState, check_citations: bool = False) -> list[dict]:
@@ -9007,6 +9140,51 @@ def _deterministic_outbound_findings(state: AgentState, check_citations: bool = 
             "generation_guidance": guidance,
         }
 
+    def _generic_step_label(value: Any, position: int) -> bool:
+        """Recognise only structurally generic labels used by supported UI
+        languages. This deliberately does not attempt semantic usefulness:
+        a substantive title such as "Call support" makes a numeric detail
+        legitimate, while Step/Paso/步骤 plus its position does not.
+        """
+        normalized = re.sub(r"[^\w]+", " ", str(value or "").casefold(), flags=re.UNICODE).strip()
+        compact = normalized.replace(" ", "")
+        return compact in {
+            str(position),
+            f"step{position}",
+            f"paso{position}",
+            f"步骤{position}",
+            f"步驟{position}",
+        }
+
+    def _ordinal_value(value: Any) -> int | None:
+        match = re.fullmatch(
+            r"\s*[\(\[]?\s*(\d+)\s*(?:st|nd|rd|th)?\s*[\)\].:]?\s*",
+            str(value or "").casefold(),
+        )
+        return int(match.group(1)) if match else None
+
+    def _empty_stepper_instructions(block: dict) -> list[str]:
+        if block.get("type") != "stepper":
+            return []
+        empty_steps = []
+        for position, item in enumerate(block.get("items") or [], start=1):
+            if not isinstance(item, dict) or not _generic_step_label(item.get("label"), position):
+                continue
+            detail = str(item.get("detail") or "")
+            placeholder_ids = re.findall(r"\{\{(.*?)\}\}", detail)
+            if not placeholder_ids or any(placeholder_id not in valid for placeholder_id in placeholder_ids):
+                continue
+            # Once every placeholder is removed, only punctuation/spacing may
+            # remain. Any Unicode letter or digit is substantive enough to
+            # avoid this narrow finding; the audit still judges its quality.
+            residue = re.sub(r"\{\{.*?\}\}", "", detail)
+            if any(character.isalnum() for character in residue):
+                continue
+            resolved_ordinals = [_ordinal_value(valid[placeholder_id]) for placeholder_id in placeholder_ids]
+            if resolved_ordinals and all(value == position for value in resolved_ordinals):
+                empty_steps.append(f"{item.get('label', '')}: {detail}".strip())
+        return empty_steps
+
     findings, attributed = [], set()
     for block, text in zip(blocks, block_texts):
         task_ids = [t for t in (block.get("sourceTaskIds") or []) if t]
@@ -9014,9 +9192,26 @@ def _deterministic_outbound_findings(state: AgentState, check_citations: bool = 
             if content:
                 findings.append(_finding(task_ids[0] if task_ids else "", kind, content))
                 attributed.update(content)
+        empty_steps = _empty_stepper_instructions(block)
+        if empty_steps:
+            findings.append(_finding(
+                task_ids[0] if task_ids else str(block.get("blockId") or ""),
+                "empty_stepper_instruction",
+                empty_steps,
+            ))
     if check_citations:
         for block in blocks:
             block_id = str(block.get("blockId") or "")
+            # BUG-065: an evidence-obligation fallback is safe to show only
+            # if retries exhaust; it is not a successful answer. Force it
+            # through the reviser rather than allowing a generic non-answer
+            # to pass merely because it contains no unsupported claim.
+            if block.get("requiresEvidenceRevision") and block.get("sourceTaskIds") and not block.get("revised"):
+                findings.append(_finding(
+                    str(block.get("sourceTaskIds")[0]),
+                    "approved_evidence_omitted",
+                    [_flatten_response_block_text(block)],
+                ))
             # Only blocks the generator wrote (element_N, and the free-text
             # `clarification` field's block) -- net-inserted and fallback
             # blocks are built by code from one obligation each -- and only
@@ -9336,7 +9531,10 @@ def _reassemble_response_blocks(
     never pass and would only exhaust the retries.
     """
     approved_ids = {block.get("blockId") for block in approved_response_blocks}
-    locked_fields = {"blockId", "type", "sourceTaskIds", "sourceShortcutHandles", "sourceUnmatchedIds", "revised"}
+    locked_fields = {
+        "blockId", "type", "sourceTaskIds", "sourceShortcutHandles",
+        "sourceUnmatchedIds", "requiresEvidenceRevision", "revised",
+    }
     result = []
     for block in original_response_blocks:
         block_id = block.get("blockId")
@@ -9349,7 +9547,10 @@ def _reassemble_response_blocks(
             continue
         merged = dict(block)
         for key, value in revision.items():
-            if key in locked_fields or value in (None, "", [], {}):
+            # `_normalize_reviser_output` includes an empty value only when
+            # the reviser returned the exact pending skeleton entry. Empty is
+            # then an explicit deletion, not an omitted edit (BUG-066).
+            if key in locked_fields or value is None:
                 continue
             merged[key] = value
         merged["revised"] = True
@@ -9476,6 +9677,12 @@ def node_06_outbound_combined_audit_gate(state: AgentState):
         TWO independent axes in this same pass. Assess each axis strictly
         on its own terms; a pass or failure on one axis never excuses,
         explains away, or is evidence toward the other axis's verdict.
+
+        {_PRODUCT_VOCABULARY_CONTRACT}
+        Apply this same vocabulary contract used by the intent formulator.
+        Do not reject an otherwise supported statement merely because it uses
+        a standardized product key instead of one of its equivalent names, or
+        vice versa.
 
         ============================================================
         AXIS 1 — CONDUCT & COMPLIANCE (evidence-independent)
@@ -10170,6 +10377,20 @@ def _record_answer_cache_outcomes(state: AgentState) -> None:
             surfaced_doc_ids = [hit["doc_id"] for hit in cache_injected.get(task_id, [])]
             cache.record_outcome(
                 query_text=text,
+                approved_parent_ids=result.get("approved_parent_ids", []),
+                surfaced_doc_ids=surfaced_doc_ids,
+                # Store the raw turn wording as a second searchable
+                # representation, but keep lookup anchored on the resolved,
+                # context-aware subquery above. This lets a clear subquery
+                # retrieve either representation without making vague inputs
+                # such as "yes" the retrieval anchor.
+                alternate_query_texts=[state.get("user_input", "")],
+            )
+            log_event(
+                "answer_cache.record_outcome.completed",
+                task_id=task_id,
+                query_text=text,
+                alternate_query_texts=[state.get("user_input", "")],
                 approved_parent_ids=result.get("approved_parent_ids", []),
                 surfaced_doc_ids=surfaced_doc_ids,
             )

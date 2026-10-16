@@ -29,10 +29,9 @@ Two operations:
     customer-facing turn actually failed.
 
 Safety properties, all deliberately conservative:
-  - PROMOTION_CONSENSUS_THRESHOLD: a (text, parent-id-set) pairing must be
-    independently confirmed this many times before it is ever surfaced.
-    A single degraded/lenient approval can never alone seed the cache --
-    it needs to recur, which a one-off mislabeling essentially can't.
+  - Only parent ids from an outbound-audit-passed turn are recorded, and a
+    cache hit remains only a candidate for the fresh sufficiency audit. The
+    cache never authorizes or serves an answer directly.
   - Rolling rejection-rate quarantine: every cache-suggested candidate's
     surfaced/rejected counts are tracked separately from organically
     retrieved candidates (see nodes.py's task_cache_injected_parent_ids).
@@ -55,19 +54,14 @@ from backend.app.orchestration.rag_engine import chroma_client, sqlite_conn
 
 COLLECTION_NAME = "subquery_answer_cache"
 
-# Chosen deliberately looser than a typical bypass-style semantic cache
-# would tolerate, because a bad hit here only ever reaches the sufficiency
-# auditor as one extra candidate -- it is never served to the customer
-# directly. See docs/FAIRNESS_ANSWER_CACHE_DESIGN.md S2 for the
-# precision/recall tradeoff discussion and the empirical band data
-# (research/2026-09-05_banking77_full_coverage/reports/fairness_cosine_consistency.md)
-# this threshold was chosen against.
-DEFAULT_SIMILARITY_THRESHOLD = 0.85
-DEFAULT_TOP_K = 3
-
-# A (text, parent-id-set) pairing must recur this many times, confirmed by
-# an outbound-audit-passed turn each time, before it is ever surfaced.
-PROMOTION_CONSENSUS_THRESHOLD = 2
+# Chosen deliberately looser than a bypass-style semantic cache can tolerate:
+# a hit is only an extra candidate for the fresh sufficiency audit and is never
+# served directly. An offline replay of the frozen C4 run found that 0.65
+# recovered all 44/44 expected same-question parent opportunities, versus
+# 41/44 at 0.80 and 38/44 at 0.85, without increasing unexpected parent IDs
+# in the scored repeats. See docs/FAIRNESS_ANSWER_CACHE_DESIGN.md section 5.
+DEFAULT_SIMILARITY_THRESHOLD = 0.65
+DEFAULT_TOP_K = 12
 
 # Quarantine an entry once its own cache-suggested candidates have been
 # rejected at least this fraction of the time, but only once it has been
@@ -76,8 +70,7 @@ PROMOTION_CONSENSUS_THRESHOLD = 2
 QUARANTINE_MIN_SURFACED = 5
 QUARANTINE_REJECTION_RATE = 0.35
 
-STATUS_CANDIDATE = "candidate"
-STATUS_ELIGIBLE = "eligible"
+STATUS_ACTIVE = "active"
 STATUS_QUARANTINED = "quarantined"
 
 
@@ -126,14 +119,16 @@ class AnswerCache:
         top_k: int = DEFAULT_TOP_K,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
     ) -> list[dict[str, Any]]:
-        """Return up to `top_k` eligible cache entries close to `query_text`.
+        """Return up to `top_k` active cache entries close to `query_text`.
 
-        Each hit is {"doc_id", "parent_ids", "similarity"}. Only entries
-        with status ELIGIBLE are ever returned -- CANDIDATE entries are
-        still accumulating consensus and QUARANTINED entries have shown a
-        real rejection pattern. Any parent id whose underlying FAQ content
-        has changed since this entry was last written is dropped from the
-        hit inline, never served stale.
+        `query_text` is the context-resolved retrieval subquery. The index
+        contains both original-question and generated-subquery representations,
+        so one semantic search can match either representation. Each hit is
+        {"doc_id", "parent_ids", "similarity"}. Historical candidate/eligible
+        records and new active records are searchable immediately; only
+        QUARANTINED entries are excluded. Any parent id whose underlying FAQ
+        content has changed since this entry was last written is dropped from
+        the hit inline, never served stale.
         """
         normalized = _normalize_text(query_text)
         if not normalized:
@@ -145,7 +140,10 @@ class AnswerCache:
 
         results = self.collection.query(
             query_texts=[normalized],
-            n_results=min(top_k * 4, count),  # over-fetch; filtered below by status/threshold
+            n_results=min(top_k * 4, count),
+            # Filter before Chroma applies n_results so quarantined records
+            # cannot crowd valid candidates out of the nearest-neighbour set.
+            where={"status": {"$ne": STATUS_QUARANTINED}},
         )
         if not results or not results.get("ids") or not results["ids"][0]:
             return []
@@ -157,9 +155,6 @@ class AnswerCache:
             if similarity < similarity_threshold:
                 continue
             metadata = results["metadatas"][0][i] or {}
-            if metadata.get("status") != STATUS_ELIGIBLE:
-                continue
-
             stored_parent_ids: list[str] = json.loads(metadata.get("parent_ids", "[]"))
             stored_hashes: dict[str, str] = json.loads(metadata.get("faq_content_hashes", "{}"))
             current_hashes = self._current_faq_content_hashes(stored_parent_ids)
@@ -192,6 +187,7 @@ class AnswerCache:
         query_text: str,
         approved_parent_ids: list[str],
         surfaced_doc_ids: list[str] | None = None,
+        alternate_query_texts: list[str] | None = None,
     ) -> None:
         """Record one outbound-audit-passed turn's outcome for a task.
 
@@ -201,12 +197,11 @@ class AnswerCache:
              `task_cache_injected_parent_ids`) gets its surfaced/rejected
              counters updated -- rejected if none of that doc's own
              parent ids made it into this turn's final approved set.
-          2. If this turn itself resolved with a non-empty approved set,
-             that (text, approved-parent-set) pairing's consensus count is
-             incremented (or a new candidate entry created at count 1),
-             independent of whether the cache assisted this turn at all --
-             this is how the cache keeps learning from ordinary,
-             non-cache-assisted traffic, not just from its own hits.
+          2. If this turn itself resolved with a non-empty approved set, each
+             parent is recorded independently against both the resolved search
+             subquery and any alternate representation (normally the original
+             customer message). All records are searchable immediately because
+             every cache hit still goes through a fresh sufficiency audit.
         """
         approved = sorted({pid for pid in (approved_parent_ids or []) if pid})
 
@@ -216,43 +211,44 @@ class AnswerCache:
         if not approved:
             return
 
-        normalized = _normalize_text(query_text)
-        if not normalized:
+        normalized_texts = list(dict.fromkeys(
+            normalized
+            for text in [query_text, *(alternate_query_texts or [])]
+            if (normalized := _normalize_text(text))
+        ))
+        if not normalized_texts:
             return
 
-        doc_id = _doc_id(normalized, approved)
-        existing = self.collection.get(ids=[doc_id])
         now = time.time()
-
-        if existing and existing.get("ids"):
-            metadata = existing["metadatas"][0]
-            consensus_count = int(metadata.get("consensus_count", 0)) + 1
-            status = metadata.get("status", STATUS_CANDIDATE)
-            if status == STATUS_CANDIDATE and consensus_count >= PROMOTION_CONSENSUS_THRESHOLD:
-                status = STATUS_ELIGIBLE
-            metadata.update({
-                "consensus_count": consensus_count,
-                "status": status,
-                "faq_content_hashes": json.dumps(self._current_faq_content_hashes(approved)),
-                "last_updated": now,
-            })
-            self.collection.update(ids=[doc_id], metadatas=[metadata])
-        else:
-            initial_status = STATUS_CANDIDATE if PROMOTION_CONSENSUS_THRESHOLD > 1 else STATUS_ELIGIBLE
-            self.collection.add(
-                ids=[doc_id],
-                documents=[normalized],
-                metadatas=[{
-                    "parent_ids": json.dumps(approved),
-                    "consensus_count": 1,
-                    "surfaced_count": 0,
-                    "rejected_count": 0,
-                    "status": initial_status,
-                    "faq_content_hashes": json.dumps(self._current_faq_content_hashes(approved)),
-                    "first_seen": now,
-                    "last_updated": now,
-                }],
-            )
+        for normalized in normalized_texts:
+            for parent_id in approved:
+                parent_ids = [parent_id]
+                doc_id = _doc_id(normalized, parent_ids)
+                existing = self.collection.get(ids=[doc_id])
+                if existing and existing.get("ids"):
+                    metadata = existing["metadatas"][0]
+                    metadata.update({
+                        "consensus_count": int(metadata.get("consensus_count", 0)) + 1,
+                        "status": STATUS_ACTIVE,
+                        "faq_content_hashes": json.dumps(self._current_faq_content_hashes(parent_ids)),
+                        "last_updated": now,
+                    })
+                    self.collection.update(ids=[doc_id], metadatas=[metadata])
+                else:
+                    self.collection.add(
+                        ids=[doc_id],
+                        documents=[normalized],
+                        metadatas=[{
+                            "parent_ids": json.dumps(parent_ids),
+                            "consensus_count": 1,
+                            "surfaced_count": 0,
+                            "rejected_count": 0,
+                            "status": STATUS_ACTIVE,
+                            "faq_content_hashes": json.dumps(self._current_faq_content_hashes(parent_ids)),
+                            "first_seen": now,
+                            "last_updated": now,
+                        }],
+                    )
 
     def _record_surfacing(self, doc_id: str, approved_parent_ids: list[str]) -> None:
         existing = self.collection.get(ids=[doc_id])

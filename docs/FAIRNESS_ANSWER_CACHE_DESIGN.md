@@ -1,10 +1,13 @@
 # Cross-Session Subquery Answer Cache: Design & Implementation
 
-**v1.0 — 2026-09-17.** Implements a targeted mitigation for the Fairness
+**v1.1 — 2026-10-14.** Implements a targeted mitigation for the Fairness
 findings in `docs/KNOWN_ISSUES_TRACKER.md` (BUG-023, BUG-025) and
 `docs/report/evaluation/AGENTIC_EVALUATION_PLAN_v1.md` (Pillar E). Documents the design
 decided in conversation, the actual code shipped, and the historical
-backfill run against the real production knowledge base.
+backfill run against the real production knowledge base. Version 1.1 removes
+the consensus-promotion gate: every outbound-audit-passed parent is immediately
+available as a candidate because it still must pass the next turn's independent
+sufficiency audit.
 
 ## 1. The problem this solves
 
@@ -53,9 +56,9 @@ the safety properties below affordable:
 
 | Point | File | What happens |
 |---|---|---|
-| Read | `nodes.py`, `node_03b_rag_worker.retrieve_task` | After live retrieval (`engine.execute_multi_angle_search`) returns its candidates, `AnswerCache.lookup(direct_query)` is queried. Any cache-suggested parent id not already present is hydrated (`engine.hydrate_parent_ids`) and appended to that task's `parents` list — the exact list the sufficiency auditor evaluates. |
+| Read | `nodes.py`, `node_03b_rag_worker.retrieve_task` | After live retrieval (`engine.execute_multi_angle_search`) returns its candidates, `AnswerCache.lookup(direct_query)` is queried once using the clear, context-resolved subquery. The index contains both original-question and generated-subquery representations, so cosine similarity may match either. Any cache-suggested parent id not already present is hydrated (`engine.hydrate_parent_ids`) and appended to the list the sufficiency auditor evaluates. |
 | Provenance | `nodes.py`, same function + outer `node_03b_rag_worker` body | Which cache entries were consulted for each task is recorded separately in the new `task_cache_injected_parent_ids` state field (`{doc_id, parent_ids, similarity}` per hit) — never mixed into the `parents` payload itself, so the sufficiency-auditor prompt is completely unchanged in shape. Also logged on the existing `task.rag.completed` event (`cache_injected_parent_ids`) for the same auditability every other retrieval signal already gets. |
-| Write | `nodes.py`, `_record_answer_cache_outcomes`, called from `node_06_outbound_audit_join`'s PASS branch | Only once a turn's own outbound compliance/groundedness audit has passed (see S4 for why this bar, not the retrieval-level task status) does the turn's outcome get recorded: `AnswerCache.record_outcome(text, approved_parent_ids, surfaced_doc_ids)`. |
+| Write | `nodes.py`, `_record_answer_cache_outcomes`, called from `node_06_outbound_audit_join`'s PASS branch | Only once a turn's own outbound compliance/groundedness audit has passed does each approved parent get recorded independently against two representations: the generated subquery and the original customer message. If they normalize to the same text, only one entry is stored. |
 
 New state field (`state.py`): `task_cache_injected_parent_ids: Dict[str, List[Dict[str, Any]]]`, reset every turn via `VOLATILE_STATE_RESET`, following the exact pattern already used for `task_partial_evidence`/`task_rejected_parent_ids`.
 
@@ -65,20 +68,21 @@ The write hook is scoped to the `normal_response` audit path only (the dominant 
 
 ## 4. Keeping the cache from being corrupted by a degraded answer
 
-This was the first open question raised in design discussion. Three independent safeguards, all deliberately conservative:
+This was the first open question raised in design discussion. Three independent safeguards remain:
 
-1. **Consensus-gated promotion.** A `(normalized text, approved parent-id set)` pairing starts as `candidate` and is *never surfaced* until it has recurred and been independently reconfirmed `PROMOTION_CONSENSUS_THRESHOLD` (2) times. A single lenient or lucky approval — e.g. the traced "automated payment arrangement" FAQ getting approved with a hedge for "payment declined" — cannot alone seed anything the cache will ever suggest to a future customer; it needs an independent second occurrence landing on the exact same pairing, which a one-off mislabeling essentially never does.
-2. **Outbound-audit-gated write eligibility.** The write hook fires only after `node_06`'s own compliance/groundedness gate has passed for the turn — a strictly stronger bar than the retrieval-level `task_results` status alone. This directly answers a risk this session already found concrete evidence for: BUG-015 showed 22/24 confirmed cases had a `task_results` status of SUFFICIENT/RELEVANT despite the customer actually receiving a total-failure fallback. Gating on the *outbound* audit, not the retrieval-level status, is a real, not cosmetic, improvement in write-quality over the naive "cache every SUFFICIENT verdict" version of this design.
-3. **Rolling rejection-rate quarantine.** Every cache-suggested candidate's surfaced/rejected counts are tracked distinctly from organically-retrieved candidates (via the `task_cache_injected_parent_ids` provenance record). Once an entry has been surfaced at least `QUARANTINE_MIN_SURFACED` (5) times and its own suggestions have been rejected at least `QUARANTINE_REJECTION_RATE` (35%) of the time, it is automatically quarantined — regardless of how it was promoted. This is the safety net for drift: even a legitimately-promoted entry that stops being correct (a policy nuance the FAQ writers didn't anticipate, a subtly different sub-intent sharing the same phrasing) gets caught by its own track record, not left to accumulate indefinitely.
-4. **Content-hash staleness, checked on every read.** Each entry snapshots a hash of every parent id's `content` field at write time. `lookup()` recomputes the live hash for every candidate parent id on every call (cheap — a handful of SQLite rows, the same table already hit for hydration) and drops/quarantines any entry whose underlying FAQ has since been edited. "Recency" for this cache means *since the source last changed*, never wall-clock time — a stale policy answer can never be served just because it was asked about recently. `validate_and_prune()` provides the same check as an exhaustive, out-of-band maintenance sweep for entries that haven't been queried recently enough to trigger the inline check.
+1. **Outbound-audit-gated recording.** The write hook fires only after `node_06`'s own compliance/groundedness gate has passed for the turn — a strictly stronger bar than the retrieval-level `task_results` status alone. Each approved parent is stored independently so a change in the rest of the approved set cannot prevent that parent from resurfacing.
+2. **Rolling rejection-rate quarantine.** Every cache-suggested candidate's surfaced/rejected counts are tracked distinctly from organically-retrieved candidates. Once an entry has been surfaced at least `QUARANTINE_MIN_SURFACED` (5) times and its suggestion has been rejected at least `QUARANTINE_REJECTION_RATE` (35%) of the time, it is automatically quarantined. The fresh sufficiency audit is the primary safety control; quarantine handles repeated bad suggestions.
+3. **Content-hash staleness, checked on every read.** Each entry snapshots a hash of its parent id's `content` field at write time. `lookup()` recomputes the live hash on every call and drops/quarantines an entry whose underlying FAQ has since been edited. `validate_and_prune()` provides the same check as an exhaustive maintenance sweep.
 
-Accepted, stated limitation: the historical backfill (S7) replays `task_results.approved_parent_ids` directly, since most historical records don't carry the fuller outbound-audit event detail needed to apply gate #2 retroactively. The consensus-of-2 requirement (#1) is what actually bounds this risk for the backfill specifically — see S7 for the numbers.
+There is deliberately no separate eligibility or two-observation promotion gate.
+A cache hit is only an additional evidence candidate, never approval to answer;
+the fresh sufficiency audit remains mandatory.
 
 ## 5. Choosing among multiple neighbors above threshold
 
-Second open design question. The answer follows directly from S2's design principle: **don't choose — union.** `lookup()` returns up to `DEFAULT_TOP_K` (3) nearest eligible entries above `DEFAULT_SIMILARITY_THRESHOLD` (0.85), and every one of their parent ids is added as a candidate (deduplicated against what live retrieval already found). If a new question sits ambiguously between two genuinely different past clusters, both sets of candidates get surfaced and the sufficiency auditor — which already evaluates every candidate independently regardless of origin — decides which, if either, actually applies. Introducing a separate "pick the single best neighbor" mechanism at the cache layer would just relocate the ambiguity into a place with strictly less context (no access to the current turn's full task/conversation state) than the auditor already has.
+Second open design question. The answer follows directly from S2's design principle: **don't choose — union.** `lookup()` uses the generated, context-resolved subquery and returns up to `DEFAULT_TOP_K` (12) nearest non-quarantined entries above `DEFAULT_SIMILARITY_THRESHOLD` (0.65). The index contains both original-message and subquery representations, but retrieval makes only this one subquery-anchored search. Every hit's parent id is added as a candidate, deduplicated against live retrieval and other cache hits. The sufficiency auditor decides which, if any, apply.
 
-The 0.85 threshold was chosen against the empirical band data this session already produced (`research/2026-09-05_banking77_full_coverage/reports/fairness_cosine_consistency.md`): even the 0.90–0.93 band showed a meaningful disjoint/mixed rate, so 0.85 is already a moderately loose floor — defensible specifically because of S2's "surface, never bypass" property, which a stricter bypass-style cache could not afford.
+The initial 0.85 threshold was too strict for this candidate-only role. In the frozen C4 run, relevant representations of the same byte-identical customer question scored as low as 0.664 because the generated subquery varied between runs. An offline replay reconstructed the cache at every lookup and exactly reproduced the live 0.85 result. Recall was 38/44 at 0.85, 41/44 at 0.80, and 44/44 at 0.65; complete-set recall was respectively 16/20, 19/20, and 20/20. Across the 20 scored repeats, unexpected parent IDs remained 3 and mean unique cache candidates rose only from 2.05 to 2.35. Therefore 0.65 is the recall-first MVP setting. It is safe only because a cache hit is still evidence offered to the independent sufficiency auditor, never an answer bypass. The replay artifact is `research/2026-10-14_c4_cache_v11/results/C4_THRESHOLD_REPLAY.md`.
 
 ## 6. Should the auditor see the previous question/answer, not just the parent id? — No.
 
@@ -128,11 +132,11 @@ task.
 
 `research/2026-09-05_banking77_full_coverage/scripts/build_answer_cache_backfill.py` replays every resolved case's `(subquery_1 text, task_1 approved_parent_ids)` pairing from the completed 3,080-case BANKING77 full-coverage study through the exact same `AnswerCache.record_outcome` call path the live pipeline uses — there is no separate bulk-seed code, so the backfill is a faithful historical replay, not a special case. Multi-turn data is **not yet included** (its per-conversation, multi-task-per-turn structure needs its own mapping pass before it can be replayed the same way — noted as follow-up work, not attempted in this first pass to avoid a rushed, incorrectly-shaped seed).
 
-Run against the real production Chroma store at `backend/data/vector_store/` (the same store the live backend reads for FAQ retrieval) on 2026-09-17. See the run's own printed summary for exact counts (cases replayed, eligible vs. candidate entries, top entries by consensus).
+Run against the real production Chroma store at `backend/data/vector_store/` (the same store the live backend reads for FAQ retrieval) on 2026-09-17. Those legacy whole-parent-set records remain readable in v1.1, including records formerly labelled `candidate`; new writes use one parent per representation entry.
 
 ## 8. Monitoring going forward
 
-Every cache entry already carries the fields a monitoring pass needs: `status`, `consensus_count`, `surfaced_count`, `rejected_count`, `first_seen`/`last_updated`. Recommended, not yet built: a periodic report (reusing this session's research-script conventions) on quarantine rate, eligible-entry count over time, and — most importantly — a sample of quarantined entries read manually the same way BUG-005/006/016 were, since a cluster of quarantines in one category is itself a strong signal about where the underlying retrieval or product-mapping logic (not just the cache) needs attention.
+Every cache entry already carries the fields a monitoring pass needs: `status`, `consensus_count`, `surfaced_count`, `rejected_count`, `first_seen`/`last_updated`. Recommended, not yet built: a periodic report on quarantine rate, active-entry count over time, parent-hit recall, and a manual sample of quarantined entries.
 
 ## 9. Live validation (2026-09-17)
 
@@ -140,7 +144,9 @@ A small, targeted live re-test (`research/2026-09-17_fairness_cache_validation/`
 12 cases through the real compiled graph, `USR_999` isolated test account,
 25s pacing) re-ran the exact same customer-facing text as two historical
 BUG-025 duplicate-text groups now that the cache is live and backfilled,
-plus a control group predicted to be unaffected.
+plus a control group predicted to be unaffected. This historical validation
+used the then-current 0.85 threshold; it is retained as provenance rather than
+as a statement of the current 0.65 boundary.
 
 | Group | n | Organic retrieval found the historical answer? | Cache injected it? | Final outcome consistency |
 |---|---:|---|---|---|
@@ -171,7 +177,7 @@ directly visible per run:
   auditor-judgment non-determinism is untouched by this change, exactly
   as S6/S9 predicted rather than something this design happens to also
   fix.
-- **Group 3 confirms the threshold boundary behaves as designed**: no
+- **Under the former 0.85 setting, Group 3 confirmed that threshold boundary**: no
   cache entry is close enough (0.65 similarity, checked directly) to
   clear 0.85, so no candidate was injected, and the pre-existing
   unresolved outcome for this specific phrasing is untouched — the
@@ -190,6 +196,6 @@ deduplicated — but has been fixed so the log itself reads cleanly too.
 
 Documented explicitly so it isn't mistaken for a complete resolution of either tracked bug, and so the boundary between "not yet done" and "deliberately out of scope" stays clear:
 
-- **BUG-023's root cause** (the intent formulator routing semantically-close questions to different products) is unpatched, and remains a genuine open item — fixing it means examining the product-mapping logic itself, an architectural change, not a model-tuning one. The cache is a downstream mitigation that increases the odds a good answer still reaches the auditor despite the misrouting, for pairs close enough in embedding space to clear the 0.85 threshold — the specific traced pair (`"payment declined"` vs. `"card declined"`, similarity 0.65) is **not** close enough for this cache to have helped.
+- **BUG-023's root cause** (the intent formulator routing semantically-close questions to different products) is unpatched, and remains a genuine open item — fixing it means examining the product-mapping logic itself, an architectural change, not a model-tuning one. The cache is a downstream mitigation that increases the odds a good answer still reaches the auditor despite the misrouting. Under the current inclusive 0.65 threshold, the traced `"payment declined"` vs. `"card declined"` pair sits at the retrieval boundary and may now be offered to the auditor; the cache still does not decide whether it is sufficient.
 - **Half of BUG-025's traced mechanism** (auditor-judgment non-determinism on an already-correct, already-surfaced candidate set) is untouched by this change, by design (S6) — and, per the explicit project-scoping decision in S6a, **stays untouched permanently, not pending**. Every remedy that would close this gap (self-consistency voting, a model-tier swap, rubric tightening) is model-level tuning, ruled out of scope for this project. This is the accepted ceiling of what the answer cache can do for fairness, not an intermediate step toward a fuller fix.
 - **BUG-025's other half** (retrieval-pool variance — the correct candidate simply wasn't surfaced that run) is the piece this cache directly targets and has already live-validated (S9), and should keep working automatically as the cache accumulates further consensus from live traffic — no further engineering is required for that half to keep improving on its own.

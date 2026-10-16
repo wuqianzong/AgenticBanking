@@ -1183,11 +1183,32 @@ def parse_json_robustly(raw_text: str) -> dict:
     if clean_text.startswith("```json"): clean_text = clean_text[7:]
     elif clean_text.startswith("```"): clean_text = clean_text[3:]
     if clean_text.endswith("```"): clean_text = clean_text[:-3]
+    clean_text = clean_text.strip()
     try:
-        parsed = json.loads(clean_text.strip())
-    except Exception as e:
-        print(f"🚨 [JSON PARSE ERROR]: {e} \nRaw text was: {raw_text}")
-        raise e
+        parsed = json.loads(clean_text)
+    except json.JSONDecodeError as error:
+        # BUG-065: a fully valid structured response was observed with one
+        # extra closing brace after the top-level object. Repair only this
+        # mechanically provable shape: json.loads must have parsed one full
+        # value and the entire remaining suffix must consist solely of extra
+        # closing delimiters. Never insert text, balance an interior object,
+        # or guess at truncated content.
+        trailing = clean_text[error.pos:].strip()
+        candidate = clean_text[:error.pos].rstrip()
+        if error.msg == "Extra data" and trailing and set(trailing) <= {"}", "]"}:
+            try:
+                parsed = json.loads(candidate)
+            except json.JSONDecodeError:
+                print(f"🚨 [JSON PARSE ERROR]: {error} \nRaw text was: {raw_text}")
+                raise error
+            log_event(
+                "llm.json_repaired",
+                repair="removed_trailing_closing_delimiters",
+                removed_character_count=len(trailing),
+            )
+        else:
+            print(f"🚨 [JSON PARSE ERROR]: {error} \nRaw text was: {raw_text}")
+            raise error
     if isinstance(parsed, list) and len(parsed) == 1 and isinstance(parsed[0], dict):
         return parsed[0]
     return parsed

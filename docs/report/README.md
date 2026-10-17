@@ -68,7 +68,7 @@ Still in `docs/`, because code comments refer to them by path (they can be moved
 | [SOFT_ESCALATION_v1.0.md](../SOFT_ESCALATION_v1.0.md) | Soft escalation (offer of a person) |
 | [FAIRNESS_ANSWER_CACHE_DESIGN.md](../FAIRNESS_ANSWER_CACHE_DESIGN.md) | Cross-session answer cache |
 | [AGENTIC_CAPABILITY_ROADMAP_v1.0.md](../AGENTIC_CAPABILITY_ROADMAP_v1.0.md) | Capability roadmap |
-| [KNOWN_ISSUES_TRACKER.md](../KNOWN_ISSUES_TRACKER.md) | All tracked issues (BUG-001 to BUG-065) |
+| [KNOWN_ISSUES_TRACKER.md](../KNOWN_ISSUES_TRACKER.md) | All tracked issues (BUG-001 to BUG-073) |
 
 ## Monthly logs ([monthly_logs/](monthly_logs/))
 

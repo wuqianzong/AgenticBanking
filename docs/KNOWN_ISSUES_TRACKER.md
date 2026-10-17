@@ -93,7 +93,7 @@ Run-to-run difference alone is evidence to review, not a failure verdict.
 | BUG-065 | A correct reply is lost and the customer sees "Sorry, I don't have an answer for that right now": the reply writer's output was valid in content but not parsed (a stray extra `}` in `receiving_money_1`; a different output shape from the reviser in `cash_withdrawal_not_recognised_1`), the draft became empty, and the outbound audit passed the empty draft because it contains no unsupported claim | Medium (demo-visible; 3 replies in v5.1, including a fraud report) | Confirmed (v5.1 traces) | Parsing of the writer and reviser output is not tolerant of small format slips, and the audit does not treat an empty answer as a failure when evidence was approved | **Fixed (2026-10-14): bounded JSON repair, skeleton-bound reviser normalization, and deterministic empty-evidence-answer veto; regression 9/9** |
 | BUG-066 | A reviser explicitly clears a rejected block, but the empty edit is treated as no edit; a duplicate copy of the same clarification can remain locked in an approved ordinary text block | Medium (customer sees a rejected and then repeated question) | Confirmed (live trace, exact raw prompts/responses retained) | **Deterministic code**: empty editable fields are discarded by reviser normalization; generation can duplicate the top-level clarification into an ordinary element, and partitioning audits the copies independently | **Fixed 2026-10-14, fixture-verified 6/6; full offline suite passed** |
 | BUG-067 | A stepper reaches the customer with only `1`, `2`, `3`, `4` as its four step details | Medium (the substantive procedure is lost) | Confirmed (live trace, exact raw writer response retained) | LLM generation plus **deterministic validation gap**: the writer used list-number precision tokens as entire step details; substitution correctly resolved them, but no check requires a step detail to contain substantive text | **Fixed 2026-10-15, fixture-verified 10/10; joined into the existing single-revision audit round** |
-| BUG-068 | Frozen same-query replay sometimes falls from a usable answer to no information, unnecessary clarification, or a wrong answer | Medium–High | Suspected (11 reviewed regressions plus 1 unresolved mixed case; individual causes not yet traced) | Under investigation; likely a mixture of retrieval and auditor/model-judgment variants | **Open — debug cohort, not a claim that every semantic difference is a defect** |
+| BUG-068 | Frozen same-query replay sometimes falls from a usable answer to no information, unnecessary clarification, or a wrong answer | Medium–High | Suspected (11 reviewed regressions plus 1 unresolved mixed case; individual causes not yet traced) | Under investigation; likely a mixture of retrieval and auditor/model-judgment variants | **Closed as a known limitation (owner, 17 Oct 2026).** Of the 17 degraded or mixed cases, 2 had code causes, now fixed (BUG-070, BUG-073); 5 recovered on rerun; 10 persist or vary from model judgement (retrieval, evidence selection, interpretation), the same family as BUG-025. See the 17 Oct update below |
 | BUG-069 | Canonical product name `Deposit_Account` was classified as an internal leak | ~~Medium~~ n/a | ~~Confirmed~~ **Retracted — metric-policy error** | R4 scanner treated an approved standardized product name as a forbidden internal identifier | **Retracted; shared mapping added to formulator and outbound auditor** |
 | BUG-070 | Malformed JSON between pipeline steps: 19 of 2,104 schema-less Gemini replies (0.9%) in five recent runs could not be parsed (outbound fact-check 8, reply writer 11), against 0 of 5,122 schema-constrained replies. The failure surfaces as other problems: an empty reply (BUG-065), or an 'audit unavailable' placeholder that wastes a revision round and ends in the generic fallback (`failed_transfer_2`) | Medium (silent, ~1 in 25–30 turns reaches a step with unreadable JSON) | Confirmed (deterministic scan of 8,178 replies) | The combined fact-check prompt title no longer matched the schema router; the writer and statement writer never had a schema | **Fixed (2026-10-16): response schemas for the fact-check (both routes), reply writer and statement writer; replay 53/53 parse, R5 30/30. Reviser left schema-less on evidence (schema degraded revisions). See `research/2026-10-16_schema_injection_check/`** |
 | BUG-071 | "Transfer me to customer service." got the compliance refusal instead of the handover offer: triage correctly returned ESCALATION, but the parallel inbound compliance screen returned no_compliant_route, and its block overrode triage | Medium (denies an explicit request for a person; demo-visible) | Confirmed (pre-commit check 16 Oct, h4_b6_03; captured prompt blocked 1 of 6 replays) | The screen filed the request under banking actions and, by its own rule, a human handover is not a route, so it found none; the join applied any block before triage's result | **Fixed (2026-10-16): deterministic override in the join -- an ESCALATION from triage overrides the screen's block; no prompt changed. Regression-verified (test_bug055, 20/20)** |
@@ -3346,8 +3346,8 @@ block: 10/10 checks passed.
 
 ## BUG-068 — Same-query variation crosses the acceptable product boundary
 
-**Severity:** Medium–High **Confidence:** Suspected **Status: Open; trace cases
-before choosing a fix**
+**Severity:** Medium–High **Confidence:** Confirmed **Status: Closed as a known
+limitation (owner, 17 Oct 2026); two code causes fixed (BUG-070, BUG-073)**
 
 **Found in:** final release regression
 `research/2026-10-15_final_release_regression/`, comparing the current H1 run
@@ -3383,6 +3383,26 @@ different answer as a defect and does not assume all 22 cases share one cause.
 formulation, retrieval/cache surfacing, sufficiency selection, response writing,
 or outbound revision. Group cases only after a common causal trace is proven.
 
+
+**Update, 17 Oct 2026: traced and closed.** All 17 cases the final review
+marked degraded or mixed were rerun on the current code in the 16 Oct
+pre-commit check (`research/2026-10-16_precommit_check/`). Three cases were
+traced to the stage where they first went wrong, and the BUG-073 cases were
+rerun again on 17 Oct (`research/2026-10-16_bug073_rerun/`).
+
+| Group | Cases | Finding |
+|---|---|---|
+| Code cause, fixed | `failed_transfer_2` | A malformed fact-check reply used up the revision rounds and produced the generic fallback (BUG-070). On the fixed code it gives an honest no-information reply, which the owner accepted for this own-case question |
+| Code cause, fixed | `contactless_not_working_1` | The intent tag `General_Inquiries` did not match the matrix spelling, so no search ran (BUG-073). On the fixed code it answers correctly from the FAQ |
+| Recovered on rerun | `automatic_top_up_1`, `country_support_2`, `wrong_amount_of_cash_received_2`, `exchange_via_app_4`, `get_physical_card_3` | A useful answer or route returned with no code change: run-to-run variation |
+| Persisting misreading | `getting_spare_card_1`, `getting_spare_card_2`, `getting_spare_card_4` | Questions about an additional (supplementary) card are read as replacement-card questions, consistently across reruns; the tool planner's own reasoning says "replacement card". Model interpretation; the supplementary-card FAQs exist |
+| Persisting or varying | `get_physical_card_2`, `country_support_4`, `cash_withdrawal_not_recognised_2`, `extra_charge_on_statement_2`, `pending_cash_withdrawal_1`, `transfer_fee_charged_1`, `request_refund_1` | A clarification or no-information reply where an earlier run answered. Traced examples diverge at query wording (same query, different reworded variants miss the FAQ) or at the evidence check; repeats of `transfer_fee_charged_1` gave a good answer in 1 of 3 |
+
+No further code cause was found. The remaining cases are model judgement in
+retrieval, evidence selection and interpretation: the auditor-judgment half of
+BUG-025, accepted as a limitation because model tuning is out of scope.
+Closed by the owner under the final-delivery rule. The reported figures are
+unchanged except where RESULTS section 9.1 records the two fixed cases.
 
 ## BUG-069 — Canonical product name was misclassified as an internal leak
 

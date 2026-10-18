@@ -99,6 +99,7 @@ Run-to-run difference alone is evidence to review, not a failure verdict.
 | BUG-071 | "Transfer me to customer service." got the compliance refusal instead of the handover offer: triage correctly returned ESCALATION, but the parallel inbound compliance screen returned no_compliant_route, and its block overrode triage | Medium (denies an explicit request for a person; demo-visible) | Confirmed (pre-commit check 16 Oct, h4_b6_03; captured prompt blocked 1 of 6 replays) | The screen filed the request under banking actions and, by its own rule, a human handover is not a route, so it found none; the join applied any block before triage's result | **Fixed (2026-10-16): deterministic override in the join -- an ESCALATION from triage overrides the screen's block; no prompt changed. Regression-verified (test_bug055, 20/20)** |
 | BUG-072 | A general FAQ policy stated as the customer's own status: asked why a top-up was not processed, the reply opened "Your top-up transaction is currently experiencing a temporary security hold"; the FAQ only says Horizon holds *certain* transactions for 24 hours, for a customer notified of a delay | Medium (untrue statement about the customer's own money; rare: 1 reply in ~9,000) | Confirmed (pre-commit check 16 Oct, `h1_pending_top_up_2`; 0 of 3 repeats) | The evidence check read the general FAQ as a finding about this customer and wrote a note telling the writer to admit the hold; the writer follows such notes; the fact-checker does not see the note and accepted the sentence as a reasonable conclusion (missed 10 of 10 replays, with and without schema) | **Accepted as a known limitation (owner, 16 Oct): a prompt fix would touch the writer, which shapes every reply; not worth the regression risk this late** |
 | BUG-073 | A valid search was discarded because a tag was spelled in the other style: the query step wrote intent `General_Inquiries` (underscore) for the matrix's `General Inquiries` (space); the exact-match scope check rejected the pair, no search ran, and the reply was "I do not have information" (`contactless_not_working_1`, 15 and 16 Oct) | Medium (silent; 8 of 1,610 logged search tasks, 0.5%) | Confirmed (replay of every logged search task) | Product and intent tags were compared with the matrix by exact string; models copy the underscore style of product names into intent names | **Fixed (2026-10-16): tags are matched spelling-insensitively (case, spaces, underscores, hyphens) and rewritten in the matrix's spelling, deterministically; no prompt changed. Regression-verified (test_bug073, 10/10)** |
+| BUG-074 | A message mixing a legitimate question with an advice request is refused whole, with a vague message: "what is the latest mortgage rate? do you recommend me to refinance?" got only "For compliance reasons, I'm unable to fulfil that request...", without saying which part was refused or why | Low–Medium (no advice given; the legitimate part goes unanswered and the customer is not told why; demo-visible) | Confirmed (live log 18 Oct; RESULTS 4.1: 4 of 20 mixed safety cases blocked whole) | By design since BUG-062 the screen judges the whole message ("the route must serve everything the customer asked for"), so one prohibited part blocks it all; the fixed refusal text did not say that only part may be the problem | **Mitigated (2026-10-18, owner's choice): the fixed refusal text now says all or part of the request cannot be helped with, gives advice as the example, and invites the customer to ask any other question on its own (English, Mandarin, Spanish). Whole-message blocking kept by design. Regression-verified (test_bug055 23/23)** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -3578,3 +3579,48 @@ rejected, and the only change to previously valid tasks is the 3 dropped intents
 now being kept. All 17 offline suites pass. The reported metrics are not
 adjusted: what the bot would answer once the search runs has not been measured,
 so `contactless_not_working_1` stays a B5b failure.
+
+
+## BUG-074 — A mixed advice-and-information message is refused whole, with a vague message
+
+**Severity:** Low–Medium **Confidence:** Confirmed **Status: Mitigated 2026-10-18 (refusal text clarified); whole-message blocking kept by design**
+
+**Found in:** a live query on 18 Oct 2026 (session `sess_94b4d6f8-d14a-498a-a80f-9b76979d95bc`):
+"what is the latest mortgage rate? do you recommend me to refinance?"
+
+**What happened:** Prompt Guard passed (risk 0.0004). Triage correctly split the
+message into two needs (the mortgage rate; a refinancing recommendation). The
+compliance screen, running in parallel, judged the whole message: "asks for a
+recommendation on whether to refinance, which falls under investment or financial
+advice", found no compliant route and returned `no_compliant_route`. The join
+applied the block first, so both needs were dropped and the customer got the fixed
+refusal "For compliance reasons, I'm unable to fulfil that request. Could you try
+rephrasing your question, or asking about something else?"
+
+**Cause:** a design rule of the BUG-062 screen: "The route must serve everything
+the customer asked for. If one part of the request cannot be served compliantly,
+there is no route." Judging the whole message protects against a harmful request
+split into innocent-looking parts; the cost is that a legitimate part is refused
+with the prohibited one. The behaviour is also inconsistent: in the v5.1 safety
+set, 16 of 20 mixed cases had their genuine banking part answered and 4 were
+blocked whole (RESULTS 4.1). No advice was given, so there was no compliance
+incident. Horizon offers no mortgage (no product in the matrix, no FAQ entry), so a
+perfect reply would only have declined the rate question too; the real loss was
+that the customer was not told which part was refused or why.
+
+**Options considered:** (1) clarify the fixed refusal text; (2) have the screen name
+the non-compliant part so the rest proceeds, which would change the screen prompt
+and the join and need the safety and compliance replay sets re-run after the code
+freeze; (3) accept as a limitation. The owner chose (1).
+
+**Fix:** the `non_compliant` message in `backend/app/core/translations.py` now
+reads: "I can't help with all or part of that request for compliance reasons. For
+example, I can't give financial or investment advice or recommendations. If your
+message included another question, please ask it on its own." Mandarin and Spanish
+carry the same meaning. The message serves every compliance block (advice, harmful
+content and the rest), so it names advice only as an example. Text-only change; the
+screen, the join and the prompts are unchanged.
+
+**Verification:** `test_bug055_inbound_compliance_screen.py` checks the message in
+all three languages through the refusal node (23/23); all 17 offline suites pass
+(184 checks).

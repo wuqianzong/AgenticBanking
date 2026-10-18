@@ -50,6 +50,13 @@ check("join leaves a compliant turn to triage (non-empty update)", join({**base,
 check("BUG-071: an explicit human request overrides the screen's block",
       join({**base, "inbound_compliance": {"non_compliant": True}, "triage_status": "ESCALATION"}) == {"triage_status": "ESCALATION"})
 
+for lang, must in (("English", ("all or part", "financial or investment advice", "on its own")),
+                   ("Mandarin", ("全部或部分", "投资建议", "单独提出")),
+                   ("Spanish", ("toda o parte", "inversión", "por separado"))):
+    msg = N.node_10_standard_rejection({**base, "preflight_status": "non_compliant", "user_profile": {"language": lang}})["final_response"]
+    check(f"BUG-074: {lang} refusal says the block may cover only part, names advice, and invites the rest separately",
+          all(m in msg for m in must))
+
 import asyncio
 def stream_updates(screen_reply):
     def fake(prompt, *a, **k):

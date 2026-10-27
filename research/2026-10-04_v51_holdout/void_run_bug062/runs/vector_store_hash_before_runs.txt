@@ -1,0 +1,1 @@
+919d28fce65b0fb2e6339246bdb868e8b77eb3ecb87fece8eb8fdbee164e1b2f  ../../backend/data/vector_store/chroma.sqlite3

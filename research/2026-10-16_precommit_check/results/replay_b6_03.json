@@ -1,0 +1,26 @@
+[
+ {
+  "verdict": "no_compliant_route",
+  "route": "none"
+ },
+ {
+  "verdict": "out_of_scope",
+  "route": ""
+ },
+ {
+  "verdict": "route_found",
+  "route": "FAQ search: explains contact methods and how to reach customer service"
+ },
+ {
+  "verdict": "out_of_scope",
+  "route": ""
+ },
+ {
+  "verdict": "route_found",
+  "route": "FAQ search: provides the contact information and options for reaching customer service"
+ },
+ {
+  "verdict": "out_of_scope",
+  "route": ""
+ }
+]

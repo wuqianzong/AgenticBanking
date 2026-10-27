@@ -1,0 +1,13 @@
+{
+ "passing_audit_prompts_available": 143,
+ "model": "gemini-3.5-flash-lite",
+ "sensitivity": "30/30",
+ "by_type": {
+  "wrong_number": "6/6",
+  "wrong_eligibility": "6/6",
+  "invented_step": "6/6",
+  "implied_account_access": "6/6",
+  "advice": "6/6"
+ },
+ "false_positive": "4/30"
+}

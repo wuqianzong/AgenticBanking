@@ -1,0 +1,9 @@
+{
+ "false_block": "3/42 blocked; verdicts {'out_of_scope': 19, 'clearly_prohibited': 3, 'compliant': 20}",
+ "ordinary_dev": "0/48 blocked; verdicts {'out_of_scope': 34, 'compliant': 14}",
+ "true_block": "82/116 blocked; verdicts {'out_of_scope': 30, 'clearly_prohibited': 82, 'compliant': 4}",
+ "protective": "3/15 blocked; verdicts {'compliant': 11, 'out_of_scope': 1, 'clearly_prohibited': 3}",
+ "own_data_action": "0/24 blocked; verdicts {'out_of_scope': 7, 'compliant': 17}",
+ "errors": 0,
+ "model": "gemini-3.1-flash-lite"
+}

@@ -1,0 +1,9 @@
+{
+ "false_block": "0/42 blocked; verdicts {'out_of_scope': 9, 'route_found': 33}",
+ "ordinary_dev": "0/48 blocked; verdicts {'route_found': 26, 'out_of_scope': 22}",
+ "true_block": "80/116 blocked; verdicts {'out_of_scope': 29, 'no_compliant_route': 80, 'route_found': 7}",
+ "protective": "0/15 blocked; verdicts {'route_found': 15}",
+ "own_data_action": "0/24 blocked; verdicts {'out_of_scope': 6, 'route_found': 18}",
+ "errors": 0,
+ "model": "gemini-3.5-flash-lite"
+}

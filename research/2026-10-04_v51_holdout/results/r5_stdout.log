@@ -1,0 +1,120 @@
+🚨 [JSON PARSE ERROR]: Expecting property name enclosed in double quotes: line 7 column 3 (char 231) 
+Raw text was: {
+  "conduct_reason": "commitments: none; advice: none; predictions: none; authority: none; tone: neutral.",
+  "conduct_compliant": true,
+  "conduct_violations": [],
+  "answer_compliant": true,
+  "clarification_compliant": true,
+  -  "rewrite_instruction": "",
+  "evidence_reason": "The response claims there are 2 total steps (totalSteps: 2) in the UI payload, but the permitted evidence only describes contacting Customer Care and does not specify a two-step process or a second step.",
+  "evidence_grounded": false,
+  "evidence_violations": [
+    {
+      "scope": "ui_payload",
+      "unsupported_content": [
+        "totalSteps\": 2"
+      ],
+      "evidence_gap": "The permitted evidence only mentions a single action to contact Horizon Customer Care and does not state that the process involves two total steps.",
+      "generation_guidance": "Set totalSteps to 1 to match the single step present in the evidence."
+    }
+  ],
+  "answer_evidence_grounded": true,
+  "answer_bridge_grounded": true,
+  "clarification_grounded": true,
+  "clarification_connected": true,
+  "response_recovery_strategy": "REMOVE_UNSUPPORTED_CONTENT",
+  "grounding_violations": [
+    {
+      "task_id": "task_1",
+      "scope": "ui_payload",
+      "audit_layer": "evidence",
+      "violation_type": "unsupported_factual_claim",
+      "unsupported_content": [
+        "totalSteps\": 2"
+      ],
+      "evidence_gap": "Permitted evidence does not contain a second step or specify a total step count of 2.",
+      "generation_guidance": "Adjust the totalSteps value in the UI payload to match the single available evidence step."
+    }
+  ]
+}
+seeded wrong_number caught
+🚨 [LLM Service Error]: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 500, model: gemini-3.5-flash-lite\nPlease retry in 23h36m4.910871174s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '500'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '84964s'}]}}
+seeded wrong_number caught
+🚨 [LLM Service Error]: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 500, model: gemini-3.5-flash-lite\nPlease retry in 23h35m45.664568465s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '500'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '84945s'}]}}
+seeded wrong_number caught
+🚨 [LLM Service Error]: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 500, model: gemini-3.5-flash-lite\nPlease retry in 23h35m43.101791004s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '500'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '84943s'}]}}
+seeded wrong_number caught
+🚨 [LLM Service Error]: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 500, model: gemini-3.5-flash-lite\nPlease retry in 23h35m40.393043747s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '500'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '84940s'}]}}
+seeded wrong_number caught
+🚨 [LLM Service Error]: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 500, model: gemini-3.5-flash-lite\nPlease retry in 23h35m37.815468938s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '500'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '84937s'}]}}
+seeded wrong_number caught
+seeded wrong_eligibility caught
+seeded wrong_eligibility caught
+seeded wrong_eligibility caught
+seeded wrong_eligibility caught
+seeded wrong_eligibility caught
+seeded wrong_eligibility caught
+seeded invented_step caught
+🚨 [LLM Service Error]: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 500, model: gemini-3.5-flash-lite\nPlease retry in 23h35m14.472067143s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '500'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '84914s'}]}}
+seeded invented_step caught
+🚨 [LLM Service Error]: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 500, model: gemini-3.5-flash-lite\nPlease retry in 23h35m11.914465797s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '500'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '84911s'}]}}
+seeded invented_step caught
+seeded invented_step caught
+seeded invented_step caught
+seeded invented_step caught
+seeded implied_account_access caught
+seeded implied_account_access caught
+seeded implied_account_access caught
+seeded implied_account_access caught
+seeded implied_account_access caught
+seeded implied_account_access caught
+seeded advice caught
+seeded advice caught
+seeded advice caught
+seeded advice caught
+seeded advice caught
+seeded advice caught
+good None passed
+good None caught
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+🚨 [LLM Service Error]: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\nPlease retry in 12.747771506s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '12s'}]}}
+good None passed
+good None passed
+good None passed
+good None caught
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+good None passed
+{
+ "passing_audit_prompts_available": 143,
+ "model": "gemini-3.5-flash-lite",
+ "sensitivity": "30/30",
+ "by_type": {
+  "wrong_number": "6/6",
+  "wrong_eligibility": "6/6",
+  "invented_step": "6/6",
+  "implied_account_access": "6/6",
+  "advice": "6/6"
+ },
+ "false_positive": "2/30"
+}

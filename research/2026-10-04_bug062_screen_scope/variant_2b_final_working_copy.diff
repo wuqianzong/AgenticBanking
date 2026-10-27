@@ -1,0 +1,145 @@
+diff --git a/backend/app/core/llm_service.py b/backend/app/core/llm_service.py
+index 8fe4156..c9526d6 100644
+--- a/backend/app/core/llm_service.py
++++ b/backend/app/core/llm_service.py
+@@ -393,12 +393,14 @@ class TriageEvaluation(BaseModel):
+ # Fields are declared in reasoning order on purpose (Gemini generates them in
+ # declaration order, same principle as TaskSufficiencyItem.reason): first what
+ # the customer is asking Horizon to produce, then the response that would
+-# fulfil it, then the verdict. Without the first step the model sometimes
++# fulfil it, then the verdict. No field asks whether the assistant's services
++# cover the request (BUG-062: that made the model treat requests it could not
++# map as prohibited). Without the first step the model sometimes
+ # judged an action the customer only described ("receive money and send it
+ # on -- is that allowed?") as if Horizon were asked to perform it.
+ class InboundComplianceScreen(BaseModel):
+-    requested_from_horizon: str = Field(description="Written first: what the customer wants from this assistant -- an answer to a question (including whether something is allowed, safe or advisable), information, their own data, or help with an action -- and which part of the assistant's service scope serves it, or that none does.")
+-    predicted_bank_response: str = Field(description="Written before non_compliant: one or two sentences predicting the truthful, compliant response Horizon would give to fulfil the customer's resolved request -- or exactly PROHIBITED if the request can only be fulfilled by output or an action that breaches the MAS compliance context or the bank conduct rules. Offering the app screen or service form where the customer completes an action does fulfil it; a refusal does not.")
++    requested_from_horizon: str = Field(description="Written first: what the customer wants Horizon to say or do. Do not judge whether the assistant's services cover it.")
++    predicted_bank_response: str = Field(description="Written second: one or two sentences giving the response that fulfils the request as asked, given how the assistant works. Never a refusal. Exactly PROHIBITED if giving that response would breach a rule.")
+     non_compliant: bool = Field(description="True only when predicted_bank_response is PROHIBITED.")
+ 
+ # TURN CONSISTENCY CHECK (Node 04a) -- semantic conflicts between one
+diff --git a/backend/app/orchestration/nodes.py b/backend/app/orchestration/nodes.py
+index 155a84e..d92a638 100644
+--- a/backend/app/orchestration/nodes.py
++++ b/backend/app/orchestration/nodes.py
+@@ -2657,28 +2657,6 @@ def node_02d_user_journey_classifier_and_triage(state: AgentState):
+         "repeated_need_detected_this_turn": repeated_need_detected_this_turn,
+     }
+ 
+-def _assistant_service_scope() -> str:
+-    """The assistant's service scope for the inbound compliance screen, built
+-    from the same registries the tool planner uses, so it always matches what
+-    the bot can actually do. Every tool -- FAQ search included -- is listed
+-    the same way, as an equal option. Descriptions only, no ids or routes."""
+-    from backend.app.orchestration.tool_registry import enabled_tool_capabilities
+-    lines = []
+-    for capability in enabled_tool_capabilities():
+-        name = capability.get("tool_name")
+-        if name == "rag":
+-            lines.append("- FAQ search: answer the customer's question from Horizon's FAQ and policy information.")
+-        for field in capability.get("available_fields", []):
+-            lines.append(f"- Own-data lookup: {field.get('description', '')}")
+-        for screen in capability.get("available_destinations", []):
+-            lines.append(f"- App screen: {screen.get('description', '')}")
+-        for form in capability.get("available_requests", []):
+-            lines.append(f"- Service form: {form.get('description', '')}")
+-    lines.append("- Human handover: pass the conversation to a human agent when the customer asks for one.")
+-    lines.append("An app screen is only a redirect: the actual transaction takes place on the bank app's own transaction page.")
+-    lines.append("The assistant cannot see personal data: the data lookup shows it to the customer only.")
+-    return "\n    ".join(lines)
+-
+ 
+ def node_02f_inbound_compliance_screen(state: AgentState):
+     """Inbound compliance screen, run in parallel with triage (BUG-055).
+@@ -2689,7 +2667,13 @@ def node_02f_inbound_compliance_screen(state: AgentState):
+     judges only that predicted response against REGULATORY_LICENSING_CONTEXT
+     and BANK_CONDUCT_CONTEXT. A question is fulfilled by a truthful answer,
+     which may be "no" or a warning, so a customer asking whether to share an
+-    OTP is answered rather than refused. It used to be one rule inside the
++    OTP is answered rather than refused. The screen does not judge scope
++    (BUG-062: a tool-by-tool scope list made the model treat requests it
++    could not map as prohibited). It sees the basic operating principles
++    instead -- own data shown but never seen, actions completed on the
++    bank's own page -- predicts the fulfilling response, and judges that:
++    a request the assistant cannot serve is compliant unless fulfilling it
++    would breach a rule. It used to be one rule inside the
+     triage prompt, where the judgment kept contradicting its own reasoning;
+     as a focused call it is reliable. Writes only `inbound_compliance` --
+     triage writes the rest of this step's state in the same superstep."""
+@@ -2712,13 +2696,21 @@ def node_02f_inbound_compliance_screen(state: AgentState):
+     customer, the topic, or the intent behind the message. Judge only what
+     Horizon would be doing if it fulfilled the request.
+ 
+-    THIS ASSISTANT'S SERVICE SCOPE (everything it can do, and nothing else):
+-    {_assistant_service_scope()}
+-    Showing the customer their own data and offering a listed screen or form
+-    are legitimate service and breach no rule: showing the customer their
+-    own data is not unauthorised access, and offering a screen or form is
+-    not executing a banking action or claiming authority -- the customer
+-    completes the action there themselves.
++    HOW THIS ASSISTANT WORKS:
++    - It answers questions from Horizon's FAQ and policy information.
++    - It can show the logged-in customer their own data. The system displays
++      the value to the customer; the assistant itself never sees it. This is
++      not unauthorised access.
++    - It helps with banking actions by sending the customer to the bank
++      app's own page, where the customer completes the action. Sending the
++      customer there is not executing an action.
++    - It can pass the customer to a human agent.
++
++    A request the assistant cannot serve has one of two outcomes:
++    - Compliant: fulfilling it would break no rule. The assistant simply
++      replies that it cannot help with this here.
++    - Non-compliant: fulfilling it would breach a rule.
++    Whether the assistant can serve a request does not decide compliance.
+ 
+     First resolve the customer's actual request from the latest message. Use
+     the conversation only to fill what the message itself leaves open -- a
+@@ -2726,34 +2718,17 @@ def node_02f_inbound_compliance_screen(state: AgentState):
+     assistant's previous offer.
+ 
+     Then decide in three steps:
+-    1. Write requested_from_horizon: what the customer wants from this
+-       assistant -- an answer to a question, information, their own data, or
+-       help with an action -- and which part of the SERVICE SCOPE serves it
+-       (or that none does). A question about whether something is allowed,
+-       safe or advisable asks for an answer. An action the customer or
+-       someone else would perform is the subject of the request; this
+-       assistant never performs actions itself, it offers the screen or
+-       form where the customer does.
+-    2. Write predicted_bank_response: the truthful, compliant response
+-       Horizon would give to fulfil the request. A question is fulfilled by
+-       answering it truthfully; the true answer may be "no" or a warning and
+-       need not agree with what the customer proposes. Predict only what
+-       this assistant would do within its SERVICE SCOPE above -- never an
+-       action outside it. A request for an action is fulfilled by what the
+-       scope offers for it:
+-       information, the customer's own data, or the app screen or service
+-       form where the customer completes it -- pointing the customer there
+-       does fulfil it. When the scope cannot do exactly what is asked (for
+-       example the customer asks Horizon to carry out an action it can only
+-       offer a screen for), predict what the assistant would offer instead
+-       within its scope: the matching screen or form, information, or an
+-       honest statement that this is not available here. Being unable to do
+-       something is never a breach. If the request can only be fulfilled by
+-       output or an action that breaches the MAS COMPLIANCE CONTEXT or the
+-       BANK CONDUCT RULES, write exactly PROHIBITED. PROHIBITED means the request asks
+-       for something prohibited, never merely something this assistant
+-       cannot do.
+-    3. Set non_compliant to true only when predicted_bank_response is PROHIBITED.
++    1. Write requested_from_horizon: what the customer wants Horizon to say
++       or do.
++    2. Write predicted_bank_response: the response that fulfils the request
++       as asked. Do not write a refusal here. A question is fulfilled by a
++       truthful answer, which may be "no" or a warning. An action is
++       fulfilled by sending the customer to the app page where they
++       complete it.
++    3. Judge predicted_bank_response against the MAS COMPLIANCE CONTEXT and
++       the BANK CONDUCT RULES. If giving it would breach a rule, write
++       exactly PROHIBITED as predicted_bank_response and set non_compliant
++       to true. Otherwise set non_compliant to false.
+ 
+     Output JSON only:
+     {{"requested_from_horizon": "...", "predicted_bank_response": "...", "non_compliant": true | false}}

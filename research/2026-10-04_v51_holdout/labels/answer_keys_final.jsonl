@@ -1,0 +1,220 @@
+{"item_id": "item_001", "key_items": ["Identity can be verified with MyInfo (Singpass) when applying", "In-person verification at the Experience Centre needs original ID: NRIC for citizens or PRs, passport for pass holders"]}
+{"item_id": "item_002", "key_items": ["Failed automated payments must be settled manually by the due date (no retry in the same month)", "Common reasons for failure include insufficient funds, a blocked account, exceeding transaction limits, or a closed account."]}
+{"item_id": "item_003", "key_items": ["Failed automated payments must be settled manually by the due date (no retry in the same month)", "Common reasons for failure include insufficient funds, a blocked account, exceeding transaction limits, or a closed account."]}
+{"item_id": "item_006", "key_items": ["Horizon does not accept cheque deposits"]}
+{"item_id": "item_008", "key_items": ["Supported ways to fund the account are FAST transfer and PayNow"]}
+{"item_id": "item_009", "key_items": ["Set up a recurring transfer (standing instruction or scheduled transfer) at the other bank to the Horizon savings account", "Specify frequency, amount and the Horizon account number"]}
+{"item_id": "item_010", "key_items": ["Domestic transfers are sent instantly, but the recipient bank may need more time", "Some transactions are held for 24 hours for security"]}
+{"item_id": "item_011", "key_items": ["The card can be used for online purchases", "Online purchases may require 3D Secure verification in the Horizon app"]}
+{"item_id": "item_014", "key_items": ["Request a replacement for a damaged card in the app (Card Management, Replace Current Card, mark as damaged)"]}
+{"item_id": "item_015", "key_items": ["The card supports recurring payments", "The digital card supports virtually all card transactions in Singapore"]}
+{"item_id": "item_018", "key_items": ["Once approved, the card details (number, expiry, CVV) are viewable in the Horizon App", "The digital card can be added to Apple Wallet"]}
+{"item_id": "item_019", "key_items": ["The physical card arrives within 6-7 business days of applying"]}
+{"item_id": "item_022", "key_items": ["Refunds go back to the original card if the transaction was pending, otherwise to the paired account"]}
+{"item_id": "item_024", "key_items": ["At foreign ATMs choose the local currency rather than Dynamic Currency Conversion, which usually has a worse rate", "The ATM operator may add its own surcharge"]}
+{"item_id": "item_026", "key_items": ["Activate the new card in the Horizon App before using it"]}
+{"item_id": "item_028", "key_items": ["Supported ways to fund the account are FAST transfer and PayNow"]}
+{"item_id": "item_029", "key_items": ["Applications are usually processed within minutes, up to five business days if more information is needed", "The decision is sent by SMS or email and shown in the app"]}
+{"item_id": "item_030", "key_items": ["Withdraw cash at Horizon-branded or Standard Chartered ATMs in Singapore and Visa ATMs overseas", "Horizon-branded ATMs are located at FairPrice Xtra Vivocity, unit B2-23."]}
+{"item_id": "item_031", "key_items": ["Domestic transfers are sent instantly but the recipient bank may take longer", "Some transactions are held for 24 hours for security", "New payees have a 12-hour cooling-off period"]}
+{"item_id": "item_034", "key_items": ["Apply for a Horizon credit card online (partner app or website, MyInfo)", "Eligibility: age 21-55 with income at least S$30,000 for citizens or PRs, S$60,000 for foreigners", "Applicants over 55 years old are eligible if they are Singapore citizens or permanent residents earning at least S$15,000 annually.", "Foreigners over 55 years old with a valid work pass are eligible if they earn at least S$60,000 annually."]}
+{"item_id": "item_035", "key_items": ["Restore app access on a new phone with Singpass and set a new passcode", "Freeze the missing card in the app and request a replacement", "The Kill Switch or customer support can block app access", "If you cannot access the app to perform these actions, you must call the customer support hotline at +65 313-HORIZ for immediate assistance."]}
+{"item_id": "item_036", "key_items": ["Card can be used abroad (Visa Plus ATMs, enable overseas use in the app)", "PayNow and transfers are Singapore-dollar and domestic only"]}
+{"item_id": "item_037", "key_items": ["Receive money by FAST bank transfer to the account number or by PayNow"]}
+{"item_id": "item_039", "key_items": ["Reset the Horizon Key PIN in the app (Profile, Security, Update Horizon Key)", "The card PIN can be set or changed in the app", "A 12-hour cooling period applies after resetting the Horizon Key"]}
+{"item_id": "item_042", "key_items": ["Order a replacement card in the app or contact Customer Care"]}
+{"item_id": "item_044", "key_items": ["Some transactions are held for 24 hours for security", "Domestic transfers are usually instant"]}
+{"item_id": "item_045", "key_items": ["Track card delivery in the app under Card Delivery Status"]}
+{"item_id": "item_046", "key_items": ["Use the Forgot Passcode option in the Horizon App"]}
+{"item_id": "item_047", "key_items": ["Freeze or lock the card in the app", "Contact the bank by live chat, voice call or hotline to dispute", "Consider a police report"]}
+{"item_id": "item_048", "key_items": ["Freeze or lock the card in the app and contact the bank immediately (app chat, call or hotline)", "Consider filing a police report"]}
+{"item_id": "item_051", "key_items": ["Merchant purchases can stay pending up to 10 calendar days", "Transit transactions can stay pending up to 14 calendar days"]}
+{"item_id": "item_052", "key_items": ["Horizon ATMs charge no fee", "Withdrawing cash on the credit card is a cash advance: 8% fee (amounts under S$5 exempt) plus daily interest from posting"]}
+{"item_id": "item_057", "key_items": ["Horizon charges no foreign transaction or markup fee on the card", "Third-party platforms or ATM operators may charge their own fees", "At foreign ATMs choose local currency over Dynamic Currency Conversion"]}
+{"item_id": "item_059", "key_items": ["Freeze the card in the Horizon App", "Then request a replacement in the app marking the card lost or stolen"]}
+{"item_id": "item_060", "key_items": ["Set up a recurring transfer (standing instruction or scheduled transfer) at the other bank into the Horizon account", "Horizon AutoPay can schedule recurring transfers from the app"]}
+{"item_id": "item_061", "key_items": ["Freeze the card in the Horizon App", "Then request a replacement in the app marking the card lost or stolen"]}
+{"item_id": "item_062", "key_items": ["Horizon and Standard Chartered ATMs charge no fee", "The ATM operator may add its own surcharge (e.g. overseas)", "A credit card withdrawal is a cash advance with an 8% fee and interest"]}
+{"item_id": "item_063", "key_items": ["Horizon supports only SGD domestic transfers", "It does not handle foreign-currency conversion or cross-border payments"]}
+{"item_id": "item_064", "key_items": ["New accounts are verified with MyInfo through Singpass", "In-person verification at the Experience Centre needs original NRIC (citizens or PRs) or passport (pass holders)"]}
+{"item_id": "item_065", "key_items": ["The minimum age to open a savings account is 16"]}
+{"item_id": "item_066", "key_items": ["Horizon sends domestic transfers instantly but the recipient bank may need extra time", "Some transactions are held for 24 hours for security"]}
+{"item_id": "item_067", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to investigate an unrecognised transaction"]}
+{"item_id": "item_070", "key_items": ["Top up by FAST transfer from another bank to the Horizon account number", "Or top up by PayNow"]}
+{"item_id": "item_071", "key_items": ["The account is SGD only", "Horizon does not offer foreign-currency conversion or transfers"]}
+{"item_id": "item_072", "key_items": ["Horizon-branded ATM at FairPrice Xtra Vivocity B2-23", "Standard Chartered ATMs in Singapore (e.g. Bedok Mall, Bugis Junction, Vivocity)", "Visa ATMs overseas", "A full directory of all ATM locations can be accessed via the ATM/Branch Locator on the Horizon website."]}
+{"item_id": "item_074", "key_items": ["Apply through a partner app or website using MyInfo", "Eligibility: age 21-55 with income at least S$30,000 (citizens or PRs) or S$60,000 (foreigners)", "Applicants over 55 are eligible if they are Singapore citizens or permanent residents with an annual income of at least S$15,000.", "Foreigners over 55 are eligible with an annual income of at least S$60,000."]}
+{"item_id": "item_075", "key_items": ["New accounts must be verified with MyInfo through Singpass", "Reinstalling the app requires logging in again with Singpass"]}
+{"item_id": "item_076", "key_items": ["Set up a recurring transfer (standing instruction or scheduled transfer) at the other bank into the Horizon account", "Horizon AutoPay can schedule recurring transfers from the app"]}
+{"item_id": "item_077", "key_items": ["There is no fee to close the account", "Interest for the month of closure is not credited"]}
+{"item_id": "item_080", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to dispute the charges"]}
+{"item_id": "item_083", "key_items": ["Apply through a partner app or website using MyInfo", "Eligibility: age 21-55 with income at least S$30,000 (citizens or PRs) or S$60,000 (foreigners)", "Applicants over 55 are eligible if they earn at least S$15,000 (Singapore citizens or permanent residents) or S$60,000 (foreigners with a valid work pass)."]}
+{"item_id": "item_084", "key_items": ["Horizon ATMs charge no fee", "Since 1 Feb 2026 a credit card cash advance costs 8% (under S$5 exempt) plus 0.077% daily interest", "Link the card to the savings account and choose the savings option to avoid cash-advance charges"]}
+{"item_id": "item_086", "key_items": ["Horizon sends domestic transfers instantly but the recipient bank may need extra time", "Some transactions are held for 24 hours for security"]}
+{"item_id": "item_087", "key_items": ["View or download monthly statements in the app (Savings, Deposit, account, Statements)"]}
+{"item_id": "item_089", "key_items": ["A refund on a pending transaction goes back to the original card", "A refund on a completed transaction goes to the paired account"]}
+{"item_id": "item_090", "key_items": ["Horizon supports only SGD domestic transfers, so no exchange rate applies to transfers"]}
+{"item_id": "item_093", "key_items": ["The card works for online, in-app and recurring payments, and in store via Apple Pay or Google Pay", "It can be used overseas (Visa)"]}
+{"item_id": "item_094", "key_items": ["Restore app access on another device by signing in with Singpass and setting a new passcode", "Setting up the Horizon Key on a new device deactivates it on the lost phone"]}
+{"item_id": "item_096", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to investigate an unrecognised transaction"]}
+{"item_id": "item_097", "key_items": ["The minimum age to open a savings account is 16, so young children cannot open one"]}
+{"item_id": "item_099", "key_items": ["The Horizon card is accepted at Standard Chartered and Horizon ATMs", "There are no fees at Horizon or Standard Chartered ATMs"]}
+{"item_id": "item_100", "key_items": ["Horizon supports only SGD domestic transfers and does not receive cross-border or foreign-currency transfers"]}
+{"item_id": "item_101", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to dispute the transaction"]}
+{"item_id": "item_102", "key_items": ["An inactive or locked card must be activated or unlocked in the Horizon App", "A damaged card can be replaced in the app (Card Management, Replace Current Card)", "Overseas transactions are disabled by default and must be enabled in the app under 'Manage card settings'."]}
+{"item_id": "item_105", "key_items": ["Top up by FAST transfer from another bank to the Horizon account number", "Or top up by PayNow"]}
+{"item_id": "item_106", "key_items": ["Transfer in by FAST from another bank, adding the Horizon account as a local beneficiary", "Or use PayNow", "GIRO from other banks is possible, MEPS+ and RTGS are not"]}
+{"item_id": "item_108", "key_items": ["Yes: transfer in by FAST from another bank to the Horizon account number", "Or use PayNow"]}
+{"item_id": "item_110", "key_items": ["Payments up to S$5,000 need no payee registration", "Above S$5,000 (up to S$200,000) the recipient must be added as a payee or verified with the Horizon Key", "Some transactions are held for 24 hours for security", "Common reasons for transfer failures include insufficient funds, a blocked account, or exceeding daily transaction limits."]}
+{"item_id": "item_111", "key_items": ["Order a replacement card in the Horizon App or contact Customer Care"]}
+{"item_id": "item_114", "key_items": ["Others can send money to the account by FAST transfer to the account number or by PayNow", "A PayNow sender sees a masked version of the name"]}
+{"item_id": "item_116", "key_items": ["Contact Horizon Customer Care through the in-app chat or support line so the discrepancy can be investigated"]}
+{"item_id": "item_117", "key_items": ["No: the PIN can be changed in the Horizon App (Card Details, Modify PIN)", "The PIN is 6 digits"]}
+{"item_id": "item_121", "key_items": ["Others can send money by FAST transfer to the Horizon account number", "Or by PayNow"]}
+{"item_id": "item_122", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878", "If fraud is suspected, lock the card in the app (View and Manage card, Lock card)"]}
+{"item_id": "item_124", "key_items": ["Merchant purchases can stay pending up to 10 days", "A failed AutoPay is not retried in the same month and must be paid manually by the due date", "AutoPay failures can be caused by insufficient funds, blocked accounts, exceeded transaction limits, or closed accounts."]}
+{"item_id": "item_126", "key_items": ["The card works for online, in-app and recurring payments", "In store via Apple Pay or Google Pay", "It can be used overseas"]}
+{"item_id": "item_128", "key_items": ["Use Forgot Passcode in the Horizon App", "The Horizon Key PIN can be reset in Profile, Security, with a 12-hour cooling period"]}
+{"item_id": "item_129", "key_items": ["Horizon supports only SGD and does not convert between foreign currencies"]}
+{"item_id": "item_130", "key_items": ["Contact Horizon Customer Care through the in-app chat or support line so the discrepancy can be investigated"]}
+{"item_id": "item_133", "key_items": ["Horizon does not handle foreign-currency or cross-border transfers", "PayNow supports only SGD transfers between FAST banks in Singapore"]}
+{"item_id": "item_134", "key_items": ["Yes, Horizon has a digital card", "It works for nearly all card transactions in Singapore via Apple Pay, Google Pay and the FairPrice app"]}
+{"item_id": "item_135", "key_items": ["Horizon operates in Singapore only", "Applicants must be Singapore residents applying locally"]}
+{"item_id": "item_136", "key_items": ["Horizon accepts applications only from Singapore residents applying locally"]}
+{"item_id": "item_137", "key_items": ["Activate the card in the Horizon App (Account Management, physical card, Activate Your Card)"]}
+{"item_id": "item_138", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to report the unrecognised withdrawal"]}
+{"item_id": "item_139", "key_items": ["Horizon-branded ATM at FairPrice Xtra Vivocity B2-23", "Standard Chartered ATMs in Singapore", "Visa ATMs overseas"]}
+{"item_id": "item_140", "key_items": ["Horizon does not accept cheque deposits", "Top up by FAST transfer or PayNow instead"]}
+{"item_id": "item_141", "key_items": ["Horizon accounts and cards are only for Singapore residents", "The card can be used overseas, including at Visa Plus ATMs, after enabling overseas use in the app"]}
+{"item_id": "item_145", "key_items": ["Freeze the card in the app", "Request a replacement in the Horizon App (Card Management or View Card, Replace Card)"]}
+{"item_id": "item_146", "key_items": ["The physical card arrives within 6-7 business days of applying"]}
+{"item_id": "item_148", "key_items": ["Restore app access on a new device by signing in with Singpass and setting a new passcode", "Setting up the Horizon Key on a new device deactivates it on the lost phone", "Block app access with the Kill Switch (Profile, Security) or by calling support"]}
+{"item_id": "item_149", "key_items": ["Activate the card in the Horizon App (Account Management, physical card, Activate Your Card)", "You can activate the card using NFC by holding it against the back of your device.", "You can activate the card by entering the unique code provided in your welcome materials."]}
+{"item_id": "item_151", "key_items": ["Horizon sends domestic transfers instantly with immediate confirmation, but the recipient bank may need more time", "Some transactions are held for 24 hours for security"]}
+{"item_id": "item_152", "key_items": ["Horizon charges no foreign transaction or markup fee", "At foreign ATMs choosing Dynamic Currency Conversion gives a worse rate than choosing local currency", "Contact support (app chat, call, hotline) to query a specific transaction"]}
+{"item_id": "item_153", "key_items": ["Update personal details through Singpass and wait 12-24 hours before resubmitting", "The MyInfo address must be a Singapore address"]}
+{"item_id": "item_154", "key_items": ["Transfer by FAST from the other bank, adding the Horizon account as a local beneficiary", "Or use PayNow", "GIRO is possible, MEPS+ and RTGS are not"]}
+{"item_id": "item_155", "key_items": ["Freeze or lock the card in the app immediately", "Contact Horizon by live chat, voice call or hotline +65 3138 7878", "File a police report"]}
+{"item_id": "item_157", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to dispute the duplicate charge"]}
+{"item_id": "item_158", "key_items": ["Identity is checked with MyInfo through Singpass at sign-up", "MyInfo fills in personal details automatically and reduces errors"]}
+{"item_id": "item_161", "key_items": ["The card PIN can be set or changed in the Horizon App (Card Details, Modify PIN)", "The PIN is 6 digits"]}
+{"item_id": "item_163", "key_items": ["Horizon charges no fee for sending or receiving SGD transfers", "PayNow is free"]}
+{"item_id": "item_166", "key_items": ["Horizon does not accept international or foreign-currency transfers", "Only SGD domestic transfers are supported"]}
+{"item_id": "item_167", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to investigate an unrecognised payment"]}
+{"item_id": "item_168", "key_items": ["Horizon charges no foreign transaction or markup fee", "Third-party platforms may charge their own fees", "Contact support to query the transaction"]}
+{"item_id": "item_169", "key_items": ["Contact Horizon by live chat, voice call or hotline +65 3138 7878 about the purchase"]}
+{"item_id": "item_172", "key_items": ["Do not uninstall unless Customer Care advises it", "The application is saved so you can continue where you left off", "Contact support via in-app chat or +65 3138 7878"]}
+{"item_id": "item_174", "key_items": ["The card works overseas, including at Visa Plus ATMs with the 6-digit PIN", "Enable overseas use in the app before travelling (View Card, Manage card settings)"]}
+{"item_id": "item_175", "key_items": ["Set or change the PIN in the Horizon App at any time (Card Details, Modify PIN)", "The PIN is needed for ATM withdrawals"]}
+{"item_id": "item_176", "key_items": ["The physical card is mailed and arrives within 6-7 business days of applying"]}
+{"item_id": "item_177", "key_items": ["On approval you receive a Horizon Cashback Card and a Horizon Link Debit Card linked to the savings account"]}
+{"item_id": "item_178", "key_items": ["FAST transfers and PayNow are credited shortly", "Some transactions are held for 24 hours for security"]}
+{"item_id": "item_179", "key_items": ["Horizon sends domestic transfers instantly, but the recipient bank may need more time", "Some transactions are held for 24 hours for security"]}
+{"item_id": "item_180", "key_items": ["No fee for SGD transfers into a Horizon account", "PayNow is free"]}
+{"item_id": "item_181", "key_items": ["Set up a recurring transfer (standing instruction or scheduled transfer) at the other bank into the Horizon account, choosing frequency and amount"]}
+{"item_id": "item_182", "key_items": ["Use Forgot Passcode in the Horizon App", "Or sign in with the Singpass QR code and set a new six-digit passcode"]}
+{"item_id": "item_183", "key_items": ["Activate the card in the Horizon App (Account Management, physical card, Activate Your Card)"]}
+{"item_id": "item_184", "key_items": ["Contact Horizon by live chat, voice call or hotline +65 3138 7878", "If fraud is suspected, lock the card in the app and file a police report"]}
+{"item_id": "item_185", "key_items": ["Horizon charges no fee for sending or receiving SGD transfers", "PayNow is free"]}
+{"item_id": "item_188", "key_items": ["Contact Horizon Customer Care through the in-app chat or support line so the discrepancy can be investigated"]}
+{"item_id": "item_190", "key_items": ["A submitted and approved transfer cannot be withdrawn", "A transaction can be deleted on the AutoPay screen within 24 hours"]}
+{"item_id": "item_191", "key_items": ["Update address, phone number or email in the app (Profile, Settings, Personal Details)", "To change NRIC/FIN, nationality, legal name or embossed name, contact Customer Care via app call or chat (about 3 business days)"]}
+{"item_id": "item_192", "key_items": ["At foreign ATMs choosing Dynamic Currency Conversion gives a worse rate than choosing local currency", "Contact Customer Care through the app to investigate the discrepancy"]}
+{"item_id": "item_193", "key_items": ["There is no issuance or annual fee for a supplementary card", "Supplementary card spending is combined with the primary card balance"]}
+{"item_id": "item_194", "key_items": ["Contact Horizon by live chat, voice call or hotline +65 3138 7878 to query the charge", "A late-payment fee waiver can be requested in in-app chat with the words \"fee waiver\" (reply within 3 working days)"]}
+{"item_id": "item_196", "key_items": ["Up to S$5,000 can be sent without registering a payee", "Above S$5,000 (up to S$200,000) the recipient must be added as a payee or verified with the Horizon Key", "Common reasons for payment failures include insufficient funds, a blocked account, exceeding daily transaction limits, or a closed account."]}
+{"item_id": "item_197", "key_items": ["Freeze or lock the card in the app (View and Manage card) and contact Horizon immediately", "File a police report", "Block app access with the Kill Switch if needed"]}
+{"item_id": "item_198", "key_items": ["In the Horizon App tap View Card, then Add to Google Pay, and follow the prompts"]}
+{"item_id": "item_200", "key_items": ["Ordering a replacement for a lost card permanently deactivates the old card, so it cannot be reactivated", "The old card stops earning Linkpoints once a lost-card replacement is selected"]}
+{"item_id": "item_201", "key_items": ["The Horizon card can be added to Google Pay from the app (View Card, Add to Google Pay)", "The account is topped up by FAST transfer or PayNow"]}
+{"item_id": "item_202", "key_items": ["Contact Horizon by live chat, voice call or hotline +65 3138 7878", "If fraud is suspected, lock the card in the app and file a police report"]}
+{"item_id": "item_203", "key_items": ["FAST transfers and PayNow are credited shortly", "Some transactions are held for 24 hours for security"]}
+{"item_id": "item_204", "key_items": ["Merchant card purchases can stay pending up to 10 calendar days", "Transit transactions up to 14 days", "Payments from savings to the Horizon credit card are instant"]}
+{"item_id": "item_205", "key_items": ["Card pairing links a Horizon Link card to the Horizon Link credit card account or the savings account, if you hold both", "The Horizon Cashback card cannot be linked to the savings account"]}
+{"item_id": "item_206", "key_items": ["Restore app access on a new device by signing in with Singpass and setting a new passcode", "Setting up the Horizon Key on a new device deactivates it on the lost phone"]}
+{"item_id": "item_208", "key_items": ["Activate the card in the Horizon App (Account Management, physical card, Activate Your Card)"]}
+{"item_id": "item_210", "key_items": ["Transfer limits can be changed in the app (Money, Payments, limit screen), higher limits need Horizon Key verification", "If the error persists contact Customer Care"]}
+{"item_id": "item_212", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to dispute the duplicate charge"]}
+{"item_id": "item_213", "key_items": ["New accounts are verified with MyInfo through Singpass, no documents needed", "In-person verification at the Experience Centre needs original NRIC (citizens or PRs) or passport (pass holders)"]}
+{"item_id": "item_215", "key_items": ["A refund on a pending transaction goes back to the original card", "A refund on a completed transaction goes to the paired account"]}
+{"item_id": "item_216", "key_items": ["There is no issuance or annual fee for a supplementary card"]}
+{"item_id": "item_217", "key_items": ["Horizon does not accept cheque deposits", "Money is added by FAST transfer or PayNow"]}
+{"item_id": "item_218", "key_items": ["The physical card should arrive within 6-7 business days of applying", "If it has not arrived, contact support by live chat or voice call in the app, or +65 313-HORIZON"]}
+{"item_id": "item_220", "key_items": ["Horizon sends domestic transfers instantly but the recipient bank may need more time", "Some transactions are held for 24 hours for security", "New payees have a 12-hour cooling-off period"]}
+{"item_id": "item_221", "key_items": ["Set the card PIN in the Horizon App (Card Details, Modify PIN)", "The PIN is 6 digits"]}
+{"item_id": "item_222", "key_items": ["Change the address in the Horizon App (Profile, Settings, Personal Details, Address)"]}
+{"item_id": "item_223", "key_items": ["Top up by FAST transfer from another bank", "Or by PayNow", "Cheque deposits are not accepted"]}
+{"item_id": "item_225", "key_items": ["Some transactions are held for 24 hours for security and then processed automatically unless cancelled"]}
+{"item_id": "item_227", "key_items": ["Top up by FAST transfer or PayNow"]}
+{"item_id": "item_228", "key_items": ["Horizon accepts only SGD transfers, so USD top-ups are not supported", "SGD transfers into the account are free"]}
+{"item_id": "item_229", "key_items": ["A refund on a pending transaction goes back to the original card", "A refund on a completed transaction goes to the paired account"]}
+{"item_id": "item_232", "key_items": ["Freeze or lock the card in the app (View and Manage card, Lock card)", "Contact Horizon by live chat, voice call or hotline +65 3138 7878", "File a police report"]}
+{"item_id": "item_234", "key_items": ["Horizon offers a digital card, usable via Apple Pay, Google Pay and the FairPrice app", "After approval, the card number, expiry and CVV are viewable in the Horizon App"]}
+{"item_id": "item_235", "key_items": ["ATM limits: S$2,000 per transaction and S$5,000 per 24 hours, within the available balance", "Choose the savings account at the ATM to draw from savings", "Withdrawals may fail if the account is in inactive status due to long-term non-use.", "Withdrawals may fail if using an ATM network other than Standard Chartered Bank or Horizon Bank ATMs."]}
+{"item_id": "item_237", "key_items": ["Horizon ATMs charge no fee", "A credit card cash withdrawal is a cash advance: 8% fee (under S$5 exempt) plus 0.077% daily interest"]}
+{"item_id": "item_238", "key_items": ["Contact Horizon by live chat, voice call or hotline +65 3138 7878 to dispute the duplicate charge", "Merchant purchases can stay pending up to 10 calendar days"]}
+{"item_id": "item_240", "key_items": ["Reset the Horizon Key PIN in the app (Profile, Security, Update Horizon Key), with a 12-hour cooling period", "If locked out of the app, call +65 313-HORIZON to restore access after identity verification (about one working day)"]}
+{"item_id": "item_241", "key_items": ["Horizon charges no foreign transaction or markup fee on its cards", "Third-party platforms such as Alipay or WeChat Pay may charge their own fees"]}
+{"item_id": "item_243", "key_items": ["Transfer by FAST from another bank, adding the Horizon account as a local beneficiary", "GIRO is possible, MEPS+ and RTGS are not", "PayNow is also available"]}
+{"item_id": "item_244", "key_items": ["If the withdrawal is not recognised, contact Horizon by live chat, voice call or hotline +65 3138 7878", "A withdrawal on the credit card account is treated as a cash advance"]}
+{"item_id": "item_245", "key_items": ["The debit card has no annual fee", "The first metal card is free"]}
+{"item_id": "item_246", "key_items": ["There is no mailed PIN: set the card PIN yourself in the Horizon App (Card Details, Modify PIN)"]}
+{"item_id": "item_248", "key_items": ["Contact Horizon Customer Care via in-app chat or the support line to start a dispute about the ATM discrepancy"]}
+{"item_id": "item_249", "key_items": ["The physical card is mailed to your address on file", "Accounts are only for Singapore residents applying locally"]}
+{"item_id": "item_251", "key_items": ["Merchant transactions can stay pending up to 10 calendar days before settling", "Contact Horizon support if the amount has not been reversed"]}
+{"item_id": "item_253", "key_items": ["Order a replacement card in the Horizon App or contact Customer Care"]}
+{"item_id": "item_254", "key_items": ["Yes: she can send money by FAST transfer to your Horizon account number or by PayNow", "A PayNow sender sees a masked version of your name", "Transfers must go to the main account, not a Savings Pot"]}
+{"item_id": "item_255", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to investigate the charge"]}
+{"item_id": "item_256", "key_items": ["Horizon supports SGD only, for accounts, transfers and investment products"]}
+{"item_id": "item_259", "key_items": ["Horizon sends domestic transfers instantly but the recipient bank may need more time", "Some transactions are held for 24 hours for security"]}
+{"item_id": "item_260", "key_items": ["Supported ways to fund the account are FAST transfer and PayNow"]}
+{"item_id": "item_261", "key_items": ["A primary credit cardholder can invite one person for a supplementary card in the app (More, More for you, Send invite)", "The primary needs a Horizon credit card with at least S$1,000 limit", "The recipient needs a Horizon savings account and no Horizon credit card"]}
+{"item_id": "item_262", "key_items": ["A failed AutoPay is not retried in the same month and must be paid manually by the due date", "Card purchases can stay pending up to 10 days", "Common reasons for AutoPay failure include insufficient funds, blocked accounts, or exceeding transaction limits."]}
+{"item_id": "item_264", "key_items": ["Horizon supports SGD only", "It does not handle foreign-currency or cross-border transfers"]}
+{"item_id": "item_265", "key_items": ["The daily transfer limit can be changed in the app (Money, Payments, limit screen)", "Higher limits need Horizon Key verification"]}
+{"item_id": "item_266", "key_items": ["There is no fee for receiving SGD transfers", "PayNow is free"]}
+{"item_id": "item_267", "key_items": ["Horizon does not accept foreign-currency or cross-border transfers", "Only SGD domestic transfers via FAST or PayNow are supported"]}
+{"item_id": "item_268", "key_items": ["Freeze the card in the Horizon App", "Request a replacement in the app marking the card lost or stolen", "Consider a police report"]}
+{"item_id": "item_269", "key_items": ["Horizon charges no fee for sending or receiving SGD transfers", "Contact Horizon by live chat, voice call or hotline to query the charge"]}
+{"item_id": "item_270", "key_items": ["PINs cannot be looked up", "Set a new card PIN in the Horizon App (Card Details, Modify PIN)"]}
+{"item_id": "item_271", "key_items": ["Horizon sends domestic transfers instantly but the recipient bank may need more time", "Some transactions are held for 24 hours for security"]}
+{"item_id": "item_272", "key_items": ["A primary cardholder can invite someone for a supplementary card in the app (More, More for you, Send invitation)", "Only one supplementary card is allowed per primary cardholder", "The primary cardholder must have a credit limit of at least S$1,000 to qualify.", "The invited person must hold a Horizon savings account, be at least 18 years old, and not already have a Horizon credit card."]}
+{"item_id": "item_273", "key_items": ["Horizon does not accept cheque deposits"]}
+{"item_id": "item_277", "key_items": ["No fee for SGD transfers into a Horizon account", "PayNow is free"]}
+{"item_id": "item_278", "key_items": ["Activate the card in the Horizon App (Account Management, physical card, Activate Your Card)"]}
+{"item_id": "item_279", "key_items": ["Use Forgot Passcode in the Horizon App"]}
+{"item_id": "item_280", "key_items": ["Horizon charges no foreign transaction or markup fee on its cards", "Third-party platforms may charge their own fees", "Contact Horizon by live chat, voice call or hotline to query the fee"]}
+{"item_id": "item_282", "key_items": ["An inactive card must be activated in the Horizon App", "A damaged card can be replaced in the app (Card Management, Replace Current Card)", "A lost card should be frozen and replaced", "Overseas transactions are disabled by default and must be enabled in the app under 'Manage card settings'."]}
+{"item_id": "item_283", "key_items": ["There is no fee to close the account", "Interest for the month of closure is not credited"]}
+{"item_id": "item_284", "key_items": ["New accounts are verified with MyInfo through Singpass", "In-person verification at the Experience Centre needs original NRIC (citizens or PRs) or passport (pass holders)"]}
+{"item_id": "item_285", "key_items": ["Horizon supports SGD only and does not convert to EUR or other currencies"]}
+{"item_id": "item_287", "key_items": ["Freeze or lock the card in the app and contact Horizon immediately (live chat, voice call, hotline +65 3138 7878)", "File a police report", "Block app access with the Kill Switch (Profile, Security) if needed"]}
+{"item_id": "item_288", "key_items": ["Freeze the card in the Horizon App (View & Manage Card, Freeze Card)", "Then order a replacement, which permanently deactivates the old card", "Consider a police report"]}
+{"item_id": "item_289", "key_items": ["The minimum age to open a savings account is 16, so there is no account for younger children"]}
+{"item_id": "item_290", "key_items": ["The minimum age to open a savings account is 16, so there is no account for younger children"]}
+{"item_id": "item_291", "key_items": ["Horizon has a digital card usable via Apple Pay, Google Pay and the FairPrice app", "After approval, sign in to the app with MyInfo to view the card number, expiry and CVV and add it to Apple Wallet"]}
+{"item_id": "item_293", "key_items": ["Horizon charges no foreign transaction or markup fee on card spending", "Horizon does not offer currency exchange or foreign-currency transfers"]}
+{"item_id": "item_294", "key_items": ["Card transactions can stay pending up to 10 calendar days (transit up to 14) before settling"]}
+{"item_id": "item_296", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to investigate the charge"]}
+{"item_id": "item_297", "key_items": ["Contact Horizon by live chat, voice call or hotline +65 3138 7878", "If fraud is suspected, lock the card in the app and file a police report"]}
+{"item_id": "item_299", "key_items": ["Card transactions can stay pending up to 10 calendar days (transit up to 14) before settling"]}
+{"item_id": "item_300", "key_items": ["Above S$5,000 (up to S$200,000) the recipient must be added as a payee or verified with the Horizon Key", "A failed AutoPay is not retried in the same month and must be paid manually", "Common reasons for declined transfers: insufficient funds, a blocked or closed savings account, or exceeding the daily limit"]}
+{"item_id": "item_304", "key_items": ["An approved transfer cannot be withdrawn", "Contact Customer Care right away via app live chat, voice call or +65 3138 7878 to start recovery", "File a police report"]}
+{"item_id": "item_305", "key_items": ["Legal name and embossed name changes go through Customer Care via app call or chat", "Expect a response in about three business days"]}
+{"item_id": "item_306", "key_items": ["Order a replacement card in the Horizon App or contact Customer Care"]}
+{"item_id": "item_308", "key_items": ["Horizon charges no foreign transaction or markup fee on its cards", "At foreign ATMs choose local currency over Dynamic Currency Conversion for a better rate"]}
+{"item_id": "item_309", "key_items": ["Reset the Horizon Key PIN in the app (Profile, Security, Update Horizon Key)", "The card PIN can be set or changed in the Horizon App", "There is a mandatory 12-hour waiting period before the newly set Horizon Key can be used."]}
+{"item_id": "item_310", "key_items": ["Horizon supports SGD only and does not offer currency exchange in the app"]}
+{"item_id": "item_311", "key_items": ["Yes: change the PIN in the Horizon App (Card Details, Modify PIN), no branch visit needed"]}
+{"item_id": "item_312", "key_items": ["Update address, phone number or email in the app (Profile, Settings, Personal Details)", "For PayNow, unlink the old number, save the new one and re-enrol it"]}
+{"item_id": "item_313", "key_items": ["Check delivery status in the app (Account Management, Card Delivery Status)", "The card arrives within 6-7 business days of applying"]}
+{"item_id": "item_314", "key_items": ["At the ATM choose the savings account to draw from savings", "Linking the card to the savings account is recommended"]}
+{"item_id": "item_316", "key_items": ["Card purchases can stay pending up to 10 calendar days (transit up to 14)", "Payments to the Horizon credit card are posted instantly"]}
+{"item_id": "item_317", "key_items": ["At foreign ATMs choose local currency rather than Dynamic Currency Conversion, which usually has a worse rate"]}
+{"item_id": "item_321", "key_items": ["Horizon charges no foreign transaction or markup fee on its cards", "Third-party platforms may charge their own fees", "Contact support to query a specific fee"]}
+{"item_id": "item_322", "key_items": ["In-store payments are possible via Apple Pay or Google Pay", "Contactless can be used overseas instead of a PIN"]}
+{"item_id": "item_323", "key_items": ["Horizon sends domestic transfers instantly but the recipient bank may need more time", "Some transactions are held for 24 hours for security"]}
+{"item_id": "item_324", "key_items": ["Contact Horizon by live chat or voice call in the app, or the hotline +65 3138 7878, to investigate the charge"]}
+{"item_id": "item_325", "key_items": ["Reset the Horizon Key PIN in the app (Profile, Security, Update Horizon Key)", "If locked out of the app, call +65 313-HORIZON to restore access after identity verification"]}
+{"item_id": "item_327", "key_items": ["Horizon does not accept international or foreign-currency transfers, so a transfer from France will not arrive"]}
+{"item_id": "item_328", "key_items": ["No: change the PIN in the Horizon App (Card Details, Modify PIN)"]}

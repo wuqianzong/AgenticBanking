@@ -1,0 +1,82 @@
+{
+  "test": "shared product vocabulary outbound-audit replay",
+  "selection": "target case plus nine fixed-seed random previously-passing H1 cases",
+  "seed": 690,
+  "requested_positions": [
+    9,
+    10
+  ],
+  "calls": 2,
+  "original_passes": 2,
+  "replay_passes": 2,
+  "verdicts_preserved": 2,
+  "degradations": [],
+  "records": [
+    {
+      "position": 9,
+      "case_id": "h1_h1_verify_my_identity_4",
+      "model": "gemini-3.5-flash-lite",
+      "original_prompt_sha256": "4a69f5dcf4bec902b3f6a34dbbc7b0552da1fc13d95c015db10f065460f07a3b",
+      "only_prompt_change": "inserted shared product vocabulary contract",
+      "original_pass": true,
+      "replay_pass": true,
+      "verdict_preserved": true,
+      "original_fields": {
+        "conduct_compliant": true,
+        "answer_compliant": true,
+        "clarification_compliant": true,
+        "evidence_grounded": true,
+        "answer_evidence_grounded": true,
+        "answer_bridge_grounded": true,
+        "clarification_grounded": true,
+        "clarification_connected": true
+      },
+      "replay_fields": {
+        "conduct_compliant": true,
+        "answer_compliant": true,
+        "clarification_compliant": true,
+        "evidence_grounded": true,
+        "answer_evidence_grounded": true,
+        "answer_bridge_grounded": true,
+        "clarification_grounded": true,
+        "clarification_connected": true
+      },
+      "replay_conduct_violation_count": 0,
+      "replay_grounding_violation_count": 0,
+      "replay_evidence_reason": "The answer is empty and the clarification correctly follows the permitted clarification input derived from the unresolved request and its validated guess."
+    },
+    {
+      "position": 10,
+      "case_id": "h1_h1_card_acceptance_4",
+      "model": "gemini-3.5-flash-lite",
+      "original_prompt_sha256": "1db2c1b98515055aa01d3ba377e0252c58f732df2a792e260ff33f71f7501005",
+      "only_prompt_change": "inserted shared product vocabulary contract",
+      "original_pass": true,
+      "replay_pass": true,
+      "verdict_preserved": true,
+      "original_fields": {
+        "conduct_compliant": true,
+        "answer_compliant": true,
+        "clarification_compliant": true,
+        "evidence_grounded": true,
+        "answer_evidence_grounded": true,
+        "answer_bridge_grounded": true,
+        "clarification_grounded": true,
+        "clarification_connected": true
+      },
+      "replay_fields": {
+        "conduct_compliant": true,
+        "answer_compliant": true,
+        "clarification_compliant": true,
+        "evidence_grounded": true,
+        "answer_evidence_grounded": true,
+        "answer_bridge_grounded": true,
+        "clarification_grounded": true,
+        "clarification_connected": true
+      },
+      "replay_conduct_violation_count": 0,
+      "replay_grounding_violation_count": 0,
+      "replay_evidence_reason": "All statements regarding the use of the Horizon card for online purchases, mobile app payments, recurring payments (utility bills and insurance premiums), and Apple Pay or Google Pay for in-store purchases are directly supported by faq_5dd95dc7."
+    }
+  ]
+}

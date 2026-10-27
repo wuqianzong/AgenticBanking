@@ -8,3 +8,11 @@ research/.research_api_keys
 uvicorn_live.log
 .deepseek_api_key
 .groq_api_key
+*.pid
+frontend_live.log
+# Research evidence: isolated data copies and launcher noise stay local
+research/**/isolated_*/
+research/**/launcher.out
+research/**/run_stdout.log
+__pycache__/
+.DS_Store

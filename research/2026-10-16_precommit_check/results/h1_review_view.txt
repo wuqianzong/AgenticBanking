@@ -1,0 +1,226 @@
+identical-ish (ratio>0.9 & same parents & channel): 5
+
+### h1_h1_pending_top_up_1 [improved] ratio=0.02 parents_same=False chan_same=True retries 0->1
+Q: why isn't my top-up going through?
+OLD: The available information does not detail the exact reason your specific top-up did not go through. However, common reasons for unsuccessful transfers include insufficient funds in your savings account, a blocked savings account, or exceeding your daily transaction limit. For PayNow or FAST payments to beneficiaries you have already added, each transaction may be up to S$200,000, with a total daily ceiling of S$200,000, while sending to recipients not saved in your payee list has a default daily limit of S$5,000. Domestic transfers are typically sent instantly with an immediate confirmation, though the recipient's bank may require additional time to process and settle the transaction. Since  | nav [] []
+NEW: Common reasons for unsuccessful transactions include insufficient funds in your savings account, a blocked savings account, exceeding your daily transaction limit, or having closed the savings account associated with the arrangement. Additionally, as related information, newly added payees are subject to a mandatory 12-hour waiting period during which transfers cannot be made. | nav [] []
+
+### h1_h1_verify_top_up_3 [stable] ratio=0.02 parents_same=False chan_same=True retries 0->0
+Q: Do I need to verify my top-up card?
+OLD: I do not have information available on verification requirements for your top-up card. | nav [] []
+NEW: To safeguard your account, Horizon Bank requires all newly issued physical Horizon cards to be activated prior to use, minimizing the risk of unauthorized transactions if your card is lost, stolen, or intercepted during delivery.  Access your Horizon App account by logging in with your credentials.  Navigate to the section labeled 'Account Management' and select the option related to your physical card.  Choose the 'Activate Your Card' feature, which will prompt you to select an activation method.  For NFC activation, click 'Proceed' and hold your card against the back of your device. Alternatively, opt for code activation by selecting 'Enter Code Manually' and input the unique code provided | nav [] []
+
+### h1_h1_getting_spare_card_1 [degraded] ratio=0.03 parents_same=False chan_same=True retries 0->0
+Q: Will I get charged for sending out more cards?
+OLD: The available information does not specifically indicate whether ordering additional cards incurs a charge. However, standard Horizon cards that are lost or damaged are replaced without any charges, whereas subsequent replacements for a metal Horizon card do incur a fee. Additionally, physical Horizon cards typically arrive within 6–7 business days. Are you asking about replacing a lost or damaged card? | nav [] []
+NEW: Horizon Bank does not charge for replacing a lost or damaged Horizon card. However, the available information does not cover whether there are charges for ordering additional or extra cards beyond a standard replacement.  If you need to replace a card, you can manage it through the Horizon App by opening the card dashboard, choosing "View & Manage Card," and following the prompts.  To help me give you the right details, are you looking to replace a lost card, or are you looking to order extra cards in addition to your current one? | nav [] []
+
+### h1_h1_automatic_top_up_1 [degraded] ratio=0.04 parents_same=False chan_same=True retries 0->0
+Q: Can I set the account to auto top-up?
+OLD: I am sorry, but I do not have information available on setting the account to auto top-up. | nav [] []
+NEW: While I don't have information on automatic top-up for your account, you can set up scheduled recurring transfers using our AutoPay feature in the Horizon App to automate your payments. Are you asking about setting up scheduled recurring transfers? | nav [] []
+
+### h1_h1_beneficiary_not_allowed_1 [stable] ratio=0.04 parents_same=False chan_same=True retries 0->1
+Q: My transfer to a beneficiary did not go through.  Why?
+OLD: I am sorry, but I do not have information available on the reason why your transfer to a beneficiary did not go through. | nav [] []
+NEW: I don't have information on why your specific transfer did not go through, but here's related information that may help: Horizon Bank implements a robust security protocol that temporarily holds certain transactions for 24 hours to protect your funds. Additionally, for payments up to S$5,000, you can send funds instantly without registering a payee, while amounts exceeding S$5,000 up to S$200,000 require adding the recipient or completing a verification step using the Horizon Key. | nav [] []
+
+### h1_h1_pending_top_up_2 [improved] ratio=0.04 parents_same=False chan_same=True retries 0->1
+Q: Please explain why my top-up hasn't been processed yet?
+OLD: Horizon Bank sends domestic transfers instantly and you receive an immediate confirmation, though the recipient's bank may require additional time to process and settle the transaction. Specific transaction statuses cannot be accessed live, and the available information does not cover why your specific top-up has not been processed yet. Since you might be setting up or managing transfers, you can also use the AutoPay or PayNow features in the Horizon App to configure your transfer details. | nav [] []
+NEW: Your top-up transaction is currently experiencing a temporary security hold. For your protection, Horizon Bank holds certain transactions for 24 hours as a precautionary security measure against potential phishing and unauthorized access before they are automatically processed. Additionally, as related context regarding transfer failures, automated arrangements can occasionally fail due to reasons such as insufficient funds in your savings account, a blocked savings account, exceeding your daily transaction limit, or having closed the associated savings account, and a manual transfer may be necessary if a scheduled payment did not go through.  To help me look into this further, are you askin | nav [] []
+
+### h1_h1_getting_virtual_card_2 [improved] ratio=0.04 parents_same=False chan_same=True retries 0->0
+Q: I would love one of the virtual cards!
+OLD: I understand you would love to get a virtual card, but the available information does not cover how to apply for one. Once obtained, however, the digital card enables virtually all card-related operations through platforms such as Apple Pay, Google Pay, and the FairPrice app. | nav [] []
+NEW: With your Horizon card, you can make online purchases, pay within mobile applications, set up recurring payments, and use mobile wallets like Apple Pay or Google Pay for in-store purchases. You can also view your card details in your Horizon App when adding your card to supported apps like FairPrice. However, the information available does not cover how to obtain a separate virtual card.  To help clarify, are you looking to add your card to Apple Pay or Google Pay? | nav [] []
+
+### h1_h1_lost_or_stolen_card_2 [stable] ratio=0.04 parents_same=True chan_same=False retries 0->0
+Q: I think someone stole my card because I can't find it.
+OLD: I'm sorry to hear that you cannot find your card.  If your card is lost or stolen, you can protect your account by freezing it and requesting a replacement directly through the Horizon App.  Log into the Horizon App.  Open the card dashboard and choose "View & Manage Card."  Tap "Freeze Card" followed by "Order Replacement."  Horizon will issue a new card and permanently deactivate the old one. You may also wish to file a police report. The new card will arrive with a different card number, so be sure to update any recurring payments or subscriptions with the new details. For additional assistance, select "Contact Us" from the app menu. | nav [] []
+NEW: I am so sorry to hear that your card is missing. For a card that is lost or stolen, you should first freeze it and then request a replacement. To do this, log into the Horizon App, open the card dashboard, and choose "View & Manage Card." Tap "Freeze Card" followed by "Order Replacement." Horizon will issue a new card and permanently deactivate the old one. You may also wish to file a police report. Please note that the new card will arrive with a different card number, so be sure to update any recurring payments or subscriptions with the new details. For additional assistance, you can select "Contact Us" from the app menu.  If you'd rather skip these steps, you can also do this directly  us | nav ['Manage Card'] []
+
+### h1_h1_transfer_timing_4 [stable] ratio=0.05 parents_same=False chan_same=True retries 0->0
+Q: How long will I have to wait for my money to be in my account?
+OLD: Standard domestic FAST or PayNow transfers are credited shortly or instantly by Horizon Bank, while outgoing domestic transfers are sent instantly. Certain transactions may be subject to a security hold of up to 24 hours for your protection. Additionally, for PayNow or FAST payments to added beneficiaries, each transaction may be up to S$200,000 with a total daily ceiling of S$200,000.  The information available does not cover other transfer types beyond domestic FAST, PayNow, and standard bank transfers.  To help me give you the exact transfer timeframe, are you asking about a FAST or PayNow transfer, or a standard domestic bank transfer? | nav [] []
+NEW: The exact waiting time depends on the transfer method used. Horizon Bank sends domestic transfers instantly with immediate confirmation, though the recipient's bank may require additional time to process and settle the transaction. Additionally, certain transactions may be held for 24 hours for security protocols. If you are receiving government payouts, you can also enrol your NRIC with PayNow via the Horizon App.  To help me give you the most accurate details, are you asking about a domestic transfer or a credit card bill payment? | nav [] []
+
+### h1_h1_unable_to_verify_identity_2 [improved] ratio=0.06 parents_same=False chan_same=True retries 0->0
+Q: Hearing about your verification results from us may take anywhere from 10 minutes to approximately one hour.  If this verification has in fact, failed, double-check to make sure that your images are clear.  Also make sure that your document photos have no blur or glare. They need to be readable.  You must also be 18 years of age or older and be a resident of Switzerland or the European Economic Area to open an account.
+OLD: When you apply for an account, here is what you can expect regarding processing times.  Submissions are typically processed within a few minutes.  If further clarification is needed and we must contact you, the process may extend to a maximum of five business days. | nav [] []
+NEW: To open a Horizon Bank account, you can use your mobile device and authenticate through MyInfo to pre-fill your application. Submissions are usually processed within a few minutes, though reviews can extend up to five business days if clarification is needed. Please note that the available information does not cover verification timelines between 10 minutes and one hour, nor does it include specific image clarity checks or residency requirements for Switzerland or the European Economic Area. Instead, our eligibility criteria require you to be a Singapore citizen, permanent resident, or a foreign national holding a valid work pass. | nav [] []
+
+### h1_h1_get_physical_card_3 [mixed] ratio=0.06 parents_same=False chan_same=False retries 0->0
+Q: I haven't received my pin
+OLD: Since you have not received your PIN, while the available information focuses specifically on card delivery rather than the PIN itself, you can reach out for assistance through the following support channels:  You can get in touch with our dedicated support team using the available contact options. Utilize the live chat feature or initiate a voice call directly from your Horizon App Reach us by dialing +65 313-HORIZON | nav [] []
+NEW: Contact us through the Horizon App by initiating a live chat or a voice call. Reach our support line at +65 313-HORIZ ( +65 3138 7878 ). If you are looking to set up or update your PIN once you receive it, you can access your Horizon App account, navigate to the 'Card Details' section, and choose the 'Modify PIN' option to create a new 6-digit PIN.  If you'd rather check your security settings directly, you can also do this using the Security Settings button below. | nav ['Security Settings'] []
+
+### h1_h1_verify_my_identity_4 [improved] ratio=0.07 parents_same=False chan_same=True retries 0->0
+Q: What is needed for identity verification?
+OLD: To help me get you the exact details you need for identity verification, could you let me know if you are asking about account opening? | nav [] []
+NEW: For paper applications submitted without MyInfo before 19 Dec 2024, original identification documents such as an NRIC for Singapore citizens or permanent residents or a passport for Work Pass or Dependent Pass holders must be brought to a Horizon Bank Experience Centre for in-person verification. Additionally, for account and profile updates like PayNow name changes, Horizon works with the PayNow operator to verify that names match your registered account record. The available information does not fully cover other verification contexts.  To help me provide the exact details you need, are you asking about identity verification for a new account application, or for a profile or PayNow name up | nav [] []
+
+### h1_h1_declined_transfer_1 [stable] ratio=0.07 parents_same=False chan_same=True retries 0->0
+Q: Why do transfers get declined?
+OLD: Transfers and automated payments can sometimes fail or get declined for a few common reasons. Since transfer limits can also affect transactions, it is helpful to keep your limits in mind as well. Insufficient funds in your savings account A blocked savings account Exceeding your daily transaction limit (for PayNow or FAST payments to added beneficiaries, each transaction may be up to S$200,000, with a total daily ceiling of S$200,000) Having a closed savings account associated with the payment arrangement | nav [] []
+NEW: I am sorry, but I do not have information available on the reasons why bank transfers get declined. | nav [] []
+
+### h1_h1_atm_support_2 [stable] ratio=0.08 parents_same=False chan_same=True retries 0->0
+Q: Can I use my card in another institutions ATM?
+OLD: You can use your Horizon card to withdraw cash at Horizon-branded ATMs or at Standard Chartered Bank ATMs that accept Visa, both locally and internationally. ATM Network and Locations: Locally and overseas, your Horizon card is accepted at Horizon-branded ATMs and Standard Chartered Bank ATMs that accept Visa. Horizon-branded machines are located at FairPrice Xtra Vivocity, unit B2-23, while Standard Chartered Bank ATMs are available at locations including Bedok Mall, Bugis Junction, Vivocity, Sixth Avenue, Clementi Mall, NEX Serangoon, Serangoon Garden, Marine Parade, Changi Business Park, Tampines, Marina Bay Financial Centre, and Battery Road. You can find a full directory of locations vi | nav [] []
+NEW: You can withdraw funds using your Horizon card at any Horizon-branded or Standard Chartered ATM throughout Singapore, as well as from Visa-compatible ATMs overseas. However, the Horizon card is not accepted at ATMs that are part of the ATM5 network. | nav [] []
+
+### h1_h1_card_linking_2 [stable] ratio=0.10 parents_same=True chan_same=True retries 0->0
+Q: Can I reactivate my card? I reported it lost and found it this morning in my jacket.
+OLD: I am sorry to hear about the worry with your missing card, but it is great news that you found it in your jacket. Regarding card reactivation, the available information does not cover whether a card reported lost can be reactivated. However, the information available explains that when a card is reported lost or stolen, Horizon permanently deactivates the old card when a replacement is ordered. For managing your card, you can temporarily freeze and unfreeze your card through the Horizon App by signing in, tapping "View & Manage Card" on the card overview screen, and selecting the freeze option. | nav [] []
+NEW: I am sorry to hear you lost your card, but I'm glad you found it. The information available does not cover reactivating a card once it has been reported lost, but as related guidance for managing a missing card in the Horizon App, here are the steps for freezing or replacing it:  Sign in to the Horizon App.  On the card overview screen, tap "View & Manage Card."  Select "Freeze Card" or choose to order a replacement if needed. | nav [] []
+
+### h1_h1_exchange_charge_3 [improved] ratio=0.10 parents_same=False chan_same=True retries 0->0
+Q: how much is it to exchange currency
+OLD: Regarding the costs associated with currency exchange, the information available does not cover general physical currency exchange costs or specific exchange rates.  Horizon Bank does not impose any foreign transaction or markup fees on your Horizon card, including the standard 1% fee typically charged by Visa. However, third-party payment platforms like Alipay or WeChat Pay may charge their own service fees. Additionally, for overseas ATM cash withdrawals, the operating bank may levy its own surcharge, and choosing local currency is recommended over Dynamic Currency Conversion. Since your request does not specify the exchange method, are you asking about foreign exchange fees for card purch | nav [] []
+NEW: Could you please clarify which specific foreign currency exchange fees you are inquiring about so I can provide the right information? | nav [] []
+
+### h1_h1_get_physical_card_2 [degraded] ratio=0.11 parents_same=False chan_same=True retries 0->0
+Q: When do I set up my card PIN?
+OLD: While I don't have the specific details on when the PIN setup happens, since you are setting up your new card, you can activate your card by logging into the Horizon App, navigating to Account Management, and selecting the option for your physical card to follow the activation steps. | nav [] []
+NEW: While the available information does not specify the exact timing of when the PIN setup is prompted, you can activate your physical Horizon card and modify your PIN in the Horizon App through the following steps.  Access your Horizon App account, navigate to 'Account Management', select your physical card, and choose 'Activate Your Card' using NFC or code activation.  Navigate to the 'Card Details' section in the Horizon App and choose the 'Modify PIN' option to create a new 6-digit PIN.  To help me provide the most relevant details,  are you asking if the PIN is set up during card activation, or if you set up the PIN after your card is activated? | nav [] []
+
+### h1_h1_contactless_not_working_2 [stable] ratio=0.14 parents_same=False chan_same=True retries 0->0
+Q: Can I make a contactless payments?
+OLD: With your Horizon card, you can make in-store purchases by setting up your card with Apple Pay or Google Pay, and you can also use it for online purchases, mobile app payments, and recurring payments like utility bills and insurance premiums. However, the available information does not specifically cover physical card contactless tapping at terminals outside of using a digital wallet. | nav [] []
+NEW: Yes, you can make in-store purchases by setting up your Horizon card with Apple Pay or Google Pay. With your card, you can also facilitate online purchases, mobile app payments, and recurring payments such as utility bills and insurance premiums. | nav [] []
+
+### h1_h1_verify_my_identity_3 [stable] ratio=0.15 parents_same=True chan_same=True retries 0->0
+Q: What forms of ID do you need for identity verification?
+OLD: While I don't have complete general information on accepted identification documents for all verification types, I can share what is needed for paper applications requiring in-person verification. For those, original identification documents are required, specifically NRIC for Singapore citizens or permanent residents, or a Passport for Work Pass or Dependent Pass holders.  To make sure I provide the right details, are you asking about an online application or an in-person verification at a Horizon Bank Experience Centre? | nav [] []
+NEW: NRIC for Singapore citizens or permanent residents. Passport for Work Pass or Dependent Pass holders. This applies if you filed a paper application before 19 Dec 2024 and did not use MyInfo. For submissions from 19 Dec 2024 onward, we advise using MyInfo authentication for a faster, more secure submission. | nav [] []
+
+### h1_h1_getting_spare_card_2 [degraded] ratio=0.16 parents_same=True chan_same=False retries 0->0
+Q: Can I get another card?
+OLD: If you need a new card, you can fill in and submit the Replace Card form below, or you can check the Manage Card button below for more options. | nav ['Manage Card'] ['Replace Card']
+NEW: Could you please clarify what you mean by getting another card? | nav [] []
+
+### h1_h1_transfer_into_account_1 [stable] ratio=0.16 parents_same=False chan_same=True retries 0->0
+Q: How can I top up my account by bank transfer?
+OLD: You can fund your Horizon Bank savings account using a bank transfer via FAST or through PayNow. To complete a bank transfer via FAST, follow these steps:  Log in to the online portal of your other bank.  Add your Horizon Bank savings account as a local beneficiary, providing the beneficiary name and your Horizon savings account number.  Initiate the FAST transfer; the money will be credited to your Horizon account shortly. | nav [] []
+NEW: You can initiate a local funds transfer through the GIRO network from other banks to your specified Horizon Bank savings account if you do not want to use the FAST service. Please note that transfers using MEPS+ or RTGS are not available for this type of transaction. | nav [] []
+
+### h1_h1_request_refund_1 [mixed] ratio=0.17 parents_same=True chan_same=True retries 0->0
+Q: I would like to retract my purchase.
+OLD: I can help with that, but I just want to make sure I understand what you would like to do -- are you looking to dispute an unauthorized charge on your purchase, or do you want to convert your recent purchase into installments? | nav [] []
+NEW: I do not have information available on retracting a purchase. | nav [] []
+
+### h1_h1_wrong_amount_of_cash_received_2 [degraded] ratio=0.17 parents_same=False chan_same=True retries 0->0
+Q: The ATM didn't give me enough money.
+OLD: I am sorry to hear about that issue with the ATM, but I do not have information available on the ATM dispensing the incorrect amount of cash. | nav [] []
+NEW: I am sorry to hear that the ATM did not dispense the correct amount. To get this investigated and resolved, please contact Horizon Customer Care through the Horizon App or by calling the support line to start a dispute. | nav [] []
+
+### h1_h1_cash_withdrawal_not_recognised_3 [stable] ratio=0.21 parents_same=False chan_same=True retries 0->0
+Q: There is a withdrawal on my account I didn't make.
+OLD: If you suspect fraudulent or suspicious activity on your account, immediately freeze your Horizon card and reach out to us without delay. You can lock your card through the Horizon App: from the home screen select "View and Manage card" and then choose "Lock card".  To report an unrecognized withdrawal, please reach out to Horizon Bank’s Customer Care team through the in‑app chat feature in the Horizon App or by calling the support line at +65 313-HORIZON ( +65 3138 7878 ) to start the dispute process. We also recommend filing a report with local law enforcement. Additionally, the Horizon App features an Emergency Lockdown option, accessible under Profile > Security, which allows you to inst | nav [] []
+NEW: Securing Your Account and Reporting Unauthorized Activity: If you suspect fraudulent or unauthorized activity on your account, please promptly report the activity. You can immediately freeze your Horizon card through the Horizon App by selecting "View and Manage card" and then choosing "Lock card". Additionally, you can utilize the self-service Kill Switch feature in the Horizon App under "Profile" > "Security" > "Activate Kill Switch" to block further access. We also recommend filing a report with local law enforcement and cooperating with Horizon Bank by providing detailed information. Contacting Customer Care: For further assistance with investigating unauthorized transactions or log inci | nav [] []
+
+### h1_h1_exchange_via_app_4 [mixed] ratio=0.29 parents_same=False chan_same=True retries 0->0
+Q: How do I change to a different currency?
+OLD: To help me get you the right details, could you let me know which currency or account type you are working with, such as choosing currency at an overseas ATM or sending transfers in a foreign currency? | nav [] []
+NEW: Horizon Bank currently supports only domestic transfers denominated in Singapore dollars (SGD). We do not handle inbound or outbound foreign-currency transfers, nor any cross-border payments. | nav [] []
+
+### h1_h1_transfer_fee_charged_1 [mixed] ratio=0.30 parents_same=False chan_same=True retries 0->0
+Q: I did a transfer and was charged a fee that I shouldn't have been!
+OLD: I am sorry to hear about the unexpected transfer fee. The information available does not provide specific policy details regarding transfer fee refunds or reversals for transfer charges. However, you can request a fee waiver by opening the Horizon App, going to the in-app chat, and sending a message that includes the phrase “fee waiver”. For unrecognized charges, you can also use the voice-call or live-chat feature within the Horizon App, or call our hotline at +65 313-HORIZON (+65 3138 7878). | nav [] []
+NEW: I am sorry to hear about the unexpected charge on your transfer, but I do not have information available on fee charged on a transfer. | nav [] []
+
+### h1_h1_top_up_by_bank_transfer_charge_2 [stable] ratio=0.30 parents_same=False chan_same=True retries 0->0
+Q: If I were to transfer, what would the cost be?
+OLD: Horizon Bank does not charge any fee for sending or receiving Singapore-dollar transfers into a Horizon Savings Account, which is your savings account. For domestic payment methods like PayNow or FAST, each transaction to previously added beneficiaries may be up to S$200,000, with a total daily ceiling of S$200,000. When sending PayNow to recipients not saved in your payee list, the default daily limit is S$5,000, and exceeding this amount requires an additional verification step using the Horizon Key. The information available does not cover other transfer types or external bank charges.  Are you asking about domestic transfers, or specifically about PayNow or FAST transfers? | nav [] []
+NEW: Horizon Bank does not charge any fee for sending or receiving Singapore-dollar transfers into a Horizon Savings Account. | nav [] []
+
+### h1_h1_transfer_timing_2 [stable] ratio=0.34 parents_same=False chan_same=True retries 0->0
+Q: What is the wait time until money reaches my account?
+OLD: Here is the information regarding transfer processing times for your Horizon savings account, along with details on security holding periods: Incoming Transfers: Incoming FAST transfers to your Horizon savings account are credited shortly, and PayNow transfers will appear in your account once sent to your registered mobile number or NRIC/FIN. Please note that external bank processing times may vary. Security Holding Periods: For your protection, Horizon Bank implements security protocols that temporarily hold certain transactions for 24 hours to detect and prevent potential phishing scams. The available information does not cover exact wait times for all other transfer types beyond FAST and  | nav [] []
+NEW: The time it takes for funds to reach your Horizon Bank savings account depends on the transfer method used. For transfers via FAST, funds are typically credited shortly after the transfer is initiated. If you use PayNow, funds will appear in your account once the payment is sent to your registered mobile number or NRIC/FIN. Please note that for your security, Horizon Bank may temporarily hold certain transactions for 24 hours to prevent potential unauthorized access. | nav [] []
+
+### h1_h1_country_support_2 [degraded] ratio=0.36 parents_same=False chan_same=True retries 0->0
+Q: You operate in which countries?
+OLD: I'm sorry, but I don't have information available on the countries where we operate. | nav [] []
+NEW: Horizon Bank operates as a digital-first banking platform serving the Singapore market. The available information does not indicate operations in other countries. | nav [] []
+
+### h1_h1_top_up_by_bank_transfer_charge_4 [improved] ratio=0.37 parents_same=False chan_same=True retries 0->0
+Q: Will I be charged for a top off transfer?
+OLD: Horizon Bank does not charge any fee for sending or receiving Singapore-dollar transfers into a Horizon Savings Account, which is your savings account linked to your debit card.  If you are looking to set up recurring transfers, you can easily do so using the AutoPay feature in the Horizon App by heading to the payments section.  To help me give you the most accurate details about your transfer, are you asking about a standard transfer into your savings account, or are you asking about setting up a recurring transfer or AutoPay? | nav [] []
+NEW: Horizon Bank does not charge any fee for sending or receiving Singapore-dollar transfers into a Horizon Savings Account. | nav [] []
+
+### h1_h1_terminate_account_1 [stable] ratio=0.37 parents_same=True chan_same=True retries 0->0
+Q: I want to inactivate my account.
+OLD: I do not have information available on inactivating your account right now. | nav [] []
+NEW: I can certainly help you with closing or inactivating an account, or are you needing help reactivating an account that was already placed in inactive status? | nav [] []
+
+### h1_h1_top_up_failed_2 [stable] ratio=0.38 parents_same=True chan_same=True retries 0->0
+Q: Hi, I tried to top up my card today and it did not work. I have tried it in the past and it worked just fine but it won't do it anymore. Can you help me out?
+OLD: I am sorry to hear that you ran into trouble with your card top-up today. To make sure I point you in the right direction, are you looking into adding funds via FAST or needing a card replacement? | nav [] []
+NEW: I am sorry to hear that your top-up did not work today, but I do not have information available on card top-up issues. | nav [] []
+
+### h1_h1_exchange_via_app_1 [stable] ratio=0.38 parents_same=True chan_same=False retries 0->0
+Q: How can I exchange currencies using your app?
+OLD: I'm sorry, but I don't have information available on exchanging currencies using the Horizon App. | nav [] []
+NEW: Sorry, for your request, I can't provide an answer — it's not a product or service Horizon currently offers. | nav [] []
+
+### h1_h1_pending_transfer_2 [stable] ratio=0.39 parents_same=False chan_same=True retries 0->0
+Q: When will my transfer move from pending to confirmed?
+OLD: Domestic transfers with Horizon Bank are sent instantly with an immediate confirmation, though the recipient's bank may need additional time to process and settle the transaction. Additionally, certain transactions may be held for a brief period of 24 hours as a security protocol to protect your funds, after which they will automatically process unless you choose to cancel them. | nav [] []
+NEW: Domestic transfers sent by Horizon Bank receive immediate confirmation, though the recipient's bank may require additional time to process and settle the transaction. For your protection, Horizon Bank implements security protocols that may temporarily hold certain transactions for up to 24 hours. Additionally, when modifying transaction thresholds or adding a new recipient through the Horizon App, a 12-hour waiting period is applied to protect against potential fraudulent activities. | nav [] []
+
+### h1_h1_failed_transfer_2 [degraded] ratio=0.47 parents_same=False chan_same=False retries 3->0
+Q: I got a transfer fail message, but no explanation of why-- what happened?
+OLD: I'm sorry, I'm not able to answer that right now. Could you try again, or ask in a different way? | nav [] []
+NEW: I am sorry, but I do not have information available on the reason for your transfer failure. | nav [] []
+
+### h1_h1_country_support_4 [degraded] ratio=0.54 parents_same=True chan_same=True retries 0->0
+Q: Are cards available in the EU?
+OLD: Could you share a bit more detail about your question regarding geographic availability in the European Union? | nav [] []
+NEW: I am sorry, but I do not have information available on card availability in the European Union. | nav [] []
+
+### h1_h1_transfer_not_received_by_recipient_4 [stable] ratio=0.57 parents_same=False chan_same=True retries 0->0
+Q: The day before yesterday I transferred funds to another account within the country.  The funds have not yet arrived.  I double and triple checked the account number and it was correct.  Why hasn't the transfer been completed yet?
+OLD: Horizon Bank sends domestic transfers instantly and provides an immediate confirmation, but the recipient's bank may require additional time to process and settle the transaction. Additionally, Horizon Bank implements a security protocol that temporarily holds certain transactions for 24 hours for your protection. | nav [] []
+NEW: Horizon Bank sends domestic transfers instantly and provides an immediate confirmation, though the recipient's bank may require additional time to process and settle the transaction. Additionally, Horizon Bank has security protocols that can temporarily hold transactions for up to 24 hours for your protection. Once a domestic transfer is submitted and approved, it cannot be withdrawn, so it is important to verify beneficiary details carefully. | nav [] []
+
+### h1_h1_passcode_forgotten_2 [stable] ratio=0.57 parents_same=True chan_same=True retries 3->3
+Q: I cannot remember my passcode, is there a way to retrieve it?
+OLD: You can use the "Security Settings" button below. | nav ['Security Settings'] []
+NEW: If you'd rather skip these steps, you can also access this directly using the Security Settings button below. | nav ['Security Settings'] []
+
+### h1_h1_atm_support_4 [stable] ratio=0.61 parents_same=True chan_same=True retries 0->0
+Q: Where can I withdraw money from?
+OLD: You can withdraw cash using your Horizon Bank card at several locations: Any Horizon-branded ATM, including the machine situated at FairPrice Xtra Vivocity, unit B2-23. Standard Chartered Bank (SCB) ATMs that accept Visa, both within the country and overseas (such as those at Bedok Mall, Bugis Junction, Vivocity, Sixth Avenue, Clementi Mall, NEX Serangoon, Serangoon Garden, Marine Parade, Changi Business Park, Tampines, Marina Bay Financial Centre, and Battery Road). Any other Visa-compatible ATMs overseas. | nav [] []
+NEW: You can withdraw cash at any Horizon-branded ATM or at Standard Chartered Bank (SCB) ATMs that accept Visa, both within the country and overseas. Horizon-branded machines are situated at FairPrice Xtra Vivocity, unit B2-23. SCB ATMs are available at Bedok Mall, Bugis Junction, Vivocity, Sixth Avenue, Clementi Mall, NEX Serangoon, Serangoon Garden, Marine Parade, Changi Business Park, Tampines, Marina Bay Financial Centre, and Battery Road. A full directory of ATM and branch locations can be accessed via the ATM/Branch Locator on the Horizon website. | nav [] []
+
+### h1_h1_Refund_not_showing_up_1 [stable] ratio=0.65 parents_same=True chan_same=True retries 0->0
+Q: I made a purchase a few weeks ago but wasn't happy with it so recently requested a refund from the supplier.  Can you check where the money is?
+OLD: I am unable to see the current status of your refund right now. | nav [] []
+NEW: I am sorry, but I do not have information available on the status of your refund right now. | nav [] []
+
+### h1_h1_extra_charge_on_statement_2 [degraded] ratio=0.67 parents_same=True chan_same=True retries 0->0
+Q: The $1.00 has still not been reverted as indicated in the previous email.
+OLD: I'm sorry to hear that, but I don't have information available on the reversion of the one-dollar charge. | nav [] []
+NEW: I do not have information available regarding the reversion of the $1.00 charge right now. | nav [] []
+
+### h1_h1_transaction_charged_twice_2 [stable] ratio=0.74 parents_same=True chan_same=True retries 0->0
+Q: Hello. I just noticed I was charged two times for a restaurant I visited this week. Can you reverse the additional charge?
+OLD: Hi there!  I'm sorry to hear about the duplicate charge, but I don't have information available on reversing a duplicate restaurant charge. | nav [] []
+NEW: Hello there.  I do not have information available on reversing a duplicate restaurant charge. | nav [] []
+
+### h1_h1_cash_withdrawal_not_recognised_2 [degraded] ratio=0.76 parents_same=True chan_same=True retries 0->0
+Q: There's a cash withdrawal I am certain I did not make
+OLD: I am sorry to hear about that unexpected cash withdrawal. I currently do not have information available on a disputed cash withdrawal. | nav [] []
+NEW: I am sorry to hear about that, but I do not have information available on reporting an unauthorized cash withdrawal. | nav [] []
+
+### h1_h1_transaction_charged_twice_1 [stable] ratio=0.84 parents_same=True chan_same=True retries 0->0
+Q: I got charged twice for the same payment. Please removed the pending payment. Thank you.
+OLD: I do not have information available on removing the pending payment charged twice.  You are very welcome. | nav [] []
+NEW: I don't have information available on removing the pending duplicate payment, but you are very welcome. | nav [] []
+
+### h1_h1_pending_cash_withdrawal_1 [mixed] ratio=0.88 parents_same=True chan_same=True retries 0->0
+Q: Why is my cash withdrawal pending?
+OLD: I am sorry, but I do not have information available on the reason for a pending cash withdrawal. | nav [] []
+NEW: I am sorry, but I do not have information available on the reason your cash withdrawal is pending. | nav [] []

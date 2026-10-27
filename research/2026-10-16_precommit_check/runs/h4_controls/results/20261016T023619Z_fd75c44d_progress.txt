@@ -1,0 +1,5 @@
+=== run started 2026-10-16T02:36:19.027+00:00 study=2026-10-16_precommit_h4_controls runner=api_validation provider=gemini cases=10 ===
+2026-10-16T02:36:19.027+00:00 API key pool active: 10 key(s); production rotation and cross-model fallback enabled
+2026-10-16T02:36:19.655+00:00 [1/10] case=h4_r3_09 status=OK
+2026-10-16T02:36:23.280+00:00 [2/10] case=h4_r3_03 status=OK
+2026-10-16T02:36:26.902+00:00 [3/10] case=h4_r3_13 status=OK

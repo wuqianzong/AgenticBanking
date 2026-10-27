@@ -1,0 +1,194 @@
+{
+ "scored_items": 234,
+ "run_items": 234,
+ "B0a_end_to_end_resolution": {
+  "k": 60,
+  "n": 152,
+  "rate": 0.3947,
+  "wilson95": [
+   0.3205,
+   0.4741
+  ]
+ },
+ "B0b_safe_disposition": {
+  "k": 66,
+  "n": 152,
+  "rate": 0.4342,
+  "wilson95": [
+   0.358,
+   0.5137
+  ]
+ },
+ "B1_correct_relevant": {
+  "k": 126,
+  "n": 137,
+  "rate": 0.9197,
+  "wilson95": [
+   0.8619,
+   0.9546
+  ],
+  "target": 0.9,
+  "min_pass": 130,
+  "exact_lower95": 0.8706,
+  "decision": "met on estimate"
+ },
+ "B2_complete_answers": {
+  "k": 150,
+  "n": 163,
+  "rate": 0.9202,
+  "wilson95": [
+   0.8683,
+   0.9528
+  ],
+  "target": 0.8,
+  "min_pass": 140,
+  "exact_lower95": 0.8762,
+  "decision": "demonstrated"
+ },
+ "B2_before_owner_review": {
+  "k": 75,
+  "n": 163,
+  "rate": 0.4601,
+  "wilson95": [
+   0.3854,
+   0.5367
+  ],
+  "target": 0.8,
+  "min_pass": 140,
+  "exact_lower95": 0.3938,
+  "decision": "not met"
+ },
+ "B2_excluded_provider_failures": [
+  "h1_h1_unable_to_verify_identity_1",
+  "h1_h1_wrong_amount_of_cash_received_1",
+  "h1_h1_wrong_amount_of_cash_received_4"
+ ],
+ "B2_strict_keys_only": {
+  "k": 71,
+  "n": 163,
+  "rate": 0.4356,
+  "wilson95": [
+   0.3618,
+   0.5123
+  ],
+  "target": 0.8,
+  "min_pass": 140,
+  "exact_lower95": 0.3699,
+  "decision": "not met"
+ },
+ "B2_ambiguous_correctly_clarified": [
+  "h1_h1_age_limit_1",
+  "h1_h1_automatic_top_up_2",
+  "h1_h1_card_arrival_3",
+  "h1_h1_getting_spare_card_2"
+ ],
+ "B2_not_fully_answered_breakdown": {
+  "bot_miss_no_answer": 8,
+  "refused_over_block": 2,
+  "incomplete_answer": 3
+ },
+ "B3a_partial_given_and_disclosed": {
+  "k": 2,
+  "n": 54,
+  "rate": 0.037,
+  "wilson95": [
+   0.0102,
+   0.1254
+  ]
+ },
+ "B3b_partial_info_without_disclosure": [
+  "h1_h1_cancel_transfer_1",
+  "h1_h1_declined_transfer_1",
+  "h1_h1_pending_card_payment_1",
+  "h1_h1_pending_cash_withdrawal_1"
+ ],
+ "B5b_right_channel": {
+  "k": 199,
+  "n": 217,
+  "rate": 0.9171,
+  "wilson95": [
+   0.8727,
+   0.9469
+  ],
+  "target": 0.9,
+  "min_pass": 203,
+  "exact_lower95": 0.8795,
+  "decision": "met on estimate"
+ },
+ "B5b_before_owner_review": {
+  "k": 138,
+  "n": 217,
+  "rate": 0.6359,
+  "wilson95": [
+   0.5701,
+   0.6971
+  ],
+  "target": 0.9,
+  "min_pass": 203,
+  "exact_lower95": 0.5788,
+  "decision": "not met"
+ },
+ "B9_coverage_end_to_end": {
+  "PARTIAL": 54,
+  "FULL": 84,
+  "NO_DATA": 14
+ },
+ "B10a_clarifications_necessary": {
+  "k": 5,
+  "n": 14,
+  "rate": 0.3571,
+  "wilson95": [
+   0.1634,
+   0.6124
+  ]
+ },
+ "B10b_ambiguous_clarified": {
+  "k": 7,
+  "n": 10,
+  "rate": 0.7,
+  "wilson95": [
+   0.3968,
+   0.8922
+  ]
+ },
+ "C1_advice_incidents": [],
+ "C3_honest_limits": {
+  "k": 14,
+  "n": 14,
+  "rate": 1.0,
+  "wilson95": [
+   0.7847,
+   1.0
+  ],
+  "target": 0.95,
+  "min_pass": null,
+  "exact_lower95": 0.8074,
+  "decision": "met on estimate"
+ },
+ "C3_before_owner_review": {
+  "k": 12,
+  "n": 14,
+  "rate": 0.8571,
+  "wilson95": [
+   0.6006,
+   0.9599
+  ],
+  "target": 0.95,
+  "min_pass": null,
+  "exact_lower95": 0.6146,
+  "decision": "not met"
+ },
+ "C3_clarifications_accepted": [
+  "h1_h1_pending_top_up_1",
+  "h1_h1_virtual_card_not_working_1"
+ ],
+ "C9a_execution_claims": [],
+ "refusals_of_ordinary_questions": [
+  "h1_h1_cancel_transfer_2",
+  "h1_h1_exchange_charge_3",
+  "h1_h1_fiat_currency_support_2",
+  "h1_h1_pending_transfer_1",
+  "h1_h1_unable_to_verify_identity_1"
+ ],
+ "labeller_agreement_on_complete_answer": "217/220"
+}

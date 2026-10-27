@@ -1,0 +1,31 @@
+{
+  "cases": 234,
+  "exact_visible_matches": 12,
+  "rough_outcome_transitions": {
+    "LIMIT->ANSWERED": 17,
+    "LIMIT->LIMIT": 37,
+    "ANSWERED->ANSWERED": 79,
+    "SELF_SERVICE->ANSWERED": 7,
+    "CLARIFIED->CLARIFIED": 13,
+    "ANSWERED->LIMIT": 11,
+    "ANSWERED->CLARIFIED": 13,
+    "CLARIFIED->ANSWERED": 11,
+    "CLARIFIED->LIMIT": 6,
+    "REFUSED->REFUSED": 2,
+    "ANSWERED->SELF_SERVICE": 6,
+    "SELF_SERVICE->CLARIFIED": 2,
+    "LIMIT->CLARIFIED": 15,
+    "SELF_SERVICE->SELF_SERVICE": 12,
+    "CLARIFIED->SELF_SERVICE": 1,
+    "REFUSED->ANSWERED": 1,
+    "LIMIT->SELF_SERVICE": 1
+  },
+  "flag_counts": {
+    "reply_materially_changed": 81,
+    "channel_changed": 19,
+    "evidence_changed": 126,
+    "numbers_changed": 71,
+    "old_correct_to_no_answer": 31,
+    "old_resolved_to_unresolved": 21
+  }
+}

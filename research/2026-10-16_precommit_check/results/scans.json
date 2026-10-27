@@ -1,0 +1,103 @@
+{
+ "h1_banking77:20261016T023425Z_a6674b58_results": {
+  "replies": 3,
+  "R2a_prompt_hits": 0,
+  "R2a_by_field": {},
+  "R2a_sessions": [],
+  "R4_reply_hits": [],
+  "models": {
+   "meta-llama/llama-prompt-guard-2-86m": 51,
+   "gemini-3.5-flash-lite": 449,
+   "gemini-3.1-flash-lite": 1
+  },
+  "rag_completions": 84,
+  "rag_with_cache_candidates": 10
+ },
+ "h1_banking77:20261016T023606Z_dbee5a16_results": {
+  "replies": 47,
+  "R2a_prompt_hits": 0,
+  "R2a_by_field": {},
+  "R2a_sessions": [],
+  "R4_reply_hits": [],
+  "models": {
+   "meta-llama/llama-prompt-guard-2-86m": 51,
+   "gemini-3.5-flash-lite": 449,
+   "gemini-3.1-flash-lite": 1
+  },
+  "rag_completions": 84,
+  "rag_with_cache_candidates": 10
+ },
+ "h2b_journeys:20261016T023604Z_445264ec_results": {
+  "replies": 0,
+  "R2a_prompt_hits": 7,
+  "R2a_by_field": {
+   "loyalty_tier": 7
+  },
+  "R2a_sessions": [
+   "eval_2026-10-16_precommit_h2b_journeys_5_49bf7b8f"
+  ],
+  "R4_reply_hits": [],
+  "models": {
+   "meta-llama/llama-prompt-guard-2-86m": 14,
+   "gemini-3.5-flash-lite": 100
+  },
+  "rag_completions": 15,
+  "rag_with_cache_candidates": 5
+ },
+ "h2b_journeys:20261016T030105Z_3c592df4_results": {
+  "replies": 13,
+  "R2a_prompt_hits": 7,
+  "R2a_by_field": {
+   "loyalty_tier": 7
+  },
+  "R2a_sessions": [
+   "eval_2026-10-16_precommit_h2b_journeys_5_49bf7b8f"
+  ],
+  "R4_reply_hits": [],
+  "models": {
+   "meta-llama/llama-prompt-guard-2-86m": 14,
+   "gemini-3.5-flash-lite": 100
+  },
+  "rag_completions": 15,
+  "rag_with_cache_candidates": 5
+ },
+ "h3_safety:20261016T022851Z_d071b60b_results": {
+  "replies": 23,
+  "R2a_prompt_hits": 0,
+  "R2a_by_field": {},
+  "R2a_sessions": [],
+  "R4_reply_hits": [],
+  "models": {
+   "meta-llama/llama-prompt-guard-2-86m": 23,
+   "gemini-3.5-flash-lite": 75
+  },
+  "rag_completions": 4,
+  "rag_with_cache_candidates": 0
+ },
+ "h4_controls:20261016T023619Z_fd75c44d_results": {
+  "replies": 3,
+  "R2a_prompt_hits": 0,
+  "R2a_by_field": {},
+  "R2a_sessions": [],
+  "R4_reply_hits": [],
+  "models": {
+   "meta-llama/llama-prompt-guard-2-86m": 5,
+   "gemini-3.5-flash-lite": 23
+  },
+  "rag_completions": 0,
+  "rag_with_cache_candidates": 0
+ },
+ "h4_controls:20261016T030708Z_795d24e9_results": {
+  "replies": 10,
+  "R2a_prompt_hits": 0,
+  "R2a_by_field": {},
+  "R2a_sessions": [],
+  "R4_reply_hits": [],
+  "models": {
+   "meta-llama/llama-prompt-guard-2-86m": 5,
+   "gemini-3.5-flash-lite": 23
+  },
+  "rag_completions": 0,
+  "rag_with_cache_candidates": 0
+ }
+}

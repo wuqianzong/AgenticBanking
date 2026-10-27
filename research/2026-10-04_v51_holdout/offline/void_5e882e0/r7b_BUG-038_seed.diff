@@ -1,0 +1,22 @@
+diff --git a/backend/app/orchestration/nodes.py b/backend/app/orchestration/nodes.py
+index 155a84e..a888c63 100644
+--- a/backend/app/orchestration/nodes.py
++++ b/backend/app/orchestration/nodes.py
+@@ -9223,8 +9223,6 @@ def _partition_audited_response(
+             i for i in (
+                 block.get("blockId"),
+                 *(block.get("sourceTaskIds") or []),
+-                *(block.get("sourceShortcutHandles") or []),
+-                *(block.get("sourceUnmatchedIds") or []),
+             ) if i
+         }
+ 
+@@ -9242,8 +9240,6 @@ def _partition_audited_response(
+             matched.update(ids & flagged)
+         else:
+             approved.append(block)
+-    if flagged - matched:
+-        return [], every_block_id | flagged, True
+     return approved, pending, False
+ 
+ 

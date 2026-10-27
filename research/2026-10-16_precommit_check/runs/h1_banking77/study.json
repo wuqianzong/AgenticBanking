@@ -1,0 +1,12 @@
+{
+ "study_id": "2026-10-16_precommit_h1_banking77",
+ "runner": "api_validation",
+ "llm_provider": "gemini",
+ "fixture": "fixture.jsonl",
+ "user_id": "USR_999",
+ "pacing_seconds": 3,
+ "max_retries_per_turn": 4,
+ "unavailable_retry_wait_seconds": 600,
+ "capture_system_log": true,
+ "notes": "Pre-commit live check of the uncommitted changes (schemas, BUG-065..069) on a sample of the 15 Oct final-run cases."
+}

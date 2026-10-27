@@ -1,0 +1,146 @@
+{"item_id": "item_002", "action": "removed", "key_item": "Customer can contact support to investigate a failed transfer", "reason": "not in the answering entries"}
+{"item_id": "item_003", "action": "removed", "key_item": "Customer can contact support to investigate a declined transfer", "reason": "not in the answering entries"}
+{"item_id": "item_022", "action": "removed", "key_item": "Contact support for a specific refund", "reason": "not in the answering entries"}
+{"item_id": "item_044", "action": "removed", "key_item": "Contact support if a top-up is still missing", "reason": "not in the answering entries"}
+{"item_id": "item_008", "action": "removed", "key_item": "Funding by external credit card is not listed", "reason": "gap statement; scored under B3a disclosure"}
+{"item_id": "item_028", "action": "removed", "key_item": "Funding by American Express or Apple Pay is not listed", "reason": "gap statement; consistency with item_008"}
+{"item_id": "item_260", "action": "removed", "key_item": "Topping up from an Amex card is not listed", "reason": "gap statement; consistency with item_008"}
+{"item_id": "item_227", "action": "removed", "key_item": "Horizon does not list a cash deposit option", "reason": "gap statement; consistency with item_008"}
+{"item_id": "item_245", "action": "rewritten", "key_item": "The first metal card is free, later replacements may incur a fee", "new": "The first metal card is free", "reason": "replacement fee conflicts between faq_34e4a4ab and faq_8336a2c7; key keeps the agreed fact"}
+{"item_id": "item_022", "action": "A_addition_not_kept", "key_item": "If the transaction was completed, the refund is applied to the card currently paired at the time the refund is processed.", "reason": "DUP"}
+{"item_id": "item_029", "action": "A_addition_not_kept", "key_item": "The FAQ entries do not contain information regarding verification image quality requirements.", "reason": "GAP"}
+{"item_id": "item_029", "action": "A_addition_not_kept", "key_item": "The FAQ entries do not contain information regarding age or residency requirements for account opening.", "reason": "GAP"}
+{"item_id": "item_035", "action": "added_from_A", "key_item": "If you cannot access the app to perform these actions, you must call the customer support hotline at +65 313-HORIZ for immediate assistance."}
+{"item_id": "item_072", "action": "added_from_A", "key_item": "A full directory of all ATM locations can be accessed via the ATM/Branch Locator on the Horizon website."}
+{"item_id": "item_093", "action": "A_addition_not_kept", "key_item": "The card can be used for international point-of-sale purchases and ATM withdrawals.", "reason": "DUP"}
+{"item_id": "item_093", "action": "A_unsupported_flag_rejected", "key_item": "It can be used overseas (Visa)", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_099", "action": "A_addition_not_kept", "key_item": "The card can also be used at Visa-compatible ATMs when overseas.", "reason": "CONFLICT"}
+{"item_id": "item_121", "action": "A_addition_not_kept", "key_item": "External transfers, including receiving funds, must be performed using your primary Horizon Bank account and cannot be done through Savings Pots.", "reason": "DETAIL"}
+{"item_id": "item_145", "action": "A_addition_not_kept", "key_item": "The FAQ entries do not specify if the bank can ship replacement cards to overseas locations.", "reason": "GAP"}
+{"item_id": "item_163", "action": "A_addition_not_kept", "key_item": "Balance transfers incur a monthly fee of 3% for transfers approved before August 13, 2026, or 1% for those approved on or after that date.", "reason": "OTHER"}
+{"item_id": "item_163", "action": "A_addition_not_kept", "key_item": "In the final month of a balance transfer tenure or upon early repayment, a 1% fee is applied to the remaining outstanding balance.", "reason": "OTHER"}
+{"item_id": "item_169", "action": "A_addition_not_kept", "key_item": "Users can cancel suspicious transactions by navigating to the 'Payment' option and then the 'AutoPay' screen in the Horizon App.", "reason": "OTHER"}
+{"item_id": "item_169", "action": "A_addition_not_kept", "key_item": "The cancellation of a transaction must be performed within a 24-hour timeframe.", "reason": "OTHER"}
+{"item_id": "item_196", "action": "added_from_A", "key_item": "Common reasons for payment failures include insufficient funds, a blocked account, exceeding daily transaction limits, or a closed account."}
+{"item_id": "item_201", "action": "A_addition_not_kept", "key_item": "The bank does not support direct top-ups to the Google Pay balance.", "reason": "UNSUP"}
+{"item_id": "item_217", "action": "A_addition_not_kept", "key_item": "The FAQ entries do not contain information on how to view updated balances after a deposit.", "reason": "GAP"}
+{"item_id": "item_217", "action": "A_addition_not_kept", "key_item": "The FAQ entries do not mention cash deposits.", "reason": "GAP"}
+{"item_id": "item_222", "action": "A_addition_not_kept", "key_item": "You must provide your Horizon Key for verification before the address update is applied.", "reason": "DETAIL"}
+{"item_id": "item_235", "action": "added_from_A", "key_item": "Withdrawals may fail if the account is in inactive status due to long-term non-use."}
+{"item_id": "item_235", "action": "A_addition_not_kept", "key_item": "Withdrawals may fail if the Horizon card is self-locked or not yet activated.", "reason": "OTHER"}
+{"item_id": "item_235", "action": "added_from_A", "key_item": "Withdrawals may fail if using an ATM network other than Standard Chartered Bank or Horizon Bank ATMs."}
+{"item_id": "item_235", "action": "A_addition_not_kept", "key_item": "Overseas withdrawals require enabling overseas usage in the Horizon app.", "reason": "DETAIL"}
+{"item_id": "item_264", "action": "A_addition_not_kept", "key_item": "The bank supports US dollars for trading UCITS ETFs.", "reason": "CONFLICT"}
+{"item_id": "item_268", "action": "A_addition_not_kept", "key_item": "You can contact support via live chat, voice call, or by calling +65 313-HORIZON.", "reason": "DETAIL"}
+{"item_id": "item_268", "action": "A_addition_not_kept", "key_item": "You must update any recurring payments or subscriptions with the new card details once it arrives.", "reason": "DETAIL"}
+{"item_id": "item_272", "action": "added_from_A", "key_item": "The primary cardholder must have a credit limit of at least S$1,000 to qualify."}
+{"item_id": "item_272", "action": "added_from_A", "key_item": "The invited person must hold a Horizon savings account, be at least 18 years old, and not already have a Horizon credit card."}
+{"item_id": "item_284", "action": "A_addition_not_kept", "key_item": "In-person verification for unlocking Savings Pot funds requires an NRIC or FIN.", "reason": "OTHER"}
+{"item_id": "item_294", "action": "A_addition_not_kept", "key_item": "The provided FAQ entries do not contain information regarding cash withdrawals.", "reason": "GAP"}
+{"item_id": "item_294", "action": "A_unsupported_flag_rejected", "key_item": "Card transactions can stay pending up to 10 calendar days (transit up to 14) before settling", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_300", "action": "A_addition_not_kept", "key_item": "Transfers may be declined due to insufficient funds in the savings account.", "reason": "MERGED"}
+{"item_id": "item_300", "action": "A_addition_not_kept", "key_item": "Transfers may be declined if the savings account is blocked.", "reason": "MERGED"}
+{"item_id": "item_300", "action": "A_addition_not_kept", "key_item": "Transfers may be declined if the daily transaction limit is exceeded.", "reason": "MERGED"}
+{"item_id": "item_300", "action": "A_addition_not_kept", "key_item": "Transfers may be declined if the associated savings account has been closed.", "reason": "MERGED"}
+{"item_id": "item_300", "action": "added_from_A_merged", "key_item": "Common reasons for declined transfers: insufficient funds, a blocked or closed savings account, or exceeding the daily limit"}
+{"item_id": "item_308", "action": "A_addition_not_kept", "key_item": "The bank does not provide a specific formula for its exchange rates.", "reason": "GAP"}
+{"item_id": "item_308", "action": "A_unsupported_flag_rejected", "key_item": "What is the formula for your exchange rate?", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_312", "action": "A_addition_not_kept", "key_item": "Phone number and email changes require an OTP for verification.", "reason": "DETAIL"}
+{"item_id": "item_312", "action": "A_addition_not_kept", "key_item": "Horizon Key verification is required to finalize updates.", "reason": "DETAIL"}
+{"item_id": "item_312", "action": "A_addition_not_kept", "key_item": "Address updates are instant, while phone and email changes take up to 12 hours to process.", "reason": "DETAIL"}
+{"item_id": "item_003", "action": "added_from_A", "key_item": "Common reasons for failure include insufficient funds, a blocked account, exceeding transaction limits, or a closed account."}
+{"item_id": "item_026", "action": "A_addition_not_kept", "key_item": "The provided FAQ entries do not contain information regarding top-up cards or their verification requirements.", "reason": "GAP"}
+{"item_id": "item_026", "action": "A_unsupported_flag_rejected", "key_item": "Activate the new card in the Horizon App before using it", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_064", "action": "A_addition_not_kept", "key_item": "Identity verification for app access or account reactivation is performed via Singpass QR-code.", "reason": "OTHER"}
+{"item_id": "item_064", "action": "A_addition_not_kept", "key_item": "Unlocking funds in a Savings Pot requires NFC-enabled card authentication and Horizon Key verification.", "reason": "OTHER"}
+{"item_id": "item_064", "action": "A_addition_not_kept", "key_item": "In-person verification for unlocking funds requires bringing an NRIC or FIN to the Experience Centre.", "reason": "OTHER"}
+{"item_id": "item_075", "action": "A_addition_not_kept", "key_item": "Manual applications submitted before 19 December 2024 do not require an appointment for in-person verification.", "reason": "OTHER"}
+{"item_id": "item_083", "action": "added_from_A", "key_item": "Applicants over 55 are eligible if they earn at least S$15,000 (Singapore citizens or permanent residents) or S$60,000 (foreigners with a valid work pass)."}
+{"item_id": "item_101", "action": "A_addition_not_kept", "key_item": "The provided FAQ entry does not address how to request a refund for non-delivered goods.", "reason": "GAP"}
+{"item_id": "item_108", "action": "A_addition_not_kept", "key_item": "You can also initiate a local funds transfer through the GIRO network from other banks.", "reason": "DETAIL"}
+{"item_id": "item_124", "action": "A_addition_not_kept", "key_item": "Transit service transactions can remain pending for up to 14 calendar days.", "reason": "DETAIL"}
+{"item_id": "item_124", "action": "added_from_A", "key_item": "AutoPay failures can be caused by insufficient funds, blocked accounts, exceeded transaction limits, or closed accounts."}
+{"item_id": "item_153", "action": "A_addition_not_kept", "key_item": "Customers can visit the Horizon Experience Centre for in-person identity verification if they are unable to use MyInfo.", "reason": "OTHER"}
+{"item_id": "item_174", "action": "A_addition_not_kept", "key_item": "For point-of-sale transactions, use signature or contactless methods if a PIN is requested.", "reason": "DETAIL"}
+{"item_id": "item_174", "action": "A_addition_not_kept", "key_item": "New, replacement, or renewed cards must be activated before enabling international usage.", "reason": "DETAIL"}
+{"item_id": "item_193", "action": "A_addition_not_kept", "key_item": "Late-payment penalties and interest charges are applied exclusively to the main cardholder.", "reason": "DETAIL"}
+{"item_id": "item_208", "action": "A_addition_not_kept", "key_item": "The user must choose between NFC activation by holding the card against the device or manual code activation using the code from the welcome materials.", "reason": "DETAIL"}
+{"item_id": "item_244", "action": "A_addition_not_kept", "key_item": "Cash advances incur a fee and interest charges.", "reason": "DETAIL"}
+{"item_id": "item_244", "action": "A_addition_not_kept", "key_item": "Selecting 'Savings Account' at an ATM avoids cash advance fees if you have a linked savings account.", "reason": "DETAIL"}
+{"item_id": "item_261", "action": "A_addition_not_kept", "key_item": "If the card is damaged, the user can request a replacement via the Card Management section in the app.", "reason": "OTHER"}
+{"item_id": "item_261", "action": "A_addition_not_kept", "key_item": "If the card is lost or stolen, the user must freeze the card in the app before ordering a replacement.", "reason": "OTHER"}
+{"item_id": "item_270", "action": "A_addition_not_kept", "key_item": "You can reset your Horizon Key PIN by navigating to Profile, then Security, and selecting Change Horizon Key.", "reason": "OTHER"}
+{"item_id": "item_270", "action": "A_addition_not_kept", "key_item": "There is a mandatory 12-hour waiting period after resetting your Horizon Key PIN before it can be used.", "reason": "OTHER"}
+{"item_id": "item_282", "action": "added_from_A", "key_item": "Overseas transactions are disabled by default and must be enabled in the app under 'Manage card settings'."}
+{"item_id": "item_291", "action": "A_addition_not_kept", "key_item": "You must download the Horizon App to access your digital card information.", "reason": "DUP"}
+{"item_id": "item_314", "action": "A_addition_not_kept", "key_item": "The FAQ entries do not provide information on how to check if an account is frozen.", "reason": "GAP"}
+{"item_id": "item_019", "action": "A_addition_not_kept", "key_item": "The FAQ does not provide a delivery estimate for international addresses like the US.", "reason": "GAP"}
+{"item_id": "item_019", "action": "A_unsupported_flag_rejected", "key_item": "The physical card arrives within 6-7 business days of applying", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_034", "action": "added_from_A", "key_item": "Applicants over 55 years old are eligible if they are Singapore citizens or permanent residents earning at least S$15,000 annually."}
+{"item_id": "item_034", "action": "added_from_A", "key_item": "Foreigners over 55 years old with a valid work pass are eligible if they earn at least S$60,000 annually."}
+{"item_id": "item_034", "action": "A_addition_not_kept", "key_item": "Retirees aged 56 or above with an annual income of less than S$15,000 may be eligible for a credit card with a S$500 limit if they hold no existing credit cards or unsecured loans with the bank.", "reason": "DETAIL"}
+{"item_id": "item_039", "action": "A_addition_not_kept", "key_item": "You must re-configure your Horizon Key when prompted after opening the Horizon App.", "reason": "DUP"}
+{"item_id": "item_039", "action": "A_unsupported_flag_rejected", "key_item": "The card PIN can be set or changed in the app", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_052", "action": "A_addition_not_kept", "key_item": "The cash advance fee and interest charges are effective from 1 February 2026.", "reason": "DETAIL"}
+{"item_id": "item_052", "action": "A_addition_not_kept", "key_item": "The daily interest rate is 0.077% (27.9% per annum) until the payment is made in full.", "reason": "DETAIL"}
+{"item_id": "item_052", "action": "A_addition_not_kept", "key_item": "From 1 July 2026, the Effective Interest Rate will be tailored to the individual credit profile, ranging from 18.9% to 29.9% per annum.", "reason": "OTHER"}
+{"item_id": "item_061", "action": "A_addition_not_kept", "key_item": "The new card will have a different number, so recurring payments must be updated.", "reason": "DETAIL"}
+{"item_id": "item_061", "action": "A_addition_not_kept", "key_item": "You can contact support via live chat, voice call in the app, or by calling +65 313-HORIZON.", "reason": "DETAIL"}
+{"item_id": "item_065", "action": "A_addition_not_kept", "key_item": "The age requirement for a credit card is 21 to 55 years old for standard applicants, or 56 and older for specific senior criteria.", "reason": "OTHER"}
+{"item_id": "item_065", "action": "A_addition_not_kept", "key_item": "The age requirement for an Instant Loan is 21 to 65 years old.", "reason": "OTHER"}
+{"item_id": "item_065", "action": "A_addition_not_kept", "key_item": "The age requirement for a supplementary credit card is 18 years or older.", "reason": "OTHER"}
+{"item_id": "item_065", "action": "A_addition_not_kept", "key_item": "The age requirement for a life insurance policy is typically 18 to 74 years old.", "reason": "OTHER"}
+{"item_id": "item_065", "action": "A_addition_not_kept", "key_item": "The age requirement for a Stocks account is 18 to 74 years old.", "reason": "OTHER"}
+{"item_id": "item_065", "action": "A_addition_not_kept", "key_item": "The age requirement for a Mutual Funds investment account is 18 to 74 years old.", "reason": "OTHER"}
+{"item_id": "item_076", "action": "A_addition_not_kept", "key_item": "To set up AutoPay for a Savings Pot, navigate to Deposit then Savings Pot or use the Payments then AutoPay menu.", "reason": "OTHER"}
+{"item_id": "item_076", "action": "A_addition_not_kept", "key_item": "To set up AutoPay for a Horizon credit card, navigate to the Credit Card section or use the Payments then AutoPay menu.", "reason": "OTHER"}
+{"item_id": "item_076", "action": "A_addition_not_kept", "key_item": "To set up recurring transfers to other bank accounts, use the Payments section to select Bank Transfer or PayNow.", "reason": "OTHER"}
+{"item_id": "item_102", "action": "added_from_A", "key_item": "Overseas transactions are disabled by default and must be enabled in the app under 'Manage card settings'."}
+{"item_id": "item_110", "action": "added_from_A", "key_item": "Common reasons for transfer failures include insufficient funds, a blocked account, or exceeding daily transaction limits."}
+{"item_id": "item_137", "action": "A_addition_not_kept", "key_item": "The user must choose between NFC activation or manual code activation to complete the process.", "reason": "DETAIL"}
+{"item_id": "item_141", "action": "A_unsupported_flag_rejected", "key_item": "Horizon accounts and cards are only for Singapore residents", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_149", "action": "added_from_A", "key_item": "You can activate the card using NFC by holding it against the back of your device."}
+{"item_id": "item_149", "action": "added_from_A", "key_item": "You can activate the card by entering the unique code provided in your welcome materials."}
+{"item_id": "item_161", "action": "A_addition_not_kept", "key_item": "The bank does not support changing the PIN at ATMs.", "reason": "UNSUP"}
+{"item_id": "item_161", "action": "A_addition_not_kept", "key_item": "The PIN must be 6 digits for ATM compatibility.", "reason": "DUP"}
+{"item_id": "item_183", "action": "A_addition_not_kept", "key_item": "The user must choose between NFC activation by holding the card to the device or manual code activation using the code from the welcome materials.", "reason": "DETAIL"}
+{"item_id": "item_210", "action": "A_addition_not_kept", "key_item": "Reload the web page and restart the application.", "reason": "OTHER"}
+{"item_id": "item_210", "action": "A_addition_not_kept", "key_item": "Try submitting the application through the Horizon App.", "reason": "OTHER"}
+{"item_id": "item_245", "action": "A_addition_not_kept", "key_item": "There is no charge for replacing a lost or damaged Horizon card.", "reason": "CONFLICT"}
+{"item_id": "item_251", "action": "A_addition_not_kept", "key_item": "Transit service transactions can remain pending for up to 14 calendar days.", "reason": "DETAIL"}
+{"item_id": "item_251", "action": "A_unsupported_flag_rejected", "key_item": "Contact Horizon support if the amount has not been reversed", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_262", "action": "added_from_A", "key_item": "Common reasons for AutoPay failure include insufficient funds, blocked accounts, or exceeding transaction limits."}
+{"item_id": "item_278", "action": "A_addition_not_kept", "key_item": "You can activate the card using NFC by holding it against the back of your device.", "reason": "DETAIL"}
+{"item_id": "item_278", "action": "A_addition_not_kept", "key_item": "You can activate the card manually by entering the unique code provided in your welcome materials.", "reason": "DETAIL"}
+{"item_id": "item_288", "action": "A_addition_not_kept", "key_item": "You can also report the card as lost or stolen and request a replacement by contacting support via live chat, voice call, or by calling +65 313-HORIZON.", "reason": "DETAIL"}
+{"item_id": "item_299", "action": "A_addition_not_kept", "key_item": "The provided FAQ entries do not contain information regarding pending cash withdrawals.", "reason": "GAP"}
+{"item_id": "item_299", "action": "A_unsupported_flag_rejected", "key_item": "Card transactions can stay pending up to 10 calendar days (transit up to 14) before settling", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_316", "action": "A_addition_not_kept", "key_item": "Domestic transfers are sent instantly by Horizon Bank, though the recipient's bank may take additional time to process them.", "reason": "OTHER"}
+{"item_id": "item_002", "action": "added_from_A", "key_item": "Common reasons for failure include insufficient funds, a blocked account, exceeding transaction limits, or a closed account."}
+{"item_id": "item_009", "action": "A_addition_not_kept", "key_item": "To set up AutoPay for a Savings Pot, go to Deposit, select Savings Pot, choose the pot, and tap Schedule AutoPay.", "reason": "OTHER"}
+{"item_id": "item_009", "action": "A_addition_not_kept", "key_item": "To set up AutoPay for a Horizon credit card, go to the Credit Card section or Payments then AutoPay, and select Horizon Credit Card.", "reason": "OTHER"}
+{"item_id": "item_009", "action": "A_addition_not_kept", "key_item": "To set up general recurring transfers to other bank accounts, go to Payments then AutoPay and choose Bank Transfer or Credit Card.", "reason": "OTHER"}
+{"item_id": "item_030", "action": "added_from_A", "key_item": "Horizon-branded ATMs are located at FairPrice Xtra Vivocity, unit B2-23."}
+{"item_id": "item_030", "action": "A_addition_not_kept", "key_item": "Standard Chartered ATMs are available at Bedok Mall, Bugis Junction, Vivocity, Sixth Avenue, Clementi Mall, NEX Serangoon, Serangoon Garden, Marine Parade, Changi Business Park, Tampines, Marina Bay Financial Centre, and Battery Road.", "reason": "DETAIL"}
+{"item_id": "item_030", "action": "A_addition_not_kept", "key_item": "A full directory of ATM locations can be accessed via the ATM/Branch Locator on the Horizon website.", "reason": "DETAIL"}
+{"item_id": "item_036", "action": "A_addition_not_kept", "key_item": "The bank does not support international transfers or cross-border payments.", "reason": "DUP"}
+{"item_id": "item_044", "action": "A_addition_not_kept", "key_item": "The recipient's bank may require additional time to process and settle the transaction.", "reason": "OTHER"}
+{"item_id": "item_059", "action": "A_addition_not_kept", "key_item": "The new card will have a different card number, so recurring payments must be updated.", "reason": "DETAIL"}
+{"item_id": "item_059", "action": "A_addition_not_kept", "key_item": "You may wish to file a police report.", "reason": "DETAIL"}
+{"item_id": "item_059", "action": "A_addition_not_kept", "key_item": "You can contact support via live chat, voice call, or the provided phone number for assistance.", "reason": "DETAIL"}
+{"item_id": "item_074", "action": "added_from_A", "key_item": "Applicants over 55 are eligible if they are Singapore citizens or permanent residents with an annual income of at least S$15,000."}
+{"item_id": "item_074", "action": "added_from_A", "key_item": "Foreigners over 55 are eligible with an annual income of at least S$60,000."}
+{"item_id": "item_087", "action": "A_addition_not_kept", "key_item": "The user must sign in to the Horizon App to begin the process.", "reason": "DETAIL"}
+{"item_id": "item_100", "action": "A_addition_not_kept", "key_item": "The bank does not handle inbound cross-border payments.", "reason": "DUP"}
+{"item_id": "item_122", "action": "A_addition_not_kept", "key_item": "Customers should file a report with local law enforcement if they suspect fraud.", "reason": "DETAIL"}
+{"item_id": "item_139", "action": "A_addition_not_kept", "key_item": "A full directory of ATM locations can be accessed via the ATM/Branch Locator on the Horizon website.", "reason": "DETAIL"}
+{"item_id": "item_146", "action": "A_addition_not_kept", "key_item": "The card may also be delivered within 7 business days of approval.", "reason": "DUP"}
+{"item_id": "item_177", "action": "A_unsupported_flag_rejected", "key_item": "On approval you receive a Horizon Cashback Card and a Horizon Link Debit Card linked to the savings account", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_185", "action": "A_addition_not_kept", "key_item": "Balance transfers incur a monthly fee of 3% for transfers approved before August 13, 2026, or 1% for those approved on or after that date.", "reason": "OTHER"}
+{"item_id": "item_185", "action": "A_addition_not_kept", "key_item": "In the final month of a balance transfer tenure or upon early repayment, a 1% fee is applied to the remaining outstanding balance.", "reason": "OTHER"}
+{"item_id": "item_237", "action": "A_addition_not_kept", "key_item": "From 1 July 2026, the Effective Interest Rate will be tailored to your individual credit profile, ranging from 18.9% to 29.9% per annum.", "reason": "OTHER"}
+{"item_id": "item_254", "action": "A_unsupported_flag_rejected", "key_item": "A PayNow sender sees a masked version of your name", "reason": "the fact is stated in an answering entry"}
+{"item_id": "item_265", "action": "A_addition_not_kept", "key_item": "Customers can request a higher credit limit for their Horizon card through the 'View Card' or 'Profile' section in the app.", "reason": "OTHER"}
+{"item_id": "item_265", "action": "A_addition_not_kept", "key_item": "Credit limit increase requests are subject to Horizon Bank's internal evaluation and approval.", "reason": "OTHER"}
+{"item_id": "item_309", "action": "added_from_A", "key_item": "There is a mandatory 12-hour waiting period before the newly set Horizon Key can be used."}
+{"item_id": "item_309", "action": "A_unsupported_flag_rejected", "key_item": "The card PIN can be set or changed in the Horizon App", "reason": "the fact is stated in an answering entry"}

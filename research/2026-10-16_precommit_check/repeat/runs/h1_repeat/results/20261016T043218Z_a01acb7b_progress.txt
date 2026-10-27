@@ -1,0 +1,18 @@
+=== run started 2026-10-16T04:32:18.403+00:00 study=2026-10-16_precommit_h1_repeat runner=api_validation provider=gemini cases=15 ===
+2026-10-16T04:32:18.403+00:00 API key pool active: 10 key(s); production rotation and cross-model fallback enabled
+2026-10-16T04:32:43.760+00:00 [1/15] case=h1_h1_declined_transfer_1__rep1 status=OK
+2026-10-16T04:33:11.440+00:00 [2/15] case=h1_h1_transfer_fee_charged_1__rep1 status=OK
+2026-10-16T04:33:29.247+00:00 [3/15] case=h1_h1_getting_spare_card_2__rep1 status=OK
+2026-10-16T04:33:59.483+00:00 [4/15] case=h1_h1_pending_top_up_2__rep1 status=OK
+2026-10-16T04:34:28.157+00:00 [5/15] case=h1_h1_verify_top_up_3__rep1 status=OK
+2026-10-16T04:35:02.691+00:00 [6/15] case=h1_h1_declined_transfer_1__rep2 status=OK
+2026-10-16T04:35:31.621+00:00 [7/15] case=h1_h1_transfer_fee_charged_1__rep2 status=OK
+2026-10-16T04:36:04.969+00:00 [8/15] case=h1_h1_getting_spare_card_2__rep2 status=OK
+2026-10-16T04:36:41.684+00:00 [9/15] case=h1_h1_pending_top_up_2__rep2 status=OK
+2026-10-16T04:37:10.786+00:00 [10/15] case=h1_h1_verify_top_up_3__rep2 status=OK
+2026-10-16T04:37:39.656+00:00 [11/15] case=h1_h1_declined_transfer_1__rep3 status=OK
+2026-10-16T04:38:12.548+00:00 [12/15] case=h1_h1_transfer_fee_charged_1__rep3 status=OK
+2026-10-16T04:38:30.929+00:00 [13/15] case=h1_h1_getting_spare_card_2__rep3 status=OK
+2026-10-16T04:39:06.182+00:00 [14/15] case=h1_h1_pending_top_up_2__rep3 status=OK
+2026-10-16T04:39:38.334+00:00 [15/15] case=h1_h1_verify_top_up_3__rep3 status=OK
+=== run finished 2026-10-16T04:39:38.334+00:00 cases=15 ===

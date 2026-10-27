@@ -1,0 +1,48 @@
+🟢 [NODE 02f] Executing Inbound Compliance Screen
+PASS a found route passes
+PASS screen writes only inbound_compliance (triage writes the rest in the same step)
+PASS BUG-062: prompt states the work scope and excludes attacks on the assistant
+PASS BUG-062: prompt explains the assistant's tools
+PASS prompt carries both shared modules and the latest message
+PASS prompt is routed to the InboundComplianceScreen schema
+🟢 [NODE 02f] Executing Inbound Compliance Screen
+PASS BUG-062: no compliant route blocks
+🟢 [NODE 02f] Executing Inbound Compliance Screen
+🚨 [NODE 02f EXCEPTION]: unknown verdict 'maybe'
+PASS BUG-062: an unknown verdict fails closed
+🟢 [NODE 02f] Executing Inbound Compliance Screen
+PASS BUG-062: an out-of-scope request passes
+🟢 [NODE 02f] Executing Inbound Compliance Screen
+🚨 [NODE 02f EXCEPTION]: unparseable
+PASS an unreadable verdict fails closed
+FAIL join blocks a non-compliant verdict
+PASS join leaves a compliant turn to triage (non-empty update)
+
+==================================================
+🚦 [ROUTER GATE] Initializing Graph Edge
+📦 [STATE CHECK] chat_history length: 0
+🗣️  [INPUT] user_input: 'Someone from Horizon called and asked for my PIN. Can I give it?'
+🔀 [ROUTE] History found -> Routing to n3 (Ingest Gate)
+==================================================
+
+🟢 [NODE 01] Executing Deterministic Ingest Gate
+💾 [MEMORY] User input stored as untrusted. History length: 1
+🟢 [NODE 02c] Executing Inbound Semantic Gate (Prompt Guard)
+   ✅ [INBOUND PASS]: User input is SAFE from injections. Attack Probability: 0.0001
+🟢 [NODE 01b] Loading User Preferences
+🟢 [NODE 02d] Executing Request Triage & Decomposition
+   🧠 [TRIAGE STATUS]: ESCALATION
+   🔎 [TRIAGE DECOMPOSITION]: 0 tool-eligible | 0 non-financial | 0 clarification
+🟢 [NODE 02f] Executing Inbound Compliance Screen
+🟢 [NODE 09] Executing Hard Escalation Broker
+⚠️ [ESCALATION SUMMARY] Current-session summarization failed: unexpected call
+PASS streamed join update on a passed turn is a dict (gateway can read it)
+🟢 [NODE 02d] Executing Request Triage & Decomposition
+   🧠 [TRIAGE STATUS]: DECOMPOSED
+   🔎 [TRIAGE DECOMPOSITION]: 0 tool-eligible | 1 non-financial | 0 clarification
+PASS triage prompt no longer judges compliance
+PASS a stray NON_COMPLIANT from triage is treated as DECOMPOSED
+PASS triage and the screen both run after the profile loader
+PASS both feed the join, which routes onward
+PASS triage no longer routes directly
+17/18

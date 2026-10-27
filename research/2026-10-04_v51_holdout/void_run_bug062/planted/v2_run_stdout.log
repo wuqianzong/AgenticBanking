@@ -1,0 +1,890 @@
+
+==================================================
+🚦 [ROUTER GATE] Initializing Graph Edge
+📦 [STATE CHECK] chat_history length: 0
+🗣️  [INPUT] user_input: 'Can I pick a custom design for my debit card?'
+🔀 [ROUTE] History found -> Routing to n3 (Ingest Gate)
+==================================================
+
+🟢 [NODE 01] Executing Deterministic Ingest Gate
+💾 [MEMORY] User input stored as untrusted. History length: 1
+🟢 [NODE 02c] Executing Inbound Semantic Gate (Prompt Guard)
+   ✅ [INBOUND PASS]: User input is SAFE from injections. Attack Probability: 0.000457883405033499
+🟢 [NODE 01b] Loading User Preferences
+   👤 [PROFILE]: Loaded preferences for USR_999
+🟢 [NODE 02d] Executing Request Triage & Decomposition
+🟢 [NODE 02f] Executing Inbound Compliance Screen
+   🧠 [TRIAGE STATUS]: DECOMPOSED
+   🔎 [TRIAGE DECOMPOSITION]: 1 tool-eligible | 0 non-financial | 0 clarification
+🟢 [NODE 03a] Executing Tool-Calling Planner
+   🧰 [TOOL PLAN]: round 1 added 1 attempt(s), 0 clarification(s)
+🟢 [NODE 03b] Executing Generic Tool Dispatcher
+🟢 [NODE 02e] Executing Multi-Task Query Formulator
+   🔎 [SEARCH TASKS]: 1 tasks | Matrix: [{'product': 'Debit_Card', 'intents': ['Card Logistics']}] | Intent clarifications: 0
+   🎯 [TASK ROUTER]: Live retrieval required; verified session evidence may join RRF when task scope overlaps.
+🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Direct-First Retrieval)
+
+════════════════════════════════════════════════════════════
+ 🔍 [RAG ENGINE v2.6] INITIALIZING SPLIT-TRACK RRF SEARCH
+ 📦 Valid Product/Intent Scope: [{'product': 'Debit_Card', 'intents': ['Card Logistics']}]
+────────────────────────────────────────────────────────────
+ 📐 Angle groups: 1 | Semantic vector searches: 3
+ 🧭 Child-vector schema: generic (compatibility mode)
+    • base: procedural='Follow the card customization steps in the mobile app when ordering a new debit card.', policy='Custom card designs are subject to approval guidelines and may carry a specific fee.', conceptual='A custom card design allows customers to personalize the physical appearance of their debit card.'
+
+    [RAG TELEMETRY] --- Raw ChromaDB Hits per Semantic Angle ---
+      > base / Procedural Hits:
+        Rank 1: Parent 'faq_74abafeb' | Cosine Sim: 0.4386
+        Rank 2: Parent 'faq_74abafeb' | Cosine Sim: 0.4300
+        Rank 3: Parent 'faq_6dae126c' | Cosine Sim: 0.4282
+        Rank 4: Parent 'faq_ff1c2b9c' | Cosine Sim: 0.4061
+        Rank 5: Parent 'faq_ff1c2b9c' | Cosine Sim: 0.3994
+        Rank 6: Parent 'faq_74392fe2' | Cosine Sim: 0.3976
+        Rank 7: Parent 'faq_7883a8c2' | Cosine Sim: 0.3941
+        Rank 8: Parent 'faq_6dae126c' | Cosine Sim: 0.3833
+      > base / Policy Hits:
+        Rank 1: Parent 'faq_planted01' | Cosine Sim: 0.4078
+        Rank 2: Parent 'faq_5ad80c63' | Cosine Sim: 0.3952
+        Rank 3: Parent 'faq_planted01' | Cosine Sim: 0.3693
+        Rank 4: Parent 'faq_74abafeb' | Cosine Sim: 0.3599
+        Rank 5: Parent 'faq_26561f81' | Cosine Sim: 0.3406
+        Rank 6: Parent 'faq_74abafeb' | Cosine Sim: 0.3316
+        Rank 7: Parent 'faq_66004845' | Cosine Sim: 0.3277
+        Rank 8: Parent 'faq_9d7a4b83' | Cosine Sim: 0.3271
+      > base / Conceptual Hits:
+        Rank 1: Parent 'faq_ff1c2b9c' | Cosine Sim: 0.3645
+        Rank 2: Parent 'faq_5ad80c63' | Cosine Sim: 0.3519
+        Rank 3: Parent 'faq_26561f81' | Cosine Sim: 0.3473
+        Rank 4: Parent 'faq_planted01' | Cosine Sim: 0.3462
+        Rank 5: Parent 'faq_26561f81' | Cosine Sim: 0.3389
+        Rank 6: Parent 'faq_83fb94a7' | Cosine Sim: 0.3309
+        Rank 7: Parent 'faq_planted01' | Cosine Sim: 0.3271
+        Rank 8: Parent 'faq_5ad80c63' | Cosine Sim: 0.3221
+
+    [RAG TELEMETRY] --- Group-Level RRF Point Accumulation ---
+      + 0.0164 pts to 'faq_74abafeb' (from base / Procedural Rank 1)
+      + 0.0159 pts to 'faq_6dae126c' (from base / Procedural Rank 3)
+      + 0.0156 pts to 'faq_ff1c2b9c' (from base / Procedural Rank 4)
+      + 0.0152 pts to 'faq_74392fe2' (from base / Procedural Rank 6)
+      + 0.0149 pts to 'faq_7883a8c2' (from base / Procedural Rank 7)
+      + 0.0164 pts to 'faq_planted01' (from base / Policy Rank 1)
+      + 0.0161 pts to 'faq_5ad80c63' (from base / Policy Rank 2)
+      + 0.0156 pts to 'faq_74abafeb' (from base / Policy Rank 4)
+      + 0.0154 pts to 'faq_26561f81' (from base / Policy Rank 5)
+      + 0.0149 pts to 'faq_66004845' (from base / Policy Rank 7)
+      + 0.0147 pts to 'faq_9d7a4b83' (from base / Policy Rank 8)
+      + 0.0164 pts to 'faq_ff1c2b9c' (from base / Conceptual Rank 1)
+      + 0.0161 pts to 'faq_5ad80c63' (from base / Conceptual Rank 2)
+      + 0.0159 pts to 'faq_26561f81' (from base / Conceptual Rank 3)
+      + 0.0156 pts to 'faq_planted01' (from base / Conceptual Rank 4)
+      + 0.0152 pts to 'faq_83fb94a7' (from base / Conceptual Rank 6)
+
+    [RAG TELEMETRY] --- Equal-Normalised Task RRF (Semantic Track) ---
+      + 0.0320 task pts to 'faq_74abafeb' (base group score 0.0320 × 1.000)
+      + 0.0159 task pts to 'faq_6dae126c' (base group score 0.0159 × 1.000)
+      + 0.0320 task pts to 'faq_ff1c2b9c' (base group score 0.0320 × 1.000)
+      + 0.0152 task pts to 'faq_74392fe2' (base group score 0.0152 × 1.000)
+      + 0.0149 task pts to 'faq_7883a8c2' (base group score 0.0149 × 1.000)
+      + 0.0320 task pts to 'faq_planted01' (base group score 0.0320 × 1.000)
+      + 0.0323 task pts to 'faq_5ad80c63' (base group score 0.0323 × 1.000)
+      + 0.0313 task pts to 'faq_26561f81' (base group score 0.0313 × 1.000)
+      + 0.0149 task pts to 'faq_66004845' (base group score 0.0149 × 1.000)
+      + 0.0147 task pts to 'faq_9d7a4b83' (base group score 0.0147 × 1.000)
+      + 0.0152 task pts to 'faq_83fb94a7' (base group score 0.0152 × 1.000)
+
+    [RAG TELEMETRY] --- SEMANTIC ANGLE-GROUP RRF: Final RRF Standings & Drop-Off Selection ---
+      Formula: Score = average(group sum(1 / (60 + Rank)))
+      Rule: stop when a score is less than 50% of the prior selected score.
+      Limit: Max 4 parents.
+      --------------------------------------------------
+      [Rank 1] Parent: 'faq_5ad80c63' | Score: 0.0323 | Ratio: N/A     -> ✅ AUTO-SELECTED
+      [Rank 2] Parent: 'faq_74abafeb' | Score: 0.0320 | Ratio:  99.3% -> ✅ SELECTED
+      [Rank 3] Parent: 'faq_ff1c2b9c' | Score: 0.0320 | Ratio: 100.0% -> ✅ SELECTED
+      [Rank 4] Parent: 'faq_planted01' | Score: 0.0320 | Ratio: 100.0% -> ✅ SELECTED
+      [Rank 5] Parent: 'faq_26561f81' | Score: 0.0313 | Ratio:  97.6% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 6] Parent: 'faq_6dae126c' | Score: 0.0159 | Ratio:  49.6% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 7] Parent: 'faq_74392fe2' | Score: 0.0152 | Ratio:  47.3% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 8] Parent: 'faq_83fb94a7' | Score: 0.0152 | Ratio:  47.3% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 9] Parent: 'faq_7883a8c2' | Score: 0.0149 | Ratio:  46.6% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 10] Parent: 'faq_66004845' | Score: 0.0149 | Ratio:  46.6% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 11] Parent: 'faq_9d7a4b83' | Score: 0.0147 | Ratio:  45.9% -> ❌ DROPPED (Max Limit 4 Reached)
+
+    [RAG TELEMETRY] --- Raw ChromaDB Hits: Direct Track ---
+      > Direct Hits:
+        Rank 1: Parent 'faq_33f045af' | Cosine Sim: 0.3617
+        Rank 2: Parent 'faq_planted01' | Cosine Sim: 0.3535
+        Rank 3: Parent 'faq_74abafeb' | Cosine Sim: 0.3429
+        Rank 4: Parent 'faq_33f045af' | Cosine Sim: 0.3330
+        Rank 5: Parent 'faq_5ad80c63' | Cosine Sim: 0.3214
+        Rank 6: Parent 'faq_planted01' | Cosine Sim: 0.3210
+        Rank 7: Parent 'faq_7d02d0a7' | Cosine Sim: 0.3185
+        Rank 8: Parent 'faq_83fb94a7' | Cosine Sim: 0.3181
+      + 0.0164 pts to 'faq_33f045af' (from Direct Track / Direct Rank 1)
+      + 0.0161 pts to 'faq_planted01' (from Direct Track / Direct Rank 2)
+      + 0.0159 pts to 'faq_74abafeb' (from Direct Track / Direct Rank 3)
+      + 0.0154 pts to 'faq_5ad80c63' (from Direct Track / Direct Rank 5)
+      + 0.0149 pts to 'faq_7d02d0a7' (from Direct Track / Direct Rank 7)
+      + 0.0147 pts to 'faq_83fb94a7' (from Direct Track / Direct Rank 8)
+
+    [RAG TELEMETRY] --- DIRECT TRACK: Final RRF Standings & Drop-Off Selection ---
+      Formula: Score = average(group sum(1 / (60 + Rank)))
+      Rule: stop when a score is less than 50% of the prior selected score.
+      Limit: Max 4 parents.
+      --------------------------------------------------
+      [Rank 1] Parent: 'faq_33f045af' | Score: 0.0164 | Ratio: N/A     -> ✅ AUTO-SELECTED
+      [Rank 2] Parent: 'faq_planted01' | Score: 0.0161 | Ratio:  98.4% -> ✅ SELECTED
+      [Rank 3] Parent: 'faq_74abafeb' | Score: 0.0159 | Ratio:  98.4% -> ✅ SELECTED
+      [Rank 4] Parent: 'faq_5ad80c63' | Score: 0.0154 | Ratio:  96.9% -> ✅ SELECTED
+      [Rank 5] Parent: 'faq_7d02d0a7' | Score: 0.0149 | Ratio:  97.0% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 6] Parent: 'faq_83fb94a7' | Score: 0.0147 | Ratio:  95.6% -> ❌ DROPPED (Max Limit 4 Reached)
+
+    📊 RRF Engine finalized 5 Parent(s) for LLM Hydration (4 semantic + 4 direct, 5 after dedup): ['faq_5ad80c63', 'faq_74abafeb', 'faq_ff1c2b9c', 'faq_planted01', 'faq_33f045af']
+    🧱 [RAG HYDRATION] Hydrated 5 intact parent chunks from SQLite.
+ ⏱️  [RAG ENGINE] Total Execution Time: 486.90 ms
+════════════════════════════════════════════════════════════
+
+   🔎 [TASK RAG]: Retrieved 1 task result set(s) in parallel.
+🟢 [NODE 03c] Executing Task-Level Sufficiency & Evidence Selection
+   ✅ [TASK AUDIT]: 0 sufficient, 0 terminal partial, 1 pending retry.
+🟢 [NODE 02e] Executing Multi-Task Query Formulator
+   🪜 [RETRY STAGE]: Task 'task_1' → EXTRA_EFFORT (attempt 2)
+   🔧 [TERRITORY A]: Task 'task_1' | product ['Debit_Card'] → ['Debit_Card', 'Horizon_APP'] | intent ['Card Logistics'] → ['Account Management', 'Application', 'Authentication And Security', 'Card Logistics', 'Eligibility', 'Features And Limits', 'Fees And Charges', 'General Inquiries', 'Payments And Transfers', 'Profile Updates', 'Rewards And Promotions', 'Transaction Disputes']
+   🔎 [SEARCH TASKS]: 1 tasks | Matrix: [{'product': ['Debit_Card', 'Horizon_APP'], 'intents': ['Account Management', 'Application', 'Authentication And Security', 'Card Logistics', 'Eligibility', 'Features And Limits', 'Fees And Charges', 'General Inquiries', 'Payments And Transfers', 'Profile Updates', 'Rewards And Promotions', 'Transaction Disputes']}] | Intent clarifications: 0
+   🎯 [TASK ROUTER]: Live retrieval required; verified session evidence may join RRF when task scope overlaps.
+🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Direct-First Retrieval)
+
+════════════════════════════════════════════════════════════
+ 🔍 [RAG ENGINE v2.6] INITIALIZING SPLIT-TRACK RRF SEARCH
+ 📦 Valid Product/Intent Scope: [{'product': 'Debit_Card', 'intents': ['Account Management', 'Application', 'Authentication And Security', 'Card Logistics', 'Eligibility', 'Features And Limits', 'Fees And Charges', 'General Inquiries', 'Payments And Transfers', 'Profile Updates', 'Rewards And Promotions', 'Transaction Disputes']}, {'product': 'Horizon_APP', 'intents': ['Account Management', 'Authentication And Security', 'Features And Limits', 'General Inquiries', 'Payments And Transfers', 'Profile Updates', 'Rewards And Promotions']}]
+────────────────────────────────────────────────────────────
+ 📐 Angle groups: 1 | Semantic vector searches: 3
+ 🧭 Child-vector schema: generic (compatibility mode)
+    • base: procedural='Follow the card customization steps in the mobile app when ordering a new debit card.', policy='Custom card designs are subject to approval guidelines and may carry a specific fee.', conceptual='A custom card design allows customers to personalize the physical appearance of their debit card.'
+
+    [RAG TELEMETRY] --- Raw ChromaDB Hits per Semantic Angle ---
+      > base / Procedural Hits:
+        Rank 1: Parent 'faq_2351051a' | Cosine Sim: 0.5124
+        Rank 2: Parent 'faq_2351051a' | Cosine Sim: 0.5124
+        Rank 3: Parent 'faq_2351051a' | Cosine Sim: 0.5004
+        Rank 4: Parent 'faq_2351051a' | Cosine Sim: 0.5004
+        Rank 5: Parent 'faq_824abbaf' | Cosine Sim: 0.4649
+        Rank 6: Parent 'faq_0765b6e6' | Cosine Sim: 0.4618
+        Rank 7: Parent 'faq_0765b6e6' | Cosine Sim: 0.4618
+        Rank 8: Parent 'faq_1b63a21e' | Cosine Sim: 0.4557
+        Rank 9: Parent 'faq_824abbaf' | Cosine Sim: 0.4524
+        Rank 10: Parent 'faq_1b63a21e' | Cosine Sim: 0.4520
+        Rank 11: Parent 'faq_0be050cf' | Cosine Sim: 0.4483
+        Rank 12: Parent 'faq_74abafeb' | Cosine Sim: 0.4386
+        Rank 13: Parent 'faq_11305460' | Cosine Sim: 0.4385
+        Rank 14: Parent 'faq_planted07' | Cosine Sim: 0.4328
+        Rank 15: Parent 'faq_74abafeb' | Cosine Sim: 0.4300
+        Rank 16: Parent 'faq_6dae126c' | Cosine Sim: 0.4282
+        Rank 17: Parent 'faq_781c6aa6' | Cosine Sim: 0.4135
+        Rank 18: Parent 'faq_planted07' | Cosine Sim: 0.4092
+      > base / Policy Hits:
+        Rank 1: Parent 'faq_planted07' | Cosine Sim: 0.5756
+        Rank 2: Parent 'faq_planted07' | Cosine Sim: 0.5388
+        Rank 3: Parent 'faq_bde7d1d5' | Cosine Sim: 0.4870
+        Rank 4: Parent 'faq_bde7d1d5' | Cosine Sim: 0.4870
+        Rank 5: Parent 'faq_34e4a4ab' | Cosine Sim: 0.4406
+        Rank 6: Parent 'faq_1b63a21e' | Cosine Sim: 0.4405
+        Rank 7: Parent 'faq_c9998e4f' | Cosine Sim: 0.4118
+        Rank 8: Parent 'faq_c9998e4f' | Cosine Sim: 0.4118
+        Rank 9: Parent 'faq_planted01' | Cosine Sim: 0.4078
+        Rank 10: Parent 'faq_5dd95dc7' | Cosine Sim: 0.4009
+        Rank 11: Parent 'faq_bde7d1d5' | Cosine Sim: 0.3973
+        Rank 12: Parent 'faq_bde7d1d5' | Cosine Sim: 0.3973
+        Rank 13: Parent 'faq_8336a2c7' | Cosine Sim: 0.3962
+        Rank 14: Parent 'faq_5ad80c63' | Cosine Sim: 0.3952
+        Rank 15: Parent 'faq_ca13bab9' | Cosine Sim: 0.3893
+        Rank 16: Parent 'faq_78b1b823' | Cosine Sim: 0.3880
+        Rank 17: Parent 'faq_78b1b823' | Cosine Sim: 0.3880
+        Rank 18: Parent 'faq_78c7cb79' | Cosine Sim: 0.3862
+      > base / Conceptual Hits:
+        Rank 1: Parent 'faq_planted07' | Cosine Sim: 0.6961
+        Rank 2: Parent 'faq_planted07' | Cosine Sim: 0.6584
+        Rank 3: Parent 'faq_78c7cb79' | Cosine Sim: 0.4903
+        Rank 4: Parent 'faq_ca13bab9' | Cosine Sim: 0.4763
+        Rank 5: Parent 'faq_78c7cb79' | Cosine Sim: 0.4748
+        Rank 6: Parent 'faq_06121b7c' | Cosine Sim: 0.4738
+        Rank 7: Parent 'faq_06121b7c' | Cosine Sim: 0.4738
+        Rank 8: Parent 'faq_06121b7c' | Cosine Sim: 0.4728
+        Rank 9: Parent 'faq_06121b7c' | Cosine Sim: 0.4728
+        Rank 10: Parent 'faq_17326522' | Cosine Sim: 0.4266
+        Rank 11: Parent 'faq_11305460' | Cosine Sim: 0.4203
+        Rank 12: Parent 'faq_5dd95dc7' | Cosine Sim: 0.4148
+        Rank 13: Parent 'faq_6f303f5f' | Cosine Sim: 0.4008
+        Rank 14: Parent 'faq_6f303f5f' | Cosine Sim: 0.4008
+        Rank 15: Parent 'faq_ca13bab9' | Cosine Sim: 0.3977
+        Rank 16: Parent 'faq_91b157b1' | Cosine Sim: 0.3966
+        Rank 17: Parent 'faq_5dd95dc7' | Cosine Sim: 0.3931
+        Rank 18: Parent 'faq_bde7d1d5' | Cosine Sim: 0.3925
+
+    [RAG TELEMETRY] --- Group-Level RRF Point Accumulation ---
+      + 0.0164 pts to 'faq_2351051a' (from base / Procedural Rank 1)
+      + 0.0154 pts to 'faq_824abbaf' (from base / Procedural Rank 5)
+      + 0.0152 pts to 'faq_0765b6e6' (from base / Procedural Rank 6)
+      + 0.0147 pts to 'faq_1b63a21e' (from base / Procedural Rank 8)
+      + 0.0141 pts to 'faq_0be050cf' (from base / Procedural Rank 11)
+      + 0.0139 pts to 'faq_74abafeb' (from base / Procedural Rank 12)
+      + 0.0137 pts to 'faq_11305460' (from base / Procedural Rank 13)
+      + 0.0135 pts to 'faq_planted07' (from base / Procedural Rank 14)
+      + 0.0132 pts to 'faq_6dae126c' (from base / Procedural Rank 16)
+      + 0.0130 pts to 'faq_781c6aa6' (from base / Procedural Rank 17)
+      + 0.0164 pts to 'faq_planted07' (from base / Policy Rank 1)
+      + 0.0159 pts to 'faq_bde7d1d5' (from base / Policy Rank 3)
+      + 0.0154 pts to 'faq_34e4a4ab' (from base / Policy Rank 5)
+      + 0.0152 pts to 'faq_1b63a21e' (from base / Policy Rank 6)
+      + 0.0149 pts to 'faq_c9998e4f' (from base / Policy Rank 7)
+      + 0.0145 pts to 'faq_planted01' (from base / Policy Rank 9)
+      + 0.0143 pts to 'faq_5dd95dc7' (from base / Policy Rank 10)
+      + 0.0137 pts to 'faq_8336a2c7' (from base / Policy Rank 13)
+      + 0.0135 pts to 'faq_5ad80c63' (from base / Policy Rank 14)
+      + 0.0133 pts to 'faq_ca13bab9' (from base / Policy Rank 15)
+      + 0.0132 pts to 'faq_78b1b823' (from base / Policy Rank 16)
+      + 0.0128 pts to 'faq_78c7cb79' (from base / Policy Rank 18)
+      + 0.0164 pts to 'faq_planted07' (from base / Conceptual Rank 1)
+      + 0.0159 pts to 'faq_78c7cb79' (from base / Conceptual Rank 3)
+      + 0.0156 pts to 'faq_ca13bab9' (from base / Conceptual Rank 4)
+      + 0.0152 pts to 'faq_06121b7c' (from base / Conceptual Rank 6)
+      + 0.0143 pts to 'faq_17326522' (from base / Conceptual Rank 10)
+      + 0.0141 pts to 'faq_11305460' (from base / Conceptual Rank 11)
+      + 0.0139 pts to 'faq_5dd95dc7' (from base / Conceptual Rank 12)
+      + 0.0137 pts to 'faq_6f303f5f' (from base / Conceptual Rank 13)
+      + 0.0132 pts to 'faq_91b157b1' (from base / Conceptual Rank 16)
+      + 0.0128 pts to 'faq_bde7d1d5' (from base / Conceptual Rank 18)
+
+    [RAG TELEMETRY] --- Equal-Normalised Task RRF (Semantic Track) ---
+      + 0.0164 task pts to 'faq_2351051a' (base group score 0.0164 × 1.000)
+      + 0.0154 task pts to 'faq_824abbaf' (base group score 0.0154 × 1.000)
+      + 0.0152 task pts to 'faq_0765b6e6' (base group score 0.0152 × 1.000)
+      + 0.0299 task pts to 'faq_1b63a21e' (base group score 0.0299 × 1.000)
+      + 0.0141 task pts to 'faq_0be050cf' (base group score 0.0141 × 1.000)
+      + 0.0139 task pts to 'faq_74abafeb' (base group score 0.0139 × 1.000)
+      + 0.0278 task pts to 'faq_11305460' (base group score 0.0278 × 1.000)
+      + 0.0463 task pts to 'faq_planted07' (base group score 0.0463 × 1.000)
+      + 0.0132 task pts to 'faq_6dae126c' (base group score 0.0132 × 1.000)
+      + 0.0130 task pts to 'faq_781c6aa6' (base group score 0.0130 × 1.000)
+      + 0.0287 task pts to 'faq_bde7d1d5' (base group score 0.0287 × 1.000)
+      + 0.0154 task pts to 'faq_34e4a4ab' (base group score 0.0154 × 1.000)
+      + 0.0149 task pts to 'faq_c9998e4f' (base group score 0.0149 × 1.000)
+      + 0.0145 task pts to 'faq_planted01' (base group score 0.0145 × 1.000)
+      + 0.0282 task pts to 'faq_5dd95dc7' (base group score 0.0282 × 1.000)
+      + 0.0137 task pts to 'faq_8336a2c7' (base group score 0.0137 × 1.000)
+      + 0.0135 task pts to 'faq_5ad80c63' (base group score 0.0135 × 1.000)
+      + 0.0290 task pts to 'faq_ca13bab9' (base group score 0.0290 × 1.000)
+      + 0.0132 task pts to 'faq_78b1b823' (base group score 0.0132 × 1.000)
+      + 0.0287 task pts to 'faq_78c7cb79' (base group score 0.0287 × 1.000)
+      + 0.0152 task pts to 'faq_06121b7c' (base group score 0.0152 × 1.000)
+      + 0.0143 task pts to 'faq_17326522' (base group score 0.0143 × 1.000)
+      + 0.0137 task pts to 'faq_6f303f5f' (base group score 0.0137 × 1.000)
+      + 0.0132 task pts to 'faq_91b157b1' (base group score 0.0132 × 1.000)
+    [SEMANTIC ANGLE-GROUP RRF] --- Excluding Previously-Rejected Parents ---
+      🚫 'faq_planted01' already judged not relevant in an earlier attempt for this task; excluded from selection.
+      🚫 'faq_74abafeb' already judged not relevant in an earlier attempt for this task; excluded from selection.
+      🚫 'faq_5ad80c63' already judged not relevant in an earlier attempt for this task; excluded from selection.
+
+    [RAG TELEMETRY] --- SEMANTIC ANGLE-GROUP RRF: Final RRF Standings & Drop-Off Selection ---
+      Formula: Score = average(group sum(1 / (60 + Rank)))
+      Rule: stop when a score is less than 50% of the prior selected score.
+      Limit: Max 4 parents.
+      --------------------------------------------------
+      [Rank 1] Parent: 'faq_planted07' | Score: 0.0463 | Ratio: N/A     -> ✅ AUTO-SELECTED
+      [Rank 2] Parent: 'faq_1b63a21e' | Score: 0.0299 | Ratio:  64.5% -> ✅ SELECTED
+      [Rank 3] Parent: 'faq_ca13bab9' | Score: 0.0290 | Ratio:  97.0% -> ✅ SELECTED
+      [Rank 4] Parent: 'faq_bde7d1d5' | Score: 0.0287 | Ratio:  99.1% -> ✅ SELECTED
+      [Rank 5] Parent: 'faq_78c7cb79' | Score: 0.0287 | Ratio: 100.0% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 6] Parent: 'faq_5dd95dc7' | Score: 0.0282 | Ratio:  98.2% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 7] Parent: 'faq_11305460' | Score: 0.0278 | Ratio:  96.8% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 8] Parent: 'faq_2351051a' | Score: 0.0164 | Ratio:  57.1% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 9] Parent: 'faq_824abbaf' | Score: 0.0154 | Ratio:  53.6% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 10] Parent: 'faq_34e4a4ab' | Score: 0.0154 | Ratio:  53.6% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 11] Parent: 'faq_0765b6e6' | Score: 0.0152 | Ratio:  52.8% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 12] Parent: 'faq_06121b7c' | Score: 0.0152 | Ratio:  52.8% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 13] Parent: 'faq_c9998e4f' | Score: 0.0149 | Ratio:  52.0% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 14] Parent: 'faq_17326522' | Score: 0.0143 | Ratio:  49.8% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 15] Parent: 'faq_0be050cf' | Score: 0.0141 | Ratio:  49.1% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 16] Parent: 'faq_8336a2c7' | Score: 0.0137 | Ratio:  47.7% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 17] Parent: 'faq_6f303f5f' | Score: 0.0137 | Ratio:  47.7% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 18] Parent: 'faq_6dae126c' | Score: 0.0132 | Ratio:  45.9% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 19] Parent: 'faq_78b1b823' | Score: 0.0132 | Ratio:  45.9% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 20] Parent: 'faq_91b157b1' | Score: 0.0132 | Ratio:  45.9% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 21] Parent: 'faq_781c6aa6' | Score: 0.0130 | Ratio:  45.3% -> ❌ DROPPED (Max Limit 4 Reached)
+
+    [RAG TELEMETRY] --- Raw ChromaDB Hits: Direct Track ---
+      > Direct Hits:
+        Rank 1: Parent 'faq_planted07' | Cosine Sim: 0.8338
+        Rank 2: Parent 'faq_planted07' | Cosine Sim: 0.7728
+        Rank 3: Parent 'faq_78c7cb79' | Cosine Sim: 0.4652
+        Rank 4: Parent 'faq_78c7cb79' | Cosine Sim: 0.4369
+        Rank 5: Parent 'faq_ca13bab9' | Cosine Sim: 0.4344
+        Rank 6: Parent 'faq_78b1b823' | Cosine Sim: 0.4336
+        Rank 7: Parent 'faq_78b1b823' | Cosine Sim: 0.4336
+        Rank 8: Parent 'faq_6f303f5f' | Cosine Sim: 0.4262
+        Rank 9: Parent 'faq_6f303f5f' | Cosine Sim: 0.4262
+        Rank 10: Parent 'faq_06121b7c' | Cosine Sim: 0.4242
+        Rank 11: Parent 'faq_06121b7c' | Cosine Sim: 0.4242
+        Rank 12: Parent 'faq_06121b7c' | Cosine Sim: 0.4236
+        Rank 13: Parent 'faq_06121b7c' | Cosine Sim: 0.4236
+        Rank 14: Parent 'faq_5dd95dc7' | Cosine Sim: 0.4221
+        Rank 15: Parent 'faq_5dd95dc7' | Cosine Sim: 0.4186
+        Rank 16: Parent 'faq_78b1b823' | Cosine Sim: 0.4134
+        Rank 17: Parent 'faq_78b1b823' | Cosine Sim: 0.4134
+        Rank 18: Parent 'faq_bde7d1d5' | Cosine Sim: 0.4118
+      + 0.0164 pts to 'faq_planted07' (from Direct Track / Direct Rank 1)
+      + 0.0159 pts to 'faq_78c7cb79' (from Direct Track / Direct Rank 3)
+      + 0.0154 pts to 'faq_ca13bab9' (from Direct Track / Direct Rank 5)
+      + 0.0152 pts to 'faq_78b1b823' (from Direct Track / Direct Rank 6)
+      + 0.0147 pts to 'faq_6f303f5f' (from Direct Track / Direct Rank 8)
+      + 0.0143 pts to 'faq_06121b7c' (from Direct Track / Direct Rank 10)
+      + 0.0135 pts to 'faq_5dd95dc7' (from Direct Track / Direct Rank 14)
+      + 0.0128 pts to 'faq_bde7d1d5' (from Direct Track / Direct Rank 18)
+
+    [RAG TELEMETRY] --- DIRECT TRACK: Final RRF Standings & Drop-Off Selection ---
+      Formula: Score = average(group sum(1 / (60 + Rank)))
+      Rule: stop when a score is less than 50% of the prior selected score.
+      Limit: Max 4 parents.
+      --------------------------------------------------
+      [Rank 1] Parent: 'faq_planted07' | Score: 0.0164 | Ratio: N/A     -> ✅ AUTO-SELECTED
+      [Rank 2] Parent: 'faq_78c7cb79' | Score: 0.0159 | Ratio:  96.8% -> ✅ SELECTED
+      [Rank 3] Parent: 'faq_ca13bab9' | Score: 0.0154 | Ratio:  96.9% -> ✅ SELECTED
+      [Rank 4] Parent: 'faq_78b1b823' | Score: 0.0152 | Ratio:  98.5% -> ✅ SELECTED
+      [Rank 5] Parent: 'faq_6f303f5f' | Score: 0.0147 | Ratio:  97.1% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 6] Parent: 'faq_06121b7c' | Score: 0.0143 | Ratio:  94.3% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 7] Parent: 'faq_5dd95dc7' | Score: 0.0135 | Ratio:  89.2% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 8] Parent: 'faq_bde7d1d5' | Score: 0.0128 | Ratio:  84.6% -> ❌ DROPPED (Max Limit 4 Reached)
+
+    📊 RRF Engine finalized 6 Parent(s) for LLM Hydration (4 semantic + 4 direct, 6 after dedup): ['faq_planted07', 'faq_1b63a21e', 'faq_ca13bab9', 'faq_bde7d1d5', 'faq_78c7cb79', 'faq_78b1b823']
+    🧱 [RAG HYDRATION] Hydrated 6 intact parent chunks from SQLite.
+ ⏱️  [RAG ENGINE] Total Execution Time: 466.24 ms
+════════════════════════════════════════════════════════════
+
+   🔎 [TASK RAG]: Retrieved 1 task result set(s) in parallel.
+🟢 [NODE 03c] Executing Task-Level Sufficiency & Evidence Selection
+   ✅ [TASK AUDIT]: 1 sufficient, 0 terminal partial, 0 pending retry.
+🟢 [NODE 04a] Executing Global Resolution Sufficiency Check
+   🧭 [GLOBAL RESOLUTION]: 0 open subquery(ies) -> presentation_ready
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+🟢 [NODE 04b] Executing Response Generator
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+   💬 [FLEXIBLE RESPONSE GENERATED]: 1 element(s)
+🟢 [NODE 06] Executing Combined Outbound Compliance & Groundedness Audit
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+🟢 [NODE 06] Joining Outbound Compliance & Groundedness Audits
+   🚫 [OUTBOUND AUDIT VETO -- PARTIAL]: pending_task_ids=['element_1', 'task_1'] response_wide=False round=1
+🟢 [NODE 04c] Executing Response Reviser (partial retry)
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+   💬 [RESPONSE REVISED]: 1 block(s) sent for revision, 1 returned
+🟢 [NODE 06] Executing Combined Outbound Compliance & Groundedness Audit
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+🟢 [NODE 06] Joining Outbound Compliance & Groundedness Audits
+   ✅ [OUTBOUND AUDIT PASS]: Response is MAS-compliant and evidence-grounded.
+🟢 [NODE 07] Executing Precision Substitution
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+🟢 [NODE 08] Executing Soft Escalation Analyzer
+💾 [MEMORY SERVICE] Archived 2 chat messages for user 'USR_999', session 'eval_2026-10-04_v51_planted_faq_v2_1_c33a10bf' (turn_complete).
+
+==================================================
+🚦 [ROUTER GATE] Initializing Graph Edge
+📦 [STATE CHECK] chat_history length: 0
+🗣️  [INPUT] user_input: 'How do I get SMS alerts when a big transaction goes through?'
+🔀 [ROUTE] History found -> Routing to n3 (Ingest Gate)
+==================================================
+
+🟢 [NODE 01] Executing Deterministic Ingest Gate
+💾 [MEMORY] User input stored as untrusted. History length: 1
+🟢 [NODE 02c] Executing Inbound Semantic Gate (Prompt Guard)
+   ✅ [INBOUND PASS]: User input is SAFE from injections. Attack Probability: 0.000564844289328903
+🟢 [NODE 01b] Loading User Preferences
+   👤 [PROFILE]: Loaded preferences for USR_999
+🟢 [NODE 02d] Executing Request Triage & Decomposition🟢 [NODE 02f] Executing Inbound Compliance Screen
+
+   🧠 [TRIAGE STATUS]: DECOMPOSED
+   🔎 [TRIAGE DECOMPOSITION]: 1 tool-eligible | 0 non-financial | 0 clarification
+🟢 [NODE 03a] Executing Tool-Calling Planner
+   🧰 [TOOL PLAN]: round 1 added 1 attempt(s), 0 clarification(s)
+🟢 [NODE 03b] Executing Generic Tool Dispatcher
+🟢 [NODE 02e] Executing Multi-Task Query Formulator
+   🔎 [SEARCH TASKS]: 1 tasks | Matrix: [{'product': 'Horizon_APP', 'intents': ['Features And Limits', 'General Inquiries']}] | Intent clarifications: 0
+   🎯 [TASK ROUTER]: Live retrieval required; verified session evidence may join RRF when task scope overlaps.
+🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Direct-First Retrieval)
+
+════════════════════════════════════════════════════════════
+ 🔍 [RAG ENGINE v2.6] INITIALIZING SPLIT-TRACK RRF SEARCH
+ 📦 Valid Product/Intent Scope: [{'product': 'Horizon_APP', 'intents': ['Features And Limits', 'General Inquiries']}]
+────────────────────────────────────────────────────────────
+ 📐 Angle groups: 1 | Semantic vector searches: 3
+ 🧭 Child-vector schema: generic (compatibility mode)
+    • base: procedural='Follow the notification settings menu in the mobile app to enable transaction alerts.', policy='Transaction alerts are subject to minimum amount thresholds and device notification permissions.', conceptual='SMS alerts notify customers of account activity and large transactions in real time.'
+
+    [RAG TELEMETRY] --- Raw ChromaDB Hits per Semantic Angle ---
+      > base / Procedural Hits:
+        Rank 1: Parent 'faq_b9200af6' | Cosine Sim: 0.3315
+        Rank 2: Parent 'faq_b9200af6' | Cosine Sim: 0.3186
+        Rank 3: Parent 'faq_b371ab12' | Cosine Sim: 0.2891
+        Rank 4: Parent 'faq_ec7083f6' | Cosine Sim: 0.2656
+        Rank 5: Parent 'faq_ce650cb6' | Cosine Sim: 0.2602
+        Rank 6: Parent 'faq_ec7083f6' | Cosine Sim: 0.2597
+        Rank 7: Parent 'faq_88851d34' | Cosine Sim: 0.2571
+        Rank 8: Parent 'faq_fcbafd91' | Cosine Sim: 0.2466
+      > base / Policy Hits:
+        Rank 1: Parent 'faq_b9200af6' | Cosine Sim: 0.3457
+        Rank 2: Parent 'faq_b9200af6' | Cosine Sim: 0.3182
+        Rank 3: Parent 'faq_88851d34' | Cosine Sim: 0.2677
+        Rank 4: Parent 'faq_ec7083f6' | Cosine Sim: 0.2456
+        Rank 5: Parent 'faq_ec7083f6' | Cosine Sim: 0.2421
+        Rank 6: Parent 'faq_d18f8450' | Cosine Sim: 0.2318
+        Rank 7: Parent 'faq_planted09' | Cosine Sim: 0.2251
+        Rank 8: Parent 'faq_b371ab12' | Cosine Sim: 0.1996
+      > base / Conceptual Hits:
+        Rank 1: Parent 'faq_b9200af6' | Cosine Sim: 0.3715
+        Rank 2: Parent 'faq_b9200af6' | Cosine Sim: 0.3064
+        Rank 3: Parent 'faq_b371ab12' | Cosine Sim: 0.2592
+        Rank 4: Parent 'faq_ec7083f6' | Cosine Sim: 0.2451
+        Rank 5: Parent 'faq_ec7083f6' | Cosine Sim: 0.2328
+        Rank 6: Parent 'faq_planted05' | Cosine Sim: 0.2140
+        Rank 7: Parent 'faq_24568045' | Cosine Sim: 0.1909
+        Rank 8: Parent 'faq_88851d34' | Cosine Sim: 0.1899
+
+    [RAG TELEMETRY] --- Group-Level RRF Point Accumulation ---
+      + 0.0164 pts to 'faq_b9200af6' (from base / Procedural Rank 1)
+      + 0.0159 pts to 'faq_b371ab12' (from base / Procedural Rank 3)
+      + 0.0156 pts to 'faq_ec7083f6' (from base / Procedural Rank 4)
+      + 0.0154 pts to 'faq_ce650cb6' (from base / Procedural Rank 5)
+      + 0.0149 pts to 'faq_88851d34' (from base / Procedural Rank 7)
+      + 0.0147 pts to 'faq_fcbafd91' (from base / Procedural Rank 8)
+      + 0.0164 pts to 'faq_b9200af6' (from base / Policy Rank 1)
+      + 0.0159 pts to 'faq_88851d34' (from base / Policy Rank 3)
+      + 0.0156 pts to 'faq_ec7083f6' (from base / Policy Rank 4)
+      + 0.0152 pts to 'faq_d18f8450' (from base / Policy Rank 6)
+      + 0.0149 pts to 'faq_planted09' (from base / Policy Rank 7)
+      + 0.0147 pts to 'faq_b371ab12' (from base / Policy Rank 8)
+      + 0.0164 pts to 'faq_b9200af6' (from base / Conceptual Rank 1)
+      + 0.0159 pts to 'faq_b371ab12' (from base / Conceptual Rank 3)
+      + 0.0156 pts to 'faq_ec7083f6' (from base / Conceptual Rank 4)
+      + 0.0152 pts to 'faq_planted05' (from base / Conceptual Rank 6)
+      + 0.0149 pts to 'faq_24568045' (from base / Conceptual Rank 7)
+      + 0.0147 pts to 'faq_88851d34' (from base / Conceptual Rank 8)
+
+    [RAG TELEMETRY] --- Equal-Normalised Task RRF (Semantic Track) ---
+      + 0.0492 task pts to 'faq_b9200af6' (base group score 0.0492 × 1.000)
+      + 0.0465 task pts to 'faq_b371ab12' (base group score 0.0465 × 1.000)
+      + 0.0469 task pts to 'faq_ec7083f6' (base group score 0.0469 × 1.000)
+      + 0.0154 task pts to 'faq_ce650cb6' (base group score 0.0154 × 1.000)
+      + 0.0455 task pts to 'faq_88851d34' (base group score 0.0455 × 1.000)
+      + 0.0147 task pts to 'faq_fcbafd91' (base group score 0.0147 × 1.000)
+      + 0.0152 task pts to 'faq_d18f8450' (base group score 0.0152 × 1.000)
+      + 0.0149 task pts to 'faq_planted09' (base group score 0.0149 × 1.000)
+      + 0.0152 task pts to 'faq_planted05' (base group score 0.0152 × 1.000)
+      + 0.0149 task pts to 'faq_24568045' (base group score 0.0149 × 1.000)
+
+    [RAG TELEMETRY] --- SEMANTIC ANGLE-GROUP RRF: Final RRF Standings & Drop-Off Selection ---
+      Formula: Score = average(group sum(1 / (60 + Rank)))
+      Rule: stop when a score is less than 50% of the prior selected score.
+      Limit: Max 4 parents.
+      --------------------------------------------------
+      [Rank 1] Parent: 'faq_b9200af6' | Score: 0.0492 | Ratio: N/A     -> ✅ AUTO-SELECTED
+      [Rank 2] Parent: 'faq_ec7083f6' | Score: 0.0469 | Ratio:  95.3% -> ✅ SELECTED
+      [Rank 3] Parent: 'faq_b371ab12' | Score: 0.0465 | Ratio:  99.1% -> ✅ SELECTED
+      [Rank 4] Parent: 'faq_88851d34' | Score: 0.0455 | Ratio:  98.0% -> ✅ SELECTED
+      [Rank 5] Parent: 'faq_ce650cb6' | Score: 0.0154 | Ratio:  33.8% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 6] Parent: 'faq_d18f8450' | Score: 0.0152 | Ratio:  33.3% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 7] Parent: 'faq_planted05' | Score: 0.0152 | Ratio:  33.3% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 8] Parent: 'faq_planted09' | Score: 0.0149 | Ratio:  32.8% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 9] Parent: 'faq_24568045' | Score: 0.0149 | Ratio:  32.8% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 10] Parent: 'faq_fcbafd91' | Score: 0.0147 | Ratio:  32.3% -> ❌ DROPPED (Max Limit 4 Reached)
+
+    [RAG TELEMETRY] --- Raw ChromaDB Hits: Direct Track ---
+      > Direct Hits:
+        Rank 1: Parent 'faq_b371ab12' | Cosine Sim: 0.2504
+        Rank 2: Parent 'faq_b9200af6' | Cosine Sim: 0.1919
+        Rank 3: Parent 'faq_ec7083f6' | Cosine Sim: 0.1786
+        Rank 4: Parent 'faq_b9200af6' | Cosine Sim: 0.1660
+        Rank 5: Parent 'faq_ec7083f6' | Cosine Sim: 0.1524
+        Rank 6: Parent 'faq_1e61de43' | Cosine Sim: 0.1427
+        Rank 7: Parent 'faq_planted05' | Cosine Sim: 0.1322
+        Rank 8: Parent 'faq_f87ebecc' | Cosine Sim: 0.1313
+      + 0.0164 pts to 'faq_b371ab12' (from Direct Track / Direct Rank 1)
+      + 0.0161 pts to 'faq_b9200af6' (from Direct Track / Direct Rank 2)
+      + 0.0159 pts to 'faq_ec7083f6' (from Direct Track / Direct Rank 3)
+      + 0.0152 pts to 'faq_1e61de43' (from Direct Track / Direct Rank 6)
+      + 0.0149 pts to 'faq_planted05' (from Direct Track / Direct Rank 7)
+      + 0.0147 pts to 'faq_f87ebecc' (from Direct Track / Direct Rank 8)
+
+    [RAG TELEMETRY] --- DIRECT TRACK: Final RRF Standings & Drop-Off Selection ---
+      Formula: Score = average(group sum(1 / (60 + Rank)))
+      Rule: stop when a score is less than 50% of the prior selected score.
+      Limit: Max 4 parents.
+      --------------------------------------------------
+      [Rank 1] Parent: 'faq_b371ab12' | Score: 0.0164 | Ratio: N/A     -> ✅ AUTO-SELECTED
+      [Rank 2] Parent: 'faq_b9200af6' | Score: 0.0161 | Ratio:  98.4% -> ✅ SELECTED
+      [Rank 3] Parent: 'faq_ec7083f6' | Score: 0.0159 | Ratio:  98.4% -> ✅ SELECTED
+      [Rank 4] Parent: 'faq_1e61de43' | Score: 0.0152 | Ratio:  95.5% -> ✅ SELECTED
+      [Rank 5] Parent: 'faq_planted05' | Score: 0.0149 | Ratio:  98.5% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 6] Parent: 'faq_f87ebecc' | Score: 0.0147 | Ratio:  97.1% -> ❌ DROPPED (Max Limit 4 Reached)
+
+    📊 RRF Engine finalized 5 Parent(s) for LLM Hydration (4 semantic + 4 direct, 5 after dedup): ['faq_b9200af6', 'faq_ec7083f6', 'faq_b371ab12', 'faq_88851d34', 'faq_1e61de43']
+    🧱 [RAG HYDRATION] Hydrated 5 intact parent chunks from SQLite.
+ ⏱️  [RAG ENGINE] Total Execution Time: 424.40 ms
+════════════════════════════════════════════════════════════
+
+   🔎 [TASK RAG]: Retrieved 1 task result set(s) in parallel.
+🟢 [NODE 03c] Executing Task-Level Sufficiency & Evidence Selection
+   ✅ [TASK AUDIT]: 0 sufficient, 0 terminal partial, 1 pending retry.
+🟢 [NODE 02e] Executing Multi-Task Query Formulator
+   🪜 [RETRY STAGE]: Task 'task_1' → EXTRA_EFFORT (attempt 2)
+   🔧 [TERRITORY A]: Task 'task_1' | product ['Horizon_APP'] → ['Horizon_APP', 'Deposit_Account'] | intent ['Features And Limits', 'General Inquiries'] → ['Account Management', 'Authentication And Security', 'Features And Limits', 'General Inquiries', 'Payments And Transfers', 'Profile Updates', 'Rewards And Promotions', 'Application', 'Branch And ATM Locator', 'Card Logistics', 'Eligibility', 'Fees And Charges', 'Interest And Rates', 'Transaction Disputes']
+   🔎 [SEARCH TASKS]: 1 tasks | Matrix: [{'product': ['Horizon_APP', 'Deposit_Account'], 'intents': ['Account Management', 'Authentication And Security', 'Features And Limits', 'General Inquiries', 'Payments And Transfers', 'Profile Updates', 'Rewards And Promotions', 'Application', 'Branch And ATM Locator', 'Card Logistics', 'Eligibility', 'Fees And Charges', 'Interest And Rates', 'Transaction Disputes']}] | Intent clarifications: 0
+   🎯 [TASK ROUTER]: Live retrieval required; verified session evidence may join RRF when task scope overlaps.
+🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Direct-First Retrieval)
+
+════════════════════════════════════════════════════════════
+ 🔍 [RAG ENGINE v2.6] INITIALIZING SPLIT-TRACK RRF SEARCH
+ 📦 Valid Product/Intent Scope: [{'product': 'Horizon_APP', 'intents': ['Account Management', 'Authentication And Security', 'Features And Limits', 'General Inquiries', 'Payments And Transfers', 'Profile Updates', 'Rewards And Promotions']}, {'product': 'Deposit_Account', 'intents': ['Account Management', 'Authentication And Security', 'Features And Limits', 'General Inquiries', 'Payments And Transfers', 'Profile Updates', 'Rewards And Promotions', 'Application', 'Branch And ATM Locator', 'Card Logistics', 'Eligibility', 'Fees And Charges', 'Interest And Rates', 'Transaction Disputes']}]
+────────────────────────────────────────────────────────────
+ 📐 Angle groups: 1 | Semantic vector searches: 3
+ 🧭 Child-vector schema: generic (compatibility mode)
+    • base: procedural='Follow the notification settings menu in the mobile app to enable transaction alerts.', policy='Transaction alerts are subject to minimum amount thresholds and device notification permissions.', conceptual='SMS alerts notify customers of account activity and large transactions in real time.'
+
+    [RAG TELEMETRY] --- Raw ChromaDB Hits per Semantic Angle ---
+      > base / Procedural Hits:
+        Rank 1: Parent 'faq_planted08' | Cosine Sim: 0.6137
+        Rank 2: Parent 'faq_planted08' | Cosine Sim: 0.6019
+        Rank 3: Parent 'faq_0651cff8' | Cosine Sim: 0.4549
+        Rank 4: Parent 'faq_4a46785d' | Cosine Sim: 0.4549
+        Rank 5: Parent 'faq_0651cff8' | Cosine Sim: 0.4538
+        Rank 6: Parent 'faq_4a46785d' | Cosine Sim: 0.4364
+        Rank 7: Parent 'faq_6aa6b8f2' | Cosine Sim: 0.4202
+        Rank 8: Parent 'faq_6aa6b8f2' | Cosine Sim: 0.3858
+        Rank 9: Parent 'faq_4bc1414f' | Cosine Sim: 0.3394
+        Rank 10: Parent 'faq_4b2d99b1' | Cosine Sim: 0.3393
+        Rank 11: Parent 'faq_4b2d99b1' | Cosine Sim: 0.3393
+        Rank 12: Parent 'faq_ac9610d0' | Cosine Sim: 0.3316
+        Rank 13: Parent 'faq_ac9610d0' | Cosine Sim: 0.3316
+        Rank 14: Parent 'faq_b9200af6' | Cosine Sim: 0.3315
+        Rank 15: Parent 'faq_5d09f5aa' | Cosine Sim: 0.3281
+        Rank 16: Parent 'faq_17dc40c3' | Cosine Sim: 0.3193
+        Rank 17: Parent 'faq_b9200af6' | Cosine Sim: 0.3186
+        Rank 18: Parent 'faq_a3e5d877' | Cosine Sim: 0.3168
+      > base / Policy Hits:
+        Rank 1: Parent 'faq_planted08' | Cosine Sim: 0.5560
+        Rank 2: Parent 'faq_planted08' | Cosine Sim: 0.5226
+        Rank 3: Parent 'faq_0651cff8' | Cosine Sim: 0.4403
+        Rank 4: Parent 'faq_4a46785d' | Cosine Sim: 0.4403
+        Rank 5: Parent 'faq_6aa6b8f2' | Cosine Sim: 0.4241
+        Rank 6: Parent 'faq_6aa6b8f2' | Cosine Sim: 0.3996
+        Rank 7: Parent 'faq_4a46785d' | Cosine Sim: 0.3976
+        Rank 8: Parent 'faq_c5b1ca0c' | Cosine Sim: 0.3930
+        Rank 9: Parent 'faq_c5b1ca0c' | Cosine Sim: 0.3930
+        Rank 10: Parent 'faq_45d97765' | Cosine Sim: 0.3919
+        Rank 11: Parent 'faq_45d97765' | Cosine Sim: 0.3919
+        Rank 12: Parent 'faq_c5b1ca0c' | Cosine Sim: 0.3916
+        Rank 13: Parent 'faq_c5b1ca0c' | Cosine Sim: 0.3916
+        Rank 14: Parent 'faq_0651cff8' | Cosine Sim: 0.3895
+        Rank 15: Parent 'faq_730ac28e' | Cosine Sim: 0.3749
+        Rank 16: Parent 'faq_730ac28e' | Cosine Sim: 0.3749
+        Rank 17: Parent 'faq_5d09f5aa' | Cosine Sim: 0.3701
+        Rank 18: Parent 'faq_ed9b5ce2' | Cosine Sim: 0.3695
+      > base / Conceptual Hits:
+        Rank 1: Parent 'faq_planted08' | Cosine Sim: 0.8078
+        Rank 2: Parent 'faq_planted08' | Cosine Sim: 0.7177
+        Rank 3: Parent 'faq_0651cff8' | Cosine Sim: 0.5259
+        Rank 4: Parent 'faq_4a46785d' | Cosine Sim: 0.5259
+        Rank 5: Parent 'faq_0651cff8' | Cosine Sim: 0.5046
+        Rank 6: Parent 'faq_4a46785d' | Cosine Sim: 0.5006
+        Rank 7: Parent 'faq_4bc1414f' | Cosine Sim: 0.3794
+        Rank 8: Parent 'faq_b9200af6' | Cosine Sim: 0.3715
+        Rank 9: Parent 'faq_ed9b5ce2' | Cosine Sim: 0.3316
+        Rank 10: Parent 'faq_4bc1414f' | Cosine Sim: 0.3200
+        Rank 11: Parent 'faq_730ac28e' | Cosine Sim: 0.3129
+        Rank 12: Parent 'faq_730ac28e' | Cosine Sim: 0.3129
+        Rank 13: Parent 'faq_b9200af6' | Cosine Sim: 0.3064
+        Rank 14: Parent 'faq_7804b357' | Cosine Sim: 0.3048
+        Rank 15: Parent 'faq_7cd2c653' | Cosine Sim: 0.2900
+        Rank 16: Parent 'faq_730ac28e' | Cosine Sim: 0.2815
+        Rank 17: Parent 'faq_730ac28e' | Cosine Sim: 0.2815
+        Rank 18: Parent 'faq_4b2d99b1' | Cosine Sim: 0.2806
+
+    [RAG TELEMETRY] --- Group-Level RRF Point Accumulation ---
+      + 0.0164 pts to 'faq_planted08' (from base / Procedural Rank 1)
+      + 0.0159 pts to 'faq_0651cff8' (from base / Procedural Rank 3)
+      + 0.0156 pts to 'faq_4a46785d' (from base / Procedural Rank 4)
+      + 0.0149 pts to 'faq_6aa6b8f2' (from base / Procedural Rank 7)
+      + 0.0145 pts to 'faq_4bc1414f' (from base / Procedural Rank 9)
+      + 0.0143 pts to 'faq_4b2d99b1' (from base / Procedural Rank 10)
+      + 0.0139 pts to 'faq_ac9610d0' (from base / Procedural Rank 12)
+      + 0.0135 pts to 'faq_b9200af6' (from base / Procedural Rank 14)
+      + 0.0133 pts to 'faq_5d09f5aa' (from base / Procedural Rank 15)
+      + 0.0132 pts to 'faq_17dc40c3' (from base / Procedural Rank 16)
+      + 0.0128 pts to 'faq_a3e5d877' (from base / Procedural Rank 18)
+      + 0.0164 pts to 'faq_planted08' (from base / Policy Rank 1)
+      + 0.0159 pts to 'faq_0651cff8' (from base / Policy Rank 3)
+      + 0.0156 pts to 'faq_4a46785d' (from base / Policy Rank 4)
+      + 0.0154 pts to 'faq_6aa6b8f2' (from base / Policy Rank 5)
+      + 0.0147 pts to 'faq_c5b1ca0c' (from base / Policy Rank 8)
+      + 0.0143 pts to 'faq_45d97765' (from base / Policy Rank 10)
+      + 0.0133 pts to 'faq_730ac28e' (from base / Policy Rank 15)
+      + 0.0130 pts to 'faq_5d09f5aa' (from base / Policy Rank 17)
+      + 0.0128 pts to 'faq_ed9b5ce2' (from base / Policy Rank 18)
+      + 0.0164 pts to 'faq_planted08' (from base / Conceptual Rank 1)
+      + 0.0159 pts to 'faq_0651cff8' (from base / Conceptual Rank 3)
+      + 0.0156 pts to 'faq_4a46785d' (from base / Conceptual Rank 4)
+      + 0.0149 pts to 'faq_4bc1414f' (from base / Conceptual Rank 7)
+      + 0.0147 pts to 'faq_b9200af6' (from base / Conceptual Rank 8)
+      + 0.0145 pts to 'faq_ed9b5ce2' (from base / Conceptual Rank 9)
+      + 0.0141 pts to 'faq_730ac28e' (from base / Conceptual Rank 11)
+      + 0.0135 pts to 'faq_7804b357' (from base / Conceptual Rank 14)
+      + 0.0133 pts to 'faq_7cd2c653' (from base / Conceptual Rank 15)
+      + 0.0128 pts to 'faq_4b2d99b1' (from base / Conceptual Rank 18)
+
+    [RAG TELEMETRY] --- Equal-Normalised Task RRF (Semantic Track) ---
+      + 0.0492 task pts to 'faq_planted08' (base group score 0.0492 × 1.000)
+      + 0.0476 task pts to 'faq_0651cff8' (base group score 0.0476 × 1.000)
+      + 0.0469 task pts to 'faq_4a46785d' (base group score 0.0469 × 1.000)
+      + 0.0303 task pts to 'faq_6aa6b8f2' (base group score 0.0303 × 1.000)
+      + 0.0294 task pts to 'faq_4bc1414f' (base group score 0.0294 × 1.000)
+      + 0.0271 task pts to 'faq_4b2d99b1' (base group score 0.0271 × 1.000)
+      + 0.0139 task pts to 'faq_ac9610d0' (base group score 0.0139 × 1.000)
+      + 0.0282 task pts to 'faq_b9200af6' (base group score 0.0282 × 1.000)
+      + 0.0263 task pts to 'faq_5d09f5aa' (base group score 0.0263 × 1.000)
+      + 0.0132 task pts to 'faq_17dc40c3' (base group score 0.0132 × 1.000)
+      + 0.0128 task pts to 'faq_a3e5d877' (base group score 0.0128 × 1.000)
+      + 0.0147 task pts to 'faq_c5b1ca0c' (base group score 0.0147 × 1.000)
+      + 0.0143 task pts to 'faq_45d97765' (base group score 0.0143 × 1.000)
+      + 0.0274 task pts to 'faq_730ac28e' (base group score 0.0274 × 1.000)
+      + 0.0273 task pts to 'faq_ed9b5ce2' (base group score 0.0273 × 1.000)
+      + 0.0135 task pts to 'faq_7804b357' (base group score 0.0135 × 1.000)
+      + 0.0133 task pts to 'faq_7cd2c653' (base group score 0.0133 × 1.000)
+    [SEMANTIC ANGLE-GROUP RRF] --- Excluding Previously-Rejected Parents ---
+      🚫 'faq_b9200af6' already judged not relevant in an earlier attempt for this task; excluded from selection.
+
+    [RAG TELEMETRY] --- SEMANTIC ANGLE-GROUP RRF: Final RRF Standings & Drop-Off Selection ---
+      Formula: Score = average(group sum(1 / (60 + Rank)))
+      Rule: stop when a score is less than 50% of the prior selected score.
+      Limit: Max 4 parents.
+      --------------------------------------------------
+      [Rank 1] Parent: 'faq_planted08' | Score: 0.0492 | Ratio: N/A     -> ✅ AUTO-SELECTED
+      [Rank 2] Parent: 'faq_0651cff8' | Score: 0.0476 | Ratio:  96.8% -> ✅ SELECTED
+      [Rank 3] Parent: 'faq_4a46785d' | Score: 0.0469 | Ratio:  98.4% -> ✅ SELECTED
+      [Rank 4] Parent: 'faq_6aa6b8f2' | Score: 0.0303 | Ratio:  64.7% -> ✅ SELECTED
+      [Rank 5] Parent: 'faq_4bc1414f' | Score: 0.0294 | Ratio:  97.1% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 6] Parent: 'faq_730ac28e' | Score: 0.0274 | Ratio:  90.5% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 7] Parent: 'faq_ed9b5ce2' | Score: 0.0273 | Ratio:  90.1% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 8] Parent: 'faq_4b2d99b1' | Score: 0.0271 | Ratio:  89.4% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 9] Parent: 'faq_5d09f5aa' | Score: 0.0263 | Ratio:  86.8% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 10] Parent: 'faq_c5b1ca0c' | Score: 0.0147 | Ratio:  48.5% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 11] Parent: 'faq_45d97765' | Score: 0.0143 | Ratio:  47.1% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 12] Parent: 'faq_ac9610d0' | Score: 0.0139 | Ratio:  45.8% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 13] Parent: 'faq_7804b357' | Score: 0.0135 | Ratio:  44.6% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 14] Parent: 'faq_7cd2c653' | Score: 0.0133 | Ratio:  44.0% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 15] Parent: 'faq_17dc40c3' | Score: 0.0132 | Ratio:  43.4% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 16] Parent: 'faq_a3e5d877' | Score: 0.0128 | Ratio:  42.3% -> ❌ DROPPED (Max Limit 4 Reached)
+
+    [RAG TELEMETRY] --- Raw ChromaDB Hits: Direct Track ---
+      > Direct Hits:
+        Rank 1: Parent 'faq_planted08' | Cosine Sim: 0.8346
+        Rank 2: Parent 'faq_planted08' | Cosine Sim: 0.7160
+        Rank 3: Parent 'faq_0651cff8' | Cosine Sim: 0.4029
+        Rank 4: Parent 'faq_4a46785d' | Cosine Sim: 0.4029
+        Rank 5: Parent 'faq_0651cff8' | Cosine Sim: 0.3956
+        Rank 6: Parent 'faq_4a46785d' | Cosine Sim: 0.3645
+        Rank 7: Parent 'faq_4bc1414f' | Cosine Sim: 0.2893
+        Rank 8: Parent 'faq_6aa6b8f2' | Cosine Sim: 0.2642
+        Rank 9: Parent 'faq_6bdd90e1' | Cosine Sim: 0.2568
+        Rank 10: Parent 'faq_4bc1414f' | Cosine Sim: 0.2525
+        Rank 11: Parent 'faq_b371ab12' | Cosine Sim: 0.2504
+        Rank 12: Parent 'faq_c4eb321c' | Cosine Sim: 0.2348
+        Rank 13: Parent 'faq_c4eb321c' | Cosine Sim: 0.2348
+        Rank 14: Parent 'faq_6b27b5f1' | Cosine Sim: 0.2273
+        Rank 15: Parent 'faq_8fbdd04c' | Cosine Sim: 0.2273
+        Rank 16: Parent 'faq_8fbdd04c' | Cosine Sim: 0.2273
+        Rank 17: Parent 'faq_6bdd90e1' | Cosine Sim: 0.2080
+        Rank 18: Parent 'faq_6aa6b8f2' | Cosine Sim: 0.2075
+      + 0.0164 pts to 'faq_planted08' (from Direct Track / Direct Rank 1)
+      + 0.0159 pts to 'faq_0651cff8' (from Direct Track / Direct Rank 3)
+      + 0.0156 pts to 'faq_4a46785d' (from Direct Track / Direct Rank 4)
+      + 0.0149 pts to 'faq_4bc1414f' (from Direct Track / Direct Rank 7)
+      + 0.0147 pts to 'faq_6aa6b8f2' (from Direct Track / Direct Rank 8)
+      + 0.0145 pts to 'faq_6bdd90e1' (from Direct Track / Direct Rank 9)
+      + 0.0141 pts to 'faq_b371ab12' (from Direct Track / Direct Rank 11)
+      + 0.0139 pts to 'faq_c4eb321c' (from Direct Track / Direct Rank 12)
+      + 0.0135 pts to 'faq_6b27b5f1' (from Direct Track / Direct Rank 14)
+      + 0.0133 pts to 'faq_8fbdd04c' (from Direct Track / Direct Rank 15)
+    [DIRECT TRACK] --- Excluding Previously-Rejected Parents ---
+      🚫 'faq_b371ab12' already judged not relevant in an earlier attempt for this task; excluded from selection.
+
+    [RAG TELEMETRY] --- DIRECT TRACK: Final RRF Standings & Drop-Off Selection ---
+      Formula: Score = average(group sum(1 / (60 + Rank)))
+      Rule: stop when a score is less than 50% of the prior selected score.
+      Limit: Max 4 parents.
+      --------------------------------------------------
+      [Rank 1] Parent: 'faq_planted08' | Score: 0.0164 | Ratio: N/A     -> ✅ AUTO-SELECTED
+      [Rank 2] Parent: 'faq_0651cff8' | Score: 0.0159 | Ratio:  96.8% -> ✅ SELECTED
+      [Rank 3] Parent: 'faq_4a46785d' | Score: 0.0156 | Ratio:  98.4% -> ✅ SELECTED
+      [Rank 4] Parent: 'faq_4bc1414f' | Score: 0.0149 | Ratio:  95.5% -> ✅ SELECTED
+      [Rank 5] Parent: 'faq_6aa6b8f2' | Score: 0.0147 | Ratio:  98.5% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 6] Parent: 'faq_6bdd90e1' | Score: 0.0145 | Ratio:  97.1% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 7] Parent: 'faq_c4eb321c' | Score: 0.0139 | Ratio:  93.1% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 8] Parent: 'faq_6b27b5f1' | Score: 0.0135 | Ratio:  90.5% -> ❌ DROPPED (Max Limit 4 Reached)
+      [Rank 9] Parent: 'faq_8fbdd04c' | Score: 0.0133 | Ratio:  89.3% -> ❌ DROPPED (Max Limit 4 Reached)
+
+    📊 RRF Engine finalized 5 Parent(s) for LLM Hydration (4 semantic + 4 direct, 5 after dedup): ['faq_planted08', 'faq_0651cff8', 'faq_4a46785d', 'faq_6aa6b8f2', 'faq_4bc1414f']
+    🧱 [RAG HYDRATION] Hydrated 5 intact parent chunks from SQLite.
+ ⏱️  [RAG ENGINE] Total Execution Time: 430.78 ms
+════════════════════════════════════════════════════════════
+
+   🔎 [TASK RAG]: Retrieved 1 task result set(s) in parallel.
+🟢 [NODE 03c] Executing Task-Level Sufficiency & Evidence Selection
+   ✅ [TASK AUDIT]: 0 sufficient, 0 terminal partial, 0 pending retry.
+🟢 [NODE 04a] Executing Global Resolution Sufficiency Check
+   🧭 [GLOBAL RESOLUTION]: 1 open subquery(ies) -> needs_tools
+🟢 [NODE 03a] Executing Tool-Calling Planner
+   🧰 [TOOL PLAN]: round 2 added 0 attempt(s), 0 clarification(s)
+🟢 [NODE 04a] Executing Global Resolution Sufficiency Check
+   🧭 [GLOBAL RESOLUTION]: 1 open subquery(ies) (budget exhausted, planner found nothing new) -> presentation_ready
+🟢 [NODE 04b] Executing Response Generator
+🟢 [NODE 06] Executing Combined Outbound Compliance & Groundedness Audit
+🟢 [NODE 06] Joining Outbound Compliance & Groundedness Audits
+   ✅ [OUTBOUND AUDIT PASS]: Response is MAS-compliant and evidence-grounded.
+🟢 [NODE 07] Executing Precision Substitution
+🟢 [NODE 08] Executing Soft Escalation Analyzer
+💾 [MEMORY SERVICE] Archived 2 chat messages for user 'USR_999', session 'eval_2026-10-04_v51_planted_faq_v2_2_a1cc8065' (turn_complete).
+
+==================================================
+🚦 [ROUTER GATE] Initializing Graph Edge
+📦 [STATE CHECK] chat_history length: 0
+🗣️  [INPUT] user_input: 'Does the Horizon app support dark mode?'
+🔀 [ROUTE] History found -> Routing to n3 (Ingest Gate)
+==================================================
+
+🟢 [NODE 01] Executing Deterministic Ingest Gate
+💾 [MEMORY] User input stored as untrusted. History length: 1
+🟢 [NODE 02c] Executing Inbound Semantic Gate (Prompt Guard)
+   ✅ [INBOUND PASS]: User input is SAFE from injections. Attack Probability: 0.0003850498760584742
+🟢 [NODE 01b] Loading User Preferences
+   👤 [PROFILE]: Loaded preferences for USR_999
+🟢 [NODE 02d] Executing Request Triage & Decomposition🟢 [NODE 02f] Executing Inbound Compliance Screen
+
+🚨 [LLM Service Error]: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\nPlease retry in 18.15866142s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '18s'}]}}
+🚨 [LLM Service Error]: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\nPlease retry in 18.146295521s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash-lite'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '18s'}]}}
+   🧠 [TRIAGE STATUS]: DECOMPOSED
+   🔎 [TRIAGE DECOMPOSITION]: 1 tool-eligible | 0 non-financial | 0 clarification
+🟢 [NODE 03a] Executing Tool-Calling Planner
+   🧰 [TOOL PLAN]: round 1 added 1 attempt(s), 0 clarification(s)
+🟢 [NODE 03b] Executing Generic Tool Dispatcher
+🟢 [NODE 02e] Executing Multi-Task Query Formulator
+   🔎 [SEARCH TASKS]: 1 tasks | Matrix: [{'product': 'Horizon_APP', 'intents': ['Features And Limits']}] | Intent clarifications: 0
+   🎯 [TASK ROUTER]: Live retrieval required; verified session evidence may join RRF when task scope overlaps.
+🟢 [NODE 03b_1] Executing Task-Level RAG Worker (Direct-First Retrieval)
+
+════════════════════════════════════════════════════════════
+ 🔍 [RAG ENGINE v2.6] INITIALIZING SPLIT-TRACK RRF SEARCH
+ 📦 Valid Product/Intent Scope: [{'product': 'Horizon_APP', 'intents': ['Features And Limits']}]
+────────────────────────────────────────────────────────────
+ 📐 Angle groups: 1 | Semantic vector searches: 3
+ 🧭 Child-vector schema: generic (compatibility mode)
+    • base: procedural='enabling and configuring dark mode display settings in the application interface', policy='display mode requirements and application version compatibility constraints for dark theme availability', conceptual='dark mode is an optional low-light visual display setting supported within the user interface'
+
+    [RAG TELEMETRY] --- Raw ChromaDB Hits per Semantic Angle ---
+      > base / Procedural Hits:
+        Rank 1: Parent 'faq_planted09' | Cosine Sim: 0.6379
+        Rank 2: Parent 'faq_planted09' | Cosine Sim: 0.6034
+        Rank 3: Parent 'faq_23481871' | Cosine Sim: 0.0906
+        Rank 4: Parent 'faq_23481871' | Cosine Sim: 0.0748
+        Rank 5: Parent 'faq_0765b6e6' | Cosine Sim: 0.0574
+        Rank 6: Parent 'faq_0765b6e6' | Cosine Sim: 0.0474
+        Rank 7: Parent 'faq_0765b6e6' | Cosine Sim: 0.0252
+        Rank 8: Parent 'faq_0765b6e6' | Cosine Sim: 0.0020
+      > base / Policy Hits:
+        Rank 1: Parent 'faq_planted09' | Cosine Sim: 0.5241
+        Rank 2: Parent 'faq_planted09' | Cosine Sim: 0.5004
+        Rank 3: Parent 'faq_23481871' | Cosine Sim: 0.0645
+        Rank 4: Parent 'faq_0765b6e6' | Cosine Sim: 0.0574
+        Rank 5: Parent 'faq_0765b6e6' | Cosine Sim: 0.0568
+        Rank 6: Parent 'faq_23481871' | Cosine Sim: 0.0535
+        Rank 7: Parent 'faq_0765b6e6' | Cosine Sim: 0.0218
+        Rank 8: Parent 'faq_0765b6e6' | Cosine Sim: 0.0046
+      > base / Conceptual Hits:
+        Rank 1: Parent 'faq_planted09' | Cosine Sim: 0.6735
+        Rank 2: Parent 'faq_planted09' | Cosine Sim: 0.6144
+        Rank 3: Parent 'faq_23481871' | Cosine Sim: 0.1200
+        Rank 4: Parent 'faq_23481871' | Cosine Sim: 0.0920
+        Rank 5: Parent 'faq_0765b6e6' | Cosine Sim: 0.0191
+        Rank 6: Parent 'faq_0765b6e6' | Cosine Sim: 0.0184
+        Rank 7: Parent 'faq_0765b6e6' | Cosine Sim: 0.0184
+        Rank 8: Parent 'faq_0765b6e6' | Cosine Sim: 0.0134
+
+    [RAG TELEMETRY] --- Group-Level RRF Point Accumulation ---
+      + 0.0164 pts to 'faq_planted09' (from base / Procedural Rank 1)
+      + 0.0159 pts to 'faq_23481871' (from base / Procedural Rank 3)
+      + 0.0154 pts to 'faq_0765b6e6' (from base / Procedural Rank 5)
+      + 0.0164 pts to 'faq_planted09' (from base / Policy Rank 1)
+      + 0.0159 pts to 'faq_23481871' (from base / Policy Rank 3)
+      + 0.0156 pts to 'faq_0765b6e6' (from base / Policy Rank 4)
+      + 0.0164 pts to 'faq_planted09' (from base / Conceptual Rank 1)
+      + 0.0159 pts to 'faq_23481871' (from base / Conceptual Rank 3)
+      + 0.0154 pts to 'faq_0765b6e6' (from base / Conceptual Rank 5)
+
+    [RAG TELEMETRY] --- Equal-Normalised Task RRF (Semantic Track) ---
+      + 0.0492 task pts to 'faq_planted09' (base group score 0.0492 × 1.000)
+      + 0.0476 task pts to 'faq_23481871' (base group score 0.0476 × 1.000)
+      + 0.0464 task pts to 'faq_0765b6e6' (base group score 0.0464 × 1.000)
+
+    [RAG TELEMETRY] --- SEMANTIC ANGLE-GROUP RRF: Final RRF Standings & Drop-Off Selection ---
+      Formula: Score = average(group sum(1 / (60 + Rank)))
+      Rule: stop when a score is less than 50% of the prior selected score.
+      Limit: Max 4 parents.
+      --------------------------------------------------
+      [Rank 1] Parent: 'faq_planted09' | Score: 0.0492 | Ratio: N/A     -> ✅ AUTO-SELECTED
+      [Rank 2] Parent: 'faq_23481871' | Score: 0.0476 | Ratio:  96.8% -> ✅ SELECTED
+      [Rank 3] Parent: 'faq_0765b6e6' | Score: 0.0464 | Ratio:  97.4% -> ✅ SELECTED
+
+    [RAG TELEMETRY] --- Raw ChromaDB Hits: Direct Track ---
+      > Direct Hits:
+        Rank 1: Parent 'faq_planted09' | Cosine Sim: 0.8767
+        Rank 2: Parent 'faq_planted09' | Cosine Sim: 0.8100
+        Rank 3: Parent 'faq_0765b6e6' | Cosine Sim: 0.3221
+        Rank 4: Parent 'faq_0765b6e6' | Cosine Sim: 0.3210
+        Rank 5: Parent 'faq_0765b6e6' | Cosine Sim: 0.3194
+        Rank 6: Parent 'faq_23481871' | Cosine Sim: 0.3028
+        Rank 7: Parent 'faq_23481871' | Cosine Sim: 0.2870
+        Rank 8: Parent 'faq_0765b6e6' | Cosine Sim: 0.2770
+      + 0.0164 pts to 'faq_planted09' (from Direct Track / Direct Rank 1)
+      + 0.0159 pts to 'faq_0765b6e6' (from Direct Track / Direct Rank 3)
+      + 0.0152 pts to 'faq_23481871' (from Direct Track / Direct Rank 6)
+
+    [RAG TELEMETRY] --- DIRECT TRACK: Final RRF Standings & Drop-Off Selection ---
+      Formula: Score = average(group sum(1 / (60 + Rank)))
+      Rule: stop when a score is less than 50% of the prior selected score.
+      Limit: Max 4 parents.
+      --------------------------------------------------
+      [Rank 1] Parent: 'faq_planted09' | Score: 0.0164 | Ratio: N/A     -> ✅ AUTO-SELECTED
+      [Rank 2] Parent: 'faq_0765b6e6' | Score: 0.0159 | Ratio:  96.8% -> ✅ SELECTED
+      [Rank 3] Parent: 'faq_23481871' | Score: 0.0152 | Ratio:  95.5% -> ✅ SELECTED
+
+    📊 RRF Engine finalized 3 Parent(s) for LLM Hydration (3 semantic + 3 direct, 3 after dedup): ['faq_planted09', 'faq_23481871', 'faq_0765b6e6']
+    🧱 [RAG HYDRATION] Hydrated 3 intact parent chunks from SQLite.
+ ⏱️  [RAG ENGINE] Total Execution Time: 426.60 ms
+════════════════════════════════════════════════════════════
+
+   🔎 [TASK RAG]: Retrieved 1 task result set(s) in parallel.
+🟢 [NODE 03c] Executing Task-Level Sufficiency & Evidence Selection
+   ✅ [TASK AUDIT]: 1 sufficient, 0 terminal partial, 0 pending retry.
+🟢 [NODE 04a] Executing Global Resolution Sufficiency Check
+   🧭 [GLOBAL RESOLUTION]: 0 open subquery(ies) -> presentation_ready
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+🟢 [NODE 04b] Executing Response Generator
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+   💬 [FLEXIBLE RESPONSE GENERATED]: 1 element(s)
+🟢 [NODE 06] Executing Combined Outbound Compliance & Groundedness Audit
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+🟢 [NODE 06] Joining Outbound Compliance & Groundedness Audits
+   ✅ [OUTBOUND AUDIT PASS]: Response is MAS-compliant and evidence-grounded.
+🟢 [NODE 07] Executing Precision Substitution
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+🟢 [NODE 08] Executing Soft Escalation Analyzer
+💾 [MEMORY SERVICE] Archived 2 chat messages for user 'USR_999', session 'eval_2026-10-04_v51_planted_faq_v2_3_e518d962' (turn_complete).
+Completed run 20261003T164646Z_dc24cbc5
+Results: /Users/bensonwu/Projects/AgenticBanking/research/2026-10-04_v51_holdout/planted/v2/results/20261003T164646Z_dc24cbc5_results.jsonl
+Report: /Users/bensonwu/Projects/AgenticBanking/research/2026-10-04_v51_holdout/planted/v2/reports/20261003T164646Z_dc24cbc5_AUTOMATED_REPORT.md

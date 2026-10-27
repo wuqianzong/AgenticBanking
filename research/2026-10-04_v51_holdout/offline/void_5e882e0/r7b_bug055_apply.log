@@ -1,0 +1,6 @@
+Applied patch to 'backend/app/orchestration/state.py' cleanly.
+Applied patch to 'backend/app/orchestration/nodes.py' with conflicts.
+Applied patch to 'backend/app/orchestration/graph.py' cleanly.
+Applied patch to 'backend/app/core/llm_service.py' with conflicts.
+U backend/app/core/llm_service.py
+U backend/app/orchestration/nodes.py

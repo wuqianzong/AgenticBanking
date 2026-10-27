@@ -1,0 +1,14 @@
+PASS tool-only turn: the sub-prompt sees the shortcut label and kind
+PASS tool-only turn: the sentence cites the handle as a shortcut (card anchors to it)
+PASS tool-only turn: the model's sentence is used
+🚨 [EVIDENCE-ONLY RESPONSE EXCEPTION]: bad json
+   ℹ️ [ENTRY NOT EXPLICITLY CITED]: nav_1 (shortcut) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)
+   ℹ️ [ENTRY NOT EXPLICITLY CITED]: svc_2 (shortcut) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)
+PASS unusable model reply: fixed sentences without 'also'
+   ℹ️ [ENTRY NOT EXPLICITLY CITED]: nav_1 (shortcut) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)
+PASS shortcut omitted by the model: its fixed sentence is added
+   ℹ️ [ENTRY NOT EXPLICITLY CITED]: nav_1 (shortcut) not found in generated elements' source_task_ids -- no fallback inserted (bypassed)
+PASS shortcut blended into another element: no duplicate sentence
+FAIL routing: a shortcut obligation counts as evidence-only
+PASS routing: FAQ evidence and personal data still use the full generator
+7/8

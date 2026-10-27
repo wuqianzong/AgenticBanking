@@ -1,0 +1,25 @@
+{
+  "frozen_at": "2026-10-15T02:22:21+08:00",
+  "git_head": "dc77352cbc7df1e4fcb70783424cec9249d1b645",
+  "tracked_runtime_patch_sha256": "7f97189ccec6785226f876d607099a1f8858cd7d6b7ba008e3639aeef12fc615",
+  "runtime_tree_manifest_sha256": "83c323e021bd85e23fb92f848fd6f2158e42ce07709ba79f83c7331e018418c4",
+  "models": {
+    "primary": "gemini-3.5-flash-lite",
+    "fallback": "gemini-3.1-flash-lite",
+    "key_count": 10,
+    "prompt_guard": "meta-llama/llama-prompt-guard-2-86m"
+  },
+  "fixtures": {
+    "h1_cases.jsonl": "e02e5f974eaf2edb9421b194eeebcc0d9def7169b3ba48cfe6d5cdf5b5281b0f",
+    "h2b_journeys.jsonl": "9e52ff7b00f49183f54e70aa5fac08b4e9e848bc36578b30bd0b312a36ec7055",
+    "h3_safety.jsonl": "ab3f114aa2d4d8e7ffbc086735d2508231f582776c0feabfb79f46077b4f45ae",
+    "h4_controls.jsonl": "02c56e14c72ce0a60415a447f6dce16ca41238b19edb9ea9c3d50d4188185361",
+    "c4_cache_v11.jsonl": "07837adf7fbcc8e902b4ea5f32745959451833249c2d38c6a2d600b4d489bb7b"
+  },
+  "isolation": {
+    "main_answer_cache_started_empty": true,
+    "c4_answer_cache_started_empty": true,
+    "faq_child_chunks_per_root": 2120,
+    "evaluation_memory_started_empty": true
+  }
+}

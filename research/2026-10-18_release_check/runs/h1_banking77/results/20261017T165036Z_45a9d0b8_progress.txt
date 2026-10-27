@@ -1,0 +1,7 @@
+=== run started 2026-10-17T16:50:36.083+00:00 study=2026-10-18_release_h1_banking77 runner=api_validation provider=gemini cases=4 ===
+2026-10-17T16:50:36.083+00:00 API key pool active: 10 key(s); production rotation and cross-model fallback enabled
+2026-10-17T16:50:53.186+00:00 [1/4] case=h1_h1_contactless_not_working_1 status=OK
+2026-10-17T16:51:19.871+00:00 [2/4] case=h1_h1_pending_top_up_2 status=OK
+2026-10-17T16:51:48.248+00:00 [3/4] case=h1_h1_card_payment_not_recognised_4 status=OK
+2026-10-17T16:52:10.464+00:00 [4/4] case=h1_h1_wrong_amount_of_cash_received_1 status=OK
+=== run finished 2026-10-17T16:52:10.464+00:00 cases=4 ===

@@ -1,0 +1,68 @@
+=== run started 2026-10-15T00:30:29.803+00:00 study=2026-10-15_final_release_c4_cache runner=api_validation provider=gemini cases=60 ===
+2026-10-15T00:30:29.803+00:00 API key pool active: 10 key(s); production rotation and cross-model fallback enabled
+2026-10-15T00:30:50.433+00:00 [1/60] case=c4v11_h1_exchange_rate_2_run1 status=OK
+2026-10-15T00:31:14.698+00:00 [2/60] case=c4v11_h1_exchange_rate_2_run2 status=OK
+2026-10-15T00:31:38.927+00:00 [3/60] case=c4v11_h1_exchange_rate_2_run3 status=OK
+2026-10-15T00:32:04.072+00:00 [4/60] case=c4v11_h1_transfer_into_account_1_run1 status=OK
+2026-10-15T00:32:23.543+00:00 [5/60] case=c4v11_h1_transfer_into_account_1_run2 status=OK
+2026-10-15T00:32:51.453+00:00 [6/60] case=c4v11_h1_transfer_into_account_1_run3 status=OK
+2026-10-15T00:33:13.841+00:00 [7/60] case=c4v11_h1_supported_cards_and_currencies_2_run1 status=OK
+2026-10-15T00:33:39.420+00:00 [8/60] case=c4v11_h1_supported_cards_and_currencies_2_run2 status=OK
+2026-10-15T00:34:01.383+00:00 [9/60] case=c4v11_h1_supported_cards_and_currencies_2_run3 status=OK
+2026-10-15T00:34:20.603+00:00 [10/60] case=c4v11_h1_pending_transfer_2_run1 status=OK
+2026-10-15T00:34:47.209+00:00 [11/60] case=c4v11_h1_pending_transfer_2_run2 status=OK
+2026-10-15T00:35:15.993+00:00 [12/60] case=c4v11_h1_pending_transfer_2_run3 status=OK
+2026-10-15T00:35:38.795+00:00 [13/60] case=c4v11_h1_get_physical_card_1_run1 status=OK
+2026-10-15T00:36:17.975+00:00 [14/60] case=c4v11_h1_get_physical_card_1_run2 status=OK
+2026-10-15T00:36:39.131+00:00 [15/60] case=c4v11_h1_get_physical_card_1_run3 status=OK
+2026-10-15T00:37:02.631+00:00 [16/60] case=c4v11_h1_age_limit_2_run1 status=OK
+2026-10-15T00:37:27.187+00:00 [17/60] case=c4v11_h1_age_limit_2_run2 status=OK
+2026-10-15T00:38:04.605+00:00 [18/60] case=c4v11_h1_age_limit_2_run3 status=OK
+2026-10-15T00:38:57.668+00:00 [19/60] case=c4v11_h1_Refund_not_showing_up_2_run1 status=OK
+2026-10-15T00:39:25.359+00:00 production's own internal retry/rotation was exhausted; waiting 600s before trying the same call again: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+2026-10-15T00:49:51.590+00:00 [20/60] case=c4v11_h1_Refund_not_showing_up_2_run2 status=OK
+2026-10-15T00:50:30.373+00:00 production's own internal retry/rotation was exhausted; waiting 600s before trying the same call again: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+2026-10-15T01:00:34.917+00:00 [21/60] case=c4v11_h1_Refund_not_showing_up_2_run3 status=OK
+2026-10-15T01:00:39.855+00:00 [22/60] case=c4v11_h1_unable_to_verify_identity_1_run1 status=OK
+2026-10-15T01:00:44.627+00:00 [23/60] case=c4v11_h1_unable_to_verify_identity_1_run2 status=OK
+2026-10-15T01:00:49.394+00:00 [24/60] case=c4v11_h1_unable_to_verify_identity_1_run3 status=OK
+2026-10-15T01:01:08.161+00:00 production's own internal retry/rotation was exhausted; waiting 600s before trying the same call again: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+2026-10-15T01:11:42.717+00:00 [25/60] case=c4v11_h1_pending_cash_withdrawal_1_run1 status=OK
+2026-10-15T01:12:37.522+00:00 [26/60] case=c4v11_h1_pending_cash_withdrawal_1_run2 status=OK
+2026-10-15T01:13:23.072+00:00 [27/60] case=c4v11_h1_pending_cash_withdrawal_1_run3 status=OK
+2026-10-15T01:13:50.899+00:00 [28/60] case=c4v11_h1_transaction_charged_twice_2_run1 status=OK
+2026-10-15T01:14:19.984+00:00 [29/60] case=c4v11_h1_transaction_charged_twice_2_run2 status=OK
+2026-10-15T01:14:46.256+00:00 [30/60] case=c4v11_h1_transaction_charged_twice_2_run3 status=OK
+2026-10-15T01:15:16.594+00:00 [31/60] case=c4v11_h1_wrong_exchange_rate_for_cash_withdrawal_2_run1 status=OK
+2026-10-15T01:15:50.254+00:00 [32/60] case=c4v11_h1_wrong_exchange_rate_for_cash_withdrawal_2_run2 status=OK
+2026-10-15T01:16:19.444+00:00 [33/60] case=c4v11_h1_wrong_exchange_rate_for_cash_withdrawal_2_run3 status=OK
+2026-10-15T01:16:46.217+00:00 [34/60] case=c4v11_h1_atm_support_1_run1 status=OK
+2026-10-15T01:17:06.273+00:00 [35/60] case=c4v11_h1_atm_support_1_run2 status=OK
+2026-10-15T01:17:29.531+00:00 [36/60] case=c4v11_h1_atm_support_1_run3 status=OK
+2026-10-15T01:18:05.920+00:00 [37/60] case=c4v11_h1_lost_or_stolen_card_2_run1 status=OK
+2026-10-15T01:18:28.660+00:00 production's own internal retry/rotation was exhausted; waiting 600s before trying the same call again: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+2026-10-15T01:28:36.921+00:00 [38/60] case=c4v11_h1_lost_or_stolen_card_2_run2 status=OK
+2026-10-15T01:28:57.951+00:00 [39/60] case=c4v11_h1_lost_or_stolen_card_2_run3 status=OK
+2026-10-15T01:29:13.692+00:00 [40/60] case=c4v11_h1_automatic_top_up_2_run1 status=OK
+2026-10-15T01:29:29.388+00:00 [41/60] case=c4v11_h1_automatic_top_up_2_run2 status=OK
+2026-10-15T01:29:46.932+00:00 [42/60] case=c4v11_h1_automatic_top_up_2_run3 status=OK
+2026-10-15T01:30:13.892+00:00 [43/60] case=c4v11_h1_balance_not_updated_after_cheque_or_cash_deposit_1_run1 status=OK
+2026-10-15T01:30:33.730+00:00 [44/60] case=c4v11_h1_balance_not_updated_after_cheque_or_cash_deposit_1_run2 status=OK
+2026-10-15T01:31:00.834+00:00 [45/60] case=c4v11_h1_balance_not_updated_after_cheque_or_cash_deposit_1_run3 status=OK
+2026-10-15T01:31:31.676+00:00 [46/60] case=c4v11_h1_card_not_working_1_run1 status=OK
+2026-10-15T01:32:02.644+00:00 [47/60] case=c4v11_h1_card_not_working_1_run2 status=OK
+2026-10-15T01:32:37.236+00:00 [48/60] case=c4v11_h1_card_not_working_1_run3 status=OK
+2026-10-15T01:33:15.879+00:00 [49/60] case=c4v11_h1_virtual_card_not_working_2_run1 status=OK
+2026-10-15T01:33:36.413+00:00 [50/60] case=c4v11_h1_virtual_card_not_working_2_run2 status=OK
+2026-10-15T01:34:07.516+00:00 production's own internal retry/rotation was exhausted; waiting 600s before trying the same call again: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+2026-10-15T01:44:10.864+00:00 [51/60] case=c4v11_h1_virtual_card_not_working_2_run3 status=OK
+2026-10-15T01:44:38.267+00:00 [52/60] case=c4v11_h1_pin_blocked_2_run1 status=OK
+2026-10-15T01:45:11.359+00:00 [53/60] case=c4v11_h1_pin_blocked_2_run2 status=OK
+2026-10-15T01:45:37.371+00:00 [54/60] case=c4v11_h1_pin_blocked_2_run3 status=OK
+2026-10-15T01:45:57.669+00:00 [55/60] case=c4v11_h1_transfer_fee_charged_2_run1 status=OK
+2026-10-15T01:46:16.981+00:00 [56/60] case=c4v11_h1_transfer_fee_charged_2_run2 status=OK
+2026-10-15T01:46:38.627+00:00 [57/60] case=c4v11_h1_transfer_fee_charged_2_run3 status=OK
+2026-10-15T01:47:02.479+00:00 [58/60] case=c4v11_h1_order_physical_card_2_run1 status=OK
+2026-10-15T01:47:31.936+00:00 [59/60] case=c4v11_h1_order_physical_card_2_run2 status=OK
+2026-10-15T01:47:55.657+00:00 [60/60] case=c4v11_h1_order_physical_card_2_run3 status=OK
+=== run finished 2026-10-15T01:47:55.657+00:00 cases=60 ===

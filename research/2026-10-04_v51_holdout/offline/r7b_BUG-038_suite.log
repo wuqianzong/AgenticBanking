@@ -1,0 +1,38 @@
+FAIL BUG-038 shape: flag on task_1 finds the block via its non-obligation citation
+FAIL flag on a shortcut handle finds the block
+PASS normal case unchanged: only the flagged block pending
+FAIL flag matching no block -> response-wide, nothing approved
+FAIL no blocks at all (BUG-009) -> nothing approved, flagged id pending
+PASS empty task_id -> response-wide (unchanged)
+PASS deterministic finding keyed by blockId finds its block
+PASS no violations -> all approved
+PASS non-obligation citation flagged on the block, naming the ids
+PASS not flagged once the block is revised
+PASS not flagged when check_citations is off (other audit scopes)
+PASS block citing no obligation flagged (the `clarification` field block)
+PASS net-inserted block not checked
+PASS well-cited block not flagged
+PASS revised block marked, citations stay locked
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+   💬 [FLEXIBLE RESPONSE GENERATED]: 2 element(s)
+PASS generator keeps the non-obligation citation on the block
+PASS generator records every obligation it received
+🟢 [NODE 04c] Executing Response Reviser (partial retry)
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+   💬 [RESPONSE REVISED]: 1 block(s) sent for revision, 0 returned
+PASS reviser gets task_1 (cited by the pending block)
+PASS reviser does NOT get task_2 (only cited by an approved block)
+PASS reviser gets the deterministic finding for the block
+🟢 [NODE 04c] Executing Response Reviser (partial retry)
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+    🧱 [RAG HYDRATION] Hydrated 1 intact parent chunks from SQLite.
+   💬 [RESPONSE REVISED]: 2 block(s) sent for revision, 0 returned
+PASS response-wide round: reviser gets every recorded obligation
+
+17/21

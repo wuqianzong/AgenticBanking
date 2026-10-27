@@ -1,0 +1,4 @@
+=== run started 2026-10-16T11:16:16.991+00:00 study=2026-10-16_bug073_rerun runner=api_validation provider=gemini cases=3 ===
+2026-10-16T11:16:16.991+00:00 API key pool active: 10 key(s); production rotation and cross-model fallback enabled
+2026-10-16T11:16:19.252+00:00 production's own internal retry/rotation was exhausted; waiting 600s before trying the same call again: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+2026-10-16T11:26:21.242+00:00 production's own internal retry/rotation was exhausted; waiting 600s before trying the same call again: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}

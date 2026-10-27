@@ -1,0 +1,5 @@
+{"item_id": "item_065", "text": "Do you have any age limit?", "ambiguous": true, "was": false, "reason": "No product named; Horizon's age rules differ by product (savings 16+, credit card 21-55, supplementary card 18+, stocks and funds 18-74, instant loan 21-65)"}
+{"item_id": "item_181", "text": "How can I Use thereto-top option?", "ambiguous": true, "was": false, "reason": "Garbled wording; 'thereto-top' does not name a recognisable feature"}
+{"item_id": "item_045", "text": "Was there a way for me to get tracking for that?", "ambiguous": true, "was": false, "reason": "'That' refers to something not stated; as a single message the thing to track is unknown"}
+{"item_id": "item_261", "text": "Can I get another card?", "ambiguous": true, "was": false, "reason": "A replacement card and an additional (supplementary) card have different answers"}
+{"item_id": "item_074", "text": "What do I need to do to get a card?", "ambiguous": true, "was": false, "reason": "A debit card (comes with the savings account) and a credit card (application, income and age criteria) have different answers"}

@@ -1,0 +1,37 @@
+{
+ "h1_items": 308,
+ "coverage_agreement": "170/308 = 55.2%",
+ "coverage_kappa": 0.346,
+ "confusion_A_vs_B": {
+  "FULL|FULL": 103,
+  "FULL|NO_DATA": 1,
+  "FULL|PARTIAL": 25,
+  "NO_DATA|FULL": 15,
+  "NO_DATA|NO_DATA": 29,
+  "NO_DATA|PARTIAL": 75,
+  "PARTIAL|FULL": 21,
+  "PARTIAL|NO_DATA": 1,
+  "PARTIAL|PARTIAL": 38
+ },
+ "ambiguity_agreement": "248/308",
+ "ambiguity_kappa": 0.179,
+ "route_fallbacks_to_B": 70,
+ "calibration_accuracy_A": "20/20",
+ "calibration_misses_A": [],
+ "final_coverage_all": {
+  "FULL": 165,
+  "PARTIAL": 114,
+  "NO_DATA": 29
+ },
+ "final_coverage_end_to_end": {
+  "FULL": 85,
+  "PARTIAL": 55,
+  "NO_DATA": 14
+ },
+ "final_coverage_topup_pool": {
+  "FULL": 80,
+  "PARTIAL": 59,
+  "NO_DATA": 15
+ },
+ "final_ambiguous": 10
+}

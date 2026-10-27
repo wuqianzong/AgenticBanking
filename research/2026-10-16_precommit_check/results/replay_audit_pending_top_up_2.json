@@ -1,0 +1,72 @@
+[
+ {
+  "run": 1,
+  "variant": "schema",
+  "evidence_grounded": true,
+  "flagged_own_case_claim": false,
+  "reason": "All explicit claims in the answer are fully supported by task_1 (faq_4b2d99b1) and task_1_scope (faq_efca64c1). The adjacent scope entry is correctly introduced with related-information framing."
+ },
+ {
+  "run": 1,
+  "variant": "no_schema",
+  "evidence_grounded": true,
+  "flagged_own_case_claim": false,
+  "reason": "The answer correctly draws upon the in_scope evidence (faq_4b2d99b1) to explain the security hold for top-ups. It also correctly incorporates the adjacent_scope evidence (faq_efca64c1) with appropriat"
+ },
+ {
+  "run": 2,
+  "variant": "schema",
+  "evidence_grounded": true,
+  "flagged_own_case_claim": false,
+  "reason": "The answer correctly applies in-scope and adjacent-scope evidence, correctly framing the adjacent-scope payment failure reasons as related context, and the clarification input accurately uses permitte"
+ },
+ {
+  "run": 2,
+  "variant": "no_schema",
+  "evidence_grounded": true,
+  "flagged_own_case_claim": false,
+  "reason": "The response properly incorporates approved evidence from task_1 regarding the {{faq_4b2d99b1_001}} hour security hold and correctly frames the adjacent scope evidence from task_1_scope as related con"
+ },
+ {
+  "run": 3,
+  "variant": "schema",
+  "evidence_grounded": true,
+  "flagged_own_case_claim": false,
+  "reason": "All explicit factual claims and the clarification question are directly supported by task-level approved evidence and the scope-expansion honesty rule."
+ },
+ {
+  "run": 3,
+  "variant": "no_schema",
+  "evidence_grounded": true,
+  "flagged_own_case_claim": false,
+  "reason": "The answer correctly references the {{faq_4b2d99b1}} evidence regarding the temporary security hold for top-up transactions, and appropriately frames the adjacent scope evidence (faq_efca64c1) as rela"
+ },
+ {
+  "run": 4,
+  "variant": "schema",
+  "evidence_grounded": true,
+  "flagged_own_case_claim": false,
+  "reason": "The answer correctly uses faq_4b2d99b1 for the security hold and properly frames the adjacent scope entry faq_efca64c1 as related context regarding transfer failures. The clarification question correc"
+ },
+ {
+  "run": 4,
+  "variant": "no_schema",
+  "evidence_grounded": true,
+  "flagged_own_case_claim": false,
+  "reason": "The answer correctly draws upon the in-scope task evidence (faq_4b2d99b1) to explain the security hold for top-ups, and properly introduces the adjacent-scope evidence (faq_efca64c1) using explicit re"
+ },
+ {
+  "run": 5,
+  "variant": "schema",
+  "evidence_grounded": true,
+  "flagged_own_case_claim": false,
+  "reason": "All explicit factual claims and the clarification questions are fully supported by the permitted task-level and adjacent-scope evidence."
+ },
+ {
+  "run": 5,
+  "variant": "no_schema",
+  "evidence_grounded": true,
+  "flagged_own_case_claim": false,
+  "reason": "The response accurately utilizes both the in-scope task evidence regarding security holds (task_1) and correctly frames the adjacent-scope transfer failure reasons as related context per the Scope-Exp"
+ }
+]

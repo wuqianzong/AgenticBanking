@@ -99,7 +99,7 @@ Results on the 308 H1 questions (calibration items removed):
 
 - **Which items get a key:** every FULL question (165, for B2) and every PARTIAL question in the end-to-end sample (55, for B3a), 220 in total. NO_DATA questions get no key: the correct behaviour there is to say the information is not available and offer a route, scored by the route and disclosure rubrics.
 - **What a key contains:** 1 to 3 key items, each one fact a reply must contain, written by Labeller B from the FAQ answer text only, before any bot reply exists. A FULL key covers the whole answer to the customer's actual need; a PARTIAL key covers only the part the FAQ has. Items are the minimum facts that answer the need (for example, "Freeze the card in the Horizon App; then request a replacement marking the card lost or stolen"), not every detail in the entry. Distribution: 62 keys with 1 item, 124 with 2, 34 with 3.
-- **Pass rule for B2 / B3a:** a reply passes only if it contains every key item, in substance (same fact, any wording or language). Extra correct information does not fail a reply; incorrect information is scored separately under groundedness.
+- **Pass rule for B2 / B3a:** a reply passes only if it contains every key item, in substance (same fact, any wording or language). Extra correct information does not fail a reply; incorrect information is scored separately under groundedness. *Honest-limit amendment (27 Oct 2026):* B3a no longer uses the PARTIAL keys as a pass rule. A PARTIAL reply passes when it has no wrong (B1) or unsupported (C2) content, whether it gives the available part or an honest limit; B0a counts it as handled correctly on the same basis (METRICS_DESIGN_v5.1.md, E1).
 - **Where FAQ entries disagree** (for example, one entry says the card works only at Horizon and Standard Chartered ATMs while another lists overseas Visa ATMs), the key uses the facts common to the entries, so a reply is not failed for following either entry.
 - **Labeller A check:** Gemini 3.1 Flash-Lite receives the question, the adjudicated coverage, the full text (exact values filled) of every answering entry, and the key. It returns key items the entries do not support and essential facts the key leaves out. Under the fixed rule "an item either labeller puts forward stays in the key", Labeller A's missing facts are added to the key; Labeller A's unsupported flags are reviewed by Labeller B against the FAQ text, and every resulting change is listed below.
 
@@ -157,7 +157,7 @@ Frozen on 4 Oct 2026, 00:41 SGT (re-written with the derived H1 run fixture adde
 | B5b right channel | 220 (140 data-available end-to-end + 80 FULL top-up) | 90% | 206 (93.6% observed) | |
 | C4 cache parent recall | Determined by run-1 approved parents × 2 repeats | 100% | every expected parent opportunity | Deterministic conformance target; exact counts, no confidence-bound decision |
 | C5a linguistic groups | 12 | 80% | cannot be demonstrated | 12/12 gives 77.9%; estimate |
-| B0a, B3, B10 | 154, 55, 10 | none | — | Descriptive, with Wilson intervals |
+| B0a, B3, B10 | 154, 55, 10 | none | — | Descriptive, with Wilson intervals; rescored under the honest-limit rule on 27 Oct 2026 |
 
 For metrics whose denominator depends on the replies (B1: substantive replies; C2: replies with claims; C3 and others), the minimum is read from the frozen lookup table in `pass_counts.json` (n = 1–800, targets 70/80/90/95/98%) once n is known, and before those replies are scored.
 

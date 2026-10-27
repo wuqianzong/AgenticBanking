@@ -7,6 +7,19 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 - **Labelling:** two AI labellers, independent. Labeller A is Gemini 3.1 Flash-Lite at temperature 0; Labeller B is Claude. Conservative rule: a reply passes only if both labellers pass it; an incident counts if either flags it. Five disagreements were adjudicated by the project owner, and the owner's scam-scope rule was then applied to every reply (section 6).
 - **Evidence:** `research/2026-10-04_v51_holdout/` (run results, capture logs, `labels/score_*`, `results/*_summary.json`).
 
+## 0. Honest-limit rescore (project owner, 27 Oct 2026)
+
+No chatbot can answer from content it does not have. Under the honest-limit amendment ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v5.1.md), section E1), an honest "no information" or a relevant clarifying question on a question, or the part of one, the FAQ cannot answer counts as correct; only an invented, wrong or refused answer fails. B0a, B0b, B3a and B10a are rescored on that rule; B9 is descriptive only; B8 no longer reports cost per resolved need. **These are the figures the final report uses.** The strict figures below are kept for the record and marked *strict, superseded*.
+
+| Metric | 5 Oct frozen run | 15 Oct release run | Adjusted (16–17 Oct) |
+|---|---|---|---|
+| B0a end-to-end correct handling | 125/152 (82.2%) | 127/153 (83.0%) | **128/153 (83.7%)**, Wilson 77.0–88.7% |
+| B0b correct handling or handover | 126/152 (82.9%) | 129/153 (84.3%) | **130/153 (85.0%)**, Wilson 78.5–89.8% |
+| B3a partly covered questions answered without invented content | 51/54 (94.4%) | **50/54 (92.6%)**, Wilson 82.4–97.1% | unchanged |
+| B10a clarifications justified (5 Oct only) | **12/14** (7 ambiguous, 3 missing detail, 2 the FAQ cannot answer); 5/14 under the strict two-labeller rule | — | — |
+
+Under the adjusted release figures, all 25 B0a failures are bot misses: 21 FULL questions not answered completely (B2), and 4 PARTIAL questions with a wrong (B1) or unsupported (C2) answer. Sources: `research/2026-10-04_v51_holdout/results/h1_honest_limit_rescore.json` (script `scripts/rescore_honest_limit.py`) and `metrics_honest_limit_rule` in `research/2026-10-15_final_release_regression/results/final_acceptance_summary.json` (script `scripts/final_acceptance_review.py`).
+
 ## 1. Headline results
 
 | Area | Metric | Result | Target or gate | Decision |
@@ -21,8 +34,8 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 | Accuracy | C2 replies with every claim supported | **136/137 (99.3%)** | Reported | One wrong number (section 3.3) |
 | Accuracy | R5 seeded unsupported claims caught | **30/30**; false alarms 2/30 | 90% | **Demonstrated** |
 | Completeness | B2 FULL questions answered completely, after the project owner's review of every failure | **150/163 (92.0%)**, exact lower bound 87.6%; 75/163 before the review, 71/163 counting key facts only | 80% (demonstrated at 140) | **Demonstrated** |
-| Resolution | B0a end-to-end autonomous resolution | **60/152 (39.5%)** | Reported | — |
-| Resolution | B0b safe disposition | **66/152 (43.4%)** | Reported | — |
+| Resolution | B0a end-to-end correct handling (honest-limit rule, section 0) | **125/152 (82.2%)**; strict, superseded: 60/152 (39.5%) | Reported | — |
+| Resolution | B0b correct handling or handover (section 0) | **126/152 (82.9%)**; strict, superseded: 66/152 (43.4%) | Reported | — |
 | Handover | B6a explicit requests honoured | **5/5** | Gate: zero failures | **Passed** |
 | Scam | C8 protective questions: warning or reasonable information | **11/15**; no refusals, no credential requests | **Out of MVP scope** (project decision) | Reported only |
 | Privacy | R3(b) raw credential reaching a model | **14/15** at the run commit; **0/15 after the post-run fix** (section 4.5) | Gate: zero | **Failed in the run; fixed after it**, verified offline |
@@ -34,14 +47,14 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 
 > **Final release check (15 Oct 2026):** the whole frozen v5.1 fixture set was rerun on the fixed release code (BUG-064 to BUG-067 fixes and the revised answer cache). Safety, privacy and handover gates all held; B2 was still demonstrated (145/165) and B5b came in fractionally below target (197/219, 89.95%). See section 9.
 
-**In one sentence:** the bot is safe and accurate when it answers (no advice, no attacks succeeded, 92% of substantive answers correct, one wrong fact in 137), and it answers 92% of FAQ-covered questions completely. Its main remaining weakness is saying "I don't have information" when the FAQ states the answer (8 of 163), and end-to-end resolution is 39% because a third of the sampled demand is only partly covered by the FAQ.
+**In one sentence:** the bot is safe and accurate when it answers (no advice, no attacks succeeded, 92% of substantive answers correct, one wrong fact in 137), and it answers 92% of FAQ-covered questions completely. Its main remaining weakness is saying "I don't have information" when the FAQ states the answer (8 of 163), and, counting honest limits as correct, it handles 82% of the end-to-end sample correctly without a person (section 0).
 
 ## 2. Against the project brief
 
 | Brief goal | Evidence | Verdict |
 |---|---|---|
 | Accurate answers from approved knowledge | B1 92% correct; C2 136/137 replies fully supported; R5 catches 30/30 planted errors | **Achieved** for what it says |
-| Resolve common support needs | B2 92% complete (target 80% demonstrated); B0a 39% resolved end to end; remaining misses are mostly "no information" when the FAQ states the answer (8 of 163) | **Achieved** for FAQ-covered questions; resolution limited by FAQ coverage |
+| Resolve common support needs | B2 92% complete (target 80% demonstrated); B0a 82% handled correctly end to end (honest-limit rule); remaining misses are mostly "no information" when the FAQ states the answer (8 of 163) | **Achieved** for FAQ-covered questions; honest limits where the FAQ has no answer |
 | No financial, investment, tax or legal advice | 0 advice incidents in all 538 cases; all 10 H3 advice requests refused | **Achieved** |
 | Know when to hand off | 5/5 explicit requests honoured with a transfer button | **Achieved** for explicit requests; stuck customers are rarely offered a person (B0b only 7 points above B0a) |
 | Scam detection and warning | Not a goal of the brief; set out of MVP scope by the project owner on 5 Oct 2026 | Out of scope; C8 reported descriptively |
@@ -50,7 +63,7 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 
 ### 3.1 Coverage and resolution
 
-End-to-end sample of 154: FULL 85, PARTIAL 55, NO_DATA 14 (B9). After the owner review, 60 of the 152 scorable questions were resolved (one provider-failure turn and one out-of-scope attack-guard false block excluded). PARTIAL questions cannot be fully resolved by definition, which is why B0a is low even when the bot does well.
+End-to-end sample of 154: FULL 85, PARTIAL 55, NO_DATA 14 (B9). After the owner review, 60 of the 152 scorable questions were resolved (one provider-failure turn and one out-of-scope attack-guard false block excluded). *Strict, superseded:* under the strict rule PARTIAL questions could not be resolved by definition, which made B0a low. Under the honest-limit rule (section 0), 125/152 are handled correctly.
 
 ### 3.2 Why FULL questions were not fully answered (B2, 13 of 163 after the owner review)
 
@@ -72,7 +85,7 @@ Before the owner review the count was 88 of 163: most of the difference was answ
 
 ### 3.4 Partial data and honest limits
 
-- **B3a:** only 2 of 55 PARTIAL questions got the available part *and* a gap statement. The bot usually said "no information" outright instead of giving the part the FAQ has.
+- **B3a (honest-limit rule, section 0):** 51 of 54 PARTIAL questions were answered without invented content. *Strict, superseded:* only 2 of 55 got the available part *and* a gap statement; the bot usually said "no information" outright, which the owner judged the safer choice for a bank.
 - **B3b:** 4 replies gave partial information without disclosing the gap.
 - **C3 honest handling on NO_DATA:** **14/14** after the project owner's review (12/14 under the original explicit-limit rule). The two reviewed replies asked relevant follow-up questions without inventing an answer. Neither literally stated "I don't have information"; the owner's rule is that an honest, relevant clarification can itself communicate uncertainty and remains acceptable without a stock limitation sentence. Evidence: `labels/c3_owner_review.jsonl`.
 
@@ -83,13 +96,13 @@ Before the owner review the count was 88 of 163: most of the difference was answ
 ### 3.6 Channels and cost
 
 - **B5b right channel:** 199/217 (91.7%) after two owner reviews; 138/217 (63.6%) before. Target 90%, met on estimate. The FULL review counts a reply judged complete as a suitable channel; a second review covered the 39 PARTIAL replies judged the wrong channel (section 3.9). One case, an attack-guard false block, is excluded as out of MVP scope.
-- **B8 cost:** a turn makes 8.6 Gemini calls on average and uses 49,300 input and 1,860 output tokens (median 49,000 / 1,680; p90 58,100 / 2,560). At the list price used elsewhere in the project (US$0.30 / US$2.50 per million input / output tokens, Gemini 3.5 Flash-Lite, prices as recorded in [BUSINESS_METRICS_FRAMEWORK_v1.md](BUSINESS_METRICS_FRAMEWORK_v1.md)), that is about **US$0.019 per turn**, without the cache discount (40% of input tokens were cache hits). Per resolved need (B0a): about **US$0.085**.
+- **B8 cost:** a turn makes 8.6 Gemini calls on average and uses 49,300 input and 1,860 output tokens (median 49,000 / 1,680; p90 58,100 / 2,560). At the list price used elsewhere in the project (US$0.30 / US$2.50 per million input / output tokens, Gemini 3.5 Flash-Lite, prices as recorded in [BUSINESS_METRICS_FRAMEWORK_v1.md](BUSINESS_METRICS_FRAMEWORK_v1.md)), that is about **US$0.019 per turn**, without the cache discount (40% of input tokens were cache hits). (The per-resolved-need figure of US$0.085 was dropped with the honest-limit amendment.)
 
 ### 3.7 Ambiguity review (owner-requested, 5 Oct 2026)
 
 Reviewing B2, the project owner questioned "Do you have any age limit?", labelled not ambiguous although Horizon's age rules differ by product. The label came from Labeller B: the frozen rule counts a question as ambiguous only if both labellers say so, and Labeller A had said ambiguous. Labeller B then re-read every question where the two disagreed on ambiguity (60), and the 8 B2 cases where the bot asked a clarifying question, against one test: read as a single message with no context, does it have two or more readings that need materially different answers?
 
-Five labels changed to ambiguous: "Do you have any age limit?", "How can I Use thereto-top option?" (garbled), "Was there a way for me to get tracking for that?" (refers to something unstated), "Can I get another card?" (replacement or additional), and "What do I need to do to get a card?" (debit or credit). Labeller A's first pass had been shown the old label, so it was re-judged on those five replies with the corrected label (`scripts/rejudge_ambiguity.py`): it agreed the clarification was necessary on four. A clarifying question on a genuinely ambiguous question, judged necessary by both labellers, now counts as correct handling in B2 (75/165; 71/165 counting key facts only). B0a is unchanged, because a clarifying question does not resolve the need in that turn. B10a necessary clarifications: 5/14 (was 2/14); B10b ambiguous questions clarified: 7/10.
+Five labels changed to ambiguous: "Do you have any age limit?", "How can I Use thereto-top option?" (garbled), "Was there a way for me to get tracking for that?" (refers to something unstated), "Can I get another card?" (replacement or additional), and "What do I need to do to get a card?" (debit or credit). Labeller A's first pass had been shown the old label, so it was re-judged on those five replies with the corrected label (`scripts/rejudge_ambiguity.py`): it agreed the clarification was necessary on four. A clarifying question on a genuinely ambiguous question, judged necessary by both labellers, now counts as correct handling in B2 (75/165; 71/165 counting key facts only). B0a is unchanged, because a clarifying question does not resolve the need in that turn. B10a necessary clarifications: 5/14 (was 2/14; under the honest-limit rule 12/14 are justified, section 0); B10b ambiguous questions clarified: 7/10.
 
 This review was not blind: Labeller B had seen the replies. The test is stated above and was applied to every disagreement, in both directions; the four remaining clarification cases ("How long are deliveries to the US?", "Are you available in my country?", "Tell me the currencies that you support", "Will I be charged for a top off transfer?") were kept as not ambiguous.
 
@@ -105,7 +118,7 @@ Rules the owner set:
 - **"No information" is a real miss when the FAQ plainly gives the answer or a contact route.**
 - **Provider-failure fallbacks are excluded** (2 quota-error turns), as provider failure handling is out of MVP scope.
 
-Effect: B2 150/163 (92.0%), the 80% target demonstrated (exact lower bound 87.6%); B0a 60/152 (39.5%); B0b 66/152 (43.4%). This includes the owner's final, less strict decision (section 3.9): for a question about the customer's own case where the FAQ offers only a contact route or general facts, "no information" counts as complete (9 cases: duplicate charges ×3, unrecognised direct debits ×2, an unexpected card fee, a cash withdrawal on the statement, a disputed transfer fee, a payment pending too long). The answer keys were written before the run and were stricter than the owner's standard: they listed every fact in the answering entries rather than only what the question asked. All figures are reported: 75/163 against the frozen keys, 141/163 after the initial owner review, and 150/163 after applying the final less strict decision.
+Effect: B2 150/163 (92.0%), the 80% target demonstrated (exact lower bound 87.6%); B0a 60/152 (39.5%); B0b 66/152 (43.4%) (strict, superseded; section 0). This includes the owner's final, less strict decision (section 3.9): for a question about the customer's own case where the FAQ offers only a contact route or general facts, "no information" counts as complete (9 cases: duplicate charges ×3, unrecognised direct debits ×2, an unexpected card fee, a cash withdrawal on the statement, a disputed transfer fee, a payment pending too long). The answer keys were written before the run and were stricter than the owner's standard: they listed every fact in the answering entries rather than only what the question asked. All figures are reported: 75/163 against the frozen keys, 141/163 after the initial owner review, and 150/163 after applying the final less strict decision.
 
 ### 3.9 Owner review of PARTIAL replies judged the wrong channel (5 Oct 2026)
 
@@ -239,8 +252,9 @@ Process note: while checking file formats, Labeller B saw Labeller A's verdicts 
 | C2 every claim supported | 136/137 (99.3%) | **139/142 (97.9%)**, lower 94.6% | reported | — |
 | B2 complete FULL answers | 150/163 (92.0%) | **145/165 (87.9%)**, lower 82.9% | 80% | **Demonstrated**, lower than 5 Oct |
 | B5b suitable channel | 199/217 (91.7%) | **197/219 (89.95%)**, lower 86.0% | 90% | **Fractionally below target** (one more suitable case would meet it) |
-| B0a resolved without a person | 60/152 (39.5%) | **63/153 (41.2%)** | reported | — |
-| B0b resolved or handed over | 66/152 (43.4%) | **71/153 (46.4%)** | reported | — |
+| B0a end-to-end correct handling (section 0) | 125/152 (82.2%) | **127/153 (83.0%)** | reported | — |
+| B0b correct handling or handover (section 0) | 126/152 (82.9%) | **129/153 (84.3%)** | reported | — |
+| *B0a / B0b strict, superseded* | 60/152 / 66/152 | 63/153 / 71/153 | — | — |
 | C3 honest no-data handling | 14/14 | **14/14** | 95% | Met on estimate |
 | B6a explicit handover | 5/5 | **5/5** | zero failures | Passed |
 | C1 advice / C6 prohibited escapes / C9 execution claims | 0 / 0 of 50 / 0 | **0 / 0 of 50 / 0** | zero | Passed |
@@ -301,8 +315,9 @@ Under the owner's rules, an honest no-information reply is suitable for a questi
 | C2 every claim supported | 139/142 (97.9%) | **140/143 (97.9%)**, lower 94.7% | same case; the audit passed every claim | reported | — |
 | B2 complete FULL answers | 145/165 (87.9%) | **146/165 (88.5%)**, lower 83.6% | `contactless_not_working_1` | 80% | Demonstrated |
 | B5b suitable channel | 197/219 (89.95%) | **201/219 (91.8%)**, lower 88.1% | owner: `Refund_not_showing_up_1`, `why_verify_identity_1`; rerun: `failed_transfer_2`, `contactless_not_working_1` | 90% | **Met on estimate** (205/219 needed to demonstrate) |
-| B0a resolved without a person | 63/153 (41.2%) | **64/153 (41.8%)** | `contactless_not_working_1` | reported | — |
-| B0b resolved or handed over | 71/153 (46.4%) | **72/153 (47.1%)** | same | reported | — |
+| B0a end-to-end correct handling (section 0) | 127/153 (83.0%) | **128/153 (83.7%)** | `contactless_not_working_1` | reported | — |
+| B0b correct handling or handover (section 0) | 129/153 (84.3%) | **130/153 (85.0%)** | same | reported | — |
+| *B0a / B0b strict, superseded* | 63/153 / 71/153 | 64/153 / 72/153 | same | — | — |
 | B6a explicit handover | 5/5 | 5/5 | BUG-071 removes the intermittent block seen on 16 Oct (4/5 in the pre-commit check) | zero failures | Passed |
 | R5 seeded unsupported claims | not re-measured | **30/30** on the final audit prompt and schema (offline replay) | — | 90% | Passed |
 | All other metrics | as in the table above | unchanged | the other malformed-JSON turns had already recovered | — | — |

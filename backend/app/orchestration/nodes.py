@@ -10666,10 +10666,100 @@ def node_06_outbound_audit_join(state: AgentState):
     }
 
 
+_NO_INFO_SENTENCE_PATTERN = re.compile(
+    r"(?i)\b(?:do not|don't|don’t)\s+have\s+(?:any\s+)?(?:specific\s+)?information\b"
+    r"|\bno\s+(?:specific\s+)?information\s+(?:is\s+)?available\b"
+)
+
+
+def _is_pure_no_info_block(block: dict) -> bool:
+    """A plain text block whose every sentence says there is no information."""
+    if block.get("type") != "text" or block.get("stepDetails") or block.get("items"):
+        return False
+    sentences = [s for s in re.split(r"(?<=[.!?])\s+", str(block.get("text", "")).strip()) if s]
+    return bool(sentences) and all(_NO_INFO_SENTENCE_PATTERN.search(s) for s in sentences)
+
+
+def _resolve_no_info_shortcut_conflicts(state: AgentState, response_blocks: list, draft: str) -> tuple[list, str]:
+    """Deterministic coherence net, run once on the final audited reply.
+
+    A need cannot end as "no information" while code attaches a button or
+    form that serves that same need: the audit judges the text before the
+    cards exist, so it cannot see the clash. A pure no-info block is
+    removed only when every subquery it cites has a deeplink or service
+    request of its own; a no-info block for any other subquery, or one
+    whose subquery is unknown, is a legitimate limit and is kept. If no
+    other block mentions the shortcut, the block becomes the shortcut's
+    fixed sentence instead, so the card never arrives unexplained.
+    """
+    shortcut_by_handle, shortcut_handles_by_subquery = {}, {}
+    for position, (shortcut, _key, subquery_id) in enumerate(_iter_shortcut_entries(state), start=1):
+        handle = f"{'nav' if shortcut['kind'] == 'navigation' else 'svc'}_{position}"
+        shortcut_by_handle[handle] = (shortcut, subquery_id)
+        if subquery_id:
+            shortcut_handles_by_subquery.setdefault(subquery_id, []).append(handle)
+    if not shortcut_handles_by_subquery:
+        return response_blocks, draft
+
+    subquery_by_task_id = {
+        task.get("task_id"): task.get("subquery_id")
+        for task in state.get("search_tasks", []) if isinstance(task, dict) and task.get("task_id")
+    }
+    subquery_ids = {
+        subquery.get("subquery_id")
+        for subquery in state.get("financial_subqueries", state.get("triaged_subqueries", []))
+        if isinstance(subquery, dict)
+    }
+
+    def _cited_subqueries(block: dict) -> set:
+        cited = set()
+        for task_id in block.get("sourceTaskIds") or []:
+            if task_id in subquery_ids:
+                cited.add(task_id)
+            elif task_id in subquery_by_task_id:
+                cited.add(subquery_by_task_id[task_id])
+            elif str(task_id).startswith("no_info_") and task_id[len("no_info_"):] in subquery_ids:
+                cited.add(task_id[len("no_info_"):])
+            else:
+                cited.add(None)
+        for handle in block.get("sourceShortcutHandles") or []:
+            cited.add(shortcut_by_handle.get(handle, (None, None))[1])
+        return cited
+
+    kept = list(response_blocks)
+    for block in response_blocks:
+        if not isinstance(block, dict) or not _is_pure_no_info_block(block):
+            continue
+        cited = _cited_subqueries(block)
+        if not cited or None in cited or any(sq not in shortcut_handles_by_subquery for sq in cited):
+            continue
+        handles = [h for sq in sorted(cited) for h in shortcut_handles_by_subquery[sq]]
+        others = [b for b in kept if b is not block]
+        explained = all(any(h in (b.get("sourceShortcutHandles") or []) for b in others) for h in handles)
+        old_text = str(block.get("text", "")).strip()
+        if explained:
+            kept.remove(block)
+            new_text = ""
+        else:
+            new_text = " ".join(_shortcut_fallback_sentence(shortcut_by_handle[h][0]) for h in handles)
+            block["text"] = new_text
+            block["sourceShortcutHandles"] = list(dict.fromkeys([*(block.get("sourceShortcutHandles") or []), *handles]))
+        if old_text and old_text in draft:
+            draft = draft.replace(old_text, new_text)
+            draft = re.sub(r"\n{3,}", "\n\n", draft).strip()
+        print(f"   🧹 [NO-INFO CONFLICT]: block {block.get('blockId')} said no information for {sorted(cited)} while {handles} serve it -- {'removed' if explained else 'replaced with the shortcut sentence'}")
+        log_event("response.no_info_conflict.resolved", block_id=block.get("blockId"), subquery_ids=sorted(cited),
+                  shortcut_handles=handles, action="removed" if explained else "replaced")
+    return kept, draft
+
+
 def node_07_precision_substitution(state: AgentState):
     print("🟢 [NODE 07] Executing Precision Substitution")
     draft = state.get("final_draft", "")
     payload = state.get("ui_action_payload", {})
+    if payload.get("responseBlocks"):
+        resolved_blocks, draft = _resolve_no_info_shortcut_conflicts(state, payload["responseBlocks"], draft)
+        payload = {**payload, "responseBlocks": resolved_blocks}
     # The response has already passed the compliance / groundedness audit by
     # the time it reaches here. Work out, before any substitution, which
     # block each deterministic card should follow; only ids, never text.

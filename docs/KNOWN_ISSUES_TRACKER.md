@@ -101,6 +101,7 @@ Run-to-run difference alone is evidence to review, not a failure verdict.
 | BUG-073 | A valid search was discarded because a tag was spelled in the other style: the query step wrote intent `General_Inquiries` (underscore) for the matrix's `General Inquiries` (space); the exact-match scope check rejected the pair, no search ran, and the reply was "I do not have information" (`contactless_not_working_1`, 15 and 16 Oct) | Medium (silent; 8 of 1,610 logged search tasks, 0.5%) | Confirmed (replay of every logged search task) | Product and intent tags were compared with the matrix by exact string; models copy the underscore style of product names into intent names | **Fixed (2026-10-16): tags are matched spelling-insensitively (case, spaces, underscores, hyphens) and rewritten in the matrix's spelling, deterministically; no prompt changed. Regression-verified (test_bug073, 10/10)** |
 | BUG-074 | A message mixing a legitimate question with an advice request is refused whole, with a vague message: "what is the latest mortgage rate? do you recommend me to refinance?" got only "For compliance reasons, I'm unable to fulfil that request...", without saying which part was refused or why | Low–Medium (no advice given; the legitimate part goes unanswered and the customer is not told why; demo-visible) | Confirmed (live log 18 Oct; RESULTS 4.1: 4 of 20 mixed safety cases blocked whole) | By design since BUG-062 the screen judges the whole message ("the route must serve everything the customer asked for"), so one prohibited part blocks it all; the fixed refusal text did not say that only part may be the problem | **Mitigated (2026-10-18, owner's choice): the fixed refusal text now says all or part of the request cannot be helped with, gives advice as the example, and invites the customer to ask any other question on its own (English, Mandarin, Spanish). Whole-message blocking kept by design. Regression-verified (test_bug055 23/23)** |
 | BUG-075 | The step-up credential check was skipped: since the 2 Sep change that completes forms directly on `/submit`, a form marked `requires_step_up` (identity document resubmission) completed without its check, and the address change, which MAS TRM 2021 para 14.2.3 lists as a high-risk activity, was registered as low risk with no step-up | Medium–High (a promised control silently absent; no model involved; demo-visible) | Confirmed (code trace and a regression test that fails on the old code) | **Deterministic code** (commit 8c6f94e removed the step-up branch from `/submit`) | **Fixed (2026-10-28): `/submit` holds a step-up form pending until `/credential-check` passes; the address change is intermediate risk with step-up. Regression-verified (test_step_up_submission 11/11; 6/11 on the old code); live-checked in the app** |
+| BUG-076 | "No information" next to a button for the same need: asked "I want to manage or replace my card myself in the app.", the reply said "I do not have information available to answer that request." and then "You can use the \"Manage Card\" button below." | Medium (contradictory reply; no wrong fact; demo-visible on deeplink-only turns) | Confirmed (log trace of the 28 Oct turn) | **Deterministic code** (a final coherence net); the trigger is model judgement in the audit | **Fixed (2026-10-28): after the final audit, a pure no-info block is removed, or replaced by the shortcut sentence, only when every subquery it cites has its own deeplink or service request; a no-info for any other subquery is kept. Regression-verified (test_bug076_no_info_shortcut_conflict 9/9)** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -3660,3 +3661,38 @@ endpoint handlers) passes 11/11 and fails 5 of 11 checks on the old code; all 18
 offline suites pass (195 checks). Live check on 28 Oct: an address change in the app
 showed the Bank Centralized Credential Check card on submit, and "Simulate: Confirm
 Identity" completed it.
+
+## BUG-076 — "No information" next to a button for the same need
+
+**Severity:** Medium **Confidence:** Confirmed **Status: Fixed 2026-10-28**
+
+**Found in:** a live demo turn on 28 Oct 2026 ("I want to manage or replace my card
+myself in the app.").
+
+**What happened:** the tool planner chose only the Manage Card deeplink, which was
+right for the request. With no FAQ evidence, the turn used the evidence-only
+generator, which puts the whole reply in the audit's Clarification slot and leaves
+the Answer slot empty. The audit's rule that a matching shortcut may be the primary
+answer applies to the Answer slot, so it judged "You can easily handle that through
+the Horizon App by selecting the Manage Card button below." unsupported and told the
+reviser to say there is no information. The omission net then added the shortcut's
+fixed sentence back, and code attached the button. The customer saw "no
+information" and a button that serves the request.
+
+**Cause:** the audit judges the text before the buttons exist, so it cannot see a
+conflict between its own rewrite instruction and the cards code will attach.
+
+**Fix:** a deterministic coherence net, `_resolve_no_info_shortcut_conflicts`, runs
+once at the start of value substitution (n22), after the final audit. A plain text
+block whose every sentence says there is no information is treated as conflicting
+only when every subquery it cites (by task id, `no_info_<subquery>` id or shortcut
+handle) has its own deeplink or service request. It is then removed if another block
+already explains the button, or replaced by the shortcut's fixed sentence. A no-info
+block for any other subquery, one with an unknown subquery, a block that mixes
+no-info with real content, and clarification blocks are left unchanged. The slot
+routing in the evidence-only generator was not changed.
+
+**Verification:** new suite `test_bug076_no_info_shortcut_conflict.py` passes 9/9,
+including the traced turn and the legitimate no-info cases; all 18 earlier offline
+suites still pass. Not yet replayed live.
+

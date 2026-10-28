@@ -100,6 +100,7 @@ Run-to-run difference alone is evidence to review, not a failure verdict.
 | BUG-072 | A general FAQ policy stated as the customer's own status: asked why a top-up was not processed, the reply opened "Your top-up transaction is currently experiencing a temporary security hold"; the FAQ only says Horizon holds *certain* transactions for 24 hours, for a customer notified of a delay | Medium (untrue statement about the customer's own money; rare: 1 reply in ~9,000) | Confirmed (pre-commit check 16 Oct, `h1_pending_top_up_2`; 0 of 3 repeats) | The evidence check read the general FAQ as a finding about this customer and wrote a note telling the writer to admit the hold; the writer follows such notes; the fact-checker does not see the note and accepted the sentence as a reasonable conclusion (missed 10 of 10 replays, with and without schema) | **Accepted as a known limitation (owner, 16 Oct): a prompt fix would touch the writer, which shapes every reply; not worth the regression risk this late** |
 | BUG-073 | A valid search was discarded because a tag was spelled in the other style: the query step wrote intent `General_Inquiries` (underscore) for the matrix's `General Inquiries` (space); the exact-match scope check rejected the pair, no search ran, and the reply was "I do not have information" (`contactless_not_working_1`, 15 and 16 Oct) | Medium (silent; 8 of 1,610 logged search tasks, 0.5%) | Confirmed (replay of every logged search task) | Product and intent tags were compared with the matrix by exact string; models copy the underscore style of product names into intent names | **Fixed (2026-10-16): tags are matched spelling-insensitively (case, spaces, underscores, hyphens) and rewritten in the matrix's spelling, deterministically; no prompt changed. Regression-verified (test_bug073, 10/10)** |
 | BUG-074 | A message mixing a legitimate question with an advice request is refused whole, with a vague message: "what is the latest mortgage rate? do you recommend me to refinance?" got only "For compliance reasons, I'm unable to fulfil that request...", without saying which part was refused or why | Low–Medium (no advice given; the legitimate part goes unanswered and the customer is not told why; demo-visible) | Confirmed (live log 18 Oct; RESULTS 4.1: 4 of 20 mixed safety cases blocked whole) | By design since BUG-062 the screen judges the whole message ("the route must serve everything the customer asked for"), so one prohibited part blocks it all; the fixed refusal text did not say that only part may be the problem | **Mitigated (2026-10-18, owner's choice): the fixed refusal text now says all or part of the request cannot be helped with, gives advice as the example, and invites the customer to ask any other question on its own (English, Mandarin, Spanish). Whole-message blocking kept by design. Regression-verified (test_bug055 23/23)** |
+| BUG-075 | The step-up credential check was skipped: since the 2 Sep change that completes forms directly on `/submit`, a form marked `requires_step_up` (identity document resubmission) completed without its check, and the address change, which MAS TRM 2021 para 14.2.3 lists as a high-risk activity, was registered as low risk with no step-up | Medium–High (a promised control silently absent; no model involved; demo-visible) | Confirmed (code trace and a regression test that fails on the old code) | **Deterministic code** (commit 8c6f94e removed the step-up branch from `/submit`) | **Fixed (2026-10-28): `/submit` holds a step-up form pending until `/credential-check` passes; the address change is intermediate risk with step-up. Regression-verified (test_step_up_submission 11/11; 6/11 on the old code); live-checked in the app** |
 
 **All four deterministic-code bugs (001, 003, 007, 009) are fixed.**
 BUG-004 and BUG-010 are also fixed, both via the same hybrid approach (see
@@ -3624,3 +3625,38 @@ screen, the join and the prompts are unchanged.
 **Verification:** `test_bug055_inbound_compliance_screen.py` checks the message in
 all three languages through the refusal node (23/23); all 17 offline suites pass
 (184 checks).
+
+## BUG-075 — The step-up credential check was skipped on form submission
+
+**Severity:** Medium–High **Confidence:** Confirmed **Status: Fixed 2026-10-28**
+
+**Found in:** a code review of the final report's claims on 28 Oct 2026. Table 17
+said the intermediate-risk form "needs a step-up credential check"; the code did
+not enforce it.
+
+**What happened:** `/api/service-request/submit` called `submit_and_complete()` for
+every form. The identity document resubmission form is registered with
+`requires_step_up: True`, but it completed on submit like any other form. The
+`/credential-check` endpoint, the one-time grant and the frontend's inline challenge
+were all still in place, but the backend never asked for the check, and by then the
+form was already completed. Separately, `profile-address-update` was registered as
+low risk with no step-up, although MAS TRM Guidelines (2021) para 14.2.3 list a
+change of home address as a high-risk activity that needs transaction-signing.
+
+**Cause:** commit 8c6f94e (2 Sep, "complete forms through direct API") replaced the
+old submit path, which returned `credential_check_required` for a step-up form, with
+a direct completion and dropped that branch.
+
+**Fix:** `/submit` now records a step-up form's payload with `mark_submitted()`,
+keeps it pending and returns `credential_check_required`; `/credential-check`
+completes it with the held payload only after a pass, and refuses a form that needs
+no step-up. A failed check drops the held payload and the request stays pending
+until it expires. The address change is now `intermediate` with
+`requires_step_up: True`. The frontend already handled the status on both form
+paths and needed no change.
+
+**Verification:** new suite `test_step_up_submission.py` (temporary database, real
+endpoint handlers) passes 11/11 and fails 5 of 11 checks on the old code; all 18
+offline suites pass (195 checks). Live check on 28 Oct: an address change in the app
+showed the Bank Centralized Credential Check card on submit, and "Simulate: Confirm
+Identity" completed it.

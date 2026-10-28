@@ -14,8 +14,10 @@ from typing import Any
 
 SERVICE_REQUEST_REGISTRY: dict[str, dict[str, Any]] = {
     "profile-address-update": {
-        "risk_level": "low",
-        "requires_step_up": False,
+        # MAS TRM Guidelines (2021) para 14.2.3 list a change of home address
+        # as a high-risk activity, so it needs the step-up credential check.
+        "risk_level": "intermediate",
+        "requires_step_up": True,
         "allowed_products": ["Horizon_APP"],
         "allowed_intents": ["Profile Updates"],
         "action_label": "Change Address",

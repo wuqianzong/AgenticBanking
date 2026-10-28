@@ -303,6 +303,17 @@ async def submit_service_request(payload: ServiceRequestSubmitPayload):
     if record["status"] != "pending":
         return {"status": "error", "message": "This request has already been completed."}
 
+    if record["requires_step_up"]:
+        # A step-up form is held, still pending, until the credential check
+        # passes; /credential-check then completes it with the held payload.
+        await asyncio.to_thread(service_request_service.mark_submitted, payload.special_id, payload.submitted_data)
+        log_event(
+            "service_request.submit.credential_check_required",
+            special_id=payload.special_id,
+            service_request_id=record["service_request_id"],
+        )
+        return {"status": "credential_check_required", "special_id": payload.special_id}
+
     record = await asyncio.to_thread(service_request_service.submit_and_complete, payload.special_id, payload.submitted_data)
     contract = get_service_request_contract(record["service_request_id"])
     log_event(
@@ -318,7 +329,7 @@ async def credential_check_service_request(payload: ServiceRequestCredentialChec
     record = await asyncio.to_thread(service_request_service.get, payload.special_id)
     if record is None or record["user_id"] != payload.user_id:
         return {"status": "error", "message": "This request could not be found or has expired."}
-    if record["status"] != "pending" or not record.get("submitted_data"):
+    if record["status"] != "pending" or not record["requires_step_up"] or not record.get("submitted_data"):
         return {"status": "error", "message": "This request is not awaiting a credential check."}
 
     contract = get_service_request_contract(record["service_request_id"])

@@ -7,6 +7,34 @@ Results of the frozen v5.1 evaluation ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v
 - **Labelling:** two AI labellers, independent. Labeller A is Gemini 3.1 Flash-Lite at temperature 0; Labeller B is Claude. Conservative rule: a reply passes only if both labellers pass it; an incident counts if either flags it. Five disagreements were adjudicated by the project owner, and the owner's scam-scope rule was then applied to every reply (section 6).
 - **Evidence:** `research/2026-10-04_v51_holdout/` (run results, capture logs, `labels/score_*`, `results/*_summary.json`).
 
+## 00. Independent rescore of the release replies (29 Oct 2026) — the final reported figures
+
+**These are the release-run figures the final report uses; they supersede the release and adjusted columns of section 0 and the release figures elsewhere in this file.**
+
+Why: an external audit of the report found two weaknesses in the release-run scoring. (1) 45 release replies kept their 5 October verdicts because their adopted FAQ set matched, although 7 had changed numeric tokens and 9 changed UI outputs. (2) B0a's scorer used the hand list `B2_FAIL` (134/165 complete), while the reported B2 came from the semantic reconciliation (145/165). Rescoring the saved replies needs no new model run.
+
+How: an independent AI reviewer (GPT-6.1 Sol) scored all 234 saved release replies (the `new` reply in `research/2026-10-15_final_release_regression/results/paired_response_review.jsonl`) blind to the earlier verdicts, against the frozen answer keys, the reference FAQ, the adopted FAQ text in `backend/data/knowledge_base.db`, the corrected ambiguity labels and the owner's review rules, following `research/2026-10-15_final_release_regression/RESCORE_BRIEF.md`. No chatbot or model was run.
+
+- **Version 1** (`results/rescore_independent.jsonl`, notes `results/rescore_independent_notes.md`). The first brief omitted the owner's manual review rules (sections 3.7–3.9 and the 16 Oct re-review) and did not point to the corrected ambiguity labels; it also allowed only buttons and forms, not own-data tokens, as grounding. Result: B2 112/165, B1 131/141, C2 133/141, B5b 155/219, B0a 114/153, B0b 120/153. Kept as a record.
+- **Version 2** (`results/rescore_independent_v2.jsonl`, notes `results/rescore_independent_v2_notes.md`), brief version 2 adds those rules and labels and nothing else. The reviewer first excluded 6 rows as attack-guard blocks because `preflight = "fail"`; those turns ran the normal pipeline, so the 6 rows were corrected to `guard_false_block = false` and given B5b verdicts (only those two fields changed; recorded in the v2 notes).
+
+Derivation: `research/2026-10-15_final_release_regression/scripts/derive_metrics_from_rescore.py` → `results/rescore_v2_metrics.json`. Every figure below comes from that one per-case table.
+
+| Metric | Release run as first scored (adjusted) | **Independent rescore v2** | Target | Decision |
+|---|---|---|---|---|
+| B0a end-to-end correct handling | 128/153 (83.7%) | **129/153 (84.3%)**, Wilson 77.7–89.2% | reported | — |
+| B0b correct handling or person offered | 130/153 (85.0%) | **132/153 (86.3%)**, Wilson 79.9–90.8% | reported | — |
+| B1 correct and relevant | 133/143 (93.0%) | **132/141 (93.6%)**, exact lower 89.1% | 90% | Met on estimate (134 needed to demonstrate) |
+| B2 complete answers | 146/165 (88.5%) | **142/165 (86.1%)**, exact lower 80.8% | 80% | **Demonstrated** (141 needed) |
+| B3a partly covered handled correctly | 50/54 (92.6%) | **46/54 (85.2%)**, Wilson 73.4–92.3% | reported | — |
+| B5b suitable channel | 201/219 (91.8%) | **195/219 (89.0%)**, exact lower 84.9% | 90% | **Not met** (198 needed on the estimate) |
+| C2 fully grounded substantive replies | 140/143 (97.9%) | **132/141 (93.6%)**, exact lower 89.1% | 95% | **Not met** |
+| C3 honest handling, NO_DATA | 14/14 | **14/14** | 95% | Met on estimate |
+
+End-to-end outcome split (153): resolved 69 (FULL complete); partly answered 15 (substantive PARTIAL, nothing wrong or unsupported); safely limited 45 (31 PARTIAL, 14 NO_DATA honest limit or relevant clarification); offered a person 3; failed 21 (15 FULL incomplete, 6 PARTIAL wrong, off-target or unsupported).
+
+Agreement with the earlier hand list: of the 31 `B2_FAIL` cases, the rescore fails 17 and passes 14; it fails 6 FULL cases the list passed. The post-release fixes of section 0 (`contactless_not_working_1`, `failed_transfer_2`) and the 16 Oct B5b re-review are not counted: the rescore scores the release replies as saved.
+
 ## 0. Honest-limit rescore (project owner, 27 Oct 2026)
 
 No chatbot can answer from content it does not have. Under the honest-limit amendment ([METRICS_DESIGN_v5.1.md](METRICS_DESIGN_v5.1.md), section E1), an honest "no information" or a relevant clarifying question on a question, or the part of one, the FAQ cannot answer counts as correct; only an invented, wrong or refused answer fails. B0a, B0b, B3a and B10a are rescored on that rule; B9 is descriptive only; B8 no longer reports cost per resolved need. **These are the figures the final report uses.** The strict figures below are kept for the record and marked *strict, superseded*.

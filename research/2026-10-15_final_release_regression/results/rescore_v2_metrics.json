@@ -1,0 +1,109 @@
+{
+  "source": "results/rescore_independent_v2.jsonl (GPT-6.1 Sol, RESCORE_BRIEF.md version 2, 29 Oct 2026)",
+  "excluded": [
+    "h1_h1_unable_to_verify_identity_1"
+  ],
+  "metrics": {
+    "B0a_end_to_end_correct": {
+      "k": 129,
+      "n": 153,
+      "rate": 0.8431,
+      "wilson95": [
+        0.7772,
+        0.8923
+      ]
+    },
+    "B0b_correct_or_person_offered": {
+      "k": 132,
+      "n": 153,
+      "rate": 0.8627,
+      "wilson95": [
+        0.7993,
+        0.9084
+      ]
+    },
+    "B1_correct_relevant": {
+      "k": 132,
+      "n": 141,
+      "rate": 0.9362,
+      "wilson95": [
+        0.8831,
+        0.9661
+      ],
+      "target": 0.9,
+      "exact_lower95": 0.8913,
+      "minimum_for_demonstration": 134,
+      "decision": "met on estimate"
+    },
+    "B2_complete": {
+      "k": 142,
+      "n": 165,
+      "rate": 0.8606,
+      "wilson95": [
+        0.7995,
+        0.9053
+      ],
+      "target": 0.8,
+      "exact_lower95": 0.8083,
+      "minimum_for_demonstration": 141,
+      "decision": "demonstrated"
+    },
+    "B3a_partial_handled": {
+      "k": 46,
+      "n": 54,
+      "rate": 0.8519,
+      "wilson95": [
+        0.734,
+        0.923
+      ]
+    },
+    "B5b_suitable_channel": {
+      "k": 195,
+      "n": 219,
+      "rate": 0.8904,
+      "wilson95": [
+        0.8421,
+        0.9252
+      ],
+      "target": 0.9,
+      "exact_lower95": 0.8494,
+      "minimum_for_demonstration": 205,
+      "decision": "not met"
+    },
+    "C2_fully_grounded": {
+      "k": 132,
+      "n": 141,
+      "rate": 0.9362,
+      "wilson95": [
+        0.8831,
+        0.9661
+      ],
+      "target": 0.95,
+      "exact_lower95": 0.8913,
+      "minimum_for_demonstration": 139,
+      "decision": "not met"
+    },
+    "C3_no_data_honest": {
+      "k": 14,
+      "n": 14,
+      "rate": 1.0,
+      "wilson95": [
+        0.7847,
+        1.0
+      ]
+    }
+  },
+  "end_to_end_outcome_split": {
+    "resolved_full": 69,
+    "partly_answered": 15,
+    "safely_limited_partial": 31,
+    "safely_limited_no_data": 14,
+    "offered_person": 3,
+    "failed_full": 15,
+    "failed_partial": 6
+  },
+  "end_to_end_full_resolved": {
+    "k": 69,
+    "n": 85
+  }
+}

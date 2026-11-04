@@ -15,13 +15,9 @@ Everything needed to write the final report and presentation, in one place.
 | [RISK_MITIGATION_CAPABILITIES.md](RISK_MITIGATION_CAPABILITIES.md) | **All risk controls in one place**: layers, how each works, regulation mapping, test results, scope limits |
 | [ui/](ui/) | UI screenshots used as figures |
 
-## Project brief and assessment ([brief/](brief/))
+## Project brief and assessment
 
-| File | What it is |
-|---|---|
-| [AgenticAI Chatbot for Consumer Banking.pdf](brief/AgenticAI%20Chatbot%20for%20Consumer%20Banking.pdf) | Project brief: purpose, scope, capability requirements, MVP intent taxonomy |
-| [Capstone project assessment.pdf](brief/Capstone%20project%20assessment.pdf) | Assessment criteria |
-| [2026-Capstone Briefing-May2026(DFT) 12 May (1).pdf](brief/2026-Capstone%20Briefing-May2026(DFT)%2012%20May%20(1).pdf) | Capstone briefing slides |
+The NUS project brief, assessment criteria and briefing slides are course materials and are not published in this repository.
 
 ## Evaluation and metrics ([evaluation/](evaluation/))
 
@@ -70,6 +66,3 @@ Still in `docs/`, because code comments refer to them by path (they can be moved
 | [AGENTIC_CAPABILITY_ROADMAP_v1.0.md](../AGENTIC_CAPABILITY_ROADMAP_v1.0.md) | Capability roadmap |
 | [KNOWN_ISSUES_TRACKER.md](../KNOWN_ISSUES_TRACKER.md) | All tracked issues (BUG-001 to BUG-074) |
 
-## Monthly logs ([monthly_logs/](monthly_logs/))
-
-Individual monthly logs (June–September) and the template.

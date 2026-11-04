@@ -16,3 +16,6 @@ research/**/launcher.out
 research/**/run_stdout.log
 __pycache__/
 .DS_Store
+
+# Secrets
+.env

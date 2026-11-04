@@ -84,7 +84,7 @@ Every number links back to per-case evidence: see [`docs/report/evaluation/RESUL
 The orchestration is a **bounded 24-node LangGraph state machine** (`backend/app/orchestration/graph.py`): every path is explicit, every model call has a narrow job, and every step's verdict is written to a structured event log.
 
 ```mermaid
-flowchart LR
+flowchart TB
     A[Customer message] --> B{Deterministic<br/>ingest gate}
     B -- credentials / attack --> X[Refuse or hard escalate]
     B --> C[Prompt Guard<br/>semantic screen]

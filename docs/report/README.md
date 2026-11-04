@@ -7,7 +7,7 @@ Everything needed to write the final report and presentation, in one place.
 | File | What it is |
 |---|---|
 | [FINAL_REPORT_DRAFT.md](FINAL_REPORT_DRAFT.md) | Final report draft (source for the Word build) |
-| [FT5007_Final_Report_Wu_Qianzong.docx](FT5007_Final_Report_Wu_Qianzong.docx) / [.pdf](FT5007_Final_Report_Wu_Qianzong.pdf) | Rendered final report |
+| [FINAL_REPORT_DRAFT.md](FINAL_REPORT_DRAFT.md) | Final report text (the rendered .docx/.pdf is kept offline) |
 | [FINAL_REPORT_REVIEW.md](FINAL_REPORT_REVIEW.md) | Review of the report draft |
 | [LESSONS_LEARNT_DRAFT.md](LESSONS_LEARNT_DRAFT.md) | Lessons learnt |
 | [LITERATURE_REVIEW.md](LITERATURE_REVIEW.md) | **Every source studied** (papers, regulation, industry), by topic, with what it says and where the project used it |

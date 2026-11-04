@@ -1,0 +1,17 @@
+{
+ "source": "BANKING77 training split, https://raw.githubusercontent.com/PolyAI-LDN/task-specific-datasets/master/banking_data/train.csv",
+ "licence": "CC BY 4.0 (Casanueva et al., 2020)",
+ "train_csv_sha256": "b06e26ac675513959a63135f11b94ea7786ed02da65db93a5650d8838cbc664b",
+ "train_rows": 10003,
+ "dev_messages_inventoried": 4861,
+ "excluded_exact_duplicates": 9,
+ "excluded_near_duplicates": 1349,
+ "near_threshold": 0.95,
+ "embedding_model": "sentence-transformers/all-mpnet-base-v2",
+ "candidate_pool_size": 8645,
+ "candidate_pool_sha256": "bdc276bb274ab13aeacc13850f9f5b1a31d524a343b324278bfa1c84f6af8b0d",
+ "seed": 20261004,
+ "per_category": 4,
+ "categories": 77,
+ "selected": 308
+}

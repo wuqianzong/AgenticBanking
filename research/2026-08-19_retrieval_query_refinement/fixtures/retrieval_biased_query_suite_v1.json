@@ -1,0 +1,72 @@
+[
+  {
+    "id": "biased_instant_loan_eligibility",
+    "customer_query": "People keep mentioning income numbers when they talk about the Instant Loan. Before I spend time on it, would someone in my situation even be allowed to apply?",
+    "expected_parent_id": "faq_0ae0bb51",
+    "scope_pairs": [{"product": "Personal_Loan", "intents": ["Eligibility"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "check Instant Loan qualification before application", "policy": "Instant Loan age income residency and work pass eligibility rules", "conceptual": "Horizon Instant Loan applicant eligibility"}]
+  },
+  {
+    "id": "biased_deposit_interest_crediting",
+    "customer_query": "My account balance changed around month end and I cannot work out whether the interest part has actually gone in yet. When does that normally happen?",
+    "expected_parent_id": "faq_fc5a7921",
+    "scope_pairs": [{"product": "Deposit_Account", "intents": ["Interest And Rates"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "check deposit account interest credit date", "policy": "deposit account interest payout schedule and timing", "conceptual": "Horizon account interest crediting"}]
+  },
+  {
+    "id": "biased_debit_card_activation",
+    "customer_query": "The new card has arrived and I can see it sitting here, but I do not want it rejected the first time I try to pay. What needs to happen first?",
+    "expected_parent_id": "faq_74abafeb",
+    "scope_pairs": [{"product": "Debit_Card", "intents": ["Card Logistics"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "activate newly received Horizon debit card before use", "policy": "new debit card activation and verification requirements", "conceptual": "Horizon debit card activation"}]
+  },
+  {
+    "id": "biased_stock_autoinvest_setup",
+    "customer_query": "I want the investment to keep happening without me remembering every month. I am looking at stocks, not a one-off purchase—where do I turn that on?",
+    "expected_parent_id": "faq_2f201863",
+    "scope_pairs": [{"product": "Stocks", "intents": ["Wealth And Insurance"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "set up recurring automatic stock investment", "policy": "AutoInvest setup funding and schedule rules", "conceptual": "Horizon automated stock investment"}]
+  },
+  {
+    "id": "biased_debit_card_pin_update",
+    "customer_query": "The number I use at the cash machine is no longer one I want to keep. I am worried about doing it safely—can I replace it?",
+    "expected_parent_id": "faq_6dae126c",
+    "scope_pairs": [{"product": "Debit_Card", "intents": ["Card Logistics"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "change Horizon card ATM PIN", "policy": "card PIN update security requirements", "conceptual": "Horizon card personal identification number management"}]
+  },
+  {
+    "id": "biased_balance_transfer_fee",
+    "customer_query": "I am considering moving an amount across, but the headline offer is not enough for me. What extra charges could I end up paying?",
+    "expected_parent_id": "faq_f7412d3a",
+    "scope_pairs": [{"product": "Credit_Card", "intents": ["Fees And Charges"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "review credit card balance transfer charges", "policy": "balance transfer fees and additional cost rules", "conceptual": "Horizon credit card balance transfer pricing"}]
+  },
+  {
+    "id": "biased_horizon_app_obtain",
+    "customer_query": "I have not used the bank on my phone before and everyone says to start there. Which place am I supposed to get the banking app from?",
+    "expected_parent_id": "faq_ec3376a6",
+    "scope_pairs": [{"product": "Horizon_APP", "intents": ["General Inquiries"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "download and obtain Horizon App", "policy": "Horizon App availability and download requirements", "conceptual": "Horizon mobile banking application"}]
+  },
+  {
+    "id": "biased_insurance_policy_access",
+    "customer_query": "I remember buying cover, but I do not have the paperwork in front of me. Is there somewhere digital where I can check what my life policy says?",
+    "expected_parent_id": "faq_598df143",
+    "scope_pairs": [{"product": "Insurance", "intents": ["Wealth And Insurance"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "view life insurance policy details digitally", "policy": "digital access to life insurance policy information", "conceptual": "Horizon life insurance policy details"}]
+  },
+  {
+    "id": "biased_mutual_fund_costs",
+    "customer_query": "Before I press ahead with a fund investment, I need to understand the money that leaves my account beyond the amount I invest. What should I look for?",
+    "expected_parent_id": "faq_eb2caf90",
+    "scope_pairs": [{"product": "Mutual_Funds", "intents": ["Wealth And Insurance"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "review costs of mutual fund investment", "policy": "mutual fund fees charges and investment cost rules", "conceptual": "Horizon mutual fund investment pricing"}]
+  },
+  {
+    "id": "biased_bank_email_verification",
+    "customer_query": "A message in my inbox looks official and wants my attention, but the address made me uneasy. How do I decide if it really came from the bank?",
+    "expected_parent_id": "faq_ed92e41d",
+    "scope_pairs": [{"product": "ALL", "intents": ["Authentication And Security"]}],
+    "angle_groups": [{"group_id": "base", "procedural": "verify whether a Horizon Bank email is genuine", "policy": "bank email authenticity scam and fraud verification guidance", "conceptual": "Horizon Bank genuine email verification"}]
+  }
+]

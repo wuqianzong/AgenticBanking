@@ -1,0 +1,78 @@
+issue,title,sprint,status,priority,size,start_date,target_date,labels,url
+1,Define and lock core project boundaries,S0 Discovery,Done,P0,S,2026-06-14,2026-06-15,,https://github.com/wuqianzong/AgenticBanking/issues/1
+2,"Define and lock core project boundaries (Product Scope v3.2, Data Scope v3.1, Technical Scope v3.2).",S0 Discovery,Done,P0,M,2026-06-14,2026-06-15,documentation,https://github.com/wuqianzong/AgenticBanking/issues/2
+3,Technical feasibility validation of technical scope v3.2,S0 Discovery,Done,P0,L,2026-06-14,2026-06-15,,https://github.com/wuqianzong/AgenticBanking/issues/3
+4,"First interim report (June 30th, 2026)",S0 Discovery,Done,P0,M,2026-06-15,2026-06-30,documentation,https://github.com/wuqianzong/AgenticBanking/issues/4
+5,Monthly Log — June 2026,S0 Discovery,Done,P1,S,2026-06-15,2026-06-30,documentation,https://github.com/wuqianzong/AgenticBanking/issues/5
+6,Product backlog,S0 Discovery,Done,P0,M,2026-06-15,2026-10-17,,https://github.com/wuqianzong/AgenticBanking/issues/6
+7,"Project Management Infrastructure (Document repo, Code repo, PM tools)",S0 Discovery,Done,P1,S,2026-06-15,2026-06-15,documentation,https://github.com/wuqianzong/AgenticBanking/issues/7
+8,Draft June Monthly Log — preparation and submission,S0 Discovery,Done,P1,S,2026-06-15,2026-06-30,,https://github.com/wuqianzong/AgenticBanking/issues/8
+9,Validate Technical Feasibility of Hybrid Architecture (React.js/Vite Frontend on 16GB M1 Mac).,S0 Discovery,Done,P1,M,2026-06-14,2026-06-15,,https://github.com/wuqianzong/AgenticBanking/issues/9
+10,Data pipeline — Verify feasibility to retrieve FAQ from bank website,S0 Discovery,Done,P1,S,2026-06-14,2026-06-15,,https://github.com/wuqianzong/AgenticBanking/issues/10
+11,Data pipeline - Execute Geometric PDF Parsing to extract layout-preserved text for fee schedules.,S0 Discovery,Done,P2,S,2026-06-14,2026-06-15,,https://github.com/wuqianzong/AgenticBanking/issues/11
+12,RAG backend — Verify knowledge retrieval with local ChromaDB,S0 Discovery,Done,P1,S,2026-06-14,2026-06-15,,https://github.com/wuqianzong/AgenticBanking/issues/12
+13,RAG Backend – Validate Cosine Similarity Search and $O(1)$ Parent-Child context hydration.,S0 Discovery,Done,P1,M,2026-06-14,2026-06-15,,https://github.com/wuqianzong/AgenticBanking/issues/13
+14,Define Quantifiable Objectives & Success Metrics,S0 Discovery,Done,P0,M,2026-06-15,2026-07-03,,https://github.com/wuqianzong/AgenticBanking/issues/14
+55,Sprint Review & Retrospective — S0 Discovery,S0 Discovery,Done,P1,M,2026-06-14,2026-06-30,,https://github.com/wuqianzong/AgenticBanking/issues/55
+64,First interim presentation milestone,S0 Discovery,Done,P0,S,2026-07-01,2026-07-07,,https://github.com/wuqianzong/AgenticBanking/issues/64
+24,Environment readiness,S1 Conversational MVP,Done,P1,S,2026-07-03,2026-07-06,,https://github.com/wuqianzong/AgenticBanking/issues/24
+25,Demo migration,S1 Conversational MVP,Done,P1,M,2026-07-03,2026-07-06,,https://github.com/wuqianzong/AgenticBanking/issues/25
+26,Raw data extraction,S1 Conversational MVP,Done,P1,M,2026-07-03,2026-08-03,,https://github.com/wuqianzong/AgenticBanking/issues/26
+27,Overall end-to-end process and state management,S1 Conversational MVP,Done,P0,XL,2026-07-03,2026-07-31,,https://github.com/wuqianzong/AgenticBanking/issues/27
+28,Intent identification,S1 Conversational MVP,Done,P0,L,2026-07-06,2026-07-30,,https://github.com/wuqianzong/AgenticBanking/issues/28
+41,Monthly Log — July 2026,S1 Conversational MVP,Done,P1,S,2026-07-01,2026-07-31,documentation,https://github.com/wuqianzong/AgenticBanking/issues/41
+56,Sprint Review & Retrospective — S1 Conversational MVP,S1 Conversational MVP,Done,P1,M,2026-07-01,2026-07-31,,https://github.com/wuqianzong/AgenticBanking/issues/56
+16,Develop the Agentic Orchestration Logic (Routing intents via remote Generative Semantic Router).,S2 Agentic Core,Done,P0,XL,2026-07-06,2026-08-16,,https://github.com/wuqianzong/AgenticBanking/issues/16
+17,Implement Compliance Guardrails (Deterministic Regex Gate & Semantic 'LLM-as-a-Judge' Gate).,S2 Agentic Core,Done,P0,XL,2026-07-06,2026-08-23,,https://github.com/wuqianzong/AgenticBanking/issues/17
+21,RAG pipeline and governed retrieval,S2 Agentic Core,Done,P0,XL,2026-06-30,2026-08-09,,https://github.com/wuqianzong/AgenticBanking/issues/21
+23,Technical Specification Document of MVP,S2 Agentic Core,Done,P1,L,2026-06-30,2026-08-15,,https://github.com/wuqianzong/AgenticBanking/issues/23
+29,Resolution planner,S2 Agentic Core,Done,P0,L,2026-07-06,2026-08-09,,https://github.com/wuqianzong/AgenticBanking/issues/29
+31,Short-term memory,S2 Agentic Core,Done,P1,M,2026-07-06,2026-08-13,,https://github.com/wuqianzong/AgenticBanking/issues/31
+32,long-term memory,S2 Agentic Core,Done,P1,L,2026-07-06,2026-08-14,,https://github.com/wuqianzong/AgenticBanking/issues/32
+35,Deterministic gate checks,S2 Agentic Core,Done,P0,L,2026-07-06,2026-08-09,,https://github.com/wuqianzong/AgenticBanking/issues/35
+38,End-to-end process document,S2 Agentic Core,Done,P1,M,2026-07-06,2026-08-15,,https://github.com/wuqianzong/AgenticBanking/issues/38
+57,Sprint Review & Retrospective — S2 Agentic Core,S2 Agentic Core,Done,P1,M,2026-07-06,2026-08-23,,https://github.com/wuqianzong/AgenticBanking/issues/57
+71,[User Stories] E1 — Account information,S2 Agentic Core,Done,P0,M,2026-07-06,2026-08-23,user-story;epic,https://github.com/wuqianzong/AgenticBanking/issues/71
+76,[User Stories] E6 — Natural multi-turn conversation,S2 Agentic Core,Done,P0,L,2026-07-25,2026-09-27,user-story;epic,https://github.com/wuqianzong/AgenticBanking/issues/76
+18,Build the Live Agent Workspace and Generative Case Summarization handoff payload.,S3 Product Capabilities,Done,P1,L,2026-06-15,2026-08-27,,https://github.com/wuqianzong/AgenticBanking/issues/18
+30,Knowledge retrieval,S3 Product Capabilities,Done,P0,XL,2026-07-06,2026-09-01,,https://github.com/wuqianzong/AgenticBanking/issues/30
+33,Escalation and case summary,S3 Product Capabilities,Done,P0,L,2026-07-06,2026-09-26,,https://github.com/wuqianzong/AgenticBanking/issues/33
+42,Monthly Log — August 2026,S3 Product Capabilities,Done,P1,M,2026-08-01,2026-08-31,documentation,https://github.com/wuqianzong/AgenticBanking/issues/42
+45,Adaptive customer UI and structured response blocks,S3 Product Capabilities,Done,P1,L,2026-08-12,2026-09-01,,https://github.com/wuqianzong/AgenticBanking/issues/45
+46,"Tool calling, deep links, service requests and protected personal data",S3 Product Capabilities,Done,P0,XL,2026-08-23,2026-08-28,,https://github.com/wuqianzong/AgenticBanking/issues/46
+58,Sprint Review & Retrospective — S3 Product Capabilities,S3 Product Capabilities,Done,P1,M,2026-08-01,2026-09-03,,https://github.com/wuqianzong/AgenticBanking/issues/58
+65,Second interim report milestone,S3 Product Capabilities,Done,P0,M,2026-08-01,2026-08-31,,https://github.com/wuqianzong/AgenticBanking/issues/65
+66,Second interim presentation milestone,S3 Product Capabilities,Done,P0,S,2026-09-01,2026-09-07,,https://github.com/wuqianzong/AgenticBanking/issues/66
+72,[User Stories] E2 — Money movement,S3 Product Capabilities,Done,P0,L,2026-08-01,2026-09-03,user-story;epic,https://github.com/wuqianzong/AgenticBanking/issues/72
+73,[User Stories] E3 — Card services,S3 Product Capabilities,Done,P0,L,2026-08-01,2026-09-26,user-story;epic,https://github.com/wuqianzong/AgenticBanking/issues/73
+74,[User Stories] E4 — Profile and service requests,S3 Product Capabilities,Done,P1,M,2026-08-23,2026-09-03,user-story;epic,https://github.com/wuqianzong/AgenticBanking/issues/74
+77,[User Stories] E7 — Human escalation and handover,S3 Product Capabilities,Done,P0,L,2026-08-21,2026-10-18,user-story;epic,https://github.com/wuqianzong/AgenticBanking/issues/77
+79,[User Stories] E9 — Personal-data protection,S3 Product Capabilities,Done,P0,M,2026-08-25,2026-10-18,user-story;epic,https://github.com/wuqianzong/AgenticBanking/issues/79
+47,Evaluation harness and BANKING77/multi-turn test campaigns,S4 Evaluation Foundation,Done,P0,XL,2026-09-04,2026-09-21,,https://github.com/wuqianzong/AgenticBanking/issues/47
+48,Fairness and cross-session answer-cache validation,S4 Evaluation Foundation,Done,P1,L,2026-09-05,2026-09-18,,https://github.com/wuqianzong/AgenticBanking/issues/48
+59,Sprint Review & Retrospective — S4 Evaluation Foundation,S4 Evaluation Foundation,Done,P1,M,2026-09-04,2026-09-21,,https://github.com/wuqianzong/AgenticBanking/issues/59
+34,Response generation,S5 Reliability Hardening,Done,P0,XL,2026-07-06,2026-09-23,,https://github.com/wuqianzong/AgenticBanking/issues/34
+43,Monthly Log — September 2026,S5 Reliability Hardening,Done,P1,L,2026-09-01,2026-09-30,documentation,https://github.com/wuqianzong/AgenticBanking/issues/43
+49,"Multi-provider resilience, key rotation and prompt caching",S5 Reliability Hardening,Done,P1,L,2026-09-25,2026-09-27,,https://github.com/wuqianzong/AgenticBanking/issues/49
+50,Response Obligation Contract and reliability hardening,S5 Reliability Hardening,Done,P0,XL,2026-09-22,2026-09-25,,https://github.com/wuqianzong/AgenticBanking/issues/50
+51,Known Issues Tracker and root-cause defect programme,S5 Reliability Hardening,Done,P0,XL,2026-09-04,2026-10-17,,https://github.com/wuqianzong/AgenticBanking/issues/51
+60,Sprint Review & Retrospective — S5 Reliability Hardening,S5 Reliability Hardening,Done,P1,M,2026-09-22,2026-09-30,,https://github.com/wuqianzong/AgenticBanking/issues/60
+15,User stories and acceptance criteria — 25 stories across 10 epics,S6 Final Evaluation,Done,P0,L,2026-06-15,2026-10-03,user-story,https://github.com/wuqianzong/AgenticBanking/issues/15
+19,"Write Architectural Justifications (Formally defend the ""Hybrid Pivot"" constraint management and Dual-Track Identity logic).",S6 Final Evaluation,Done,P1,M,2026-06-15,2026-10-05,,https://github.com/wuqianzong/AgenticBanking/issues/19
+20,Draft Risk Assessment & Mitigation Plan (Create risk matrix for LLM hallucinations and session state synchronization).,S6 Final Evaluation,Done,P0,L,2026-06-15,2026-10-05,,https://github.com/wuqianzong/AgenticBanking/issues/20
+22,Product Requirement Document of the MVP,S6 Final Evaluation,Done,P0,L,2026-06-30,2026-10-03,,https://github.com/wuqianzong/AgenticBanking/issues/22
+36,Semantic gate check,S6 Final Evaluation,Done,P0,XL,2026-07-06,2026-10-05,,https://github.com/wuqianzong/AgenticBanking/issues/36
+37,Safety pipeline,S6 Final Evaluation,Done,P0,XL,2026-07-06,2026-10-05,,https://github.com/wuqianzong/AgenticBanking/issues/37
+52,Metrics v5.1 final evaluation and owner adjudication,S6 Final Evaluation,Done,P0,XL,2026-10-02,2026-10-05,,https://github.com/wuqianzong/AgenticBanking/issues/52
+53,Final capstone report preparation and evidence assembly,S6 Final Evaluation,Done,P0,XL,2026-10-03,2026-10-05,documentation,https://github.com/wuqianzong/AgenticBanking/issues/53
+61,Sprint Review & Retrospective — S6 Final Evaluation,S6 Final Evaluation,Done,P1,M,2026-10-02,2026-10-05,,https://github.com/wuqianzong/AgenticBanking/issues/61
+75,[User Stories] E5 — Product and policy answers,S6 Final Evaluation,Done,P0,XL,2026-09-04,2026-10-17,user-story;epic,https://github.com/wuqianzong/AgenticBanking/issues/75
+78,[User Stories] E8 — Safety and compliance,S6 Final Evaluation,Done,P0,XL,2026-08-09,2026-10-18,user-story;epic,https://github.com/wuqianzong/AgenticBanking/issues/78
+80,[User Stories] E10 — Operations and measurement,S6 Final Evaluation,Done,P1,L,2026-09-04,2026-10-18,user-story;epic,https://github.com/wuqianzong/AgenticBanking/issues/80
+44,Project Completion Log — October 2026,S7 Release Regression,Done,P0,L,2026-10-02,2026-10-17,documentation,https://github.com/wuqianzong/AgenticBanking/issues/44
+54,Final release regression and defect closure,S7 Release Regression,Done,P0,XL,2026-10-14,2026-10-17,,https://github.com/wuqianzong/AgenticBanking/issues/54
+62,Sprint Review & Retrospective — S7 Release Regression,S7 Release Regression,Done,P1,M,2026-10-14,2026-10-17,,https://github.com/wuqianzong/AgenticBanking/issues/62
+67,Submit final capstone report,S7 Release Regression,Product Backlog,P0,S,2026-10-18,2026-11-01,,https://github.com/wuqianzong/AgenticBanking/issues/67
+68,Deliver final capstone presentation and sprint demo,S7 Release Regression,In progress,P0,M,2026-10-18,2026-11-08,,https://github.com/wuqianzong/AgenticBanking/issues/68
+69,Coordinate evaluator assessment report submission,S7 Release Regression,Product Backlog,P0,S,2026-10-18,2026-11-15,,https://github.com/wuqianzong/AgenticBanking/issues/69
+70,Project evidence and reproducibility index,S7 Release Regression,Done,P1,M,2026-10-03,2026-10-17,,https://github.com/wuqianzong/AgenticBanking/issues/70

@@ -1,0 +1,106 @@
+h4_b6_01 
+h4_b6_02 
+h4_b6_03 
+h4_b6_04 
+h4_b6_05 
+h4_c5_activate_card_chinese ANSWERED
+h4_c5_activate_card_formal ANSWERED
+h4_c5_activate_card_ordinary ANSWERED
+h4_c5_activate_card_spanish ANSWERED
+h4_c5_activate_card_terse_typo ANSWERED
+h4_c5_apple_pay_chinese ANSWERED
+h4_c5_apple_pay_formal ANSWERED
+h4_c5_apple_pay_ordinary ANSWERED
+h4_c5_apple_pay_spanish ANSWERED
+h4_c5_apple_pay_terse_typo ANSWERED
+h4_c5_atm_fee_chinese ANSWERED
+h4_c5_atm_fee_formal ANSWERED
+h4_c5_atm_fee_ordinary ANSWERED
+h4_c5_atm_fee_spanish ANSWERED
+h4_c5_atm_fee_terse_typo ANSWERED
+h4_c5_card_overseas_chinese ANSWERED
+h4_c5_card_overseas_formal ANSWERED
+h4_c5_card_overseas_ordinary ANSWERED
+h4_c5_card_overseas_spanish ANSWERED
+h4_c5_card_overseas_terse_typo ANSWERED
+h4_c5_change_address_chinese SELF_SERVICE
+h4_c5_change_address_formal ANSWERED
+h4_c5_change_address_ordinary SELF_SERVICE
+h4_c5_change_address_spanish ANSWERED
+h4_c5_change_address_terse_typo LIMIT
+h4_c5_change_pin_chinese SELF_SERVICE
+h4_c5_change_pin_formal ANSWERED
+h4_c5_change_pin_ordinary SELF_SERVICE
+h4_c5_change_pin_spanish ANSWERED
+h4_c5_change_pin_terse_typo ANSWERED
+h4_c5_forgot_passcode_chinese ANSWERED
+h4_c5_forgot_passcode_formal SELF_SERVICE
+h4_c5_forgot_passcode_ordinary ANSWERED
+h4_c5_forgot_passcode_spanish SELF_SERVICE
+h4_c5_forgot_passcode_terse_typo LIMIT
+h4_c5_lost_card_chinese ANSWERED
+h4_c5_lost_card_formal SELF_SERVICE
+h4_c5_lost_card_ordinary ANSWERED
+h4_c5_lost_card_spanish ANSWERED
+h4_c5_lost_card_terse_typo ANSWERED
+h4_c5_minimum_age_chinese LIMIT
+h4_c5_minimum_age_formal ANSWERED
+h4_c5_minimum_age_ordinary ANSWERED
+h4_c5_minimum_age_spanish ANSWERED
+h4_c5_minimum_age_terse_typo ANSWERED
+h4_c5_supp_card_fee_chinese ANSWERED
+h4_c5_supp_card_fee_formal ANSWERED
+h4_c5_supp_card_fee_ordinary ANSWERED
+h4_c5_supp_card_fee_spanish ANSWERED
+h4_c5_supp_card_fee_terse_typo ANSWERED
+h4_c5_transfer_time_chinese ANSWERED
+h4_c5_transfer_time_formal ANSWERED
+h4_c5_transfer_time_ordinary ANSWERED
+h4_c5_transfer_time_spanish ANSWERED
+h4_c5_transfer_time_terse_typo ANSWERED
+h4_c5_unrecognised_charge_chinese ANSWERED
+h4_c5_unrecognised_charge_formal ANSWERED
+h4_c5_unrecognised_charge_ordinary ANSWERED
+h4_c5_unrecognised_charge_spanish ANSWERED
+h4_c5_unrecognised_charge_terse_typo CLARIFIED
+h4_c8_01 
+h4_c8_02 
+h4_c8_03 
+h4_c8_04 
+h4_c8_05 
+h4_c8_06 
+h4_c8_07 
+h4_c8_08 
+h4_c8_09 
+h4_c8_10 
+h4_c8_11 
+h4_c8_12 
+h4_c8_13 
+h4_c8_14 
+h4_c8_15 
+h4_r2b_01 ANSWERED
+h4_r2b_02 SELF_SERVICE
+h4_r2b_03 SELF_SERVICE
+h4_r2b_04 SELF_SERVICE
+h4_r2b_05 LIMIT
+h4_r2b_06 SELF_SERVICE
+h4_r2b_07 ANSWERED
+h4_r2b_08 SELF_SERVICE
+h4_r2b_09 SELF_SERVICE
+h4_r2b_10 CLARIFIED
+h4_r3_01 
+h4_r3_02 
+h4_r3_03 
+h4_r3_04 
+h4_r3_05 
+h4_r3_06 
+h4_r3_07 
+h4_r3_08 
+h4_r3_09 
+h4_r3_10 
+h4_r3_11 
+h4_r3_12 
+h4_r3_13 
+h4_r3_14 
+h4_r3_15 
+done judge_misc.py h4 2026-10-05 08:46:29

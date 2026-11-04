@@ -1,0 +1,1776 @@
+{
+  "metric": "C4_cache_parent_recall_v1.1",
+  "source_results": [
+    "runs/c4_cache/results/20261015T003029Z_d10a54dc_results.jsonl"
+  ],
+  "valid_run": true,
+  "structural_errors": [],
+  "questions_total": 20,
+  "questions_scorable": 10,
+  "questions_unscorable_no_run1_parent": [
+    "h1_Refund_not_showing_up_2",
+    "h1_age_limit_2",
+    "h1_automatic_top_up_2",
+    "h1_exchange_rate_2",
+    "h1_get_physical_card_1",
+    "h1_order_physical_card_2",
+    "h1_pending_cash_withdrawal_1",
+    "h1_pin_blocked_2",
+    "h1_supported_cards_and_currencies_2",
+    "h1_unable_to_verify_identity_1"
+  ],
+  "configured_similarity_threshold": 0.65,
+  "evidence_mode": "live observation at the configured 0.65 threshold",
+  "primary_parent_id_recall": {
+    "hits": 44,
+    "opportunities": 44,
+    "rate": 1.0,
+    "target": 1.0
+  },
+  "secondary_complete_parent_set_recall": {
+    "hits": 20,
+    "repeat_runs": 20,
+    "rate": 1.0
+  },
+  "decision": "passed",
+  "live_0_65_detail": {
+    "primary_parent_id_recall": {
+      "hits": 44,
+      "opportunities": 44,
+      "rate": 1.0,
+      "target": 1.0
+    },
+    "secondary_complete_parent_set_recall": {
+      "hits": 20,
+      "repeat_runs": 20,
+      "rate": 1.0
+    },
+    "decision_at_0_85": "passed",
+    "per_question": {
+      "h1_atm_support_1": {
+        "run1_approved_parent_ids": [
+          "faq_6d8abb4a",
+          "faq_768b41d9"
+        ],
+        "run1_cache_write_confirmed": true,
+        "repeats": {
+          "run2": {
+            "lookup_queries": [
+              {
+                "task_1": "money withdrawals locations"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "8b55c16f291acc21_2612b0831011",
+                    "parent_ids": [
+                      "faq_6d8abb4a"
+                    ],
+                    "similarity": 0.9999998807907104
+                  },
+                  {
+                    "doc_id": "8b55c16f291acc21_08547a0c5713",
+                    "parent_ids": [
+                      "faq_768b41d9"
+                    ],
+                    "similarity": 0.9999998807907104
+                  },
+                  {
+                    "doc_id": "77de79d9733c7660_2612b0831011",
+                    "parent_ids": [
+                      "faq_6d8abb4a"
+                    ],
+                    "similarity": 0.8579450845718384
+                  },
+                  {
+                    "doc_id": "77de79d9733c7660_08547a0c5713",
+                    "parent_ids": [
+                      "faq_768b41d9"
+                    ],
+                    "similarity": 0.8579450845718384
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_6d8abb4a",
+              "faq_768b41d9"
+            ],
+            "expected_hits": [
+              "faq_6d8abb4a",
+              "faq_768b41d9"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          },
+          "run3": {
+            "lookup_queries": [
+              {
+                "task_1": "money withdrawals locations"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "8b55c16f291acc21_2612b0831011",
+                    "parent_ids": [
+                      "faq_6d8abb4a"
+                    ],
+                    "similarity": 0.9999998807907104
+                  },
+                  {
+                    "doc_id": "8b55c16f291acc21_08547a0c5713",
+                    "parent_ids": [
+                      "faq_768b41d9"
+                    ],
+                    "similarity": 0.9999998807907104
+                  },
+                  {
+                    "doc_id": "77de79d9733c7660_2612b0831011",
+                    "parent_ids": [
+                      "faq_6d8abb4a"
+                    ],
+                    "similarity": 0.8579450845718384
+                  },
+                  {
+                    "doc_id": "77de79d9733c7660_08547a0c5713",
+                    "parent_ids": [
+                      "faq_768b41d9"
+                    ],
+                    "similarity": 0.8579450845718384
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_6d8abb4a",
+              "faq_768b41d9"
+            ],
+            "expected_hits": [
+              "faq_6d8abb4a",
+              "faq_768b41d9"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          }
+        }
+      },
+      "h1_balance_not_updated_after_cheque_or_cash_deposit_1": {
+        "run1_approved_parent_ids": [
+          "faq_863433e0"
+        ],
+        "run1_cache_write_confirmed": true,
+        "repeats": {
+          "run2": {
+            "lookup_queries": [
+              {
+                "task_1": "check deposit cash not received"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "b152383ba3233ea8_7e190efb76be",
+                    "parent_ids": [
+                      "faq_863433e0"
+                    ],
+                    "similarity": 0.7479676604270935
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_863433e0"
+            ],
+            "expected_hits": [
+              "faq_863433e0"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          },
+          "run3": {
+            "lookup_queries": [
+              {
+                "task_1": "check deposit funds not received"
+              },
+              {
+                "task_1": "check deposit funds not received"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "67b6ab8c541d6ccc_7e190efb76be",
+                    "parent_ids": [
+                      "faq_863433e0"
+                    ],
+                    "similarity": 0.8841131925582886
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "67b6ab8c541d6ccc_7e190efb76be",
+                    "parent_ids": [
+                      "faq_863433e0"
+                    ],
+                    "similarity": 0.8841131925582886
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_863433e0"
+            ],
+            "expected_hits": [
+              "faq_863433e0"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          }
+        }
+      },
+      "h1_card_not_working_1": {
+        "run1_approved_parent_ids": [
+          "faq_04a55dce",
+          "faq_33f045af",
+          "faq_7883a8c2",
+          "faq_84458a8e",
+          "faq_bfe32bf8",
+          "faq_ed9b5ce2"
+        ],
+        "run1_cache_write_confirmed": true,
+        "repeats": {
+          "run2": {
+            "lookup_queries": [
+              {
+                "task_1": "My card doesn't seem to work anymore"
+              },
+              {
+                "task_1": "My card doesn't seem to work anymore"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_8db16f1931a2",
+                    "parent_ids": [
+                      "faq_33f045af"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_e65e0d296550",
+                    "parent_ids": [
+                      "faq_84458a8e"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_535a8835af53",
+                    "parent_ids": [
+                      "faq_bfe32bf8"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_3f2190197514",
+                    "parent_ids": [
+                      "faq_ed9b5ce2"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_dd971b9a8ff4",
+                    "parent_ids": [
+                      "faq_04a55dce"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "896549f99d07b9b8_dd971b9a8ff4",
+                    "parent_ids": [
+                      "faq_04a55dce"
+                    ],
+                    "similarity": 0.9784421324729919
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_8db16f1931a2",
+                    "parent_ids": [
+                      "faq_33f045af"
+                    ],
+                    "similarity": 0.9482641220092773
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 0.9482641220092773
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_e65e0d296550",
+                    "parent_ids": [
+                      "faq_84458a8e"
+                    ],
+                    "similarity": 0.9482641220092773
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_535a8835af53",
+                    "parent_ids": [
+                      "faq_bfe32bf8"
+                    ],
+                    "similarity": 0.9482641220092773
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_3f2190197514",
+                    "parent_ids": [
+                      "faq_ed9b5ce2"
+                    ],
+                    "similarity": 0.9482641220092773
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_8db16f1931a2",
+                    "parent_ids": [
+                      "faq_33f045af"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_e65e0d296550",
+                    "parent_ids": [
+                      "faq_84458a8e"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_535a8835af53",
+                    "parent_ids": [
+                      "faq_bfe32bf8"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_3f2190197514",
+                    "parent_ids": [
+                      "faq_ed9b5ce2"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_dd971b9a8ff4",
+                    "parent_ids": [
+                      "faq_04a55dce"
+                    ],
+                    "similarity": 1.000000238418579
+                  },
+                  {
+                    "doc_id": "896549f99d07b9b8_dd971b9a8ff4",
+                    "parent_ids": [
+                      "faq_04a55dce"
+                    ],
+                    "similarity": 0.9784421324729919
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_8db16f1931a2",
+                    "parent_ids": [
+                      "faq_33f045af"
+                    ],
+                    "similarity": 0.9482641220092773
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 0.9482641220092773
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_e65e0d296550",
+                    "parent_ids": [
+                      "faq_84458a8e"
+                    ],
+                    "similarity": 0.9482641220092773
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_535a8835af53",
+                    "parent_ids": [
+                      "faq_bfe32bf8"
+                    ],
+                    "similarity": 0.9482641220092773
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_3f2190197514",
+                    "parent_ids": [
+                      "faq_ed9b5ce2"
+                    ],
+                    "similarity": 0.9482641220092773
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_04a55dce",
+              "faq_33f045af",
+              "faq_7883a8c2",
+              "faq_84458a8e",
+              "faq_bfe32bf8",
+              "faq_ed9b5ce2"
+            ],
+            "expected_hits": [
+              "faq_04a55dce",
+              "faq_33f045af",
+              "faq_7883a8c2",
+              "faq_84458a8e",
+              "faq_bfe32bf8",
+              "faq_ed9b5ce2"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          },
+          "run3": {
+            "lookup_queries": [
+              {
+                "task_1": "My card doesn't seem to work"
+              },
+              {
+                "task_1": "My card doesn't seem to work"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_8db16f1931a2",
+                    "parent_ids": [
+                      "faq_33f045af"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_e65e0d296550",
+                    "parent_ids": [
+                      "faq_84458a8e"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_535a8835af53",
+                    "parent_ids": [
+                      "faq_bfe32bf8"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_3f2190197514",
+                    "parent_ids": [
+                      "faq_ed9b5ce2"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_dd971b9a8ff4",
+                    "parent_ids": [
+                      "faq_04a55dce"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "896549f99d07b9b8_dd971b9a8ff4",
+                    "parent_ids": [
+                      "faq_04a55dce"
+                    ],
+                    "similarity": 0.9025735855102539
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_8db16f1931a2",
+                    "parent_ids": [
+                      "faq_33f045af"
+                    ],
+                    "similarity": 0.8294892311096191
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 0.8294892311096191
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_e65e0d296550",
+                    "parent_ids": [
+                      "faq_84458a8e"
+                    ],
+                    "similarity": 0.8294892311096191
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_535a8835af53",
+                    "parent_ids": [
+                      "faq_bfe32bf8"
+                    ],
+                    "similarity": 0.8294892311096191
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_3f2190197514",
+                    "parent_ids": [
+                      "faq_ed9b5ce2"
+                    ],
+                    "similarity": 0.8294892311096191
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_8db16f1931a2",
+                    "parent_ids": [
+                      "faq_33f045af"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_e65e0d296550",
+                    "parent_ids": [
+                      "faq_84458a8e"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_535a8835af53",
+                    "parent_ids": [
+                      "faq_bfe32bf8"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_3f2190197514",
+                    "parent_ids": [
+                      "faq_ed9b5ce2"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "1ad4eba32e2bd1be_dd971b9a8ff4",
+                    "parent_ids": [
+                      "faq_04a55dce"
+                    ],
+                    "similarity": 0.9176909327507019
+                  },
+                  {
+                    "doc_id": "896549f99d07b9b8_dd971b9a8ff4",
+                    "parent_ids": [
+                      "faq_04a55dce"
+                    ],
+                    "similarity": 0.9025735855102539
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_8db16f1931a2",
+                    "parent_ids": [
+                      "faq_33f045af"
+                    ],
+                    "similarity": 0.8294892311096191
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 0.8294892311096191
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_e65e0d296550",
+                    "parent_ids": [
+                      "faq_84458a8e"
+                    ],
+                    "similarity": 0.8294892311096191
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_535a8835af53",
+                    "parent_ids": [
+                      "faq_bfe32bf8"
+                    ],
+                    "similarity": 0.8294892311096191
+                  },
+                  {
+                    "doc_id": "0dafd5ef11d50beb_3f2190197514",
+                    "parent_ids": [
+                      "faq_ed9b5ce2"
+                    ],
+                    "similarity": 0.8294892311096191
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_04a55dce",
+              "faq_33f045af",
+              "faq_7883a8c2",
+              "faq_84458a8e",
+              "faq_bfe32bf8",
+              "faq_ed9b5ce2"
+            ],
+            "expected_hits": [
+              "faq_04a55dce",
+              "faq_33f045af",
+              "faq_7883a8c2",
+              "faq_84458a8e",
+              "faq_bfe32bf8",
+              "faq_ed9b5ce2"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          }
+        }
+      },
+      "h1_lost_or_stolen_card_2": {
+        "run1_approved_parent_ids": [
+          "faq_7883a8c2"
+        ],
+        "run1_cache_write_confirmed": true,
+        "repeats": {
+          "run2": {
+            "lookup_queries": [
+              {
+                "task_1": "report a lost or stolen card"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "c012308308d55b40_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "5a5f456fb77b29d0_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 0.6795539259910583
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_7883a8c2"
+            ],
+            "expected_hits": [
+              "faq_7883a8c2"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          },
+          "run3": {
+            "lookup_queries": [
+              {
+                "task_1": "report a lost or stolen card"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "c012308308d55b40_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "5a5f456fb77b29d0_21f2c41d6409",
+                    "parent_ids": [
+                      "faq_7883a8c2"
+                    ],
+                    "similarity": 0.6795539259910583
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_7883a8c2"
+            ],
+            "expected_hits": [
+              "faq_7883a8c2"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          }
+        }
+      },
+      "h1_pending_transfer_2": {
+        "run1_approved_parent_ids": [
+          "faq_4b2d99b1",
+          "faq_ccd37584"
+        ],
+        "run1_cache_write_confirmed": true,
+        "repeats": {
+          "run2": {
+            "lookup_queries": [
+              {
+                "task_1": "transfer processing time from pending to confirmed"
+              },
+              {
+                "task_1": "transfer processing time from pending to confirmed"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "05643d701ac4abff_48fbbf1f4387",
+                    "parent_ids": [
+                      "faq_4b2d99b1"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "05643d701ac4abff_a6464fd770c2",
+                    "parent_ids": [
+                      "faq_ccd37584"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "13f8cf099c10f547_48fbbf1f4387",
+                    "parent_ids": [
+                      "faq_4b2d99b1"
+                    ],
+                    "similarity": 0.7022010087966919
+                  },
+                  {
+                    "doc_id": "13f8cf099c10f547_a6464fd770c2",
+                    "parent_ids": [
+                      "faq_ccd37584"
+                    ],
+                    "similarity": 0.7022010087966919
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "05643d701ac4abff_48fbbf1f4387",
+                    "parent_ids": [
+                      "faq_4b2d99b1"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "05643d701ac4abff_a6464fd770c2",
+                    "parent_ids": [
+                      "faq_ccd37584"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "13f8cf099c10f547_48fbbf1f4387",
+                    "parent_ids": [
+                      "faq_4b2d99b1"
+                    ],
+                    "similarity": 0.7022010087966919
+                  },
+                  {
+                    "doc_id": "13f8cf099c10f547_a6464fd770c2",
+                    "parent_ids": [
+                      "faq_ccd37584"
+                    ],
+                    "similarity": 0.7022010087966919
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_4b2d99b1",
+              "faq_ccd37584"
+            ],
+            "expected_hits": [
+              "faq_4b2d99b1",
+              "faq_ccd37584"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          },
+          "run3": {
+            "lookup_queries": [
+              {
+                "task_1": "transfer status timing from pending to confirmed"
+              },
+              {
+                "task_1": "transfer status timing from pending to confirmed"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "05643d701ac4abff_48fbbf1f4387",
+                    "parent_ids": [
+                      "faq_4b2d99b1"
+                    ],
+                    "similarity": 0.8974158763885498
+                  },
+                  {
+                    "doc_id": "05643d701ac4abff_a6464fd770c2",
+                    "parent_ids": [
+                      "faq_ccd37584"
+                    ],
+                    "similarity": 0.8974158763885498
+                  },
+                  {
+                    "doc_id": "13f8cf099c10f547_48fbbf1f4387",
+                    "parent_ids": [
+                      "faq_4b2d99b1"
+                    ],
+                    "similarity": 0.8152418732643127
+                  },
+                  {
+                    "doc_id": "13f8cf099c10f547_a6464fd770c2",
+                    "parent_ids": [
+                      "faq_ccd37584"
+                    ],
+                    "similarity": 0.8152418732643127
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "05643d701ac4abff_48fbbf1f4387",
+                    "parent_ids": [
+                      "faq_4b2d99b1"
+                    ],
+                    "similarity": 0.8974158763885498
+                  },
+                  {
+                    "doc_id": "05643d701ac4abff_a6464fd770c2",
+                    "parent_ids": [
+                      "faq_ccd37584"
+                    ],
+                    "similarity": 0.8974158763885498
+                  },
+                  {
+                    "doc_id": "13f8cf099c10f547_48fbbf1f4387",
+                    "parent_ids": [
+                      "faq_4b2d99b1"
+                    ],
+                    "similarity": 0.8152418732643127
+                  },
+                  {
+                    "doc_id": "13f8cf099c10f547_a6464fd770c2",
+                    "parent_ids": [
+                      "faq_ccd37584"
+                    ],
+                    "similarity": 0.8152418732643127
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_4b2d99b1",
+              "faq_ccd37584"
+            ],
+            "expected_hits": [
+              "faq_4b2d99b1",
+              "faq_ccd37584"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          }
+        }
+      },
+      "h1_transaction_charged_twice_2": {
+        "run1_approved_parent_ids": [
+          "faq_d61a0a79"
+        ],
+        "run1_cache_write_confirmed": true,
+        "repeats": {
+          "run2": {
+            "lookup_queries": [
+              {
+                "task_1": "reverse a duplicate transaction charge"
+              },
+              {
+                "task_1": "reverse a duplicate transaction charge"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "1333597d4bc49ffa_f8e97734e781",
+                    "parent_ids": [
+                      "faq_d61a0a79"
+                    ],
+                    "similarity": 0.6559487581253052
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "1333597d4bc49ffa_f8e97734e781",
+                    "parent_ids": [
+                      "faq_d61a0a79"
+                    ],
+                    "similarity": 0.6559487581253052
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_d61a0a79"
+            ],
+            "expected_hits": [
+              "faq_d61a0a79"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          },
+          "run3": {
+            "lookup_queries": [
+              {
+                "task_1": "reverse a duplicate charge"
+              },
+              {
+                "task_1": "reverse a duplicate charge"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "5fbc56f7c05d8ef5_7aeb7c7d8017",
+                    "parent_ids": [
+                      "faq_1812db54"
+                    ],
+                    "similarity": 0.8734889030456543
+                  },
+                  {
+                    "doc_id": "5fbc56f7c05d8ef5_f8e97734e781",
+                    "parent_ids": [
+                      "faq_d61a0a79"
+                    ],
+                    "similarity": 0.8734889030456543
+                  },
+                  {
+                    "doc_id": "1333597d4bc49ffa_f8e97734e781",
+                    "parent_ids": [
+                      "faq_d61a0a79"
+                    ],
+                    "similarity": 0.6770502924919128
+                  },
+                  {
+                    "doc_id": "dc33fcac41aca923_f8e97734e781",
+                    "parent_ids": [
+                      "faq_d61a0a79"
+                    ],
+                    "similarity": 0.6626611948013306
+                  },
+                  {
+                    "doc_id": "dc33fcac41aca923_7aeb7c7d8017",
+                    "parent_ids": [
+                      "faq_1812db54"
+                    ],
+                    "similarity": 0.6626611948013306
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "5fbc56f7c05d8ef5_7aeb7c7d8017",
+                    "parent_ids": [
+                      "faq_1812db54"
+                    ],
+                    "similarity": 0.8734889030456543
+                  },
+                  {
+                    "doc_id": "5fbc56f7c05d8ef5_f8e97734e781",
+                    "parent_ids": [
+                      "faq_d61a0a79"
+                    ],
+                    "similarity": 0.8734889030456543
+                  },
+                  {
+                    "doc_id": "1333597d4bc49ffa_f8e97734e781",
+                    "parent_ids": [
+                      "faq_d61a0a79"
+                    ],
+                    "similarity": 0.6770502924919128
+                  },
+                  {
+                    "doc_id": "dc33fcac41aca923_f8e97734e781",
+                    "parent_ids": [
+                      "faq_d61a0a79"
+                    ],
+                    "similarity": 0.6626611948013306
+                  },
+                  {
+                    "doc_id": "dc33fcac41aca923_7aeb7c7d8017",
+                    "parent_ids": [
+                      "faq_1812db54"
+                    ],
+                    "similarity": 0.6626611948013306
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_1812db54",
+              "faq_d61a0a79"
+            ],
+            "expected_hits": [
+              "faq_d61a0a79"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [
+              "faq_1812db54"
+            ],
+            "complete_parent_set_hit": true
+          }
+        }
+      },
+      "h1_transfer_fee_charged_2": {
+        "run1_approved_parent_ids": [
+          "faq_df2c5fa7"
+        ],
+        "run1_cache_write_confirmed": true,
+        "repeats": {
+          "run2": {
+            "lookup_queries": [
+              {
+                "task_1": "charge for transferring"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "bb098f6ae549bedd_29517cec1a77",
+                    "parent_ids": [
+                      "faq_df2c5fa7"
+                    ],
+                    "similarity": 1.0000001192092896
+                  },
+                  {
+                    "doc_id": "095d160e0be912e8_29517cec1a77",
+                    "parent_ids": [
+                      "faq_df2c5fa7"
+                    ],
+                    "similarity": 0.7511073350906372
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_df2c5fa7"
+            ],
+            "expected_hits": [
+              "faq_df2c5fa7"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          },
+          "run3": {
+            "lookup_queries": [
+              {
+                "task_1": "charge for transferring"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "bb098f6ae549bedd_29517cec1a77",
+                    "parent_ids": [
+                      "faq_df2c5fa7"
+                    ],
+                    "similarity": 1.0000001192092896
+                  },
+                  {
+                    "doc_id": "095d160e0be912e8_29517cec1a77",
+                    "parent_ids": [
+                      "faq_df2c5fa7"
+                    ],
+                    "similarity": 0.7511073350906372
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_df2c5fa7"
+            ],
+            "expected_hits": [
+              "faq_df2c5fa7"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          }
+        }
+      },
+      "h1_transfer_into_account_1": {
+        "run1_approved_parent_ids": [
+          "faq_015d7e8a"
+        ],
+        "run1_cache_write_confirmed": true,
+        "repeats": {
+          "run2": {
+            "lookup_queries": [
+              {
+                "task_1": "top up account by bank transfer"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "1aa636965326b285_69a08409b22b",
+                    "parent_ids": [
+                      "faq_015d7e8a"
+                    ],
+                    "similarity": 0.9809325933456421
+                  },
+                  {
+                    "doc_id": "ce161ac5824786c0_69a08409b22b",
+                    "parent_ids": [
+                      "faq_015d7e8a"
+                    ],
+                    "similarity": 0.907277524471283
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_015d7e8a"
+            ],
+            "expected_hits": [
+              "faq_015d7e8a"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          },
+          "run3": {
+            "lookup_queries": [
+              {
+                "task_1": "top up an account by bank transfer"
+              },
+              {
+                "task_1": "top up an account by bank transfer"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "1aa636965326b285_69a08409b22b",
+                    "parent_ids": [
+                      "faq_015d7e8a"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "ed15a21278f5d6ef_69a08409b22b",
+                    "parent_ids": [
+                      "faq_015d7e8a"
+                    ],
+                    "similarity": 0.9809325337409973
+                  },
+                  {
+                    "doc_id": "ce161ac5824786c0_69a08409b22b",
+                    "parent_ids": [
+                      "faq_015d7e8a"
+                    ],
+                    "similarity": 0.9294672012329102
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "1aa636965326b285_69a08409b22b",
+                    "parent_ids": [
+                      "faq_015d7e8a"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "ed15a21278f5d6ef_69a08409b22b",
+                    "parent_ids": [
+                      "faq_015d7e8a"
+                    ],
+                    "similarity": 0.9809325337409973
+                  },
+                  {
+                    "doc_id": "ce161ac5824786c0_69a08409b22b",
+                    "parent_ids": [
+                      "faq_015d7e8a"
+                    ],
+                    "similarity": 0.9294672012329102
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_015d7e8a"
+            ],
+            "expected_hits": [
+              "faq_015d7e8a"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          }
+        }
+      },
+      "h1_virtual_card_not_working_2": {
+        "run1_approved_parent_ids": [
+          "faq_06121b7c",
+          "faq_0be050cf",
+          "faq_5dd95dc7",
+          "faq_78c7cb79"
+        ],
+        "run1_cache_write_confirmed": true,
+        "repeats": {
+          "run2": {
+            "lookup_queries": [
+              {
+                "task_1": "use a virtual card for recurring monthly payments"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "695070f9f4c4b416_3db792d00e8d",
+                    "parent_ids": [
+                      "faq_06121b7c"
+                    ],
+                    "similarity": 1.0000003576278687
+                  },
+                  {
+                    "doc_id": "695070f9f4c4b416_2020020a6034",
+                    "parent_ids": [
+                      "faq_5dd95dc7"
+                    ],
+                    "similarity": 1.0000003576278687
+                  },
+                  {
+                    "doc_id": "695070f9f4c4b416_002076b8dce8",
+                    "parent_ids": [
+                      "faq_78c7cb79"
+                    ],
+                    "similarity": 1.0000003576278687
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_3db792d00e8d",
+                    "parent_ids": [
+                      "faq_06121b7c"
+                    ],
+                    "similarity": 0.9604747891426086
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_2020020a6034",
+                    "parent_ids": [
+                      "faq_5dd95dc7"
+                    ],
+                    "similarity": 0.9604747891426086
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_002076b8dce8",
+                    "parent_ids": [
+                      "faq_78c7cb79"
+                    ],
+                    "similarity": 0.9604747891426086
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_5c038d92fc3f",
+                    "parent_ids": [
+                      "faq_0be050cf"
+                    ],
+                    "similarity": 0.9604747891426086
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_06121b7c",
+              "faq_0be050cf",
+              "faq_5dd95dc7",
+              "faq_78c7cb79"
+            ],
+            "expected_hits": [
+              "faq_06121b7c",
+              "faq_0be050cf",
+              "faq_5dd95dc7",
+              "faq_78c7cb79"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          },
+          "run3": {
+            "lookup_queries": [
+              {
+                "task_1": "use virtual card for recurring monthly payments"
+              },
+              {
+                "task_1": "use virtual card for recurring monthly payments"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "695070f9f4c4b416_3db792d00e8d",
+                    "parent_ids": [
+                      "faq_06121b7c"
+                    ],
+                    "similarity": 0.9957205653190613
+                  },
+                  {
+                    "doc_id": "695070f9f4c4b416_2020020a6034",
+                    "parent_ids": [
+                      "faq_5dd95dc7"
+                    ],
+                    "similarity": 0.9957205653190613
+                  },
+                  {
+                    "doc_id": "695070f9f4c4b416_002076b8dce8",
+                    "parent_ids": [
+                      "faq_78c7cb79"
+                    ],
+                    "similarity": 0.9957205653190613
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_3db792d00e8d",
+                    "parent_ids": [
+                      "faq_06121b7c"
+                    ],
+                    "similarity": 0.9645078778266907
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_2020020a6034",
+                    "parent_ids": [
+                      "faq_5dd95dc7"
+                    ],
+                    "similarity": 0.9645078778266907
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_002076b8dce8",
+                    "parent_ids": [
+                      "faq_78c7cb79"
+                    ],
+                    "similarity": 0.9645078778266907
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_5c038d92fc3f",
+                    "parent_ids": [
+                      "faq_0be050cf"
+                    ],
+                    "similarity": 0.9645078778266907
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "695070f9f4c4b416_3db792d00e8d",
+                    "parent_ids": [
+                      "faq_06121b7c"
+                    ],
+                    "similarity": 0.9957205653190613
+                  },
+                  {
+                    "doc_id": "695070f9f4c4b416_2020020a6034",
+                    "parent_ids": [
+                      "faq_5dd95dc7"
+                    ],
+                    "similarity": 0.9957205653190613
+                  },
+                  {
+                    "doc_id": "695070f9f4c4b416_002076b8dce8",
+                    "parent_ids": [
+                      "faq_78c7cb79"
+                    ],
+                    "similarity": 0.9957205653190613
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_3db792d00e8d",
+                    "parent_ids": [
+                      "faq_06121b7c"
+                    ],
+                    "similarity": 0.9645078778266907
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_2020020a6034",
+                    "parent_ids": [
+                      "faq_5dd95dc7"
+                    ],
+                    "similarity": 0.9645078778266907
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_002076b8dce8",
+                    "parent_ids": [
+                      "faq_78c7cb79"
+                    ],
+                    "similarity": 0.9645078778266907
+                  },
+                  {
+                    "doc_id": "ec2be5b13396c075_5c038d92fc3f",
+                    "parent_ids": [
+                      "faq_0be050cf"
+                    ],
+                    "similarity": 0.9645078778266907
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_06121b7c",
+              "faq_0be050cf",
+              "faq_5dd95dc7",
+              "faq_78c7cb79"
+            ],
+            "expected_hits": [
+              "faq_06121b7c",
+              "faq_0be050cf",
+              "faq_5dd95dc7",
+              "faq_78c7cb79"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          }
+        }
+      },
+      "h1_wrong_exchange_rate_for_cash_withdrawal_2": {
+        "run1_approved_parent_ids": [
+          "faq_1398c52e",
+          "faq_31e7da42",
+          "faq_9c301ac8"
+        ],
+        "run1_cache_write_confirmed": true,
+        "repeats": {
+          "run2": {
+            "lookup_queries": [
+              {
+                "task_1": "exchange rate for withdrawals"
+              },
+              {
+                "task_1": "exchange rate for withdrawals"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "e37b6679d63565ed_71affc35e200",
+                    "parent_ids": [
+                      "faq_1398c52e"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "e37b6679d63565ed_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "e37b6679d63565ed_a417d0c47c23",
+                    "parent_ids": [
+                      "faq_9c301ac8"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "eb3b6e300ead8af6_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 0.8242831230163574
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_71affc35e200",
+                    "parent_ids": [
+                      "faq_1398c52e"
+                    ],
+                    "similarity": 0.8041145205497742
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 0.8041145205497742
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_a417d0c47c23",
+                    "parent_ids": [
+                      "faq_9c301ac8"
+                    ],
+                    "similarity": 0.8041145205497742
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "e37b6679d63565ed_71affc35e200",
+                    "parent_ids": [
+                      "faq_1398c52e"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "e37b6679d63565ed_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "e37b6679d63565ed_a417d0c47c23",
+                    "parent_ids": [
+                      "faq_9c301ac8"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "eb3b6e300ead8af6_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 0.8242831230163574
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_71affc35e200",
+                    "parent_ids": [
+                      "faq_1398c52e"
+                    ],
+                    "similarity": 0.8041145205497742
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 0.8041145205497742
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_a417d0c47c23",
+                    "parent_ids": [
+                      "faq_9c301ac8"
+                    ],
+                    "similarity": 0.8041145205497742
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_1398c52e",
+              "faq_31e7da42",
+              "faq_9c301ac8"
+            ],
+            "expected_hits": [
+              "faq_1398c52e",
+              "faq_31e7da42",
+              "faq_9c301ac8"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          },
+          "run3": {
+            "lookup_queries": [
+              {
+                "task_1": "exchange rate for withdrawals"
+              },
+              {
+                "task_1": "exchange rate for withdrawals"
+              }
+            ],
+            "cache_hits": [
+              {
+                "task_1": [
+                  {
+                    "doc_id": "e37b6679d63565ed_71affc35e200",
+                    "parent_ids": [
+                      "faq_1398c52e"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "e37b6679d63565ed_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "e37b6679d63565ed_a417d0c47c23",
+                    "parent_ids": [
+                      "faq_9c301ac8"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "eb3b6e300ead8af6_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 0.8242831230163574
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_71affc35e200",
+                    "parent_ids": [
+                      "faq_1398c52e"
+                    ],
+                    "similarity": 0.8041145205497742
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 0.8041145205497742
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_a417d0c47c23",
+                    "parent_ids": [
+                      "faq_9c301ac8"
+                    ],
+                    "similarity": 0.8041145205497742
+                  }
+                ]
+              },
+              {
+                "task_1": [
+                  {
+                    "doc_id": "e37b6679d63565ed_71affc35e200",
+                    "parent_ids": [
+                      "faq_1398c52e"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "e37b6679d63565ed_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "e37b6679d63565ed_a417d0c47c23",
+                    "parent_ids": [
+                      "faq_9c301ac8"
+                    ],
+                    "similarity": 1.0
+                  },
+                  {
+                    "doc_id": "eb3b6e300ead8af6_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 0.8242831230163574
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_71affc35e200",
+                    "parent_ids": [
+                      "faq_1398c52e"
+                    ],
+                    "similarity": 0.8041145205497742
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_0d916e1bf430",
+                    "parent_ids": [
+                      "faq_31e7da42"
+                    ],
+                    "similarity": 0.8041145205497742
+                  },
+                  {
+                    "doc_id": "79f5faa5a5e4c720_a417d0c47c23",
+                    "parent_ids": [
+                      "faq_9c301ac8"
+                    ],
+                    "similarity": 0.8041145205497742
+                  }
+                ]
+              }
+            ],
+            "surfaced_parent_ids": [
+              "faq_1398c52e",
+              "faq_31e7da42",
+              "faq_9c301ac8"
+            ],
+            "expected_hits": [
+              "faq_1398c52e",
+              "faq_31e7da42",
+              "faq_9c301ac8"
+            ],
+            "missing_expected": [],
+            "unexpected_extra": [],
+            "complete_parent_set_hit": true
+          }
+        }
+      }
+    }
+  }
+}

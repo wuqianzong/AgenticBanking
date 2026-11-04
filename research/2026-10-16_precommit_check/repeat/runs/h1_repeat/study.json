@@ -1,0 +1,12 @@
+{
+ "study_id": "2026-10-16_precommit_h1_repeat",
+ "runner": "api_validation",
+ "llm_provider": "gemini",
+ "fixture": "fixture.jsonl",
+ "user_id": "USR_999",
+ "pacing_seconds": 3,
+ "max_retries_per_turn": 4,
+ "unavailable_retry_wait_seconds": 600,
+ "capture_system_log": true,
+ "notes": "Three repeats of the five clearly degraded pre-commit cases, fresh data copy, to separate run-to-run variation from regression."
+}

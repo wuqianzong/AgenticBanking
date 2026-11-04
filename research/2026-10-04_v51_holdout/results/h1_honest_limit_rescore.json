@@ -1,0 +1,67 @@
+{
+ "rule": "Honest-limit rule (owner decision 27 Oct 2026); supersedes the strict B0a/B0b/B3a/B10a in h1_summary.json.",
+ "B0a_end_to_end_correct_handling": {
+  "k": 125,
+  "n": 152,
+  "rate": 0.8224
+ },
+ "B0b_correct_handling_or_handover": {
+  "k": 126,
+  "n": 152,
+  "rate": 0.8289
+ },
+ "B3a_partial_without_invented_content": {
+  "k": 51,
+  "n": 54,
+  "rate": 0.9444
+ },
+ "B10a_clarifications_justified": {
+  "k": 12,
+  "n": 14,
+  "rate": 0.8571
+ },
+ "B10a_strict_two_labeller_necessary": {
+  "k": 5,
+  "n": 14,
+  "rate": 0.3571
+ },
+ "B10a_reasons": {
+  "ambiguous_question": 7,
+  "not_justified": 2,
+  "missing_detail": 3,
+  "faq_cannot_answer": 2
+ },
+ "B10a_not_justified": [
+  "h1_h1_card_delivery_estimate_2",
+  "h1_h1_card_payment_fee_charged_1"
+ ],
+ "failures": [
+  "h1_h1_age_limit_1",
+  "h1_h1_automatic_top_up_2",
+  "h1_h1_balance_not_updated_after_bank_transfer_2",
+  "h1_h1_cancel_transfer_2",
+  "h1_h1_card_linking_2",
+  "h1_h1_card_payment_wrong_exchange_rate_1",
+  "h1_h1_cash_withdrawal_not_recognised_1",
+  "h1_h1_direct_debit_payment_not_recognised_1",
+  "h1_h1_exchange_via_app_1",
+  "h1_h1_exchange_via_app_2",
+  "h1_h1_fiat_currency_support_2",
+  "h1_h1_getting_spare_card_1",
+  "h1_h1_getting_spare_card_2",
+  "h1_h1_getting_virtual_card_2",
+  "h1_h1_order_physical_card_1",
+  "h1_h1_pending_card_payment_2",
+  "h1_h1_pending_cash_withdrawal_1",
+  "h1_h1_pending_transfer_1",
+  "h1_h1_pin_blocked_1",
+  "h1_h1_receiving_money_1",
+  "h1_h1_top_up_by_bank_transfer_charge_1",
+  "h1_h1_top_up_by_card_charge_2",
+  "h1_h1_transaction_charged_twice_1",
+  "h1_h1_transaction_charged_twice_2",
+  "h1_h1_transfer_fee_charged_1",
+  "h1_h1_verify_my_identity_1",
+  "h1_h1_visa_or_mastercard_1"
+ ]
+}

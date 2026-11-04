@@ -1,0 +1,53 @@
+0 writer parses [] {}
+1 writer parses [] {}
+2 writer parses [] {}
+3 writer parses [] {}
+4 writer parses [] {}
+5 writer parses [] {'similarity': 0.579}
+6 writer parses [] {'similarity': 0.305}
+7 writer parses [] {'similarity': 0.339}
+8 writer parses [] {'similarity': 0.194}
+9 writer parses [] {'similarity': 0.506}
+10 writer parses [] {'similarity': 1.0}
+11 writer parses [] {'similarity': 0.589}
+12 writer parses [] {'similarity': 0.313}
+13 writer parses [] {'similarity': 0.029}
+14 writer parses [] {'similarity': 0.666}
+15 writer parses [] {'similarity': 0.799}
+16 writer parses [] {'similarity': 0.186}
+17 audit_normal parses [] {}
+18 audit_normal parses [] {}
+19 audit_normal parses [] {}
+20 audit_normal parses [] {}
+21 audit_normal parses [] {'same_verdict': True}
+22 audit_normal parses [] {'same_verdict': True}
+23 audit_normal parses [] {'same_verdict': True}
+24 audit_normal parses [] {'same_verdict': True}
+25 audit_normal parses [] {'same_verdict': True}
+26 audit_normal parses [] {'same_verdict': True}
+27 audit_normal parses [] {'same_verdict': True}
+28 audit_normal parses [] {'same_verdict': True}
+29 audit_normal parses [] {'same_verdict': True}
+30 audit_normal parses [] {'same_verdict': True}
+31 audit_normal parses [] {'same_verdict': True}
+32 audit_normal parses [] {'same_verdict': True}
+33 audit_normal parses [] {'same_verdict': True}
+34 audit_normal parses [] {'same_verdict': True}
+35 statement parses [] {'similarity': 1.0}
+36 statement parses [] {'similarity': 0.767}
+37 statement parses [] {'similarity': 1.0}
+38 statement parses [] {'similarity': 0.945}
+39 statement parses [] {'similarity': 0.92}
+40 statement parses [] {'similarity': 1.0}
+41 reviser parses [] {'similarity': 0.372}
+42 reviser parses [] {'similarity': 0.681}
+43 reviser parses [] {'similarity': 0.238}
+44 reviser parses [] {'similarity': 0.87}
+45 reviser parses [] {'similarity': 0.914}
+46 reviser parses [] {'similarity': 0.607}
+47 reviser parses [] {'similarity': 0.098}
+48 reviser parses [] {'similarity': 0.701}
+49 audit_nonfinancial parses [] {'same_verdict': True}
+50 audit_nonfinancial parses [] {'same_verdict': True}
+51 audit_nonfinancial parses [] {'same_verdict': False}
+52 audit_nonfinancial parses [] {'same_verdict': True}

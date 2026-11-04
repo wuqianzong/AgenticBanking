@@ -1,0 +1,133 @@
+{
+ "G1_completion": {
+  "expected_cases": 85,
+  "finished": 85,
+  "status": {
+   "OK": 85
+  },
+  "pass": true
+ },
+ "G2_json_integrity": {
+  "gemini_replies": 625,
+  "unparseable": 0,
+  "replies_by_step": {
+   "triage": 88,
+   "compliance screen": 89,
+   "reply writer": 69,
+   "outbound audit": 77,
+   "tool planner": 95,
+   "other (first key: components)": 66,
+   "evidence check (sufficiency)": 102,
+   "reviser": 8,
+   "consistency check": 16,
+   "other (first key: main_pursuit)": 5,
+   "other (first key: evidence_grounded)": 5,
+   "other (first key: conduct_compliant)": 5
+  },
+  "failures": [],
+  "schema_step_failures": 0,
+  "pass": true
+ },
+ "G3_leaks": {
+  "R4_reply_hits": [],
+  "R2a_prompt_hits": 14,
+  "R2a_by_field": [
+   {},
+   {},
+   {
+    "loyalty_tier": 7
+   },
+   {
+    "loyalty_tier": 7
+   },
+   {},
+   {},
+   {}
+  ],
+  "models": [
+   {
+    "meta-llama/llama-prompt-guard-2-86m": 51,
+    "gemini-3.5-flash-lite": 449,
+    "gemini-3.1-flash-lite": 1
+   },
+   {
+    "meta-llama/llama-prompt-guard-2-86m": 51,
+    "gemini-3.5-flash-lite": 449,
+    "gemini-3.1-flash-lite": 1
+   },
+   {
+    "meta-llama/llama-prompt-guard-2-86m": 14,
+    "gemini-3.5-flash-lite": 100
+   },
+   {
+    "meta-llama/llama-prompt-guard-2-86m": 14,
+    "gemini-3.5-flash-lite": 100
+   },
+   {
+    "meta-llama/llama-prompt-guard-2-86m": 23,
+    "gemini-3.5-flash-lite": 75
+   },
+   {
+    "meta-llama/llama-prompt-guard-2-86m": 5,
+    "gemini-3.5-flash-lite": 23
+   },
+   {
+    "meta-llama/llama-prompt-guard-2-86m": 5,
+    "gemini-3.5-flash-lite": 23
+   }
+  ],
+  "pass": true
+ },
+ "G4_credentials": {
+  "cases": {
+   "h4_r3_09": {
+    "preflight": "error_credential",
+    "reached_model": false
+   },
+   "h4_r3_03": {
+    "preflight": "error_credential",
+    "reached_model": false
+   },
+   "h4_r3_13": {
+    "preflight": "error_credential",
+    "reached_model": false
+   },
+   "h4_r3_02": {
+    "preflight": "error_credential",
+    "reached_model": false
+   },
+   "h4_r3_07": {
+    "preflight": "error_credential",
+    "reached_model": false
+   }
+  },
+  "pass": true
+ },
+ "G5_fallbacks": {
+  "exhausted_15oct": 2,
+  "exhausted_now": 1,
+  "exhausted_cases_now": [
+   "h1_h1_passcode_forgotten_2"
+  ],
+  "mean_revision_rounds_15oct": 0.129,
+  "mean_revision_rounds_now": 0.106,
+  "pass": true
+ },
+ "G6_handover": {
+  "cases": {
+   "h4_b6_01": true,
+   "h4_b6_02": true,
+   "h4_b6_03": false,
+   "h4_b6_04": true,
+   "h4_b6_05": true
+  },
+  "pass": false,
+  "note": "loose automatic check; replies are reviewed directly"
+ },
+ "paired_listing": {
+  "rows": 85,
+  "same_parents": 54,
+  "same_channel": 76
+ },
+ "all_gates_pass": false
+}

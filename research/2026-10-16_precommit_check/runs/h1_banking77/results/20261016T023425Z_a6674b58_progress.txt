@@ -1,0 +1,5 @@
+=== run started 2026-10-16T02:34:25.707+00:00 study=2026-10-16_precommit_h1_banking77 runner=api_validation provider=gemini cases=50 ===
+2026-10-16T02:34:25.707+00:00 API key pool active: 10 key(s); production rotation and cross-model fallback enabled
+2026-10-16T02:34:50.966+00:00 [1/50] case=h1_h1_failed_transfer_2 status=OK
+2026-10-16T02:35:18.188+00:00 [2/50] case=h1_h1_automatic_top_up_1 status=OK
+2026-10-16T02:35:42.740+00:00 [3/50] case=h1_h1_exchange_via_app_4 status=OK

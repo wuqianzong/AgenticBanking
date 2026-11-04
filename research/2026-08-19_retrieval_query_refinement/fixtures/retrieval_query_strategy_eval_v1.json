@@ -1,0 +1,1322 @@
+[
+  {
+    "id": "debit_card_activation_indirect_conceptual",
+    "customer_query": "Explain the concept behind activating a new Horizon debit card.",
+    "direct_query": "How do I activate my new Horizon debit card?",
+    "expected_parent_id": "faq_74abafeb",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "use mobile app, call customer service, ATM activation",
+        "policy": "activation timeframe, security requirements, verification steps",
+        "conceptual": "purpose of activation, card security mechanisms, activation workflow"
+      }
+    ]
+  },
+  {
+    "id": "debit_card_activation_policy_dominant",
+    "customer_query": "What are the activation policies for a newly issued Horizon card?",
+    "direct_query": "How do I activate my new Horizon debit card?",
+    "expected_parent_id": "faq_74abafeb",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "use mobile app, call customer service, ATM activation",
+        "policy": "activation timeframe, security requirements, verification steps",
+        "conceptual": "purpose of activation, card security mechanisms, activation workflow"
+      }
+    ]
+  },
+  {
+    "id": "debit_card_activation_procedural_dominant",
+    "customer_query": "How can I activate my new Horizon debit card?",
+    "direct_query": "How do I activate my new Horizon debit card?",
+    "expected_parent_id": "faq_74abafeb",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "use mobile app, call customer service, ATM activation",
+        "policy": "activation timeframe, security requirements, verification steps",
+        "conceptual": "purpose of activation, card security mechanisms, activation workflow"
+      }
+    ]
+  },
+  {
+    "id": "deposit_interest_crediting_indirect_conceptual",
+    "customer_query": "How does the interest crediting process work for a Horizon deposit account?",
+    "direct_query": "When is interest credited to a Horizon deposit account?",
+    "expected_parent_id": "faq_fc5a7921",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "interest posting schedule, calculation dates, posting frequency",
+        "policy": "interest crediting policy, applicable terms, rate application rules",
+        "conceptual": "interest accrual concept, compounding method, timing of credit"
+      }
+    ]
+  },
+  {
+    "id": "deposit_interest_crediting_policy_dominant",
+    "customer_query": "What are the bank's rules for crediting interest on Horizon deposit accounts?",
+    "direct_query": "When is interest credited to a Horizon deposit account?",
+    "expected_parent_id": "faq_fc5a7921",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "interest posting schedule, calculation dates, posting frequency",
+        "policy": "interest crediting policy, applicable terms, rate application rules",
+        "conceptual": "interest accrual concept, compounding method, timing of credit"
+      }
+    ]
+  },
+  {
+    "id": "deposit_interest_crediting_procedural_dominant",
+    "customer_query": "When will the interest be posted to my Horizon deposit account?",
+    "direct_query": "When is interest credited to a Horizon deposit account?",
+    "expected_parent_id": "faq_fc5a7921",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "interest posting schedule, calculation dates, posting frequency",
+        "policy": "interest crediting policy, applicable terms, rate application rules",
+        "conceptual": "interest accrual concept, compounding method, timing of credit"
+      }
+    ]
+  },
+  {
+    "id": "instant_loan_eligibility_indirect_conceptual",
+    "customer_query": "I'm curious about the concepts behind qualifying for an Instant Loan.",
+    "direct_query": "What are the eligibility criteria for an Instant Loan?",
+    "expected_parent_id": "faq_0ae0bb51",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Eligibility"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "required documents, income thresholds, credit score minimums",
+        "policy": "bank eligibility policy, regulatory criteria, loan approval guidelines",
+        "conceptual": "definition of eligibility, risk assessment concepts, borrower qualification principles"
+      }
+    ]
+  },
+  {
+    "id": "instant_loan_eligibility_policy_dominant",
+    "customer_query": "What policies determine who can get an Instant Loan?",
+    "direct_query": "What are the eligibility criteria for an Instant Loan?",
+    "expected_parent_id": "faq_0ae0bb51",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Eligibility"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "required documents, income thresholds, credit score minimums",
+        "policy": "bank eligibility policy, regulatory criteria, loan approval guidelines",
+        "conceptual": "definition of eligibility, risk assessment concepts, borrower qualification principles"
+      }
+    ]
+  },
+  {
+    "id": "instant_loan_eligibility_procedural_dominant",
+    "customer_query": "Can you walk me through the steps I need to meet to qualify for an Instant Loan?",
+    "direct_query": "What are the eligibility criteria for an Instant Loan?",
+    "expected_parent_id": "faq_0ae0bb51",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Eligibility"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "required documents, income thresholds, credit score minimums",
+        "policy": "bank eligibility policy, regulatory criteria, loan approval guidelines",
+        "conceptual": "definition of eligibility, risk assessment concepts, borrower qualification principles"
+      }
+    ]
+  },
+  {
+    "id": "stock_autoinvest_multiple_plans_indirect_conceptual",
+    "customer_query": "Can you explain the concept of having multiple auto\u2011invest stock plans?",
+    "direct_query": "Can I create more than one automated stock investment plan?",
+    "expected_parent_id": "faq_9a88fadb",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "set up first plan, add second plan, manage each schedule",
+        "policy": "plan limit policy, eligibility per plan, compliance rules",
+        "conceptual": "strategy of multiple plans, diversification across plans, investment layering"
+      }
+    ]
+  },
+  {
+    "id": "stock_autoinvest_multiple_plans_policy_dominant",
+    "customer_query": "What does the bank's policy say about having several auto\u2011invest stock plans?",
+    "direct_query": "Can I create more than one automated stock investment plan?",
+    "expected_parent_id": "faq_9a88fadb",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "set up first plan, add second plan, manage each schedule",
+        "policy": "plan limit policy, eligibility per plan, compliance rules",
+        "conceptual": "strategy of multiple plans, diversification across plans, investment layering"
+      }
+    ]
+  },
+  {
+    "id": "stock_autoinvest_multiple_plans_procedural_dominant",
+    "customer_query": "Is it possible to create multiple automatic stock investment plans, and how?",
+    "direct_query": "Can I create more than one automated stock investment plan?",
+    "expected_parent_id": "faq_9a88fadb",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "set up first plan, add second plan, manage each schedule",
+        "policy": "plan limit policy, eligibility per plan, compliance rules",
+        "conceptual": "strategy of multiple plans, diversification across plans, investment layering"
+      }
+    ]
+  },
+  {
+    "id": "stock_autoinvest_setup_indirect_conceptual",
+    "customer_query": "Explain the idea behind automatic stock investing.",
+    "direct_query": "How do I set up automatic investments for stocks?",
+    "expected_parent_id": "faq_2f201863",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "choose portfolio, set contribution amount, schedule recurring purchases",
+        "policy": "auto\u2011invest eligibility, limits, regulatory compliance",
+        "conceptual": "benefits of auto\u2011invest, diversification concept, dollar\u2011cost averaging"
+      }
+    ]
+  },
+  {
+    "id": "stock_autoinvest_setup_policy_dominant",
+    "customer_query": "What policies govern automatic stock investment setups?",
+    "direct_query": "How do I set up automatic investments for stocks?",
+    "expected_parent_id": "faq_2f201863",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "choose portfolio, set contribution amount, schedule recurring purchases",
+        "policy": "auto\u2011invest eligibility, limits, regulatory compliance",
+        "conceptual": "benefits of auto\u2011invest, diversification concept, dollar\u2011cost averaging"
+      }
+    ]
+  },
+  {
+    "id": "stock_autoinvest_setup_procedural_dominant",
+    "customer_query": "What steps do I follow to set up automatic stock investments?",
+    "direct_query": "How do I set up automatic investments for stocks?",
+    "expected_parent_id": "faq_2f201863",
+    "scope_pairs": [
+      {
+        "product": "Stocks",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "choose portfolio, set contribution amount, schedule recurring purchases",
+        "policy": "auto\u2011invest eligibility, limits, regulatory compliance",
+        "conceptual": "benefits of auto\u2011invest, diversification concept, dollar\u2011cost averaging"
+      }
+    ]
+  },
+  {
+    "id": "credit_card_balance_transfer_fee_indirect_conceptual",
+    "customer_query": "I'm trying to understand how much a balance transfer on a credit card will cost me.",
+    "direct_query": "What is the fee for a credit card balance transfer?",
+    "expected_parent_id": "faq_f7412d3a",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "procedure and cost for balance transfer on credit card",
+        "policy": "balance transfer fee policy and rates",
+        "conceptual": "explanation of balance transfer fees for credit cards"
+      }
+    ]
+  },
+  {
+    "id": "credit_card_balance_transfer_fee_policy_dominant",
+    "customer_query": "What does the bank's fee policy state regarding credit\u2011card balance transfers?",
+    "direct_query": "What is the fee for a credit card balance transfer?",
+    "expected_parent_id": "faq_f7412d3a",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "procedure and cost for balance transfer on credit card",
+        "policy": "balance transfer fee policy and rates",
+        "conceptual": "explanation of balance transfer fees for credit cards"
+      }
+    ]
+  },
+  {
+    "id": "credit_card_balance_transfer_fee_procedural_dominant",
+    "customer_query": "Can you walk me through the steps and tell me the cost of doing a balance transfer on my credit card?",
+    "direct_query": "What is the fee for a credit card balance transfer?",
+    "expected_parent_id": "faq_f7412d3a",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Fees And Charges"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "procedure and cost for balance transfer on credit card",
+        "policy": "balance transfer fee policy and rates",
+        "conceptual": "explanation of balance transfer fees for credit cards"
+      }
+    ]
+  },
+  {
+    "id": "debit_card_delivery_indirect_conceptual",
+    "customer_query": "I wonder about the typical waiting period before my new Horizon debit card arrives\u2014any idea?",
+    "direct_query": "When will my Horizon debit card be delivered after I apply?",
+    "expected_parent_id": "faq_9d7a4b83",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "standard delivery time for Horizon debit cards",
+        "policy": "card delivery policy and expected timeframe",
+        "conceptual": "process of issuing and shipping a Horizon debit card"
+      }
+    ]
+  },
+  {
+    "id": "debit_card_delivery_policy_dominant",
+    "customer_query": "What does the bank's delivery policy say about the arrival time of a newly applied Horizon debit card?",
+    "direct_query": "When will my Horizon debit card be delivered after I apply?",
+    "expected_parent_id": "faq_9d7a4b83",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "standard delivery time for Horizon debit cards",
+        "policy": "card delivery policy and expected timeframe",
+        "conceptual": "process of issuing and shipping a Horizon debit card"
+      }
+    ]
+  },
+  {
+    "id": "debit_card_delivery_procedural_dominant",
+    "customer_query": "How long does it usually take to get my Horizon debit card after I submit an application?",
+    "direct_query": "When will my Horizon debit card be delivered after I apply?",
+    "expected_parent_id": "faq_9d7a4b83",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "standard delivery time for Horizon debit cards",
+        "policy": "card delivery policy and expected timeframe",
+        "conceptual": "process of issuing and shipping a Horizon debit card"
+      }
+    ]
+  },
+  {
+    "id": "debit_card_pin_update_indirect_conceptual",
+    "customer_query": "I'm looking to understand how I can modify the PIN on my Horizon card\u2014what's involved?",
+    "direct_query": "How do I change the PIN for my Horizon debit card?",
+    "expected_parent_id": "faq_6dae126c",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to update Horizon card PIN",
+        "policy": "PIN change policy and security requirements",
+        "conceptual": "information on PIN management for Horizon cards"
+      }
+    ]
+  },
+  {
+    "id": "debit_card_pin_update_policy_dominant",
+    "customer_query": "What does the bank require in its policy to change the PIN for my Horizon card?",
+    "direct_query": "How do I change the PIN for my Horizon debit card?",
+    "expected_parent_id": "faq_6dae126c",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to update Horizon card PIN",
+        "policy": "PIN change policy and security requirements",
+        "conceptual": "information on PIN management for Horizon cards"
+      }
+    ]
+  },
+  {
+    "id": "debit_card_pin_update_procedural_dominant",
+    "customer_query": "What are the steps to update the PIN on my Horizon debit card?",
+    "direct_query": "How do I change the PIN for my Horizon debit card?",
+    "expected_parent_id": "faq_6dae126c",
+    "scope_pairs": [
+      {
+        "product": "Debit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to update Horizon card PIN",
+        "policy": "PIN change policy and security requirements",
+        "conceptual": "information on PIN management for Horizon cards"
+      }
+    ]
+  },
+  {
+    "id": "deposit_bonus_interest_timing_indirect_conceptual",
+    "customer_query": "I'm curious about how bonus interest works\u2014when does it actually get posted to my savings account?",
+    "direct_query": "When is bonus interest credited to my savings account?",
+    "expected_parent_id": "faq_871bd177",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "timeline for bonus interest credit",
+        "policy": "bonus interest eligibility and payout policy",
+        "conceptual": "definition of bonus interest and its accrual schedule"
+      }
+    ]
+  },
+  {
+    "id": "deposit_bonus_interest_timing_policy_dominant",
+    "customer_query": "What are the bank's rules regarding the timing of bonus interest payments on my savings account?",
+    "direct_query": "When is bonus interest credited to my savings account?",
+    "expected_parent_id": "faq_871bd177",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "timeline for bonus interest credit",
+        "policy": "bonus interest eligibility and payout policy",
+        "conceptual": "definition of bonus interest and its accrual schedule"
+      }
+    ]
+  },
+  {
+    "id": "deposit_bonus_interest_timing_procedural_dominant",
+    "customer_query": "Can you tell me the timeline for when the bonus interest will be added to my savings account?",
+    "direct_query": "When is bonus interest credited to my savings account?",
+    "expected_parent_id": "faq_871bd177",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "timeline for bonus interest credit",
+        "policy": "bonus interest eligibility and payout policy",
+        "conceptual": "definition of bonus interest and its accrual schedule"
+      }
+    ]
+  },
+  {
+    "id": "horizon_app_obtain_indirect_conceptual",
+    "customer_query": "I'm looking for where I can obtain the Horizon app\u2014any guidance?",
+    "direct_query": "Where can I download the Horizon app?",
+    "expected_parent_id": "faq_ec3376a6",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "General Inquiries"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "download steps for Horizon app",
+        "policy": "availability policy for Horizon app platforms",
+        "conceptual": "information about the Horizon mobile application and its distribution"
+      }
+    ]
+  },
+  {
+    "id": "horizon_app_obtain_policy_dominant",
+    "customer_query": "What does the bank's policy say about where the Horizon app is available for download?",
+    "direct_query": "Where can I download the Horizon app?",
+    "expected_parent_id": "faq_ec3376a6",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "General Inquiries"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "download steps for Horizon app",
+        "policy": "availability policy for Horizon app platforms",
+        "conceptual": "information about the Horizon mobile application and its distribution"
+      }
+    ]
+  },
+  {
+    "id": "horizon_app_obtain_procedural_dominant",
+    "customer_query": "How do I download and install the Horizon app on my device?",
+    "direct_query": "Where can I download the Horizon app?",
+    "expected_parent_id": "faq_ec3376a6",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "General Inquiries"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "download steps for Horizon app",
+        "policy": "availability policy for Horizon app platforms",
+        "conceptual": "information about the Horizon mobile application and its distribution"
+      }
+    ]
+  },
+  {
+    "id": "life_insurance_products_indirect_conceptual",
+    "customer_query": "I'm interested in learning about the types of life insurance Horizon Bank makes available.",
+    "direct_query": "What life insurance products does Horizon Bank offer?",
+    "expected_parent_id": "faq_88e75264",
+    "scope_pairs": [
+      {
+        "product": "Insurance",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Procedure to view Horizon Bank life insurance options, enrollment steps",
+        "policy": "Policy on life insurance product offerings at Horizon Bank",
+        "conceptual": "Conceptual overview of Horizon Bank life insurance products"
+      }
+    ]
+  },
+  {
+    "id": "life_insurance_products_policy_dominant",
+    "customer_query": "What is Horizon Bank's policy regarding the range of life insurance products it offers?",
+    "direct_query": "What life insurance products does Horizon Bank offer?",
+    "expected_parent_id": "faq_88e75264",
+    "scope_pairs": [
+      {
+        "product": "Insurance",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Procedure to view Horizon Bank life insurance options, enrollment steps",
+        "policy": "Policy on life insurance product offerings at Horizon Bank",
+        "conceptual": "Conceptual overview of Horizon Bank life insurance products"
+      }
+    ]
+  },
+  {
+    "id": "life_insurance_products_procedural_dominant",
+    "customer_query": "Can you explain the steps to find out which life insurance products Horizon Bank provides?",
+    "direct_query": "What life insurance products does Horizon Bank offer?",
+    "expected_parent_id": "faq_88e75264",
+    "scope_pairs": [
+      {
+        "product": "Insurance",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Procedure to view Horizon Bank life insurance options, enrollment steps",
+        "policy": "Policy on life insurance product offerings at Horizon Bank",
+        "conceptual": "Conceptual overview of Horizon Bank life insurance products"
+      }
+    ]
+  },
+  {
+    "id": "mutual_fund_costs_indirect_conceptual",
+    "customer_query": "I'm curious about the cost structure of investing in Horizon mutual funds.",
+    "direct_query": "What costs are involved when investing in Horizon mutual funds?",
+    "expected_parent_id": "faq_eb2caf90",
+    "scope_pairs": [
+      {
+        "product": "Mutual_Funds",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Procedure to locate fee schedule for Horizon mutual funds, cost breakdown steps",
+        "policy": "Policy on fees and charges for Horizon mutual fund investments",
+        "conceptual": "Conceptual overview of cost structure for Horizon mutual funds"
+      }
+    ]
+  },
+  {
+    "id": "mutual_fund_costs_policy_dominant",
+    "customer_query": "What does Horizon Bank's policy state about fees for investing in its mutual funds?",
+    "direct_query": "What costs are involved when investing in Horizon mutual funds?",
+    "expected_parent_id": "faq_eb2caf90",
+    "scope_pairs": [
+      {
+        "product": "Mutual_Funds",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Procedure to locate fee schedule for Horizon mutual funds, cost breakdown steps",
+        "policy": "Policy on fees and charges for Horizon mutual fund investments",
+        "conceptual": "Conceptual overview of cost structure for Horizon mutual funds"
+      }
+    ]
+  },
+  {
+    "id": "mutual_fund_costs_procedural_dominant",
+    "customer_query": "What steps should I follow to find fee information for Horizon mutual funds?",
+    "direct_query": "What costs are involved when investing in Horizon mutual funds?",
+    "expected_parent_id": "faq_eb2caf90",
+    "scope_pairs": [
+      {
+        "product": "Mutual_Funds",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Procedure to locate fee schedule for Horizon mutual funds, cost breakdown steps",
+        "policy": "Policy on fees and charges for Horizon mutual fund investments",
+        "conceptual": "Conceptual overview of cost structure for Horizon mutual funds"
+      }
+    ]
+  },
+  {
+    "id": "mutual_fund_products_indirect_conceptual",
+    "customer_query": "I'm looking to understand the variety of mutual funds Horizon Bank provides.",
+    "direct_query": "Which mutual funds are available through Horizon Bank?",
+    "expected_parent_id": "faq_85546eac",
+    "scope_pairs": [
+      {
+        "product": "Mutual_Funds",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Steps to view Horizon Bank mutual fund lineup, access fund list",
+        "policy": "Policy on mutual fund selection and availability at Horizon Bank",
+        "conceptual": "Conceptual description of Horizon Bank mutual fund offerings"
+      }
+    ]
+  },
+  {
+    "id": "mutual_fund_products_policy_dominant",
+    "customer_query": "What does Horizon Bank's policy say about the selection of mutual funds it provides?",
+    "direct_query": "Which mutual funds are available through Horizon Bank?",
+    "expected_parent_id": "faq_85546eac",
+    "scope_pairs": [
+      {
+        "product": "Mutual_Funds",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Steps to view Horizon Bank mutual fund lineup, access fund list",
+        "policy": "Policy on mutual fund selection and availability at Horizon Bank",
+        "conceptual": "Conceptual description of Horizon Bank mutual fund offerings"
+      }
+    ]
+  },
+  {
+    "id": "mutual_fund_products_procedural_dominant",
+    "customer_query": "How can I see the list of mutual funds that Horizon Bank offers?",
+    "direct_query": "Which mutual funds are available through Horizon Bank?",
+    "expected_parent_id": "faq_85546eac",
+    "scope_pairs": [
+      {
+        "product": "Mutual_Funds",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Steps to view Horizon Bank mutual fund lineup, access fund list",
+        "policy": "Policy on mutual fund selection and availability at Horizon Bank",
+        "conceptual": "Conceptual description of Horizon Bank mutual fund offerings"
+      }
+    ]
+  },
+  {
+    "id": "rewards_membership_connection_indirect_conceptual",
+    "customer_query": "I'm curious if the rewards program automatically syncs with a Horizon card I already have.",
+    "direct_query": "Do existing rewards memberships automatically connect to a Horizon card?",
+    "expected_parent_id": "faq_da866599",
+    "scope_pairs": [
+      {
+        "product": "Rewards_Program",
+        "intents": [
+          "Rewards And Promotions"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "How to link existing rewards membership to a Horizon card, steps for automatic connection",
+        "policy": "Policy on automatic rewards membership connection to Horizon cards",
+        "conceptual": "Concept of rewards membership integration with Horizon cards"
+      }
+    ]
+  },
+  {
+    "id": "rewards_membership_connection_policy_dominant",
+    "customer_query": "Does Horizon's policy automatically link existing rewards memberships to a new Horizon card?",
+    "direct_query": "Do existing rewards memberships automatically connect to a Horizon card?",
+    "expected_parent_id": "faq_da866599",
+    "scope_pairs": [
+      {
+        "product": "Rewards_Program",
+        "intents": [
+          "Rewards And Promotions"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "How to link existing rewards membership to a Horizon card, steps for automatic connection",
+        "policy": "Policy on automatic rewards membership connection to Horizon cards",
+        "conceptual": "Concept of rewards membership integration with Horizon cards"
+      }
+    ]
+  },
+  {
+    "id": "rewards_membership_connection_procedural_dominant",
+    "customer_query": "Will my current rewards account be linked to my new Horizon card without any extra steps?",
+    "direct_query": "Do existing rewards memberships automatically connect to a Horizon card?",
+    "expected_parent_id": "faq_da866599",
+    "scope_pairs": [
+      {
+        "product": "Rewards_Program",
+        "intents": [
+          "Rewards And Promotions"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "How to link existing rewards membership to a Horizon card, steps for automatic connection",
+        "policy": "Policy on automatic rewards membership connection to Horizon cards",
+        "conceptual": "Concept of rewards membership integration with Horizon cards"
+      }
+    ]
+  },
+  {
+    "id": "verify_bank_email_indirect_conceptual",
+    "customer_query": "I'm wondering how to tell if an email that says it's from Horizon Bank is actually legitimate.",
+    "direct_query": "How can I verify if an email claiming to be from Horizon Bank is genuine?",
+    "expected_parent_id": "faq_ed92e41d",
+    "scope_pairs": [
+      {
+        "product": "ALL",
+        "intents": [
+          "Authentication And Security"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Steps to authenticate Horizon Bank emails, verification process",
+        "policy": "Policy on email authenticity and security communications from Horizon Bank",
+        "conceptual": "Conceptual explanation of how to identify legitimate Horizon Bank emails"
+      }
+    ]
+  },
+  {
+    "id": "verify_bank_email_policy_dominant",
+    "customer_query": "What is Horizon Bank's policy for confirming the authenticity of emails sent to customers?",
+    "direct_query": "How can I verify if an email claiming to be from Horizon Bank is genuine?",
+    "expected_parent_id": "faq_ed92e41d",
+    "scope_pairs": [
+      {
+        "product": "ALL",
+        "intents": [
+          "Authentication And Security"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Steps to authenticate Horizon Bank emails, verification process",
+        "policy": "Policy on email authenticity and security communications from Horizon Bank",
+        "conceptual": "Conceptual explanation of how to identify legitimate Horizon Bank emails"
+      }
+    ]
+  },
+  {
+    "id": "verify_bank_email_procedural_dominant",
+    "customer_query": "What steps should I take to verify that an email claiming to be from Horizon Bank is genuine?",
+    "direct_query": "How can I verify if an email claiming to be from Horizon Bank is genuine?",
+    "expected_parent_id": "faq_ed92e41d",
+    "scope_pairs": [
+      {
+        "product": "ALL",
+        "intents": [
+          "Authentication And Security"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "Steps to authenticate Horizon Bank emails, verification process",
+        "policy": "Policy on email authenticity and security communications from Horizon Bank",
+        "conceptual": "Conceptual explanation of how to identify legitimate Horizon Bank emails"
+      }
+    ]
+  },
+  {
+    "id": "credit_card_verification_indirect_conceptual",
+    "customer_query": "Why does Horizon require verification of a new credit card before it becomes active?",
+    "direct_query": "Why must I verify my new Horizon credit card before using it?",
+    "expected_parent_id": "faq_26561f81",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to verify new Horizon credit card, verification process, activation requirements",
+        "policy": "Horizon policy on card verification, verification rules for new credit cards, compliance requirements",
+        "conceptual": "reason for verifying new credit card, purpose of card verification, benefits of verification"
+      }
+    ]
+  },
+  {
+    "id": "credit_card_verification_policy_dominant",
+    "customer_query": "What is Horizon Bank's policy on verifying a newly issued credit card before it can be used?",
+    "direct_query": "Why must I verify my new Horizon credit card before using it?",
+    "expected_parent_id": "faq_26561f81",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to verify new Horizon credit card, verification process, activation requirements",
+        "policy": "Horizon policy on card verification, verification rules for new credit cards, compliance requirements",
+        "conceptual": "reason for verifying new credit card, purpose of card verification, benefits of verification"
+      }
+    ]
+  },
+  {
+    "id": "credit_card_verification_procedural_dominant",
+    "customer_query": "Can you walk me through the steps required to verify my new Horizon credit card before I can start using it?",
+    "direct_query": "Why must I verify my new Horizon credit card before using it?",
+    "expected_parent_id": "faq_26561f81",
+    "scope_pairs": [
+      {
+        "product": "Credit_Card",
+        "intents": [
+          "Card Logistics"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to verify new Horizon credit card, verification process, activation requirements",
+        "policy": "Horizon policy on card verification, verification rules for new credit cards, compliance requirements",
+        "conceptual": "reason for verifying new credit card, purpose of card verification, benefits of verification"
+      }
+    ]
+  },
+  {
+    "id": "deposit_account_funding_indirect_conceptual",
+    "customer_query": "Why should I add money to my Horizon savings account, and what options do I have?",
+    "direct_query": "How can I add money to my Horizon savings account?",
+    "expected_parent_id": "faq_7d49c937",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Payments And Transfers"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to add funds to Horizon savings account, funding methods, transfer procedures",
+        "policy": "Horizon funding policy for savings accounts, deposit rules, transfer limits",
+        "conceptual": "reasons to fund savings account, benefits of adding money, impact on savings growth"
+      }
+    ]
+  },
+  {
+    "id": "deposit_account_funding_policy_dominant",
+    "customer_query": "What are Horizon's policies for adding funds to a savings account?",
+    "direct_query": "How can I add money to my Horizon savings account?",
+    "expected_parent_id": "faq_7d49c937",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Payments And Transfers"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to add funds to Horizon savings account, funding methods, transfer procedures",
+        "policy": "Horizon funding policy for savings accounts, deposit rules, transfer limits",
+        "conceptual": "reasons to fund savings account, benefits of adding money, impact on savings growth"
+      }
+    ]
+  },
+  {
+    "id": "deposit_account_funding_procedural_dominant",
+    "customer_query": "Can you explain the process to fund my Horizon savings account?",
+    "direct_query": "How can I add money to my Horizon savings account?",
+    "expected_parent_id": "faq_7d49c937",
+    "scope_pairs": [
+      {
+        "product": "Deposit_Account",
+        "intents": [
+          "Payments And Transfers"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to add funds to Horizon savings account, funding methods, transfer procedures",
+        "policy": "Horizon funding policy for savings accounts, deposit rules, transfer limits",
+        "conceptual": "reasons to fund savings account, benefits of adding money, impact on savings growth"
+      }
+    ]
+  },
+  {
+    "id": "horizon_key_setup_indirect_conceptual",
+    "customer_query": "Why is setting up a Horizon Key important for my account security?",
+    "direct_query": "How do I set up my Horizon Key?",
+    "expected_parent_id": "faq_b074c2e1",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Authentication And Security"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to set up Horizon Key, activation process, device linking",
+        "policy": "Horizon Key setup policy, security requirements, eligibility criteria",
+        "conceptual": "purpose of Horizon Key, benefits of using Horizon Key, security advantages"
+      }
+    ]
+  },
+  {
+    "id": "horizon_key_setup_policy_dominant",
+    "customer_query": "What are the requirements and policies for setting up a Horizon Key?",
+    "direct_query": "How do I set up my Horizon Key?",
+    "expected_parent_id": "faq_b074c2e1",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Authentication And Security"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to set up Horizon Key, activation process, device linking",
+        "policy": "Horizon Key setup policy, security requirements, eligibility criteria",
+        "conceptual": "purpose of Horizon Key, benefits of using Horizon Key, security advantages"
+      }
+    ]
+  },
+  {
+    "id": "horizon_key_setup_procedural_dominant",
+    "customer_query": "What steps do I need to follow to set up my Horizon Key?",
+    "direct_query": "How do I set up my Horizon Key?",
+    "expected_parent_id": "faq_b074c2e1",
+    "scope_pairs": [
+      {
+        "product": "Horizon_APP",
+        "intents": [
+          "Authentication And Security"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to set up Horizon Key, activation process, device linking",
+        "policy": "Horizon Key setup policy, security requirements, eligibility criteria",
+        "conceptual": "purpose of Horizon Key, benefits of using Horizon Key, security advantages"
+      }
+    ]
+  },
+  {
+    "id": "life_insurance_policy_access_indirect_conceptual",
+    "customer_query": "Why might I want to review my life insurance policy details, and where can I find them?",
+    "direct_query": "Where can I view my life insurance policy details?",
+    "expected_parent_id": "faq_598df143",
+    "scope_pairs": [
+      {
+        "product": "Insurance",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to view life insurance policy, online portal navigation, document retrieval",
+        "policy": "policy on accessing life insurance information, privacy guidelines, user permissions",
+        "conceptual": "importance of reviewing policy details, benefits of policy visibility, understanding coverage"
+      }
+    ]
+  },
+  {
+    "id": "life_insurance_policy_access_policy_dominant",
+    "customer_query": "What does Horizon's policy say about accessing life insurance policy information?",
+    "direct_query": "Where can I view my life insurance policy details?",
+    "expected_parent_id": "faq_598df143",
+    "scope_pairs": [
+      {
+        "product": "Insurance",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to view life insurance policy, online portal navigation, document retrieval",
+        "policy": "policy on accessing life insurance information, privacy guidelines, user permissions",
+        "conceptual": "importance of reviewing policy details, benefits of policy visibility, understanding coverage"
+      }
+    ]
+  },
+  {
+    "id": "life_insurance_policy_access_procedural_dominant",
+    "customer_query": "How can I access my life insurance policy details online?",
+    "direct_query": "Where can I view my life insurance policy details?",
+    "expected_parent_id": "faq_598df143",
+    "scope_pairs": [
+      {
+        "product": "Insurance",
+        "intents": [
+          "Wealth And Insurance"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to view life insurance policy, online portal navigation, document retrieval",
+        "policy": "policy on accessing life insurance information, privacy guidelines, user permissions",
+        "conceptual": "importance of reviewing policy details, benefits of policy visibility, understanding coverage"
+      }
+    ]
+  },
+  {
+    "id": "personal_loan_borrowing_cost_indirect_conceptual",
+    "customer_query": "Why does Horizon calculate borrowing costs the way it does for personal loans?",
+    "direct_query": "How does Horizon calculate the cost of borrowing for a personal loan?",
+    "expected_parent_id": "faq_98ed4759",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to compute personal loan borrowing cost, interest calculation method, fee inclusion",
+        "policy": "Horizon policy on loan cost calculation, rate determination rules, disclosed fees",
+        "conceptual": "reason behind Horizon's borrowing cost methodology, factors influencing loan rates, cost transparency"
+      }
+    ]
+  },
+  {
+    "id": "personal_loan_borrowing_cost_policy_dominant",
+    "customer_query": "What is Horizon's policy for determining the cost of borrowing on personal loans?",
+    "direct_query": "How does Horizon calculate the cost of borrowing for a personal loan?",
+    "expected_parent_id": "faq_98ed4759",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to compute personal loan borrowing cost, interest calculation method, fee inclusion",
+        "policy": "Horizon policy on loan cost calculation, rate determination rules, disclosed fees",
+        "conceptual": "reason behind Horizon's borrowing cost methodology, factors influencing loan rates, cost transparency"
+      }
+    ]
+  },
+  {
+    "id": "personal_loan_borrowing_cost_procedural_dominant",
+    "customer_query": "What steps are involved in calculating the borrowing cost for a personal loan at Horizon?",
+    "direct_query": "How does Horizon calculate the cost of borrowing for a personal loan?",
+    "expected_parent_id": "faq_98ed4759",
+    "scope_pairs": [
+      {
+        "product": "Personal_Loan",
+        "intents": [
+          "Interest And Rates"
+        ]
+      }
+    ],
+    "angle_groups": [
+      {
+        "group_id": "base",
+        "procedural": "steps to compute personal loan borrowing cost, interest calculation method, fee inclusion",
+        "policy": "Horizon policy on loan cost calculation, rate determination rules, disclosed fees",
+        "conceptual": "reason behind Horizon's borrowing cost methodology, factors influencing loan rates, cost transparency"
+      }
+    ]
+  }
+]

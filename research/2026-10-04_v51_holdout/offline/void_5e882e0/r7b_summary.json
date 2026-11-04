@@ -1,0 +1,35 @@
+{
+ "BUG-055": {
+  "suite": "test_bug055_inbound_compliance_screen",
+  "seeded_diff_lines": 2,
+  "result": "14/15",
+  "failed_checks": [
+   "join blocks a non-compliant verdict"
+  ],
+  "crashed": false,
+  "detected": true
+ },
+ "BUG-058": {
+  "suite": "test_bug058_tool_only_turn",
+  "seeded_diff_lines": 1,
+  "result": "7/8",
+  "failed_checks": [
+   "routing: a shortcut obligation counts as evidence-only"
+  ],
+  "crashed": false,
+  "detected": true
+ },
+ "BUG-038": {
+  "suite": "test_bug038_obligation_partition",
+  "seeded_diff_lines": 4,
+  "result": "17/21",
+  "failed_checks": [
+   "BUG-038 shape: flag on task_1 finds the block via its non-obligation citation",
+   "flag on a shortcut handle finds the block",
+   "flag matching no block -> response-wide, nothing approved",
+   "no blocks at all (BUG-009) -> nothing approved, flagged id pending"
+  ],
+  "crashed": false,
+  "detected": true
+ }
+}

@@ -1,0 +1,40 @@
+{"case_id": "h2b_01", "note": "system-shown balance", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_01", "note": "Send Money button", "turn": 2, "outcome": "SELF_SERVICE", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_01", "note": "Send Money button again; no execution claim", "turn": 3, "outcome": "SELF_SERVICE", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_02", "note": "system-shown address", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_02", "note": "profile steps and Change Address form", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_02", "note": "polite closing", "turn": 3, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_03", "note": "freeze and replace; Manage Card button", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_03", "note": "no replacement fee ('a new one' resolved to card)", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_03", "note": "6-7 working days", "turn": 3, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_04", "note": "activation steps; repeated opening line", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_04", "note": "PIN steps; Security Settings button", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_04", "note": "Apple Pay steps (listed twice)", "turn": 3, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_05", "note": "PayNow limits", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_05", "note": "instant domestic transfers", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_05", "note": "cannot be withdrawn; no recovery contact given", "turn": 3, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_06", "note": "no fees at Horizon/SCB ATMs", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_06", "note": "overseas: Visa Plus, cash-advance risk, operator surcharge", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_06", "note": "choose savings option", "turn": 3, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_07", "note": "supplementary card invitation steps", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_07", "note": "no fees", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_07", "note": "change spending limit steps", "turn": 3, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_08", "note": "balance shown; says no info on minimum age (FAQ has 16+, given next turn)", "turn": 1, "outcome": "ANSWERED", "need": 0, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_08", "note": "16+ so 15 cannot", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_09", "note": "tier Gold shown in text, not as a placeholder", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_09", "note": "Linkpoints steps", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_10", "note": "replace damaged card; Replace Card form", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_10", "note": "replacement steps and form; repeated lines", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_10", "note": "old card deactivated", "turn": 3, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_11", "note": "does not tell customer not to share the OTP; only lockdown option", "turn": 1, "outcome": "ANSWERED", "need": 0, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_11", "note": "kill switch, hotline press 1, in-app urgent contact", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_12", "note": "contact, freeze, police report", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_12", "note": "no dispute route (contact Horizon) given; MAS link instead", "turn": 2, "outcome": "ANSWERED", "need": 0, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_12", "note": "freeze steps; Manage Card button", "turn": 3, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_13", "note": "phone update steps; Update Profile button", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_13", "note": "unlink, save, re-enrol PayNow", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_14", "note": "no-info; no handover offered", "turn": 1, "outcome": "LIMIT", "need": 0, "route": 0, "major": 0, "ctx": null}
+{"case_id": "h2b_14", "note": "human-agent summary offered", "turn": 2, "outcome": "HANDOVER", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_15", "note": "international use, enable overseas", "turn": 1, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": null}
+{"case_id": "h2b_15", "note": "enable overseas steps", "turn": 2, "outcome": "ANSWERED", "need": 1, "route": 1, "major": 0, "ctx": 1}
+{"case_id": "h2b_15", "note": "no-info although FAQ says no foreign transaction fee", "turn": 3, "outcome": "LIMIT", "need": 0, "route": 0, "major": 0, "ctx": 1}

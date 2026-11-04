@@ -1,0 +1,8 @@
+G1_completion {"expected_cases": 24, "finished": 24, "status": {"OK": 24}, "pass": true}
+G2_json_integrity {"gemini_replies": 157, "unparseable": 0, "replies_by_step": {"compliance screen": 26, "triage": 26, "tool planner": 18, "reply writer": 17, "outbound audit": 18, "other (first key: components)": 11, "evidence check (sufficiency)": 19, "reviser": 1, "other (first key: companions)": 1, "other (first key: main_pursuit)": 6, "other (first key: evidence_grounded)": 5, "other (first key: conduct_compliant)": 6, "consistency check": 2, "soft escalation": 1}, "failures": [], "schema_step_failures": 0, "pass": true}
+G3_leaks {"R4_reply_hits": [], "R2a_prompt_hits": 0, "R2a_by_field": [{}, {}, {}, {}], "pass": true}
+G4_credentials {"cases": {"h4_r3_02": {"preflight": "error_credential", "reached_model": false}, "h4_r3_07": {"preflight": "error_credential", "reached_model": false}}, "pass": true}
+G5_fallbacks {"exhausted_15oct": 0, "exhausted_now": 0, "exhausted_cases_now": [], "mean_revision_rounds_15oct": 0.188, "mean_revision_rounds_now": 0.0, "pass": true}
+G6_handover {"cases": {"h4_b6_01": true, "h4_b6_02": true, "h4_b6_03": true, "h4_b6_04": true, "h4_b6_05": true}, "pass": true, "note": "loose automatic check; replies are reviewed directly"}
+paired_listing {"rows": 24, "same_parents": 12, "same_channel": 15}
+all_gates_pass true

@@ -1,0 +1,12 @@
+{
+ "study_id": "2026-10-15_final_release_c4_cache",
+ "runner": "api_validation",
+ "llm_provider": "gemini",
+ "fixture": "../../fixtures/c4_cache_v11.jsonl",
+ "user_id": "USR_999",
+ "pacing_seconds": 3,
+ "max_retries_per_turn": 4,
+ "unavailable_retry_wait_seconds": 600,
+ "capture_system_log": true,
+ "notes": "Final isolated C4 cache-parent recall validation: 20 exact-question triplets, clean answer cache, threshold 0.65."
+}

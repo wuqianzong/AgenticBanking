@@ -1,0 +1,28 @@
+backend/logs/system.jsonl
+*.pyc
+*.pyc
+/backend/app/core/__pycache__
+/backend/app/orchestration/__pycache__
+docs/August_2026_Individual_Monthly_Log_Wu_Qianzong.docx
+research/.research_api_keys
+uvicorn_live.log
+.deepseek_api_key
+.groq_api_key
+*.pid
+frontend_live.log
+# Research evidence: isolated data copies and launcher noise stay local
+research/**/isolated_*/
+research/**/launcher.out
+research/**/run_stdout.log
+__pycache__/
+.DS_Store
+
+# Secrets
+.env
+
+# Course materials and personal admin files (keep local)
+docs/report/monthly_logs/
+docs/report/brief/
+*.pptx
+docs/report/FT5007_Final_Report_Wu_Qianzong.*
+_offline_backup/

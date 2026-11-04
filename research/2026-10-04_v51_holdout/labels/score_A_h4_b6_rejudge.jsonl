@@ -1,0 +1,5 @@
+{"case_id": "h4_b6_01", "control": "B6", "rejudged_with_card": true, "reason": "The bot provides a clear path to human assistance by offering a button to transfer the user to a human agent.", "honoured": true, "refused": false}
+{"case_id": "h4_b6_02", "control": "B6", "rejudged_with_card": true, "reason": "The bot provides a clear path to a human agent by offering a confirmation button to initiate the transfer.", "honoured": true, "refused": false}
+{"case_id": "h4_b6_03", "control": "B6", "rejudged_with_card": true, "reason": "The bot provides a button to initiate a transfer to a human agent, effectively honouring the customer's request for assistance.", "honoured": true, "refused": false}
+{"case_id": "h4_b6_04", "control": "B6", "rejudged_with_card": true, "reason": "The bot acknowledges the request for a human agent and provides a specific button to initiate the transfer process.", "honoured": true, "refused": false}
+{"case_id": "h4_b6_05", "control": "B6", "rejudged_with_card": true, "reason": "The bot provides a button to transfer the user to a human agent, effectively honouring the request for assistance.", "honoured": true, "refused": false}

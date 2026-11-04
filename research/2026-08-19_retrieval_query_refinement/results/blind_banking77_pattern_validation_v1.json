@@ -1,0 +1,3057 @@
+{
+  "metadata": {
+    "purpose": "Fresh BANKING77 blind semantic validation of corpus-pattern retrieval",
+    "sample_seed": 20260820,
+    "sample_per_category": 5,
+    "pattern_generation_rule": "scope and FAQ corpus only; no customer query or expected parent ID",
+    "judge_blinding_rule": "anonymised, shuffled hydrated evidence; no parent IDs or strategy labels"
+  },
+  "scope_patterns": {
+    "[{\"intents\":[\"Card Logistics\"],\"product\":\"Debit_Card\"}]": {
+      "model": "gemini-3.5-flash-lite",
+      "patterns": [
+        "expected timeframe for receiving physical Horizon card in the mail",
+        "activate new physical Horizon card via NFC or manual code in app",
+        "modify PIN for Horizon card in card details section of app",
+        "freeze missing Horizon card or order replacement for lost or damaged card"
+      ],
+      "source_parent_count": 10
+    },
+    "[{\"intents\":[\"Card Logistics\",\"General Inquiries\"],\"product\":\"Debit_Card\"}]": {
+      "model": "gemini-3.5-flash-lite",
+      "patterns": [
+        "expected timeframe for receiving physical Horizon card in the mail",
+        "activate newly issued Horizon card for use via Horizon App",
+        "modify PIN in Horizon App for Horizon card security",
+        "freeze Horizon card or order replacement for lost or stolen card"
+      ],
+      "source_parent_count": 25
+    },
+    "[{\"intents\":[\"Card Logistics\",\"Transaction Disputes\"],\"product\":\"Debit_Card\"}]": {
+      "model": "gemini-3.5-flash-lite",
+      "patterns": [
+        "Track shipping progress and delivery timeframe for physical Horizon card",
+        "Activate newly issued or replaced Horizon card using NFC or code",
+        "Freeze missing Horizon card and request replacement for lost, stolen, or damaged card",
+        "Report incorrect transfer recipient or handle mistaken funds deposition with customer care"
+      ],
+      "source_parent_count": 20
+    },
+    "[{\"intents\":[\"Payments And Transfers\"],\"product\":\"Deposit_Account\"}]": {
+      "model": "gemini-3.5-flash-lite",
+      "patterns": [
+        "fund horizon bank savings account via fast transfer or paynow",
+        "configure recurring autopilot transfers to savings pot from horizon savings account",
+        "modify or cancel automatic payment arrangements and recurring transactions in horizon app",
+        "register or manage paynow proxy details and mobile number linkage in horizon bank"
+      ],
+      "source_parent_count": 51
+    },
+    "[{\"intents\":[\"Authentication And Security\"],\"product\":\"Horizon_APP\"}]": {
+      "model": "gemini-3.5-flash-lite",
+      "patterns": [
+        "configure horizon key and waiting period",
+        "lock horizon card and report fraud",
+        "enable security lock and emergency lockdown",
+        "reset horizon app passcode and unlock account"
+      ],
+      "source_parent_count": 19
+    }
+  },
+  "cases": [
+    {
+      "id": "blind_banking77_activate_my_card_01",
+      "source_intent": "activate_my_card",
+      "customer_query": "What do I need to do to activate my card?",
+      "direct_query": "What do I need to do to activate my card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_74abafeb",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_66004845",
+            "faq_7883a8c2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 directly provides the step-by-step instructions required to activate a newly received Horizon card."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 directly outlines the steps to activate a Horizon card, fully addressing the customer's question."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_7883a8c2",
+            "faq_ff1c2b9c"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 directly provides the step-by-step instructions required to activate a newly received Horizon card."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 provides step\u2011by\u2011step instructions for activating a newly received Horizon card, directly answering the customer's question."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_activate_my_card_02",
+      "source_intent": "activate_my_card",
+      "customer_query": "I just got my card and want to use it, how do I activate my card?",
+      "direct_query": "I just got my card and want to use it, how do I activate my card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_74abafeb",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_66004845",
+            "faq_7883a8c2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 provides clear, step-by-step instructions on how to activate a newly received Horizon card using either NFC or a manual code."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 gives step\u2011by\u2011step instructions for activating a newly received Horizon card, directly answering the customer's request."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_7883a8c2",
+            "faq_74392fe2",
+            "faq_ff1c2b9c"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 provides step-by-step instructions on how to activate a newly received Horizon card using the Horizon App via NFC or manual code entry."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 directly explains how to activate a newly received Horizon card, matching the customer's request."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_activate_my_card_03",
+      "source_intent": "activate_my_card",
+      "customer_query": "How can I start using my card?",
+      "direct_query": "How can I start using my card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_74abafeb",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_7883a8c2",
+            "faq_26561f81"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 provides clear, step-by-step instructions on how to activate and start using a newly received Horizon card."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 provides step\u2011by\u2011step instructions to activate the Horizon card, directly answering how to start using it."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_7883a8c2",
+            "faq_74392fe2",
+            "faq_33f045af"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 provides direct and detailed steps on how to start using and activate a newly received Horizon card."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 gives step\u2011by\u2011step instructions to activate a newly received Horizon card, directly answering how to start using the card."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_activate_my_card_04",
+      "source_intent": "activate_my_card",
+      "customer_query": "What is the activation process on my new card?",
+      "direct_query": "What is the activation process on my new card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_74abafeb",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_6dae126c",
+            "faq_66004845",
+            "faq_74392fe2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 directly details the complete steps required to activate a newly received Horizon card via the app, using either NFC or manual code entry."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 provides complete step\u2011by\u2011step instructions for activating a new Horizon card, directly answering the customer's question."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_6dae126c",
+            "faq_26561f81"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 provides the complete step-by-step process for activating a newly received Horizon card, including logging into the Horizon App, navigating to Account Management, and choosing either NFC or manual code activation."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 provides the exact activation steps for a new Horizon card, directly answering the customer's question about the activation process."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_activate_my_card_05",
+      "source_intent": "activate_my_card",
+      "customer_query": "Why can't I activate my card?",
+      "direct_query": "Why can't I activate my card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_74abafeb",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_74abafeb"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_66004845",
+            "faq_74392fe2",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence does not explain why a card cannot be activated; it only provides instructions on how to activate a card.",
+              "reason": "The evidence explains how to activate a card, but contains no information regarding the reasons why an activation might fail or why a user is unable to activate their card."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "Reasons why activation may fail (e.g., card not received, app issues, incorrect activation method)",
+              "reason": "Evidence 4 gives the activation steps but does not explain why a user might be unable to activate the card, so it only partially addresses the question."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_66004845",
+            "faq_74392fe2",
+            "faq_ff1c2b9c",
+            "faq_7883a8c2"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "Information explaining the general reasons or troubleshooting steps for why a card cannot be activated.",
+              "reason": "The evidence set only discusses SimplyGo charges on inactive cards, missing or not yet received cards, and contact methods for support, but it does not explain why a card cannot be activated."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "Information on why activation fails or how to activate the card is missing",
+              "reason": "The only related evidence describes behavior of an inactive card (SimplyGo charges) but does not explain reasons for activation failure or provide activation instructions"
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_change_pin_01",
+      "source_intent": "change_pin",
+      "customer_query": "Which cash machines will allow me to change my PIN?",
+      "direct_query": "Which cash machines will allow me to change my PIN?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_6dae126c",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence does not mention which cash machines allow PIN changes; it only mentions changing the PIN via the Horizon App.",
+              "reason": "The supplied evidence discusses card activation, card replacement, freezing missing cards, and changing the PIN via the Horizon App, but contains no information about cash machines or ATMs."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "Which cash machines/ATMs support PIN changes",
+              "reason": "Evidence 4 explains how to change the PIN via the app but does not specify which cash machines allow PIN changes, so the material part of the question is missing."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence set contains information about freezing/replacing cards, updating PINs via the app, and activating cards, but does not mention which cash machines allow PIN changes.",
+              "reason": "None of the provided evidence mentions cash machines or ATMs regarding changing a PIN; the evidence only explains how to update a PIN through the Horizon App."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                3
+              ],
+              "missing_information": "Information on which cash machines/ATMs support PIN changes (e.g., specific networks or locations)",
+              "reason": "Evidence 3 explains how to change the PIN via the app but does not specify which cash machines allow PIN changes, so the answer is only partially supported."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_change_pin_02",
+      "source_intent": "change_pin",
+      "customer_query": "Am I able to change my PIN at any cash machines?",
+      "direct_query": "Am I able to change my PIN at any cash machines?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_6dae126c",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "There is no evidence regarding whether a PIN can be changed at cash machines.",
+              "reason": "The evidence does not contain information about changing a PIN at cash machines; it only explains how to update a PIN through the Horizon App."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                2
+              ],
+              "missing_information": "Whether PIN can be changed at cash machines",
+              "reason": "Evidence 2 explains how to update the PIN via the Horizon app but does not mention cash\u2011machine availability, so the question about changing PIN at any cash machines is not answered."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_74abafeb",
+            "faq_7883a8c2"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence does not contain information about whether a PIN can be changed at cash machines (ATMs), only mentioning updating the PIN via the Horizon App.",
+              "reason": "None of the provided evidence discusses changing a PIN at cash machines or ATMs."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                3
+              ],
+              "missing_information": "Whether PIN can be changed at cash machines",
+              "reason": "Evidence 3 explains how to update the PIN via the Horizon app but does not address changing the PIN at cash machines, so the answer lacks that specific information."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_change_pin_03",
+      "source_intent": "change_pin",
+      "customer_query": "How can I change the PIN?  Do I have to go to a real bank?",
+      "direct_query": "How can I change the PIN?  Do I have to go to a real bank?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_6dae126c",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 directly explains how to change the PIN using the Horizon App, answering the customer's need and implicitly showing they do not need to go to a real bank."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 gives step\u2011by\u2011step instructions to modify the PIN through the Horizon app, showing the change can be done online and does not require visiting a physical bank."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_33f045af",
+            "faq_7883a8c2",
+            "faq_74abafeb"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 3 directly explains how to change the PIN using the Horizon App ('Card Details' section, 'Modify PIN' option), answering the customer's question about changing the PIN and whether they need to go to a real bank (since it is done via the app)."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 3 gives explicit steps to change the PIN through the Horizon app, showing the process can be completed digitally and thus no need to visit a physical bank."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_change_pin_04",
+      "source_intent": "change_pin",
+      "customer_query": "May I receive a different card pin",
+      "direct_query": "May I receive a different card pin",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_6dae126c",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_6dae126c",
+            "faq_5ad80c63",
+            "faq_7883a8c2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 3 directly provides the steps required to update or change a Horizon card PIN."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 3 directly explains how to update the Horizon card PIN, which fully addresses the request for a different PIN."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_7883a8c2",
+            "faq_74392fe2",
+            "faq_6dae126c"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 directly provides the step-by-step process for updating a card PIN using the Horizon App."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 directly explains how to update the Horizon card PIN, which fully addresses the request for a different PIN."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_change_pin_05",
+      "source_intent": "change_pin",
+      "customer_query": "Help me set up a new PIN?",
+      "direct_query": "Help me set up a new PIN?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_6dae126c",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_6dae126c"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6dae126c",
+            "faq_74abafeb",
+            "faq_33f045af",
+            "faq_74392fe2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 provides the specific steps required to update or set a new PIN for a Horizon card via the Horizon App."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 gives step\u2011by\u2011step instructions for updating the Horizon card PIN, directly addressing the request to set up a new PIN."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_74abafeb",
+            "faq_74392fe2",
+            "faq_6dae126c",
+            "faq_33f045af"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 directly provides the steps to update or set up a new PIN for a Horizon card using the Horizon App."
+            },
+            "gpt": {
+              "error": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kt4ef3teew1bxpz65mmv94hp` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199457, Requested 1269. Please try again in 5m13.632s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+              "model": "openai/gpt-oss-120b"
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_card_arrival_01",
+      "source_intent": "card_arrival",
+      "customer_query": "Why hasn't my card been delivered?",
+      "direct_query": "Why hasn't my card been delivered?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_9d7a4b83",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_74392fe2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                2,
+                3
+              ],
+              "missing_information": "",
+              "reason": "The evidence provides the expected delivery timeframe (X-Y business days) and instructions on what to do if the card has not been received or if the app incorrectly shows it as delivered by contacting support via the app or phone."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                123
+              ],
+              "missing_information": "",
+              "reason": "The evidence gives the expected delivery window for the physical card and advises contacting support via the app or phone if the card has not arrived, which fully addresses the question why the card hasn't been delivered."
+            }
+          },
+          "evidence_count": 3
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_5ad80c63",
+            "faq_7883a8c2"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2,
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 explains the expected delivery timeframe (within exact value business days from the application date), and Evidence 3 provides troubleshooting steps for a card that hasn't arrived yet."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                2,
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence provides the expected delivery window and clear steps to take (contact support via app or phone) if the card has not arrived, directly addressing the customer's concern about non\u2011delivery."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_card_arrival_02",
+      "source_intent": "card_arrival",
+      "customer_query": "I did not get my card yet, is it lost?",
+      "direct_query": "I did not get my card yet, is it lost?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_9d7a4b83",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ff1c2b9c",
+            "faq_7883a8c2",
+            "faq_74392fe2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                2,
+                3
+              ],
+              "missing_information": "",
+              "reason": "The evidence provides instructions on what to do if a card is lost (freeze and order a replacement), what to do if a card hasn't arrived yet (contact support via app or phone), and steps for missing applied-for cards."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 directly addresses a situation where the card is marked delivered but not received, advising the user to contact support via the app or phone, which fully answers the customer's concern about a missing card."
+            }
+          },
+          "evidence_count": 3
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_ff1c2b9c",
+            "faq_74392fe2",
+            "faq_33f045af"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence does not address how to determine if a newly ordered card that has not yet arrived is considered lost, only how to report non-receipt or missing cards after delivery/generally, but lacks information confirming whether a not-yet-received card is lost.",
+              "reason": "The customer is asking specifically if their card is lost because they have not received it yet. The evidence covers missing cards, non-receipt of replacement cards, and damaged cards, but does not provide information to determine if a card that hasn't arrived yet is officially considered lost."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                2,
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 gives clear steps for a missing card (freeze and order replacement). Evidence 2 and 3 provide contact options for cards that haven't arrived. Together they fully address the customer's concern about a card not received and possible loss."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_card_arrival_03",
+      "source_intent": "card_arrival",
+      "customer_query": "I ordered a card a week ago, and it's still not here. What do I do?",
+      "direct_query": "I ordered a card a week ago, and it's still not here. What do I do?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_9d7a4b83",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_74392fe2",
+            "faq_7883a8c2",
+            "faq_ff1c2b9c"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 directly answers what to do when a newly applied-for Horizon card has not arrived yet by instructing the customer to contact support via the Horizon App's live chat/voice call or by calling the provided phone number."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                13
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 and 3 provide direct instructions to contact support (live chat, voice call, or phone) to resolve a card that has not arrived, fully addressing the customer's request."
+            }
+          },
+          "evidence_count": 3
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_74392fe2",
+            "faq_ff1c2b9c"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 directly provides the steps to resolve the issue of a new Horizon card not arriving yet by instructing the customer to contact support through live chat, voice call in the Horizon App, or by phone."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 and 3 give explicit steps for a card that hasn't arrived, directing the user to contact support via live chat, voice call, or phone, which directly answers the customer's request."
+            }
+          },
+          "evidence_count": 3
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_card_arrival_04",
+      "source_intent": "card_arrival",
+      "customer_query": "How do I know when my card will arrive?",
+      "direct_query": "How do I know when my card will arrive?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_9d7a4b83",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1,
+                2
+              ],
+              "missing_information": "The exact delivery timeframe values are redacted as '[exact value]'.",
+              "reason": "The evidence states that the card arrives within a specific range of business days from the application date, but the exact values are redacted."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                12
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 and 2 provide the expected delivery timeframe for the physical Horizon card, directly answering when the card will arrive."
+            }
+          },
+          "evidence_count": 3
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2,
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 and Evidence 3 directly answer when the physical card will arrive by stating it should be delivered within a specific range of business days from the date of application."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                23
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 and 3 provide the expected delivery timeframe for the physical Horizon card, directly answering the question of when the card will arrive."
+            }
+          },
+          "evidence_count": 3
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_card_arrival_05",
+      "source_intent": "card_arrival",
+      "customer_query": "I've been waiting longer than expected for my card.",
+      "direct_query": "I've been waiting longer than expected for my card.",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "General Inquiries"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_9d7a4b83",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_9d7a4b83",
+        "faq_74392fe2"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_9d7a4b83",
+            "faq_5ad80c63",
+            "faq_ff1c2b9c",
+            "faq_74392fe2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1,
+                4
+              ],
+              "missing_information": "The exact timeframe (number of working/business days) for card delivery is masked as '[exact value]-[exact value]'.",
+              "reason": "The evidence provides the general timeframe rule (within [exact value]-[exact value] working/business days from application), but the specific numbers are masked out, making it impossible to give a complete timeframe answer."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1234
+              ],
+              "missing_information": "",
+              "reason": "Evidence provides the expected delivery timeframe and clear steps to contact support when the card hasn't arrived, fully covering the customer's concern."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_74392fe2",
+            "faq_ff1c2b9c",
+            "faq_5ad80c63",
+            "faq_9d7a4b83"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1,
+                3
+              ],
+              "missing_information": "The specific delivery timeframe values are masked as [exact value]-[exact value] business/working days.",
+              "reason": "Evidence 1 and 3 state that the card should arrive within a certain number of business or working days from application, but the actual numerical values are masked with placeholders."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1234
+              ],
+              "missing_information": "",
+              "reason": "The evidence includes the expected delivery window for the physical card and instructions on how to contact support if the card has not arrived, fully addressing the customer's concern about waiting longer than expected."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_lost_or_stolen_card_01",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "What should I do if my card is missing?",
+      "direct_query": "What should I do if my card is missing?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_7883a8c2",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_74392fe2",
+            "faq_74abafeb"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                2
+              ],
+              "missing_information": "",
+              "reason": "The evidence provides clear, actionable steps to report a missing card, freeze the account, and request a replacement through the Horizon App or customer support."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                12
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 and 2 give explicit steps\u2014freeze the card in the app, request a replacement, and contact support (live chat, call, or police report)\u2014which fully answer how to handle a missing card."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_74392fe2",
+            "faq_74abafeb"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                2
+              ],
+              "missing_information": "",
+              "reason": "The evidence provides clear steps on what to do if a card is missing, including temporarily freezing it, reporting it as lost or stolen, ordering a replacement via the app, and contacting support."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                12
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 and 2 give explicit instructions to freeze the missing card via the Horizon app and order a replacement, covering the required actions for a missing card."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_lost_or_stolen_card_02",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "Someone stole my wallet earlier today, not sure exactly when, probably on Piccadilly circus. Can you check if there were any attempts to use the card and obviously block it?",
+      "direct_query": "Someone stole my wallet earlier today, not sure exactly when, probably on Piccadilly circus. Can you check if there were any attempts to use the card and obviously block it?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_7883a8c2",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_23b30ec5",
+            "faq_ff1c2b9c"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1,
+                3
+              ],
+              "missing_information": "The evidence does not provide a way to check for past transaction attempts or unauthorized usage history.",
+              "reason": "The evidence provides instructions on how to freeze and report a card as stolen, but it does not address the customer's request to check if there were any attempts to use the card."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                13
+              ],
+              "missing_information": "How to view recent card transactions or detect unauthorized usage",
+              "reason": "The evidence explains how to freeze a lost/stolen card and order a replacement, but it does not cover checking for attempted card use."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_6eed6806"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1,
+                4
+              ],
+              "missing_information": "Information on how to check if there were any attempts to use the card.",
+              "reason": "The evidence explains how to block or freeze the card and order a replacement when it is lost or stolen, but it does not contain any information about checking for fraudulent usage attempts."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1,
+                4
+              ],
+              "missing_information": "Information on how to view recent card transactions or detect unauthorized usage is not provided in the evidence.",
+              "reason": "The evidence explains how to freeze or block a lost/stolen card and request a replacement, but it does not cover checking for attempted card use."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_lost_or_stolen_card_03",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "Someone stole my card. I need to report it stolen. I made a police report already, but how do I report it with you?",
+      "direct_query": "Someone stole my card. I need to report it stolen. I made a police report already, but how do I report it with you?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_7883a8c2",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af",
+            "faq_23b30ec5"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                3
+              ],
+              "missing_information": "",
+              "reason": "The evidence provides clear steps for reporting a card as lost or stolen, which includes freezing it and requesting a replacement via the Horizon App, as well as mentioning that a police report may be filed."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                13
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 and 3 give clear instructions on freezing a stolen card, ordering a replacement, and note filing a police report, directly answering how to report the stolen card to the bank."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af",
+            "faq_74392fe2"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                2
+              ],
+              "missing_information": "",
+              "reason": "The evidence provides clear instructions on how to report a stolen card and request a replacement through the Horizon App or by contacting support."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                12
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 explains how to report a lost or stolen card through the Horizon app or by contacting support, and Evidence 2 adds steps to freeze the card and request a replacement, directly answering the customer's request to report a stolen card."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_lost_or_stolen_card_04",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "What should I do if I lost my card?",
+      "direct_query": "What should I do if I lost my card?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_7883a8c2",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_8e5e63ca",
+            "faq_7883a8c2",
+            "faq_33f045af",
+            "faq_74392fe2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2,
+                4
+              ],
+              "missing_information": "",
+              "reason": "The evidence set provides comprehensive instructions on what to do if a card is lost, including freezing the card and requesting a replacement via the Horizon App."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                24
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 outlines how to report a lost card and request a replacement via the app or support, while Evidence 4 adds steps to freeze the card and order a new one, together covering all actions the customer should take."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_33f045af",
+            "faq_74392fe2"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2,
+                4
+              ],
+              "missing_information": "",
+              "reason": "The evidence set provides direct instructions on what to do if a card is lost, including freezing the card and requesting a replacement via the Horizon App."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                24
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 and 4 give explicit instructions for a lost card, including freezing the card, reporting it, and ordering a replacement, which fully answers the customer's question."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_lost_or_stolen_card_05",
+      "source_intent": "lost_or_stolen_card",
+      "customer_query": "My card is lost! What do I do now?",
+      "direct_query": "My card is lost! What do I do now?",
+      "scope_pairs": [
+        {
+          "product": "Debit_Card",
+          "intents": [
+            "Card Logistics",
+            "Transaction Disputes"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_7883a8c2",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_7883a8c2",
+        "faq_8e5e63ca"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_74392fe2",
+            "faq_33f045af"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2,
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 and 4 provide comprehensive instructions on how to freeze a lost card, request a replacement, and contact support for further assistance."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                24
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 and 4 give explicit instructions for a lost card: freeze it in the app, order a replacement, and contact support, covering all needed steps."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_7883a8c2",
+            "faq_8e5e63ca",
+            "faq_74392fe2",
+            "faq_33f045af"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                4
+              ],
+              "missing_information": "",
+              "reason": "The evidence directly provides steps to take when a card is lost, including freezing the card, requesting a replacement via the app, and contacting support."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                14
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 and 4 provide explicit instructions to freeze a missing card, request a replacement, and contact support, fully covering the customer's query."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_transfer_timing_01",
+      "source_intent": "transfer_timing",
+      "customer_query": "I have to transfer something to China as fast as I can. How long will it take to arrive in China?",
+      "direct_query": "I have to transfer something to China as fast as I can. How long will it take to arrive in China?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_ccd37584",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_6f4ef9e6",
+            "faq_4b2d99b1",
+            "faq_32c1662f"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 explicitly states that Horizon Bank does not handle any cross-border payments or outbound foreign-currency transfers, directly answering that the transfer to China cannot be done."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 states Horizon Bank only supports domestic SGD transfers and does not handle cross\u2011border payments, so a transfer to China cannot be made and thus no arrival time can be provided."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_6f4ef9e6",
+            "faq_44bb339e",
+            "faq_4b2d99b1"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence set contains no information regarding international transfers, transfers to China, or delivery times for destinations outside the domestic banking system.",
+              "reason": "None of the provided evidence mentions international transfers or shipping/delivery times to China."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "Information on international transfer processing times to China",
+              "reason": "The provided evidence only discusses domestic transfers, security hold periods, local GIRO transfers, and PayNow/FAST limits, none of which address the speed or timeline for sending money to China."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_transfer_timing_02",
+      "source_intent": "transfer_timing",
+      "customer_query": "when will i receive a US transfer",
+      "direct_query": "when will i receive a US transfer",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_ccd37584",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_32c1662f",
+            "faq_4b2d99b1",
+            "faq_28ce64f2"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "Information about US transfers is missing, as the bank only supports domestic SGD transfers and does not handle cross-border payments.",
+              "reason": "The evidence states that Horizon Bank only supports domestic transfers in SGD and does not handle inbound or outbound foreign-currency transfers or cross-border payments."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "Information about US transfer processing times",
+              "reason": "The provided evidence only addresses domestic SGD transfers, payee activation delays, security holds, and currency limits, and does not mention US or cross\u2011border transfers, so it cannot answer the question."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_ccd37584",
+            "faq_02489175",
+            "faq_d6da9860"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence does not contain any information regarding the processing time, receipt, or availability of US transfers.",
+              "reason": "None of the provided evidence discusses US transfers or their timelines; the evidence is limited to PayNow recipient display names, domestic transfers, FAST transfers, and local PayNow restrictions."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "Information on processing time for US (international) transfers is not provided in the evidence.",
+              "reason": "None of the supplied evidence addresses US transfers; they only cover domestic transfers, funding methods, and PayNow limitations."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_transfer_timing_03",
+      "source_intent": "transfer_timing",
+      "customer_query": "I initiated a Bank transfer form Europe, how long will this take?",
+      "direct_query": "I initiated a Bank transfer form Europe, how long will this take?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_ccd37584",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_e24d737a",
+            "faq_efca64c1"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence set lacks information regarding the processing time for bank transfers originating from Europe.",
+              "reason": "None of the provided evidence addresses international bank transfers from Europe or their processing times."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "information on processing time for international transfers from Europe",
+              "reason": "the provided evidence only discusses domestic transfer times and a security hold period, with no mention of international or Europe\u2011originating transfers"
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_7d49c937",
+            "faq_efca64c1"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence set lacks information regarding the processing time for international or European bank transfers into Horizon Bank.",
+              "reason": "The supplied evidence discusses domestic transfers, AutoPay failures, security holding periods, and funding via FAST or PayNow, but contains no information about transfers originating from Europe."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "information about processing time for international transfers from Europe",
+              "reason": "none of the provided evidence addresses international or cross\u2011border transfer times; only domestic transfer timing is mentioned"
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_transfer_timing_04",
+      "source_intent": "transfer_timing",
+      "customer_query": "Approximately how long will an urgent transfer from China take?",
+      "direct_query": "Approximately how long will an urgent transfer from China take?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_ccd37584",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_32c1662f",
+            "faq_6f4ef9e6"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "The evidence states that Horizon Bank does not handle cross-border payments or inbound/outbound transfers, so there is no processing time available for international transfers from China.",
+              "reason": "Evidence 4 explicitly states that Horizon Bank does not handle cross-border payments or outbound transfers, meaning an urgent transfer from China cannot be supported or answered."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "information on processing time for urgent cross\u2011border transfers from China",
+              "reason": "none of the provided evidence addresses international or urgent transfers from China; only domestic transfer times and currency limits are covered"
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_6f4ef9e6",
+            "faq_7d49c937"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "Information about urgent international transfers or transfers specifically originating from China, including their processing times.",
+              "reason": "The evidence set only discusses PayNow, FAST, domestic transfers, and security holding periods, but contains no information regarding international transfers from China or their duration."
+            },
+            "gpt": {
+              "error": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kt4ef3teew1bxpz65mmv94hp` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199442, Requested 1308. Please try again in 5m24s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+              "model": "openai/gpt-oss-120b"
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_transfer_timing_05",
+      "source_intent": "transfer_timing",
+      "customer_query": "how long dies it take for transfers to reflect on my balance",
+      "direct_query": "how long dies it take for transfers to reflect on my balance",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_ccd37584",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_ccd37584"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_4b2d99b1",
+            "faq_6f4ef9e6",
+            "faq_80b5d788"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "Information on how long it takes for incoming or outgoing transfers to reflect on the customer's balance.",
+              "reason": "The evidence set discusses the Kill Switch feature, domestic transfer sending processes and recipient processing times, security holding periods, and transfer limits, but does not provide information on how long it takes for transfers to reflect on the customer's balance."
+            },
+            "gpt": {
+              "model": "openai/gpt-oss-120b",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                23
+              ],
+              "missing_information": "Exact timeframe for when an incoming transfer will appear on the customer's balance (e.g., immediate, same\u2011day, or up to X hours).",
+              "reason": "Evidence 2 describes that Horizon Bank sends domestic transfers instantly but the recipient's bank may need extra time, and Evidence 3 notes a possible security hold, yet neither gives a concrete period for the transfer to reflect on the account balance."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_ccd37584",
+            "faq_6f4ef9e6",
+            "faq_4b2d99b1",
+            "faq_7d49c937"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1,
+                4
+              ],
+              "missing_information": "Exact transfer times or general processing durations for all types of incoming/outgoing transfers, as the evidence only mentions a specific security hold period of [exact value] hours for certain transactions and that FAST transfers will be credited 'shortly'.",
+              "reason": "Evidence 1 mentions a temporary hold of [exact value] hours for certain transactions, and Evidence 4 mentions FAST transfers are credited 'shortly', but the evidence set lacks complete, general information on how long all types of transfers take to reflect on the balance."
+            },
+            "gpt": {
+              "error": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kt4ef3teew1bxpz65mmv94hp` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199427, Requested 1310. Please try again in 5m18.384s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+              "model": "openai/gpt-oss-120b"
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_cancel_transfer_01",
+      "source_intent": "cancel_transfer",
+      "customer_query": "Help me cancel my transaction",
+      "direct_query": "Help me cancel my transaction",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_ea430613",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                2,
+                4
+              ],
+              "missing_information": "The evidence only provides instructions for canceling automatic payments (AutoPay) and states that domestic transfers cannot be revoked. It does not provide information on how to cancel other types of transactions, such as pending manual transfers or payments.",
+              "reason": "The evidence addresses the cancellation of automatic payments and confirms that completed transfers cannot be revoked, but it does not provide a general method for canceling all types of transactions."
+            },
+            "gpt": {
+              "error": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kt4ef3teew1bxpz65mmv94hp` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199675, Requested 1456. Please try again in 8m8.592s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+              "model": "openai/gpt-oss-120b"
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "The evidence only provides instructions for canceling automatic payment arrangements (AutoPay). It does not provide information on how to cancel other types of transactions, such as one-time transfers or payments.",
+              "reason": "Evidence 4 provides clear instructions for canceling automatic payment arrangements, but the customer's request to 'cancel my transaction' is broad and could refer to other transaction types not covered by the provided evidence."
+            },
+            "gpt": {
+              "error": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kt4ef3teew1bxpz65mmv94hp` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199670, Requested 1499. Please try again in 8m25.008s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+              "model": "openai/gpt-oss-120b"
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_cancel_transfer_02",
+      "source_intent": "cancel_transfer",
+      "customer_query": "Can I change the amount I made on a payment that I made to the payment is correct.",
+      "direct_query": "Can I change the amount I made on a payment that I made to the payment is correct.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_ea430613",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_8f5247b0",
+            "faq_79e23f7e",
+            "faq_3c9718d5",
+            "faq_beeeec2d"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence only provides instructions for modifying recurring AutoPay arrangements, not for changing the amount of a payment that has already been made.",
+              "reason": "The customer is asking to change the amount of a payment that has already been made. The provided evidence only discusses modifying future recurring AutoPay settings and does not address the ability to retroactively change a completed payment."
+            },
+            "gpt": {
+              "error": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kt4ef3teew1bxpz65mmv94hp` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199664, Requested 1272. Please try again in 6m44.352s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+              "model": "openai/gpt-oss-120b"
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_8f5247b0",
+            "faq_3c9718d5",
+            "faq_79e23f7e",
+            "faq_824abbaf"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence does not address how to modify a payment that has already been made; it only discusses modifying future automatic payment preferences.",
+              "reason": "The customer is asking to change the amount of a payment that has already been made. The provided evidence only explains how to modify future AutoPay settings or manage account details, not how to alter or correct a completed transaction."
+            },
+            "gpt": {
+              "error": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kt4ef3teew1bxpz65mmv94hp` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199659, Requested 1238. Please try again in 6m27.504s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+              "model": "openai/gpt-oss-120b"
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_cancel_transfer_03",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I transferred the wrong amount and would like to cancel the transaction.",
+      "direct_query": "I transferred the wrong amount and would like to cancel the transaction.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_ea430613",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_3c9718d5",
+            "faq_efca64c1"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 explicitly states that once a transfer is submitted and approved, it cannot be withdrawn, which directly addresses the customer's request to cancel a transaction."
+            },
+            "gpt": {
+              "error": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kt4ef3teew1bxpz65mmv94hp` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199652, Requested 1463. Please try again in 8m1.68s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+              "model": "openai/gpt-oss-120b"
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_ea430613",
+            "faq_3c9718d5",
+            "faq_7d49c937"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 explicitly states that once a transfer is submitted and approved, it cannot be withdrawn, which directly addresses the customer's request to cancel a transaction."
+            },
+            "gpt": {
+              "error": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kt4ef3teew1bxpz65mmv94hp` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199647, Requested 1475. Please try again in 8m4.704s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+              "model": "openai/gpt-oss-120b"
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_cancel_transfer_04",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I accidentally made a transaction to the wrong account.",
+      "direct_query": "I accidentally made a transaction to the wrong account.",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_ea430613",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_efca64c1",
+            "faq_6ec2e740",
+            "faq_824abbaf"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 states that once a transfer is submitted and approved, it cannot be withdrawn, directly answering the customer's issue regarding a mistaken transaction."
+            },
+            "gpt": {
+              "error": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kt4ef3teew1bxpz65mmv94hp` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199643, Requested 1418. Please try again in 7m38.352s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}",
+              "model": "openai/gpt-oss-120b"
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_6ec2e740",
+            "faq_efca64c1",
+            "faq_ea430613",
+            "faq_7d49c937"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 directly states that once a transfer has been submitted and approved, it cannot be withdrawn and advises verifying beneficiary details and amounts carefully before finalizing."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_cancel_transfer_05",
+      "source_intent": "cancel_transfer",
+      "customer_query": "I want to reverse my transaction from earlier",
+      "direct_query": "I want to reverse my transaction from earlier",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_ea430613",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_ea430613"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_b928f182",
+            "faq_3c9718d5"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.5-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 directly states that once a transfer is submitted and approved, it cannot be withdrawn."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_ea430613",
+            "faq_6ec2e740",
+            "faq_3c9718d5",
+            "faq_05669a00"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 3 explicitly states that once a transfer is submitted and approved, it cannot be withdrawn, which directly addresses the customer's request to reverse a transaction."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_transfer_into_account_01",
+      "source_intent": "transfer_into_account",
+      "customer_query": "How do I top up my card?",
+      "direct_query": "How do I top up my card?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_7d49c937",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_ffbc9df3",
+            "faq_beeeec2d",
+            "faq_7d49c937",
+            "faq_05669a00"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence provided discusses funding a savings account, paying credit card statements, and transferring money to other banks, but does not explain how to 'top up' a card (e.g., a prepaid or debit card).",
+              "reason": "None of the provided evidence addresses the process of topping up a card; the evidence focuses on funding savings accounts or paying credit card bills."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_7d49c937",
+            "faq_beeeec2d",
+            "faq_05669a00",
+            "faq_ffbc9df3"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence provided discusses funding a savings account, paying credit card statements, and transferring money to other banks, but does not explain how to 'top up' a card (e.g., a prepaid or debit card).",
+              "reason": "None of the provided evidence addresses the process of topping up a card; the evidence focuses on funding savings accounts or paying credit card bills."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_transfer_into_account_02",
+      "source_intent": "transfer_into_account",
+      "customer_query": "Can I use a bank transfer to refill my account?",
+      "direct_query": "Can I use a bank transfer to refill my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_7d49c937",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_453239a8",
+            "faq_05669a00",
+            "faq_32c1662f"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 explicitly confirms that the user can initiate a local funds transfer from other banks to their Horizon Bank savings account using the GIRO network."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_05669a00",
+            "faq_44bb339e",
+            "faq_13757d59",
+            "faq_7d49c937"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                4
+              ],
+              "missing_information": "",
+              "reason": "The evidence explicitly confirms that bank transfers are an available method to fund a Horizon Bank savings account, specifically mentioning FAST and GIRO transfers."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_transfer_into_account_03",
+      "source_intent": "transfer_into_account",
+      "customer_query": "I would like use the bank transfer, but I don't understand the process, can you please explain, topping up?",
+      "direct_query": "I would like use the bank transfer, but I don't understand the process, can you please explain, topping up?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_7d49c937",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_02489175",
+            "faq_44bb339e",
+            "faq_ccd37584",
+            "faq_6c321602"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "none",
+              "relevant_evidence_indexes": [],
+              "missing_information": "The evidence does not explain the process for topping up an account via bank transfer; Evidence 1 mentions GIRO for transfers but does not explain the 'topping up' process, and Evidence 4 states GIRO arrangements cannot be created.",
+              "reason": "The provided evidence does not contain instructions or a process description for how a customer can top up their account via bank transfer."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_05669a00",
+            "faq_44bb339e",
+            "faq_7d49c937",
+            "faq_02489175"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 provides a clear, step-by-step process for topping up a Horizon Bank savings account via bank transfer (FAST) and PayNow, which directly addresses the customer's request for an explanation of the bank transfer process."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_transfer_into_account_04",
+      "source_intent": "transfer_into_account",
+      "customer_query": "How do I go forth on transferring money into my account?",
+      "direct_query": "How do I go forth on transferring money into my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_7d49c937",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_7d49c937",
+            "faq_6f4ef9e6"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2,
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 3 provides specific methods for funding a Horizon Bank savings account (FAST and PayNow), and Evidence 2 provides an additional option via the GIRO network."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_05669a00",
+            "faq_44bb339e",
+            "faq_7d49c937",
+            "faq_6f4ef9e6"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                1,
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 1 provides two specific methods (FAST and PayNow) for transferring money into a Horizon Bank account, and Evidence 4 provides an additional option via the GIRO network."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_transfer_into_account_05",
+      "source_intent": "transfer_into_account",
+      "customer_query": "How do I transfer money to my account?",
+      "direct_query": "How do I transfer money to my account?",
+      "scope_pairs": [
+        {
+          "product": "Deposit_Account",
+          "intents": [
+            "Payments And Transfers"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_7d49c937",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_7d49c937"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_44bb339e",
+            "faq_05669a00",
+            "faq_7d49c937",
+            "faq_beeeec2d"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                3,
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 provides clear, step-by-step instructions on how to fund a Horizon Bank savings account using FAST and PayNow, and Evidence 3 provides an alternative method via the GIRO network."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_05669a00",
+            "faq_44bb339e",
+            "faq_7d49c937",
+            "faq_6f4ef9e6"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 provides clear, step-by-step instructions on how to fund a Horizon Bank savings account using both FAST and PayNow methods."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_passcode_forgotten_01",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "I do not remember the code, what should I do?",
+      "direct_query": "I do not remember the code, what should I do?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_b00e6476",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_46116179",
+            "faq_e50ada50",
+            "faq_406bf55a"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                3,
+                4
+              ],
+              "missing_information": "The evidence does not clarify whether the customer is referring to their Horizon Key PIN or their Horizon App passcode, as both are addressed separately.",
+              "reason": "The evidence provides instructions for resetting a forgotten Horizon Key PIN (Evidence 3) and a forgotten Horizon App passcode (Evidence 4), but the customer's message is ambiguous regarding which 'code' they have forgotten."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_e50ada50",
+            "faq_46116179",
+            "faq_b00e6476",
+            "faq_83b0a90a"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1,
+                2
+              ],
+              "missing_information": "The customer did not specify whether they forgot their Horizon Key PIN or their Horizon App passcode.",
+              "reason": "The evidence provides solutions for both a forgotten Horizon Key PIN (Evidence 1) and a forgotten Horizon App passcode (Evidence 2), but the customer's request is ambiguous regarding which 'code' they are referring to."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_passcode_forgotten_02",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "What steps do I take to receive another passcode?",
+      "direct_query": "What steps do I take to receive another passcode?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_b00e6476",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_56fda9f9",
+            "faq_46116179",
+            "faq_406bf55a"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "The evidence does not explicitly explain how to receive a new passcode if the user is not using the 'Forgot Passcode' flow, nor does it clarify if 'passcode' refers to the app passcode or a different security credential.",
+              "reason": "Evidence 1 provides a 'Forgot Passcode' option for the Horizon app, which addresses the need to reset or receive a new passcode, but the evidence is limited to that specific scenario."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                3
+              ],
+              "missing_information": "",
+              "reason": "Evidence 3 explicitly instructs the user to select the 'Forgot Passcode' option in the Horizon App to regain access if they cannot remember their passcode."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_passcode_forgotten_03",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "Why won't my passcode work?",
+      "direct_query": "Why won't my passcode work?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_b00e6476",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_46116179",
+            "faq_518c355e"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1
+              ],
+              "missing_information": "The evidence does not explain why a passcode might not work (e.g., incorrect entry, expired, or locked status), only how to reset it if forgotten.",
+              "reason": "Evidence 1 provides a solution for a forgotten passcode, but the evidence set does not contain information explaining the potential reasons why a passcode might currently be failing to work."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_46116179",
+            "faq_518c355e"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                1,
+                2,
+                4
+              ],
+              "missing_information": "The evidence does not explain why a passcode might fail for reasons other than being forgotten or locked (e.g., technical errors, account status, or incorrect entry).",
+              "reason": "The evidence provides solutions for when a passcode is forgotten or locked, but it does not address the general question of why a passcode might not work, which could be due to factors not covered in the provided text."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_passcode_forgotten_04",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "My passcode doesn't work",
+      "direct_query": "My passcode doesn't work",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_b00e6476",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_46116179",
+            "faq_56fda9f9"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                2
+              ],
+              "missing_information": "",
+              "reason": "Evidence 2 provides a direct solution for a user who cannot access their account due to a passcode issue by instructing them to use the 'Forgot Passcode' option in the Horizon App."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_83b0a90a",
+            "faq_46116179"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                2,
+                3,
+                4
+              ],
+              "missing_information": "The evidence does not clarify if 'passcode' refers to the Horizon App passcode or the Horizon Key PIN, nor does it provide a solution if the passcode is known but simply not working.",
+              "reason": "The evidence provides solutions for forgotten passcodes or locked keys, but does not address a scenario where the passcode is known but fails to function."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    },
+    {
+      "id": "blind_banking77_passcode_forgotten_05",
+      "source_intent": "passcode_forgotten",
+      "customer_query": "Where can I reset the passcode?",
+      "direct_query": "Where can I reset the passcode?",
+      "scope_pairs": [
+        {
+          "product": "Horizon_APP",
+          "intents": [
+            "Authentication And Security"
+          ]
+        }
+      ],
+      "expected_parent_id": "faq_b00e6476",
+      "diagnostic_acceptable_parent_ids": [
+        "faq_b00e6476"
+      ],
+      "strategies": {
+        "direct_anchor": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_56fda9f9",
+            "faq_46116179"
+          ],
+          "query_view_count": 1,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "partial",
+              "relevant_evidence_indexes": [
+                2
+              ],
+              "missing_information": "The evidence does not provide the specific navigation path or steps to reset a passcode if the user is already logged in and simply wishes to change it, as Evidence 2 only addresses the 'Forgot Passcode' scenario.",
+              "reason": "Evidence 2 provides a method to reset the passcode if it is forgotten, but does not explain how to reset or change the passcode if the user is currently logged in and knows their existing one."
+            }
+          },
+          "evidence_count": 4
+        },
+        "corpus_pattern_narrative": {
+          "selected_parent_ids": [
+            "faq_b00e6476",
+            "faq_e50ada50",
+            "faq_83b0a90a",
+            "faq_56fda9f9"
+          ],
+          "query_view_count": 5,
+          "judgments": {
+            "gemini": {
+              "model": "gemini-3.1-flash-lite",
+              "answerability": "full",
+              "relevant_evidence_indexes": [
+                4
+              ],
+              "missing_information": "",
+              "reason": "Evidence 4 explicitly provides the steps to take when a user cannot remember their Horizon app passcode by selecting the 'Forgot Passcode' option within the app."
+            }
+          },
+          "evidence_count": 4
+        }
+      }
+    }
+  ],
+  "summary": {
+    "strategy_summary": {
+      "direct_anchor": {
+        "sets": 40,
+        "agreement_sets": 19,
+        "disagreement_sets": 6,
+        "gemini": {
+          "full": 22,
+          "none": 10,
+          "partial": 8
+        },
+        "gpt": {
+          "full": 17,
+          "partial": 5,
+          "none": 3
+        }
+      },
+      "corpus_pattern_narrative": {
+        "sets": 40,
+        "agreement_sets": 17,
+        "disagreement_sets": 5,
+        "gemini": {
+          "full": 23,
+          "none": 10,
+          "partial": 7
+        },
+        "gpt": {
+          "full": 15,
+          "partial": 4,
+          "none": 3
+        }
+      }
+    },
+    "paired_judge_outcomes": {
+      "gemini:full_to_full": 19,
+      "gpt:full_to_full": 15,
+      "gemini:none_to_none": 8,
+      "gpt:partial_to_partial": 4,
+      "gemini:full_to_none": 2,
+      "gemini:partial_to_full": 3,
+      "gemini:partial_to_partial": 5,
+      "gpt:full_to_none": 1,
+      "gpt:none_to_none": 2,
+      "gemini:none_to_partial": 1,
+      "gemini:none_to_full": 1,
+      "gemini:full_to_partial": 1
+    }
+  }
+}

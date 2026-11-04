@@ -1,0 +1,126 @@
+{
+ "2026-10-04 v5.1 holdout": {
+  "gemini_replies": 3741,
+  "results": {
+   "ok": 3731,
+   "fail": 9,
+   "repaired_trailing": 1
+  },
+  "replies_by_step": {
+   "compliance screen": 509,
+   "triage": 508,
+   "tool planner": 598,
+   "reply writer": 437,
+   "outbound audit": 471,
+   "other (first key: components)": 410,
+   "evidence check (sufficiency)": 655,
+   "consistency check": 97,
+   "other (first key: companions)": 4,
+   "other (first key: main_pursuit)": 6,
+   "other (first key: evidence_grounded)": 6,
+   "other (first key: conduct_compliant)": 6,
+   "reviser": 34
+  },
+  "failures_by_step": {
+   "outbound audit": 3,
+   "reply writer": 7
+  },
+  "failure_kinds": {
+   "Expecting property name enclosed in double quotes": 3,
+   "Invalid \\uXXXX escape": 1,
+   "extra content after the object": 1,
+   "missing comma or bracket": 3,
+   "stray list marker before a key ('- \"key\"')": 1,
+   "trailing closing brace (repaired)": 1
+  }
+ },
+ "2026-10-04 v5.1 planted": {
+  "gemini_replies": 69,
+  "results": {
+   "ok": 69
+  },
+  "replies_by_step": {
+   "triage": 9,
+   "compliance screen": 9,
+   "tool planner": 12,
+   "other (first key: components)": 9,
+   "evidence check (sufficiency)": 12,
+   "reply writer": 8,
+   "outbound audit": 9,
+   "reviser": 1
+  },
+  "failures_by_step": {},
+  "failure_kinds": {}
+ },
+ "2026-10-14 BUG-065 replay": {
+  "gemini_replies": 93,
+  "results": {
+   "ok": 93
+  },
+  "replies_by_step": {
+   "triage": 12,
+   "compliance screen": 14,
+   "tool planner": 13,
+   "other (first key: components)": 11,
+   "evidence check (sufficiency)": 17,
+   "consistency check": 4,
+   "reply writer": 9,
+   "outbound audit": 11,
+   "reviser": 2
+  },
+  "failures_by_step": {},
+  "failure_kinds": {}
+ },
+ "2026-10-14 C4 cache v1.1": {
+  "gemini_replies": 477,
+  "results": {
+   "ok": 477
+  },
+  "replies_by_step": {
+   "triage": 57,
+   "compliance screen": 57,
+   "tool planner": 80,
+   "other (first key: components)": 57,
+   "evidence check (sufficiency)": 89,
+   "reply writer": 57,
+   "outbound audit": 62,
+   "consistency check": 13,
+   "reviser": 5
+  },
+  "failures_by_step": {},
+  "failure_kinds": {}
+ },
+ "2026-10-15 final release": {
+  "gemini_replies": 3798,
+  "results": {
+   "ok": 3789,
+   "fail": 8,
+   "repaired_trailing": 1
+  },
+  "replies_by_step": {
+   "triage": 507,
+   "compliance screen": 507,
+   "tool planner": 596,
+   "reply writer": 444,
+   "outbound audit": 499,
+   "other (first key: components)": 419,
+   "evidence check (sufficiency)": 655,
+   "reviser": 55,
+   "consistency check": 92,
+   "other (first key: main_pursuit)": 8,
+   "other (first key: evidence_grounded)": 8,
+   "other (first key: conduct_compliant)": 8
+  },
+  "failures_by_step": {
+   "outbound audit": 5,
+   "reply writer": 4
+  },
+  "failure_kinds": {
+   "Expecting property name enclosed in double quotes": 4,
+   "stray list marker before a key ('- \"key\"')": 2,
+   "trailing closing brace (repaired)": 1,
+   "not JSON (prose)": 1,
+   "Expecting value": 1
+  }
+ }
+}

@@ -1,0 +1,12 @@
+PASS  test_bug030_model_unavailable                 6/6
+PASS  test_bug038_obligation_partition              21/21
+PASS  test_bug042_clarification_retention           2/2
+PASS  test_bug045_faq_default_and_no_info           6/6
+PASS  test_bug049_manifest_guard_retired            5/5
+PASS  test_bug051_soft_escalation_no_info           3/3
+PASS  test_bug055_inbound_compliance_screen         15/15
+PASS  test_bug058_tool_only_turn                    8/8
+PASS  test_evidence_marker_merge                    18/18
+PASS  test_turn_consistency_check                   9/9
+
+all suites passed

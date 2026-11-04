@@ -1,0 +1,49 @@
+{
+  "definition": "Stable when the non-empty adopted parent-ID set is identical, or direct semantic review finds the same practical answer, limitation, clarification, or route. Wording alone is ignored.",
+  "cases": 234,
+  "stable_meaning_or_parent_set": {
+    "k": 185,
+    "n": 234,
+    "rate": 0.7906
+  },
+  "improved": 32,
+  "degraded": 11,
+  "mixed": 6,
+  "net_direction_excluding_stable_and_mixed": 21,
+  "equivalence_basis": {
+    "direct_semantic_review": 55,
+    "reviewed_same_meaning_high_similarity": 61,
+    "same_adopted_parent_set": 45,
+    "reviewed_same_practical_limit": 12,
+    "same_text": 12
+  },
+  "semantically_reconciled_metrics": {
+    "B1": {
+      "k": 132,
+      "n": 142,
+      "rate": 0.9296,
+      "target": 0.9,
+      "exact_lower95": 0.8835,
+      "minimum_for_demonstration": 134,
+      "decision": "met on estimate"
+    },
+    "B2": {
+      "k": 145,
+      "n": 165,
+      "rate": 0.8788,
+      "target": 0.8,
+      "exact_lower95": 0.8288,
+      "minimum_for_demonstration": 141,
+      "decision": "demonstrated"
+    },
+    "B5b": {
+      "k": 197,
+      "n": 219,
+      "rate": 0.8995,
+      "target": 0.9,
+      "exact_lower95": 0.8597,
+      "minimum_for_demonstration": 205,
+      "decision": "not met"
+    }
+  }
+}

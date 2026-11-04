@@ -1,0 +1,18 @@
+=== run started 2026-10-14T22:34:16.656+00:00 study=2026-10-15_final_release_h2b_journeys runner=api_validation provider=gemini cases=15 ===
+2026-10-14T22:34:16.656+00:00 API key pool active: 10 key(s); production rotation and cross-model fallback enabled
+2026-10-14T22:34:55.666+00:00 [1/15] case=h2b_01 status=OK
+2026-10-14T22:35:48.541+00:00 [2/15] case=h2b_02 status=OK
+2026-10-14T22:36:56.960+00:00 [3/15] case=h2b_03 status=OK
+2026-10-14T22:38:14.029+00:00 [4/15] case=h2b_04 status=OK
+2026-10-14T22:41:07.121+00:00 [5/15] case=h2b_05 status=OK
+2026-10-14T22:43:22.394+00:00 [6/15] case=h2b_06 status=OK
+2026-10-14T22:44:39.177+00:00 [7/15] case=h2b_07 status=OK
+2026-10-14T22:45:20.033+00:00 [8/15] case=h2b_08 status=OK
+2026-10-14T22:45:53.355+00:00 [9/15] case=h2b_09 status=OK
+2026-10-14T22:47:01.583+00:00 [10/15] case=h2b_10 status=OK
+2026-10-14T22:47:51.119+00:00 [11/15] case=h2b_11 status=OK
+2026-10-14T22:49:00.203+00:00 [12/15] case=h2b_12 status=OK
+2026-10-14T22:50:06.157+00:00 [13/15] case=h2b_13 status=OK
+2026-10-14T22:50:42.162+00:00 [14/15] case=h2b_14 status=OK
+2026-10-14T22:52:08.156+00:00 [15/15] case=h2b_15 status=OK
+=== run finished 2026-10-14T22:52:08.156+00:00 cases=15 ===

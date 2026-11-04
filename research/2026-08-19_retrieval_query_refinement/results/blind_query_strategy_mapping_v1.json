@@ -1,0 +1,322 @@
+{
+  "blind_01_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_01_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_01_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_01_4": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_02_1": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_02_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_02_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_02_4": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_03_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_03_2": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_03_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_03_4": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_04_1": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_04_2": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_04_3": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_04_4": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_05_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_05_2": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_05_3": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_05_4": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_06_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_06_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_06_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_06_4": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_07_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_07_2": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_07_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_07_4": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_08_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_08_2": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_08_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_08_4": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_09_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_09_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_09_3": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_09_4": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_10_1": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_10_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_10_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_10_4": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_11_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_11_2": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_11_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_11_4": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_12_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_12_2": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_12_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_12_4": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_13_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_13_2": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_13_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_13_4": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_14_1": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_14_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_14_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_14_4": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_15_1": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_15_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_15_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_15_4": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_16_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_16_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_16_3": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_16_4": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_17_1": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_17_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_17_3": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_17_4": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_18_1": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_18_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_18_3": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_18_4": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_19_1": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_19_2": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_19_3": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_19_4": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_20_1": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_20_2": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  },
+  "blind_20_3": {
+    "A": "combined_clean_query",
+    "B": "narrative_three_query_rrf"
+  },
+  "blind_20_4": {
+    "A": "narrative_three_query_rrf",
+    "B": "combined_clean_query"
+  }
+}

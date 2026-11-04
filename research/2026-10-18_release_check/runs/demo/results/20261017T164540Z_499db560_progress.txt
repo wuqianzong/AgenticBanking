@@ -1,0 +1,11 @@
+=== run started 2026-10-17T16:45:40.891+00:00 study=2026-10-18_release_demo runner=api_validation provider=gemini cases=8 ===
+2026-10-17T16:45:40.891+00:00 API key pool active: 10 key(s); production rotation and cross-model fallback enabled
+2026-10-17T16:46:19.387+00:00 [1/8] case=demo_balance_transfer status=OK
+2026-10-17T16:46:51.331+00:00 [2/8] case=demo_lost_card status=OK
+2026-10-17T16:47:18.836+00:00 [3/8] case=demo_faq status=OK
+2026-10-17T16:47:35.367+00:00 [4/8] case=demo_address status=OK
+2026-10-17T16:47:59.533+00:00 [5/8] case=demo_antiscam status=OK
+2026-10-17T16:48:06.412+00:00 [6/8] case=demo_advice_refusal status=OK
+2026-10-17T16:49:19.199+00:00 [7/8] case=demo_soft_escalation status=OK
+2026-10-17T16:49:29.573+00:00 [8/8] case=demo_human status=OK
+=== run finished 2026-10-17T16:49:29.573+00:00 cases=8 ===

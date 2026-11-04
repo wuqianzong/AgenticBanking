@@ -1,0 +1,38 @@
+{
+ "A": {
+  "agreement": "31/31 = 100.0%",
+  "kappa": 1.0,
+  "changes": []
+ },
+ "B": {
+  "agreement": "26/31 = 83.9%",
+  "kappa": 0.709,
+  "changes": [
+   [
+    "item_293",
+    "PARTIAL",
+    "FULL"
+   ],
+   [
+    "item_156",
+    "PARTIAL",
+    "FULL"
+   ],
+   [
+    "item_056",
+    "PARTIAL",
+    "NO_DATA"
+   ],
+   [
+    "item_285",
+    "PARTIAL",
+    "FULL"
+   ],
+   [
+    "item_014",
+    "PARTIAL",
+    "FULL"
+   ]
+  ]
+ }
+}

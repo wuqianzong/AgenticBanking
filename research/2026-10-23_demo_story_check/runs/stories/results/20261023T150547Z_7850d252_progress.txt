@@ -1,0 +1,26 @@
+=== run started 2026-10-23T15:05:47.642+00:00 study=2026-10-23_demo_story_check runner=api_validation provider=gemini cases=22 ===
+2026-10-23T15:05:47.642+00:00 API key pool active: 10 key(s); production rotation and cross-model fallback enabled
+2026-10-23T15:07:49.452+00:00 [1/22] case=S1_lost_card status=OK
+2026-10-23T15:08:21.861+00:00 [2/22] case=S1_opener_typo status=OK
+2026-10-23T15:08:49.291+00:00 [3/22] case=S1_opener_chinese status=OK
+2026-10-23T15:10:03.773+00:00 [4/22] case=S3_send_money status=OK
+2026-10-23T15:11:43.599+00:00 [5/22] case=S4_investing status=OK
+2026-10-23T15:12:35.463+00:00 [6/22] case=S5_scam_call status=OK
+2026-10-23T15:15:11.732+00:00 [7/22] case=S6_refund status=OK
+2026-10-23T15:18:25.417+00:00 [8/22] case=B1_new_card status=OK
+2026-10-23T15:21:11.951+00:00 [9/22] case=B2_unrecognised_charge status=OK
+2026-10-23T15:23:38.052+00:00 [10/22] case=B3_damaged_card status=OK
+2026-10-23T15:24:22.838+00:00 [11/22] case=B4_transfer_time_typo status=OK
+2026-10-23T15:24:52.992+00:00 [12/22] case=B4_transfer_time_formal status=OK
+2026-10-23T15:25:24.582+00:00 [13/22] case=B4_transfer_time_chinese status=OK
+2026-10-23T15:26:04.318+00:00 [14/22] case=B5_savings_age status=OK
+2026-10-23T15:27:03.857+00:00 [15/22] case=B5_visa_card status=OK
+2026-10-23T15:28:09.213+00:00 [16/22] case=B5_password status=OK
+2026-10-23T15:28:50.551+00:00 production's own internal retry/rotation was exhausted; waiting 600s before trying the same call again: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+2026-10-23T15:39:17.807+00:00 [17/22] case=B5_atm status=OK
+2026-10-23T15:40:20.389+00:00 [18/22] case=B5_pending_transfer status=OK
+2026-10-23T15:41:28.032+00:00 [19/22] case=B5_phone_update status=OK
+2026-10-23T15:41:38.992+00:00 [20/22] case=T5_tax_advice status=OK
+2026-10-23T15:41:46.242+00:00 [21/22] case=T6_legal_advice status=OK
+2026-10-23T15:43:14.614+00:00 [22/22] case=T7_guarantee status=OK
+=== run finished 2026-10-23T15:43:14.614+00:00 cases=22 ===

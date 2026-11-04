@@ -1,0 +1,12 @@
+diff --git a/backend/app/orchestration/nodes.py b/backend/app/orchestration/nodes.py
+index 2c1ee03..9b0378c 100644
+--- a/backend/app/orchestration/nodes.py
++++ b/backend/app/orchestration/nodes.py
+@@ -1444,7 +1444,6 @@ _GENERATION_RULE_BY_TYPE = {
+ # generator to compose from, and it used to fill the gap with steps from an
+ # earlier turn that the audit then rejected three times.
+ _EVIDENCE_ONLY_GENERATION_RULES = {
+-    _GENERATION_RULE_BY_TYPE["shortcut"],
+     _GENERATION_RULE_BY_TYPE["clarification"],
+     _GENERATION_RULE_BY_TYPE["decline"],
+     _GENERATION_RULE_BY_TYPE["no_info"],

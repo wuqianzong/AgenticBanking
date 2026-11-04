@@ -1,0 +1,768 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, StreamingResponse
+from pydantic import BaseModel
+from langchain_core.messages import HumanMessage, AIMessage  # FIXED: Added missing import
+
+import redis
+import json
+import asyncio
+import os
+
+# IMPORT THE NEW COMPILED TRI-TIER ENGINE
+from backend.app.orchestration.graph import app_graph
+from backend.app.services.memory_service import LongTermMemoryManager, ShortTermMemoryManager
+from backend.app.core.system_logger import log_event, reset_request_context, set_request_context
+from backend.app.services.inbound_safety_service import find_credential_rule_ids
+from backend.app.core.llm_service import ModelUnavailableError
+from backend.app.services import service_request_service
+from backend.app.services import deeplink_service
+from backend.app.services.service_request_mock_api import run_mock_credential_check
+from backend.app.orchestration.service_request_registry import get_service_request_contract
+
+app = FastAPI(title="Production Horizon Core Gateway")
+HORIZON_FRONTEND_ORIGIN = os.getenv("HORIZON_FRONTEND_ORIGIN", "http://localhost:5173").rstrip("/")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Active Redis Management
+try:
+    r_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    r_client.ping()
+    USE_REDIS = True
+except redis.ConnectionError:
+    USE_REDIS = False
+    mem_cache = {}
+
+class ChatPayload(BaseModel):
+    session_id: str
+    message: str
+    user_id: str
+    debug_reasoning: bool = False  # Dev-only, per-request opt-in: see _extract_reasoning_snippets
+    llm_provider: str = "gemini"  # Dev setting "Model": "gemini" (default) or "deepseek" -- see llm_service._provider_model_id
+
+class CloseSessionPayload(BaseModel):
+    session_id: str
+    user_id: str
+    reason: str = "logout"
+
+class UserPreferencesPayload(BaseModel):
+    user_id: str
+    nickname: str = ""
+    language: str = "English"
+    tone: str = "professional"
+    emoji: str = "enabled"
+    financial_literacy: str = "intermediate"
+
+class ServiceRequestSubmitPayload(BaseModel):
+    special_id: str
+    user_id: str
+    session_id: str
+    submitted_data: dict = {}
+
+class ServiceRequestCredentialCheckPayload(BaseModel):
+    special_id: str
+    user_id: str
+    session_id: str
+    passed: bool
+
+class TurnRatingPayload(BaseModel):
+    session_id: str
+    user_id: str
+    turn_number: int
+    rating: int
+
+
+async def archive_session_history(payload: CloseSessionPayload, archive_reason: str):
+    """Write the complete in-memory transcript to SQLite before a session boundary.
+
+    Only the raw transcript is archived. No cross-session summary or
+    baseline is generated here -- the project does not require carrying
+    conversation content across logins, so a session boundary is a pure
+    durability write, not an LLM call.
+    """
+    config = {"configurable": {"thread_id": payload.session_id}}
+    state_snapshot = app_graph.get_state(config)
+    active_history = state_snapshot.values.get("chat_history", []) if state_snapshot.values else []
+    history_sequence_offset = state_snapshot.values.get("history_sequence_offset", 0) if state_snapshot.values else 0
+
+    if not active_history:
+        # MemorySaver is intentionally ephemeral.  A server restart must not
+        # prevent logout/timeout from archiving the durable per-turn
+        # transcript that was already written to SQLite.
+        persisted_messages = await asyncio.to_thread(
+            LongTermMemoryManager.fetch_chat_history,
+            payload.user_id,
+            payload.session_id,
+        )
+        active_history = [
+            HumanMessage(content=message["content"])
+            if message["role"] == "user"
+            else AIMessage(content=message["content"])
+            for message in persisted_messages
+        ]
+        history_sequence_offset = 0
+
+    if not active_history:
+        return {"status": "ignored", "reason": "No conversation history found for this session."}
+
+    inserted_count = await asyncio.to_thread(
+        LongTermMemoryManager.persist_chat_history,
+        payload.user_id,
+        payload.session_id,
+        active_history,
+        archive_reason,
+        history_sequence_offset,
+    )
+    return {"status": "archived", "message_count": len(active_history), "new_messages": inserted_count}
+
+
+async def compact_working_history(config: dict) -> dict:
+    """Keep only 10 turns in graph memory before a scheduled new turn."""
+    try:
+        state_snapshot = app_graph.get_state(config)
+        state = state_snapshot.values
+        history = state.get("chat_history", [])
+        trimmed_history = ShortTermMemoryManager.trim_history(history)
+        discarded_count = len(history) - len(trimmed_history)
+        if discarded_count <= 0:
+            return {"compacted": False, "discarded_messages": 0}
+
+        prior_summary = state.get("compacted_history_summary", "")
+        evicted_messages = history[:discarded_count]
+        updated_summary = await asyncio.to_thread(
+            LongTermMemoryManager.summarize_trimmed_history,
+            prior_summary,
+            evicted_messages,
+        )
+        app_graph.update_state(config, {
+            "chat_history": trimmed_history,
+            "history_sequence_offset": state.get("history_sequence_offset", 0) + discarded_count,
+            "compacted_history_summary": updated_summary,
+        })
+        print(
+            f"🧾 [MEMORY SERVICE] Compacted {discarded_count} earlier messages; "
+            f"retained the latest 10 turns in graph memory."
+        )
+        return {"compacted": True, "discarded_messages": discarded_count}
+    except Exception as error:
+        # The durable transcript has already been persisted; a failed summary
+        # must never affect an already-completed customer response.
+        print(f"⚠️ [MEMORY SERVICE] Background history compaction skipped: {error}")
+        return {"compacted": False, "discarded_messages": 0, "error": str(error)}
+
+@app.get("/api/preferences/{user_id}")
+async def get_preferences(user_id: str):
+    try:
+        profile = await asyncio.to_thread(LongTermMemoryManager.get_user_preferences, user_id)
+        return profile or {}
+    except Exception as error:
+        return {"status": "error", "message": str(error)}
+
+@app.put("/api/preferences")
+async def update_preferences(payload: UserPreferencesPayload):
+    try:
+        await asyncio.to_thread(
+            LongTermMemoryManager.update_user_preferences,
+            payload.dict()
+        )
+        return {"status": "success", "updated": True}
+    except Exception as error:
+        return {"status": "error", "message": str(error)}
+
+async def _run_service_request_turn(session_id: str, user_id: str, service_request_event: dict) -> dict:
+    """Invoke the WP-7 special route (node_svc_service_request_resolver) as
+    its own turn on the customer's existing graph thread, then persist and
+    return the same shape /api/chat's final payload uses so the frontend can
+    render it identically to an ordinary assistant message.
+    """
+    config = {"configurable": {"thread_id": session_id}}
+    token = set_request_context(session_id=session_id, user_id=user_id)
+    try:
+        previous_snapshot = app_graph.get_state(config)
+        previous_turn_count = previous_snapshot.values.get("turn_count", 0) if previous_snapshot.values else 0
+        await app_graph.ainvoke(
+            {
+                "user_id": user_id,
+                "session_id": session_id,
+                "service_request_event": service_request_event,
+                "turn_count": previous_turn_count + 1,
+            },
+            config=config,
+        )
+        state_snapshot = app_graph.get_state(config)
+        execution_result = state_snapshot.values
+
+        await archive_session_history(
+            CloseSessionPayload(session_id=session_id, user_id=user_id, reason="turn_complete"),
+            archive_reason="turn_complete",
+        )
+        active_history = execution_result.get("chat_history", [])
+        if active_history:
+            history_sequence_offset = execution_result.get("history_sequence_offset", 0)
+            await asyncio.to_thread(
+                LongTermMemoryManager.persist_message_ui_payload,
+                user_id, session_id,
+                history_sequence_offset + len(active_history) - 1,
+                execution_result.get("ui_action_payload", {}),
+            )
+        return {
+            "type": "complete",
+            "text": execution_result.get("final_response", ""),
+            "uiType": execution_result.get("ui_action_payload", {}).get("uiType", "none"),
+            "options": execution_result.get("ui_action_payload", {}).get("options", []),
+        }
+    finally:
+        reset_request_context(token)
+
+
+def _completed_service_request_response(record: dict, contract: dict | None) -> dict:
+    """Return the fixed, non-LLM confirmation for a completed form."""
+    form_name = (contract or {}).get("action_label") or record["service_request_id"]
+    request_id = record["special_id"]
+    return {
+        "status": "completed",
+        "special_id": request_id,
+        "service_request_id": record["service_request_id"],
+        "form_name": form_name,
+        "request_id": request_id,
+        "text": f"Your {form_name} form has been submitted successfully. Request ID: {request_id}",
+        "uiType": "none",
+        "options": [],
+    }
+
+
+def _service_request_credential_denied_response(record: dict) -> dict:
+    """Fixed local response for a failed mock credential check.
+
+    The registration remains pending, so this says nothing about the form
+    data and lets the customer retry through the same direct API path.
+    """
+    return {
+        "status": "credential_check_failed",
+        "special_id": record["special_id"],
+        "service_request_id": record["service_request_id"],
+        "text": "We could not complete the credential check. Your form has not been submitted; please try again.",
+        "uiType": "none",
+        "options": [],
+    }
+
+
+@app.get("/api/service-request/list/{user_id}")
+async def list_service_requests(user_id: str):
+    """The customer's full service-request to-do list -- pending, completed,
+    and expired -- scoped by user_id so it stays visible across sessions."""
+    records = await asyncio.to_thread(service_request_service.list_registrations, user_id)
+    return {
+        "items": [
+            {
+                "special_id": record["special_id"],
+                "service_request_id": record["service_request_id"],
+                "action_label": (get_service_request_contract(record["service_request_id"]) or {}).get("action_label", ""),
+                "description": (get_service_request_contract(record["service_request_id"]) or {}).get("description", ""),
+                "status": record["status"],
+                "created_at": record["created_at"],
+                "expires_at": record["expires_at"],
+            }
+            for record in records
+        ]
+    }
+
+
+@app.get("/api/service-request/{special_id}")
+async def get_service_request(special_id: str):
+    """Deterministic lookup used both to open a form the first time and to
+    reopen a still-valid one later from old chat history."""
+    record = await asyncio.to_thread(service_request_service.get, special_id)
+    if record is None:
+        return {"status": "error", "message": "Unknown service request."}
+    response = {"status": record["status"], "special_id": special_id, "service_request_id": record["service_request_id"]}
+    if record["status"] == "pending":
+        # Covers both a never-submitted form and one reset by a failed
+        # credential check -- either way, "pending" means the form is open
+        # for (re)submission until this registration expires.
+        contract = get_service_request_contract(record["service_request_id"])
+        response["form_schema"] = contract["form_schema"] if contract else {}
+        response["description"] = contract["description"] if contract else ""
+    return response
+
+
+@app.post("/api/service-request/submit")
+async def submit_service_request(payload: ServiceRequestSubmitPayload):
+    record = await asyncio.to_thread(service_request_service.get, payload.special_id)
+    if record is None or record["user_id"] != payload.user_id:
+        return {"status": "error", "message": "This request could not be found or has expired."}
+    if record["status"] == "expired":
+        return {"status": "error", "message": "This request has expired. Please ask again."}
+    if record["status"] != "pending":
+        return {"status": "error", "message": "This request has already been completed."}
+
+    if record["requires_step_up"]:
+        # A step-up form is held, still pending, until the credential check
+        # passes; /credential-check then completes it with the held payload.
+        await asyncio.to_thread(service_request_service.mark_submitted, payload.special_id, payload.submitted_data)
+        log_event(
+            "service_request.submit.credential_check_required",
+            special_id=payload.special_id,
+            service_request_id=record["service_request_id"],
+        )
+        return {"status": "credential_check_required", "special_id": payload.special_id}
+
+    record = await asyncio.to_thread(service_request_service.submit_and_complete, payload.special_id, payload.submitted_data)
+    contract = get_service_request_contract(record["service_request_id"])
+    log_event(
+        "service_request.submit.completed_directly",
+        special_id=payload.special_id,
+        service_request_id=record["service_request_id"],
+    )
+    return _completed_service_request_response(record, contract)
+
+
+@app.post("/api/service-request/credential-check")
+async def credential_check_service_request(payload: ServiceRequestCredentialCheckPayload):
+    record = await asyncio.to_thread(service_request_service.get, payload.special_id)
+    if record is None or record["user_id"] != payload.user_id:
+        return {"status": "error", "message": "This request could not be found or has expired."}
+    if record["status"] != "pending" or not record["requires_step_up"] or not record.get("submitted_data"):
+        return {"status": "error", "message": "This request is not awaiting a credential check."}
+
+    contract = get_service_request_contract(record["service_request_id"])
+    passed = run_mock_credential_check(payload.passed)
+    record = await asyncio.to_thread(service_request_service.resolve_credential_check, payload.special_id, passed)
+
+    if not passed:
+        return _service_request_credential_denied_response(record)
+
+    record = await asyncio.to_thread(
+        service_request_service.submit_and_complete,
+        payload.special_id,
+        record["submitted_data"],
+    )
+    return _completed_service_request_response(record, contract)
+
+
+@app.get("/api/deeplink/open/{request_id}")
+async def open_deeplink_request(request_id: str, user_id: str):
+    """Re-authorize a historic opaque link ID then redirect centrally.
+
+    The route is intentionally never returned in a chat payload or JSON
+    response. In production, authenticated session identity replaces the
+    temporary MVP ``user_id`` query parameter.
+    """
+    record = await asyncio.to_thread(
+        deeplink_service.resolve_registered_request,
+        request_id,
+        user_id,
+    )
+    if record is None:
+        return {"status": "error", "message": "This navigation request could not be found."}
+    if record["status"] != deeplink_service.RESOLVED or not record.get("route"):
+        return {"status": "unavailable", "message": "This navigation destination is not available."}
+    log_event("deeplink.request.opened", request_id=request_id, user_id=user_id)
+    # A relative Location would retain the API host (localhost:8000 in the
+    # MVP) and therefore 404. The route remains exclusively central-service
+    # data; the browser follows this absolute redirect without the chat UI or
+    # frontend JavaScript ever receiving it as a payload field.
+    return RedirectResponse(url=f"{HORIZON_FRONTEND_ORIGIN}{record['route']}", status_code=307)
+
+
+@app.post("/api/feedback/turn-rating")
+async def submit_turn_rating(payload: TurnRatingPayload):
+    """Record a customer's thumbs rating for one turn's response quality.
+
+    Only offered by the frontend when node_08_soft_escalation_analyzer found
+    that turn's own schema-derived confidence ambiguous (see
+    TURN_FEEDBACK_SCORE_LOWER_BOUND/UPPER_BOUND). Durably logged for future
+    analysis, and also patched into the live, still-open session's
+    turn_escalation_history so it can immediately sharpen later turns'
+    rolling bot-confidence -- see _turn_confidence's override behavior.
+    """
+    if payload.rating not in (0, 1):
+        return {"status": "error", "message": "rating must be 0 or 1."}
+
+    found = await asyncio.to_thread(
+        LongTermMemoryManager.record_turn_rating,
+        payload.user_id, payload.session_id, payload.turn_number, payload.rating,
+    )
+    if not found:
+        return {"status": "error", "message": "No logged turn matches this session and turn number."}
+
+    config = {"configurable": {"thread_id": payload.session_id}}
+    state_snapshot = app_graph.get_state(config)
+    history = list((state_snapshot.values or {}).get("turn_escalation_history", []))
+    matched = False
+    for entry in history:
+        if entry.get("turn_number") == payload.turn_number:
+            entry["user_rating"] = payload.rating
+            matched = True
+            break
+    if matched:
+        app_graph.update_state(config, {"turn_escalation_history": history})
+
+    log_event(
+        "escalation.turn_rating.recorded",
+        session_id=payload.session_id, user_id=payload.user_id,
+        turn_number=payload.turn_number, rating=payload.rating,
+        live_state_patched=matched,
+    )
+    return {"status": "ok"}
+
+
+@app.post("/api/session/checkout")
+async def close_and_compact_session(payload: CloseSessionPayload):
+    """
+    Asynchronous Compaction Webhook Trigger.
+    Saves and condenses active short-term chat logs right upon thread close event.
+    """
+    token = set_request_context(session_id=payload.session_id, user_id=payload.user_id)
+    try:
+        log_event("session.checkout", reason=payload.reason)
+        result = await archive_session_history(payload, payload.reason)
+        result["session_id"] = payload.session_id
+        # Checkout is the lifecycle boundary for ephemeral LangGraph state.
+        # Durable transcript and memory summaries have already been archived
+        # above, so deleting this thread safely releases the session-scoped
+        # evidence cache and avoids unbounded in-memory checkpoint growth.
+        await app_graph.checkpointer.adelete_thread(payload.session_id)
+        result["graph_state_cleared"] = True
+        log_event("session.checkout.graph_state_cleared", session_id=payload.session_id)
+        log_event("session.checkout.completed", status=result["status"])
+        return result
+    except Exception as error:
+        log_event("session.checkout.failed", level="ERROR", error=str(error))
+        raise
+    finally:
+        reset_request_context(token)
+
+
+@app.get("/api/history/{user_id}")
+async def get_chat_history(
+    user_id: str,
+    session_id: str,
+    limit: int = 20,
+    before_sequence: int | None = None,
+):
+    """Return one ordered, user-filtered transcript page (20 messages = 10 turns)."""
+    if not 1 <= limit <= 100:
+        return {"user_id": user_id, "messages": [], "has_more": False, "error": "limit must be 1-100"}
+    page = await asyncio.to_thread(
+        LongTermMemoryManager.fetch_chat_history_page,
+        user_id,
+        session_id,
+        limit,
+        before_sequence,
+    )
+    return {"user_id": user_id, "session_id": session_id, **page}
+
+
+@app.get("/api/history/{user_id}/previous")
+async def get_prior_session_history(
+    user_id: str,
+    current_session_id: str,
+    limit: int = 20,
+    before_row_id: int | None = None,
+):
+    """Page through earlier sessions owned by this user, excluding the active one."""
+    if not 1 <= limit <= 100:
+        return {"user_id": user_id, "messages": [], "has_more": False, "error": "limit must be 1-100"}
+    page = await asyncio.to_thread(
+        LongTermMemoryManager.fetch_prior_session_history_page,
+        user_id,
+        current_session_id,
+        limit,
+        before_row_id,
+    )
+    return {"user_id": user_id, "session_id": current_session_id, **page}
+
+MODEL_UNAVAILABLE_MESSAGE = "The model is currently unavailable. Please try again later."
+
+
+def _extract_reasoning_snippets(node_name: str, state_update: dict) -> list[str]:
+    """Dev-only debug aid: surface a node's own already-computed reasoning
+    text to the frontend, for the Development-settings "show reasoning"
+    switch. Deliberately an explicit allowlist of known reasoning-bearing
+    fields on known state keys -- never a blind dump of state_update --
+    so a future state field (e.g. personal_data_reveal_map, or anything
+    else sensitive) can never leak here just by a node happening to
+    return it. Reads only what this node returned -- but several nodes
+    return their whole accumulated search_tasks/task_results list, so the
+    caller (chat_stream) de-duplicates across nodes within a turn.
+    """
+    snippets: list[str] = []
+
+    for task in state_update.get("search_tasks", []) or []:
+        reason = str(task.get("mapping_reason", "")).strip()
+        if reason:
+            snippets.append(f"[{node_name}] Task {task.get('task_id', '?')} product/intent mapping: {reason}")
+
+    for result in state_update.get("task_results", []) or []:
+        reason = str(result.get("reason", "")).strip()
+        if reason:
+            snippets.append(f"[{node_name}] Task {result.get('task_id', '?')} sufficiency verdict ({result.get('status', '?')}): {reason}")
+        guidance = str(result.get("generation_guidance", "")).strip()
+        if guidance:
+            snippets.append(f"[{node_name}] Task {result.get('task_id', '?')} generation guidance: {guidance}")
+
+    for entry in state_update.get("clarification_tasks", []) or []:
+        reason = str(entry.get("clarification_reason", "")).strip()
+        if reason:
+            snippets.append(f"[{node_name}] Clarification ({entry.get('subquery_id', '?')}): {reason}")
+
+    compliance = state_update.get("outbound_compliance_result")
+    if isinstance(compliance, dict):
+        reason = str(compliance.get("reason", "")).strip()
+        if reason:
+            snippets.append(f"[{node_name}] Compliance audit: {reason}")
+
+    groundedness = state_update.get("outbound_groundedness_result")
+    if isinstance(groundedness, dict):
+        reason = str(groundedness.get("reason", "")).strip()
+        if reason:
+            snippets.append(f"[{node_name}] Groundedness audit: {reason}")
+
+    return snippets
+
+
+@app.post("/api/chat")
+async def process_chat(payload: ChatPayload):
+    """
+    Upgraded to Streaming NDJSON Response.
+    Yields node execution progress in real-time before returning the final payload.
+    """
+    config = {"configurable": {"thread_id": payload.session_id}}
+    # A message carrying a credential is rejected at the ingest gate; keep the value out of the log as well.
+    logged_message = ("[message removed: it contained a credential]" if find_credential_rule_ids(payload.message)
+                      else payload.message)
+    log_event("chat.request", session_id=payload.session_id, user_id=payload.user_id, message=logged_message)
+
+    # --- FRONTEND INITIALIZATION ---
+    # Restore an existing thread, or run Turn 0 to generate and persist a greeting.
+    is_initialization = payload.message == "**INIT**"
+    if is_initialization:
+        state_snapshot = app_graph.get_state(config)
+        history = state_snapshot.values.get("chat_history", []) if state_snapshot.values else []
+
+        if history:
+            async def history_stream():
+                context_token = set_request_context(session_id=payload.session_id, user_id=payload.user_id)
+                try:
+                    serialized_history = [
+                        {
+                            "role": "user" if isinstance(m, HumanMessage) else "ai",
+                            "content": m.content,
+                        }
+                        for m in history
+                    ]
+                    log_event("chat.history_sync", message_count=len(serialized_history))
+                    yield json.dumps({
+                        "type": "init",
+                        "uiType": "history_sync",
+                        "items": serialized_history,
+                    }) + "\n"
+                finally:
+                    reset_request_context(context_token)
+
+            return StreamingResponse(history_stream(), media_type="application/x-ndjson")
+
+    # --- STANDARD INVOCATION (STREAMING) ---
+    async def chat_stream():
+        provider = payload.llm_provider if payload.llm_provider in ("gemini", "deepseek") else "gemini"
+        context_token = set_request_context(session_id=payload.session_id, user_id=payload.user_id, llm_provider=provider)
+        previous_snapshot = app_graph.get_state(config)
+        previous_turn_count = previous_snapshot.values.get("turn_count", 0) if previous_snapshot.values else 0
+        initial_turn_state = {
+            "user_id": payload.user_id,
+            "session_id": payload.session_id,
+            "user_input": "__INIT__" if is_initialization else payload.message,
+            "turn_count": previous_turn_count if is_initialization else previous_turn_count + 1,
+        }
+
+        try:
+            # Compact before turns 11, 21, 31, ... rather than after a reply.
+            # The submitted message has already disabled the input in React,
+            # so no graph turn can race this state update. Stream it as a
+            # regular progress stage so the customer can see the work.
+            is_scheduled_compaction_turn = (
+                not is_initialization
+                and previous_turn_count > 0
+                and (previous_turn_count + 1) % 10 == 1
+            )
+            if is_scheduled_compaction_turn:
+                yield json.dumps({
+                    "type": "progress",
+                    "node": "memory_compaction",
+                }) + "\n"
+                await asyncio.sleep(0.3)
+                yield json.dumps({
+                    "type": "progress",
+                    "node": "memory_validation",
+                }) + "\n"
+                compaction_result = await compact_working_history(config)
+                log_event("memory.compaction.completed", **compaction_result)
+
+            # 1. Stream the Node Execution Progress
+            # low_confidence_mode is set once by node_03c (see its own
+            # docstring) when this task's own live dynamic confidence is
+            # genuinely below threshold. It's a state field, not a
+            # per-chunk event, so once any chunk this turn sets it, every
+            # subsequent progress event keeps reporting it -- the frontend
+            # shows "Thinking harder" for the rest of this turn's
+            # processing, not just the one node transition that set it.
+            # task_confidence, by contrast, is deliberately NOT sticky:
+            # node_03c recomputes and returns it fresh every round (once
+            # per retry attempt, not once per turn), so the frontend sees
+            # it actually move as retrieval progresses -- see
+            # RAG_RETRY_EFFORT_v1.0.md.
+            low_confidence_mode = False
+            task_confidence = None
+            # Debug-panel de-duplication: several nodes return the WHOLE
+            # accumulated search_tasks/task_results list each time (not just
+            # what they changed), so the same reasoning text would otherwise
+            # be re-emitted by every later node in the turn.
+            seen_reasoning: set[str] = set()
+            async for chunk in app_graph.astream(initial_turn_state, config=config):
+                for node_name, state_update in chunk.items():
+                    if state_update.get("low_confidence_mode"):
+                        low_confidence_mode = True
+                    if "live_task_confidence" in state_update:
+                        task_confidence = state_update["live_task_confidence"]
+                    log_event("graph.node.completed", node=node_name, state_keys=list(state_update.keys()))
+                    progress_event = {
+                        "type": "progress",
+                        "node": node_name,
+                        "lowConfidenceMode": low_confidence_mode,
+                        "taskConfidence": task_confidence,
+                    }
+                    # Dev-only, per-request opt-in (Development settings ->
+                    # "Show reasoning"). Never computed or sent otherwise --
+                    # this is debug-only surfacing of the pipeline's own
+                    # internal reasoning fields, not something a real
+                    # customer session should carry by default.
+                    if payload.debug_reasoning:
+                        fresh_reasoning = []
+                        for line in _extract_reasoning_snippets(node_name, state_update):
+                            # Compare on the text after the "[node] " label, so the
+                            # same entry re-returned by a later node is not repeated.
+                            key = line.split("] ", 1)[1] if line.startswith("[") and "] " in line else line
+                            if key in seen_reasoning:
+                                continue
+                            seen_reasoning.add(key)
+                            fresh_reasoning.append(line)
+                        if fresh_reasoning:
+                            progress_event["reasoning"] = fresh_reasoning
+                    # Yield the name of the node currently executing to the frontend
+                    yield json.dumps(progress_event) + "\n"
+                    # Pace progress events so React can render each transition.
+                    await asyncio.sleep(0.3)
+
+            # 2. Graph has finished. Fetch the final condensed state from the checkpointer.
+            state_snapshot = app_graph.get_state(config)
+            execution_result = state_snapshot.values
+
+            # Persist every completed turn so a browser refresh can restore the
+            # transcript. Inserts are idempotent by session-wide sequence number.
+            archive_reason = "turn_0" if is_initialization else "turn_complete"
+            await archive_session_history(
+                CloseSessionPayload(
+                    session_id=payload.session_id,
+                    user_id=payload.user_id,
+                    reason=archive_reason,
+                ),
+                archive_reason=archive_reason,
+            )
+            active_history = execution_result.get("chat_history", [])
+            if active_history:
+                history_sequence_offset = execution_result.get("history_sequence_offset", 0)
+                await asyncio.to_thread(
+                    LongTermMemoryManager.persist_message_ui_payload,
+                    payload.user_id,
+                    payload.session_id,
+                    history_sequence_offset + len(active_history) - 1,
+                    execution_result.get("ui_action_payload", {}),
+                )
+
+            # Durable, every-turn log of the full resolution schema (not a
+            # derived score) for future analysis -- see
+            # docs/SOFT_ESCALATION_v1.0.md. Independent of whether this turn
+            # ever showed the thumbs prompt.
+            await asyncio.to_thread(
+                LongTermMemoryManager.persist_turn_resolution,
+                payload.user_id,
+                payload.session_id,
+                execution_result.get("turn_count", 0),
+                execution_result.get("financial_subqueries", []),
+            )
+
+            final_payload = {
+                "type": "complete",
+                "text": execution_result.get("final_response", ""),
+                "uiType": execution_result.get("ui_action_payload", {}).get("uiType", "text"),
+                "options": execution_result.get("ui_action_payload", {}).get("options", []),
+                "items": execution_result.get("ui_action_payload", {}).get("items", []),
+                "progressTitle": execution_result.get("ui_action_payload", {}).get("progressTitle", ""),
+                "stepDetail": execution_result.get("ui_action_payload", {}).get("stepDetail", ""),
+                "stepDetails": execution_result.get("ui_action_payload", {}).get("stepDetails", []),
+                "clarificationText": execution_result.get("ui_action_payload", {}).get("clarificationText", ""),
+                "listTitle": execution_result.get("ui_action_payload", {}).get("listTitle", ""),
+                "listIntro": execution_result.get("ui_action_payload", {}).get("listIntro", ""),
+                "extendedText": execution_result.get("ui_action_payload", {}).get("extendedText", ""),
+                "responseBlocks": execution_result.get("ui_action_payload", {}).get("responseBlocks", []),
+                "listClarificationText": execution_result.get("ui_action_payload", {}).get("listClarificationText", ""),
+                "precisionSubstituted": execution_result.get("ui_action_payload", {}).get("precisionSubstituted", False),
+                "currentStep": execution_result.get("ui_action_payload", {}).get("currentStep"),
+                "totalSteps": execution_result.get("ui_action_payload", {}).get("totalSteps"),
+                "serviceRequestActions": execution_result.get("ui_action_payload", {}).get("serviceRequestActions", []),
+                "navigationActions": execution_result.get("ui_action_payload", {}).get("navigationActions", []),
+                "personalDataReveals": execution_result.get("ui_action_payload", {}).get("personalDataReveals", []),
+                "personalDataSubstituted": execution_result.get("ui_action_payload", {}).get("personalDataSubstituted", False),
+                "showFeedbackPrompt": execution_result.get("ui_action_payload", {}).get("showFeedbackPrompt", False),
+                "softEscalationAvailable": execution_result.get("ui_action_payload", {}).get("softEscalationAvailable", False),
+                "nextActions": execution_result.get("ui_action_payload", {}).get("nextActions", []),
+                "turnNumber": execution_result.get("turn_count", 0),
+            }
+            yield json.dumps(final_payload) + "\n"
+            log_event("chat.response", ui_type=final_payload["uiType"], response_length=len(final_payload["text"]))
+
+        except ModelUnavailableError as unavailable:
+            # BUG-030 (per the user): the model is overloaded or every key's
+            # quota is used up -- no retry or key switch inside this turn can
+            # fix that, so the turn stops and the customer retries later.
+            # With the developer reasoning display on, the provider's exact
+            # error follows the message.
+            text = MODEL_UNAVAILABLE_MESSAGE
+            if payload.debug_reasoning:
+                text = f"{text}\n\n{unavailable.detail}"
+            yield json.dumps({
+                "type": "complete",
+                "text": text,
+                "uiType": "text",
+                "options": [],
+            }) + "\n"
+            log_event("chat.model_unavailable", level="ERROR", error=unavailable.detail)
+        except Exception as e:
+            # Safe fallback if the graph crashes during execution
+            yield json.dumps({
+                "type": "complete",
+                "text": f"System encountered an error: {str(e)}",
+                "uiType": "text",
+                "options": [],
+            }) + "\n"
+            log_event("chat.error", level="ERROR", error=str(e))
+        finally:
+            reset_request_context(context_token)
+
+    return StreamingResponse(
+        chat_stream(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

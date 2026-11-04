@@ -1,0 +1,1970 @@
+{
+ "item_001": {
+  "h1_id": "h1_verify_my_identity_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_002": {
+  "h1_id": "h1_failed_transfer_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_003": {
+  "h1_id": "h1_declined_transfer_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_004": {
+  "h1_id": "cal_18",
+  "source": "calibration",
+  "known_coverage": "NO_DATA",
+  "known_faq": ""
+ },
+ "item_005": {
+  "h1_id": "cal_01",
+  "source": "calibration",
+  "known_coverage": "FULL",
+  "known_faq": "faq_14914805"
+ },
+ "item_006": {
+  "h1_id": "h1_top_up_by_cash_or_cheque_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_007": {
+  "h1_id": "h1_verify_source_of_funds_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_008": {
+  "h1_id": "h1_supported_cards_and_currencies_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_009": {
+  "h1_id": "h1_automatic_top_up_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_010": {
+  "h1_id": "h1_pending_transfer_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_011": {
+  "h1_id": "h1_card_acceptance_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_012": {
+  "h1_id": "h1_beneficiary_not_allowed_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_013": {
+  "h1_id": "h1_disposable_card_limits_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_014": {
+  "h1_id": "h1_contactless_not_working_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_015": {
+  "h1_id": "h1_virtual_card_not_working_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_016": {
+  "h1_id": "h1_top_up_failed_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_017": {
+  "h1_id": "h1_virtual_card_not_working_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_018": {
+  "h1_id": "h1_getting_virtual_card_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_019": {
+  "h1_id": "h1_card_delivery_estimate_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_020": {
+  "h1_id": "h1_fiat_currency_support_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_021": {
+  "h1_id": "h1_request_refund_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_022": {
+  "h1_id": "h1_Refund_not_showing_up_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_023": {
+  "h1_id": "h1_request_refund_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_024": {
+  "h1_id": "h1_wrong_exchange_rate_for_cash_withdrawal_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_025": {
+  "h1_id": "cal_05",
+  "source": "calibration",
+  "known_coverage": "FULL",
+  "known_faq": "faq_33f045af"
+ },
+ "item_026": {
+  "h1_id": "h1_verify_top_up_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_027": {
+  "h1_id": "cal_11",
+  "source": "calibration",
+  "known_coverage": "NO_DATA",
+  "known_faq": ""
+ },
+ "item_028": {
+  "h1_id": "h1_apple_pay_or_google_pay_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_029": {
+  "h1_id": "h1_unable_to_verify_identity_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_030": {
+  "h1_id": "h1_atm_support_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_031": {
+  "h1_id": "h1_balance_not_updated_after_bank_transfer_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_032": {
+  "h1_id": "h1_why_verify_identity_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_033": {
+  "h1_id": "h1_declined_cash_withdrawal_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_034": {
+  "h1_id": "h1_visa_or_mastercard_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_035": {
+  "h1_id": "h1_lost_or_stolen_phone_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_036": {
+  "h1_id": "h1_country_support_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_037": {
+  "h1_id": "h1_receiving_money_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_038": {
+  "h1_id": "h1_card_linking_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_039": {
+  "h1_id": "h1_pin_blocked_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_040": {
+  "h1_id": "h1_declined_transfer_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_041": {
+  "h1_id": "cal_06",
+  "source": "calibration",
+  "known_coverage": "FULL",
+  "known_faq": "faq_daff2a37"
+ },
+ "item_042": {
+  "h1_id": "h1_card_swallowed_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_043": {
+  "h1_id": "cal_04",
+  "source": "calibration",
+  "known_coverage": "FULL",
+  "known_faq": "faq_2ba8c382"
+ },
+ "item_044": {
+  "h1_id": "h1_pending_top_up_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_045": {
+  "h1_id": "h1_card_arrival_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_046": {
+  "h1_id": "h1_passcode_forgotten_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_047": {
+  "h1_id": "h1_compromised_card_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_048": {
+  "h1_id": "h1_compromised_card_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_049": {
+  "h1_id": "h1_top_up_failed_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_050": {
+  "h1_id": "h1_virtual_card_not_working_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_051": {
+  "h1_id": "h1_pending_card_payment_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_052": {
+  "h1_id": "h1_cash_withdrawal_charge_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_053": {
+  "h1_id": "cal_12",
+  "source": "calibration",
+  "known_coverage": "NO_DATA",
+  "known_faq": ""
+ },
+ "item_054": {
+  "h1_id": "h1_verify_source_of_funds_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_055": {
+  "h1_id": "h1_card_linking_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_056": {
+  "h1_id": "h1_transfer_fee_charged_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_057": {
+  "h1_id": "h1_card_payment_wrong_exchange_rate_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_058": {
+  "h1_id": "h1_top_up_limits_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_059": {
+  "h1_id": "h1_lost_or_stolen_card_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_060": {
+  "h1_id": "h1_automatic_top_up_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_061": {
+  "h1_id": "h1_lost_or_stolen_card_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_062": {
+  "h1_id": "h1_cash_withdrawal_charge_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_063": {
+  "h1_id": "h1_exchange_via_app_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_064": {
+  "h1_id": "h1_verify_my_identity_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_065": {
+  "h1_id": "h1_age_limit_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_066": {
+  "h1_id": "h1_transfer_not_received_by_recipient_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_067": {
+  "h1_id": "h1_direct_debit_payment_not_recognised_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_068": {
+  "h1_id": "h1_top_up_reverted_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_069": {
+  "h1_id": "h1_terminate_account_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_070": {
+  "h1_id": "h1_topping_up_by_card_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_071": {
+  "h1_id": "h1_exchange_via_app_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_072": {
+  "h1_id": "h1_atm_support_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_073": {
+  "h1_id": "h1_exchange_rate_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_074": {
+  "h1_id": "h1_order_physical_card_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_075": {
+  "h1_id": "h1_why_verify_identity_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_076": {
+  "h1_id": "h1_automatic_top_up_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_077": {
+  "h1_id": "h1_terminate_account_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_078": {
+  "h1_id": "h1_visa_or_mastercard_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_079": {
+  "h1_id": "cal_16",
+  "source": "calibration",
+  "known_coverage": "NO_DATA",
+  "known_faq": ""
+ },
+ "item_080": {
+  "h1_id": "h1_transaction_charged_twice_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_081": {
+  "h1_id": "h1_topping_up_by_card_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_082": {
+  "h1_id": "h1_top_up_reverted_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_083": {
+  "h1_id": "h1_visa_or_mastercard_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_084": {
+  "h1_id": "h1_cash_withdrawal_charge_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_085": {
+  "h1_id": "h1_Refund_not_showing_up_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_086": {
+  "h1_id": "h1_transfer_not_received_by_recipient_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_087": {
+  "h1_id": "h1_verify_source_of_funds_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_088": {
+  "h1_id": "h1_terminate_account_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_089": {
+  "h1_id": "h1_Refund_not_showing_up_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_090": {
+  "h1_id": "h1_exchange_rate_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_091": {
+  "h1_id": "h1_reverted_card_payment?_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_092": {
+  "h1_id": "h1_why_verify_identity_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_093": {
+  "h1_id": "h1_card_acceptance_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_094": {
+  "h1_id": "h1_lost_or_stolen_phone_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_095": {
+  "h1_id": "h1_card_delivery_estimate_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_096": {
+  "h1_id": "h1_direct_debit_payment_not_recognised_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_097": {
+  "h1_id": "h1_age_limit_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_098": {
+  "h1_id": "h1_unable_to_verify_identity_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_099": {
+  "h1_id": "h1_atm_support_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_100": {
+  "h1_id": "h1_balance_not_updated_after_bank_transfer_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_101": {
+  "h1_id": "h1_request_refund_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_102": {
+  "h1_id": "h1_card_not_working_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_103": {
+  "h1_id": "h1_failed_transfer_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_104": {
+  "h1_id": "h1_top_up_reverted_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_105": {
+  "h1_id": "h1_supported_cards_and_currencies_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_106": {
+  "h1_id": "h1_transfer_into_account_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_107": {
+  "h1_id": "h1_get_disposable_virtual_card_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_108": {
+  "h1_id": "h1_transfer_into_account_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_109": {
+  "h1_id": "h1_disposable_card_limits_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_110": {
+  "h1_id": "h1_failed_transfer_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_111": {
+  "h1_id": "h1_card_swallowed_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_112": {
+  "h1_id": "h1_pending_top_up_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_113": {
+  "h1_id": "h1_card_not_working_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_114": {
+  "h1_id": "h1_topping_up_by_card_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_115": {
+  "h1_id": "h1_top_up_limits_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_116": {
+  "h1_id": "h1_wrong_amount_of_cash_received_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_117": {
+  "h1_id": "h1_change_pin_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_118": {
+  "h1_id": "h1_cancel_transfer_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_119": {
+  "h1_id": "cal_09",
+  "source": "calibration",
+  "known_coverage": "FULL",
+  "known_faq": "faq_be976c33"
+ },
+ "item_120": {
+  "h1_id": "h1_declined_transfer_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_121": {
+  "h1_id": "h1_receiving_money_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_122": {
+  "h1_id": "h1_card_payment_not_recognised_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_123": {
+  "h1_id": "h1_pending_top_up_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_124": {
+  "h1_id": "h1_declined_card_payment_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_125": {
+  "h1_id": "h1_card_about_to_expire_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_126": {
+  "h1_id": "h1_card_acceptance_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_127": {
+  "h1_id": "h1_unable_to_verify_identity_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_128": {
+  "h1_id": "h1_passcode_forgotten_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_129": {
+  "h1_id": "h1_exchange_via_app_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_130": {
+  "h1_id": "h1_wrong_amount_of_cash_received_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_131": {
+  "h1_id": "h1_virtual_card_not_working_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_132": {
+  "h1_id": "h1_card_about_to_expire_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_133": {
+  "h1_id": "h1_exchange_rate_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_134": {
+  "h1_id": "h1_getting_virtual_card_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_135": {
+  "h1_id": "h1_country_support_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_136": {
+  "h1_id": "h1_country_support_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_137": {
+  "h1_id": "h1_activate_my_card_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_138": {
+  "h1_id": "h1_cash_withdrawal_not_recognised_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_139": {
+  "h1_id": "h1_atm_support_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_140": {
+  "h1_id": "h1_top_up_by_cash_or_cheque_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_141": {
+  "h1_id": "h1_country_support_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_142": {
+  "h1_id": "h1_verify_top_up_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_143": {
+  "h1_id": "h1_pending_top_up_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_144": {
+  "h1_id": "h1_top_up_by_card_charge_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_145": {
+  "h1_id": "h1_card_about_to_expire_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_146": {
+  "h1_id": "h1_card_arrival_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_147": {
+  "h1_id": "cal_20",
+  "source": "calibration",
+  "known_coverage": "NO_DATA",
+  "known_faq": ""
+ },
+ "item_148": {
+  "h1_id": "h1_lost_or_stolen_phone_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_149": {
+  "h1_id": "h1_activate_my_card_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_150": {
+  "h1_id": "h1_disposable_card_limits_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_151": {
+  "h1_id": "h1_pending_transfer_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_152": {
+  "h1_id": "h1_wrong_exchange_rate_for_cash_withdrawal_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_153": {
+  "h1_id": "h1_unable_to_verify_identity_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_154": {
+  "h1_id": "h1_transfer_into_account_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_155": {
+  "h1_id": "h1_cash_withdrawal_not_recognised_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_156": {
+  "h1_id": "h1_order_physical_card_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_157": {
+  "h1_id": "h1_transaction_charged_twice_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_158": {
+  "h1_id": "h1_why_verify_identity_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_159": {
+  "h1_id": "cal_02",
+  "source": "calibration",
+  "known_coverage": "FULL",
+  "known_faq": "faq_8ce1bac1"
+ },
+ "item_160": {
+  "h1_id": "h1_contactless_not_working_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_161": {
+  "h1_id": "h1_change_pin_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_162": {
+  "h1_id": "h1_card_not_working_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_163": {
+  "h1_id": "h1_top_up_by_bank_transfer_charge_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_164": {
+  "h1_id": "h1_top_up_reverted_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_165": {
+  "h1_id": "h1_card_payment_fee_charged_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_166": {
+  "h1_id": "h1_exchange_charge_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_167": {
+  "h1_id": "h1_card_payment_not_recognised_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_168": {
+  "h1_id": "h1_card_payment_wrong_exchange_rate_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_169": {
+  "h1_id": "h1_request_refund_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_170": {
+  "h1_id": "h1_order_physical_card_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_171": {
+  "h1_id": "h1_transfer_fee_charged_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_172": {
+  "h1_id": "h1_contactless_not_working_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_173": {
+  "h1_id": "cal_08",
+  "source": "calibration",
+  "known_coverage": "FULL",
+  "known_faq": "faq_4887f1cb"
+ },
+ "item_174": {
+  "h1_id": "h1_card_acceptance_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_175": {
+  "h1_id": "h1_get_physical_card_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_176": {
+  "h1_id": "h1_card_delivery_estimate_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_177": {
+  "h1_id": "h1_visa_or_mastercard_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_178": {
+  "h1_id": "h1_transfer_timing_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_179": {
+  "h1_id": "h1_transfer_timing_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_180": {
+  "h1_id": "h1_top_up_by_bank_transfer_charge_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_181": {
+  "h1_id": "h1_automatic_top_up_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_182": {
+  "h1_id": "h1_passcode_forgotten_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_183": {
+  "h1_id": "h1_activate_my_card_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_184": {
+  "h1_id": "h1_cash_withdrawal_not_recognised_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_185": {
+  "h1_id": "h1_transfer_fee_charged_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_186": {
+  "h1_id": "h1_get_disposable_virtual_card_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_187": {
+  "h1_id": "h1_top_up_by_card_charge_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_188": {
+  "h1_id": "h1_wrong_amount_of_cash_received_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_189": {
+  "h1_id": "h1_beneficiary_not_allowed_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_190": {
+  "h1_id": "h1_cancel_transfer_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_191": {
+  "h1_id": "h1_edit_personal_details_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_192": {
+  "h1_id": "h1_wrong_exchange_rate_for_cash_withdrawal_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_193": {
+  "h1_id": "h1_getting_spare_card_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_194": {
+  "h1_id": "h1_card_payment_fee_charged_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_195": {
+  "h1_id": "h1_top_up_failed_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_196": {
+  "h1_id": "h1_beneficiary_not_allowed_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_197": {
+  "h1_id": "h1_compromised_card_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_198": {
+  "h1_id": "h1_apple_pay_or_google_pay_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_199": {
+  "h1_id": "cal_15",
+  "source": "calibration",
+  "known_coverage": "NO_DATA",
+  "known_faq": ""
+ },
+ "item_200": {
+  "h1_id": "h1_card_linking_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_201": {
+  "h1_id": "h1_apple_pay_or_google_pay_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_202": {
+  "h1_id": "h1_card_payment_not_recognised_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_203": {
+  "h1_id": "h1_transfer_timing_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_204": {
+  "h1_id": "h1_pending_card_payment_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_205": {
+  "h1_id": "h1_card_linking_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_206": {
+  "h1_id": "h1_lost_or_stolen_phone_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_207": {
+  "h1_id": "h1_topping_up_by_card_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_208": {
+  "h1_id": "h1_activate_my_card_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_209": {
+  "h1_id": "h1_top_up_by_card_charge_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_210": {
+  "h1_id": "h1_beneficiary_not_allowed_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_211": {
+  "h1_id": "cal_19",
+  "source": "calibration",
+  "known_coverage": "NO_DATA",
+  "known_faq": ""
+ },
+ "item_212": {
+  "h1_id": "h1_transaction_charged_twice_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_213": {
+  "h1_id": "h1_verify_my_identity_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_214": {
+  "h1_id": "cal_07",
+  "source": "calibration",
+  "known_coverage": "FULL",
+  "known_faq": "faq_824007f2"
+ },
+ "item_215": {
+  "h1_id": "h1_reverted_card_payment?_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_216": {
+  "h1_id": "h1_getting_spare_card_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_217": {
+  "h1_id": "h1_balance_not_updated_after_cheque_or_cash_deposit_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_218": {
+  "h1_id": "h1_card_arrival_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_219": {
+  "h1_id": "h1_cancel_transfer_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_220": {
+  "h1_id": "h1_pending_transfer_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_221": {
+  "h1_id": "h1_get_physical_card_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_222": {
+  "h1_id": "h1_edit_personal_details_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_223": {
+  "h1_id": "h1_top_up_by_cash_or_cheque_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_224": {
+  "h1_id": "h1_disposable_card_limits_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_225": {
+  "h1_id": "h1_transfer_not_received_by_recipient_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_226": {
+  "h1_id": "h1_top_up_failed_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_227": {
+  "h1_id": "h1_top_up_by_cash_or_cheque_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_228": {
+  "h1_id": "h1_top_up_by_card_charge_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_229": {
+  "h1_id": "h1_reverted_card_payment?_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_230": {
+  "h1_id": "h1_card_delivery_estimate_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_231": {
+  "h1_id": "h1_pending_cash_withdrawal_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_232": {
+  "h1_id": "h1_card_payment_not_recognised_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_233": {
+  "h1_id": "h1_verify_top_up_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_234": {
+  "h1_id": "h1_getting_virtual_card_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_235": {
+  "h1_id": "h1_declined_cash_withdrawal_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_236": {
+  "h1_id": "cal_03",
+  "source": "calibration",
+  "known_coverage": "FULL",
+  "known_faq": "faq_f89201b7"
+ },
+ "item_237": {
+  "h1_id": "h1_cash_withdrawal_charge_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_238": {
+  "h1_id": "h1_transaction_charged_twice_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_239": {
+  "h1_id": "h1_exchange_charge_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_240": {
+  "h1_id": "h1_pin_blocked_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_241": {
+  "h1_id": "h1_exchange_charge_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_242": {
+  "h1_id": "h1_get_disposable_virtual_card_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_243": {
+  "h1_id": "h1_transfer_into_account_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_244": {
+  "h1_id": "h1_cash_withdrawal_not_recognised_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_245": {
+  "h1_id": "h1_order_physical_card_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_246": {
+  "h1_id": "h1_get_physical_card_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_247": {
+  "h1_id": "h1_failed_transfer_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_248": {
+  "h1_id": "h1_wrong_amount_of_cash_received_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_249": {
+  "h1_id": "h1_card_about_to_expire_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_250": {
+  "h1_id": "h1_Refund_not_showing_up_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_251": {
+  "h1_id": "h1_extra_charge_on_statement_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_252": {
+  "h1_id": "h1_pending_card_payment_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_253": {
+  "h1_id": "h1_card_swallowed_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_254": {
+  "h1_id": "h1_receiving_money_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_255": {
+  "h1_id": "h1_direct_debit_payment_not_recognised_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_256": {
+  "h1_id": "h1_fiat_currency_support_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_257": {
+  "h1_id": "h1_verify_source_of_funds_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_258": {
+  "h1_id": "h1_balance_not_updated_after_cheque_or_cash_deposit_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_259": {
+  "h1_id": "h1_balance_not_updated_after_bank_transfer_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_260": {
+  "h1_id": "h1_supported_cards_and_currencies_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_261": {
+  "h1_id": "h1_getting_spare_card_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_262": {
+  "h1_id": "h1_declined_card_payment_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_263": {
+  "h1_id": "cal_10",
+  "source": "calibration",
+  "known_coverage": "FULL",
+  "known_faq": "faq_69278ad5"
+ },
+ "item_264": {
+  "h1_id": "h1_fiat_currency_support_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_265": {
+  "h1_id": "h1_top_up_limits_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_266": {
+  "h1_id": "h1_top_up_by_bank_transfer_charge_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_267": {
+  "h1_id": "h1_receiving_money_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_268": {
+  "h1_id": "h1_lost_or_stolen_card_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_269": {
+  "h1_id": "h1_transfer_fee_charged_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_270": {
+  "h1_id": "h1_get_physical_card_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_271": {
+  "h1_id": "h1_transfer_timing_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_272": {
+  "h1_id": "h1_getting_spare_card_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_273": {
+  "h1_id": "h1_balance_not_updated_after_cheque_or_cash_deposit_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_274": {
+  "h1_id": "h1_declined_card_payment_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_275": {
+  "h1_id": "h1_apple_pay_or_google_pay_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_276": {
+  "h1_id": "h1_pending_cash_withdrawal_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_277": {
+  "h1_id": "h1_top_up_by_bank_transfer_charge_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_278": {
+  "h1_id": "h1_verify_top_up_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_279": {
+  "h1_id": "h1_passcode_forgotten_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_280": {
+  "h1_id": "h1_card_payment_fee_charged_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_281": {
+  "h1_id": "h1_declined_cash_withdrawal_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_282": {
+  "h1_id": "h1_card_not_working_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_283": {
+  "h1_id": "h1_terminate_account_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_284": {
+  "h1_id": "h1_verify_my_identity_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_285": {
+  "h1_id": "h1_fiat_currency_support_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_286": {
+  "h1_id": "cal_13",
+  "source": "calibration",
+  "known_coverage": "NO_DATA",
+  "known_faq": ""
+ },
+ "item_287": {
+  "h1_id": "h1_compromised_card_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_288": {
+  "h1_id": "h1_lost_or_stolen_card_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_289": {
+  "h1_id": "h1_age_limit_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_290": {
+  "h1_id": "h1_age_limit_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_291": {
+  "h1_id": "h1_getting_virtual_card_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_292": {
+  "h1_id": "h1_extra_charge_on_statement_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_293": {
+  "h1_id": "h1_exchange_charge_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_294": {
+  "h1_id": "h1_pending_cash_withdrawal_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_295": {
+  "h1_id": "h1_pending_transfer_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_296": {
+  "h1_id": "h1_extra_charge_on_statement_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_297": {
+  "h1_id": "h1_direct_debit_payment_not_recognised_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_298": {
+  "h1_id": "h1_balance_not_updated_after_cheque_or_cash_deposit_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_299": {
+  "h1_id": "h1_pending_cash_withdrawal_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_300": {
+  "h1_id": "h1_declined_transfer_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_301": {
+  "h1_id": "h1_supported_cards_and_currencies_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_302": {
+  "h1_id": "h1_reverted_card_payment?_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_303": {
+  "h1_id": "h1_card_payment_wrong_exchange_rate_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_304": {
+  "h1_id": "h1_cancel_transfer_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_305": {
+  "h1_id": "h1_edit_personal_details_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_306": {
+  "h1_id": "h1_card_swallowed_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_307": {
+  "h1_id": "cal_14",
+  "source": "calibration",
+  "known_coverage": "NO_DATA",
+  "known_faq": ""
+ },
+ "item_308": {
+  "h1_id": "h1_exchange_rate_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_309": {
+  "h1_id": "h1_pin_blocked_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_310": {
+  "h1_id": "h1_exchange_via_app_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_311": {
+  "h1_id": "h1_change_pin_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_312": {
+  "h1_id": "h1_edit_personal_details_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_313": {
+  "h1_id": "h1_card_arrival_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_314": {
+  "h1_id": "h1_declined_cash_withdrawal_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_315": {
+  "h1_id": "h1_declined_card_payment_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_316": {
+  "h1_id": "h1_pending_card_payment_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_317": {
+  "h1_id": "h1_wrong_exchange_rate_for_cash_withdrawal_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_318": {
+  "h1_id": "cal_17",
+  "source": "calibration",
+  "known_coverage": "NO_DATA",
+  "known_faq": ""
+ },
+ "item_319": {
+  "h1_id": "h1_card_payment_wrong_exchange_rate_3",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_320": {
+  "h1_id": "h1_top_up_limits_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_321": {
+  "h1_id": "h1_card_payment_fee_charged_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_322": {
+  "h1_id": "h1_contactless_not_working_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_323": {
+  "h1_id": "h1_transfer_not_received_by_recipient_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_324": {
+  "h1_id": "h1_extra_charge_on_statement_1",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_325": {
+  "h1_id": "h1_pin_blocked_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_326": {
+  "h1_id": "h1_get_disposable_virtual_card_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_327": {
+  "h1_id": "h1_balance_not_updated_after_bank_transfer_4",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ },
+ "item_328": {
+  "h1_id": "h1_change_pin_2",
+  "source": "h1",
+  "known_coverage": null,
+  "known_faq": null
+ }
+}

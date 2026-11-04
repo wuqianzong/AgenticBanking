@@ -1,0 +1,31 @@
+# Demo user-story check
+
+Results file: `runs/stories/results/20261023T150547Z_7850d252_results.jsonl`; Story 2: `runs/story2/results/story2_results.jsonl`.
+
+**20/23 cases pass their must-checks.**
+
+| Case | Story | Pass | Must failed | Should missed | Secret in a prompt |
+|---|---|---|---|---|---|
+| S1_lost_card | S1 | PASS |  | t2: reply matches /metal/ | none |
+| S2_moving_house | S2 | PASS |  |  | none |
+| S1_opener_typo | S1 | PASS |  |  | none |
+| S1_opener_chinese | S1 | FAIL | t1: reply matches /[一-鿿]{4,}/ |  | none |
+| S3_send_money | S3 | FAIL | t3: button 'Send Money' | t2: reply matches /Maria/ | none |
+| S4_investing | S4 | PASS |  | t1: reply matches /\?/ | none |
+| S5_scam_call | S5 | FAIL | t1: reply matches /never/ |  | none |
+| S6_refund | S6 | PASS |  | t2: reply matches /\?/; t3: reply matches /original|paired/ | none |
+| B1_new_card | B1 | PASS |  | t3: reply matches /push|notification/ | none |
+| B2_unrecognised_charge | B2 | PASS |  |  | none |
+| B3_damaged_card | B3 | PASS |  |  | none |
+| B4_transfer_time_typo | B4 | PASS |  |  | none |
+| B4_transfer_time_formal | B4 | PASS |  |  | none |
+| B4_transfer_time_chinese | B4 | PASS |  |  | none |
+| B5_savings_age | B5 | PASS |  |  | none |
+| B5_visa_card | B5 | PASS |  | t1: reply matches /document/ | none |
+| B5_password | B5 | PASS |  |  | none |
+| B5_atm | B5 | PASS |  |  | none |
+| B5_pending_transfer | B5 | PASS |  |  | none |
+| B5_phone_update | B5 | PASS |  |  | none |
+| T5_tax_advice | Taboo 5 | PASS |  |  | none |
+| T6_legal_advice | Taboo 6 | PASS |  |  | none |
+| T7_guarantee | Taboo 7 | PASS |  |  | none |
